@@ -1,0 +1,2079 @@
+{
+  "classes": {
+    "AST": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": []
+    },
+    "mod": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "AST"
+      ]
+    },
+    "Script": {
+      "fields": [
+        "body",
+        "annotations"
+      ],
+      "attributes": [],
+      "dataclass_fields": [
+        "body",
+        "annotations"
+      ],
+      "defaults": {
+        "body": {
+          "kind": "list"
+        },
+        "annotations": {
+          "kind": "list"
+        }
+      },
+      "bases": [
+        "mod"
+      ]
+    },
+    "Expression": {
+      "fields": [
+        "body"
+      ],
+      "attributes": [],
+      "dataclass_fields": [
+        "body"
+      ],
+      "defaults": {
+        "body": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "mod"
+      ]
+    },
+    "stmt": {
+      "fields": [],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "AST"
+      ]
+    },
+    "FunctionDef": {
+      "fields": [
+        "name",
+        "args",
+        "body",
+        "method",
+        "export",
+        "annotations"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "name",
+        "args",
+        "body",
+        "method",
+        "export",
+        "annotations",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "name": {
+          "kind": "null"
+        },
+        "args": {
+          "kind": "list"
+        },
+        "body": {
+          "kind": "list"
+        },
+        "method": {
+          "kind": "null"
+        },
+        "export": {
+          "kind": "null"
+        },
+        "annotations": {
+          "kind": "list"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "stmt"
+      ]
+    },
+    "TypeDef": {
+      "fields": [
+        "name",
+        "body",
+        "export",
+        "annotations"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "name",
+        "body",
+        "export",
+        "annotations",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "name": {
+          "kind": "null"
+        },
+        "body": {
+          "kind": "list"
+        },
+        "export": {
+          "kind": "null"
+        },
+        "annotations": {
+          "kind": "list"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "stmt"
+      ]
+    },
+    "EnumDef": {
+      "fields": [
+        "name",
+        "values",
+        "export",
+        "annotations"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "name",
+        "values",
+        "export",
+        "annotations",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "name": {
+          "kind": "null"
+        },
+        "values": {
+          "kind": "list"
+        },
+        "export": {
+          "kind": "null"
+        },
+        "annotations": {
+          "kind": "list"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "stmt"
+      ]
+    },
+    "Assign": {
+      "fields": [
+        "target",
+        "value",
+        "type",
+        "mode",
+        "annotations"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "target",
+        "value",
+        "type",
+        "mode",
+        "annotations",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "target": {
+          "kind": "null"
+        },
+        "value": {
+          "kind": "null"
+        },
+        "type": {
+          "kind": "null"
+        },
+        "mode": {
+          "kind": "null"
+        },
+        "annotations": {
+          "kind": "list"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "stmt"
+      ]
+    },
+    "ReAssign": {
+      "fields": [
+        "target",
+        "value"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "target",
+        "value",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "target": {
+          "kind": "null"
+        },
+        "value": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "stmt"
+      ]
+    },
+    "AugAssign": {
+      "fields": [
+        "target",
+        "op",
+        "value"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "target",
+        "op",
+        "value",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "target": {
+          "kind": "null"
+        },
+        "op": {
+          "kind": "null"
+        },
+        "value": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "stmt"
+      ]
+    },
+    "Import": {
+      "fields": [
+        "namespace",
+        "name",
+        "version",
+        "alias"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "namespace",
+        "name",
+        "version",
+        "alias",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "namespace": {
+          "kind": "null"
+        },
+        "name": {
+          "kind": "null"
+        },
+        "version": {
+          "kind": "null"
+        },
+        "alias": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "stmt"
+      ]
+    },
+    "Expr": {
+      "fields": [
+        "value"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "value",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "value": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "stmt"
+      ]
+    },
+    "Break": {
+      "fields": [],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "stmt"
+      ]
+    },
+    "Continue": {
+      "fields": [],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "stmt"
+      ]
+    },
+    "expr": {
+      "fields": [],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "AST"
+      ]
+    },
+    "BoolOp": {
+      "fields": [
+        "op",
+        "values"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "op",
+        "values",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "op": {
+          "kind": "null"
+        },
+        "values": {
+          "kind": "list"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "BinOp": {
+      "fields": [
+        "left",
+        "op",
+        "right"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "left",
+        "op",
+        "right",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "left": {
+          "kind": "null"
+        },
+        "op": {
+          "kind": "null"
+        },
+        "right": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "UnaryOp": {
+      "fields": [
+        "op",
+        "operand"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "op",
+        "operand",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "op": {
+          "kind": "null"
+        },
+        "operand": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "Conditional": {
+      "fields": [
+        "test",
+        "body",
+        "orelse"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "test",
+        "body",
+        "orelse",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "test": {
+          "kind": "null"
+        },
+        "body": {
+          "kind": "null"
+        },
+        "orelse": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "Compare": {
+      "fields": [
+        "left",
+        "ops",
+        "comparators"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "left",
+        "ops",
+        "comparators",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "left": {
+          "kind": "null"
+        },
+        "ops": {
+          "kind": "list"
+        },
+        "comparators": {
+          "kind": "list"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "Call": {
+      "fields": [
+        "func",
+        "args"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "func",
+        "args",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "func": {
+          "kind": "null"
+        },
+        "args": {
+          "kind": "list"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "Constant": {
+      "fields": [
+        "value",
+        "kind"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "value",
+        "kind",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "value": {
+          "kind": "null"
+        },
+        "kind": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "Attribute": {
+      "fields": [
+        "value",
+        "attr",
+        "ctx"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "value",
+        "attr",
+        "ctx",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "value": {
+          "kind": "null"
+        },
+        "attr": {
+          "kind": "null"
+        },
+        "ctx": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "Subscript": {
+      "fields": [
+        "value",
+        "slice",
+        "ctx"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "value",
+        "slice",
+        "ctx",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "value": {
+          "kind": "null"
+        },
+        "slice": {
+          "kind": "null"
+        },
+        "ctx": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "Name": {
+      "fields": [
+        "id",
+        "ctx"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "id",
+        "ctx",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "id": {
+          "kind": "null"
+        },
+        "ctx": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "Tuple": {
+      "fields": [
+        "elts",
+        "ctx"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "elts",
+        "ctx",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "elts": {
+          "kind": "list"
+        },
+        "ctx": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "ForTo": {
+      "fields": [
+        "target",
+        "start",
+        "end",
+        "body",
+        "step"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "target",
+        "start",
+        "end",
+        "body",
+        "step",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "target": {
+          "kind": "null"
+        },
+        "start": {
+          "kind": "null"
+        },
+        "end": {
+          "kind": "null"
+        },
+        "body": {
+          "kind": "list"
+        },
+        "step": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "ForIn": {
+      "fields": [
+        "target",
+        "iter",
+        "body"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "target",
+        "iter",
+        "body",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "target": {
+          "kind": "null"
+        },
+        "iter": {
+          "kind": "null"
+        },
+        "body": {
+          "kind": "list"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "While": {
+      "fields": [
+        "test",
+        "body"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "test",
+        "body",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "test": {
+          "kind": "null"
+        },
+        "body": {
+          "kind": "list"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "If": {
+      "fields": [
+        "test",
+        "body",
+        "orelse"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "test",
+        "body",
+        "orelse",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "test": {
+          "kind": "null"
+        },
+        "body": {
+          "kind": "list"
+        },
+        "orelse": {
+          "kind": "list"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "Switch": {
+      "fields": [
+        "cases",
+        "subject"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "cases",
+        "subject",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "cases": {
+          "kind": "list"
+        },
+        "subject": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "Qualify": {
+      "fields": [
+        "qualifier",
+        "value"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "qualifier",
+        "value",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "qualifier": {
+          "kind": "null"
+        },
+        "value": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "Specialize": {
+      "fields": [
+        "value",
+        "args"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "value",
+        "args",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "value": {
+          "kind": "null"
+        },
+        "args": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "expr"
+      ]
+    },
+    "decl_mode": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "AST"
+      ]
+    },
+    "Var": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "decl_mode"
+      ]
+    },
+    "VarIp": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "decl_mode"
+      ]
+    },
+    "type_qual": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "AST"
+      ]
+    },
+    "Const": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "type_qual"
+      ]
+    },
+    "Input": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "type_qual"
+      ]
+    },
+    "Simple": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "type_qual"
+      ]
+    },
+    "Series": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "type_qual"
+      ]
+    },
+    "expr_context": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "AST"
+      ]
+    },
+    "Load": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "expr_context"
+      ]
+    },
+    "Store": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "expr_context"
+      ]
+    },
+    "bool_op": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "AST"
+      ]
+    },
+    "And": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "bool_op"
+      ]
+    },
+    "Or": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "bool_op"
+      ]
+    },
+    "operator": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "AST"
+      ]
+    },
+    "Add": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "operator"
+      ]
+    },
+    "Sub": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "operator"
+      ]
+    },
+    "Mult": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "operator"
+      ]
+    },
+    "Div": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "operator"
+      ]
+    },
+    "Mod": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "operator"
+      ]
+    },
+    "unary_op": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "AST"
+      ]
+    },
+    "Not": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "unary_op"
+      ]
+    },
+    "UAdd": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "unary_op"
+      ]
+    },
+    "USub": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "unary_op"
+      ]
+    },
+    "compare_op": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "AST"
+      ]
+    },
+    "Eq": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "compare_op"
+      ]
+    },
+    "NotEq": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "compare_op"
+      ]
+    },
+    "Lt": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "compare_op"
+      ]
+    },
+    "LtE": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "compare_op"
+      ]
+    },
+    "Gt": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "compare_op"
+      ]
+    },
+    "GtE": {
+      "fields": [],
+      "attributes": [],
+      "dataclass_fields": [],
+      "defaults": {},
+      "bases": [
+        "compare_op"
+      ]
+    },
+    "param": {
+      "fields": [],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "AST"
+      ]
+    },
+    "Param": {
+      "fields": [
+        "name",
+        "default",
+        "type"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "name",
+        "default",
+        "type",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "name": {
+          "kind": "null"
+        },
+        "default": {
+          "kind": "null"
+        },
+        "type": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "param"
+      ]
+    },
+    "arg": {
+      "fields": [],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "AST"
+      ]
+    },
+    "Arg": {
+      "fields": [
+        "value",
+        "name"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "value",
+        "name",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "value": {
+          "kind": "null"
+        },
+        "name": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "arg"
+      ]
+    },
+    "SwitchCase": {
+      "fields": [],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "AST"
+      ]
+    },
+    "Case": {
+      "fields": [
+        "body",
+        "pattern"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "body",
+        "pattern",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "body": {
+          "kind": "list"
+        },
+        "pattern": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "SwitchCase"
+      ]
+    },
+    "enum_member": {
+      "fields": [],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "AST"
+      ]
+    },
+    "EnumMember": {
+      "fields": [
+        "name",
+        "value"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "name",
+        "value",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "name": {
+          "kind": "null"
+        },
+        "value": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "enum_member"
+      ]
+    },
+    "cmnt": {
+      "fields": [],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "AST"
+      ]
+    },
+    "Comment": {
+      "fields": [
+        "value",
+        "kind"
+      ],
+      "attributes": [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "dataclass_fields": [
+        "value",
+        "kind",
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset"
+      ],
+      "defaults": {
+        "value": {
+          "kind": "null"
+        },
+        "kind": {
+          "kind": "null"
+        },
+        "lineno": {
+          "kind": "null"
+        },
+        "col_offset": {
+          "kind": "null"
+        },
+        "end_lineno": {
+          "kind": "null"
+        },
+        "end_col_offset": {
+          "kind": "null"
+        }
+      },
+      "bases": [
+        "cmnt"
+      ]
+    }
+  }
+}

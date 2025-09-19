@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -24,13 +24,10 @@ function isNodeConstructor(value: unknown): value is NodeCtor {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..');
-const metadataScript = resolve(repoRoot, 'scripts', 'ast_metadata.py');
+const metadataPath = resolve(repoRoot, 'pynescript', 'ast', 'python-metadata.json');
 
 const pythonMetadata: { classes: Record<string, PythonClassMetadata> } = JSON.parse(
-  execFileSync('python3', [metadataScript], {
-    cwd: repoRoot,
-    encoding: 'utf8'
-  })
+  readFileSync(metadataPath, { encoding: 'utf8' })
 );
 
 const constructors = new Map<string, NodeCtor>();
