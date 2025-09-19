@@ -1,0 +1,16 @@
+{
+  "name": "monaco-pine-validator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:ast": "vitest run tests/ast",
+    "test:validator": "node tests/run-all-tests.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
