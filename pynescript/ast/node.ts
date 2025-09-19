@@ -18,7 +18,24 @@ export class AST {
 }
 
 export type identifier = string;
-export type constant = any;
+export type int = number;
+export type bytes = Uint8Array;
+export type py_string = string | bytes;
+export interface Complex {
+  readonly real: number;
+  readonly imag: number;
+}
+export const PY_ELLIPSIS = Symbol('Ellipsis');
+export type ellipsis = typeof PY_ELLIPSIS;
+export type constant =
+  | py_string
+  | number
+  | Complex
+  | boolean
+  | readonly constant[]
+  | ReadonlySet<constant>
+  | null
+  | ellipsis;
 
 export class mod extends AST {
 
@@ -32,7 +49,7 @@ export class mod extends AST {
 
 export class Script extends mod {
   body: stmt[] = [];
-  annotations: string[] = [];
+  annotations: py_string[] = [];
   static readonly _fields = ['body', 'annotations'] as const;
 
   constructor(init?: Partial<Script>) {
@@ -71,12 +88,12 @@ export class stmt extends AST {
 }
 
 export class FunctionDef extends stmt {
-  name: string | null = null;
+  name: identifier | null = null;
   args: param[] = [];
   body: stmt[] = [];
-  method: number | null = null;
-  export: number | null = null;
-  annotations: string[] = [];
+  method: int | null = null;
+  export: int | null = null;
+  annotations: py_string[] = [];
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['name', 'args', 'body', 'method', 'export', 'annotations'] as const;
 
@@ -89,10 +106,10 @@ export class FunctionDef extends stmt {
 }
 
 export class TypeDef extends stmt {
-  name: string | null = null;
+  name: identifier | null = null;
   body: stmt[] = [];
-  export: number | null = null;
-  annotations: string[] = [];
+  export: int | null = null;
+  annotations: py_string[] = [];
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['name', 'body', 'export', 'annotations'] as const;
 
@@ -109,7 +126,7 @@ export class Assign extends stmt {
   value: expr | null = null;
   type: expr | null = null;
   mode: decl_mode | null = null;
-  annotations: string[] = [];
+  annotations: py_string[] = [];
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['target', 'value', 'type', 'mode', 'annotations'] as const;
 
@@ -151,10 +168,10 @@ export class AugAssign extends stmt {
 }
 
 export class Import extends stmt {
-  namespace: string | null = null;
-  name: string | null = null;
-  version: number | null = null;
-  alias: string | null = null;
+  namespace: identifier | null = null;
+  name: identifier | null = null;
+  version: int | null = null;
+  alias: identifier | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['namespace', 'name', 'version', 'alias'] as const;
 
@@ -304,8 +321,8 @@ export class Call extends expr {
 }
 
 export class Constant extends expr {
-  value: any | null = null;
-  kind: string | null = null;
+  value: constant | null = null;
+  kind: py_string | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['value', 'kind'] as const;
 
@@ -319,7 +336,7 @@ export class Constant extends expr {
 
 export class Attribute extends expr {
   value: expr | null = null;
-  attr: string | null = null;
+  attr: identifier | null = null;
   ctx: expr_context | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['value', 'attr', 'ctx'] as const;
@@ -348,7 +365,7 @@ export class Subscript extends expr {
 }
 
 export class Name extends expr {
-  id: string | null = null;
+  id: identifier | null = null;
   ctx: expr_context | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['id', 'ctx'] as const;
@@ -804,7 +821,7 @@ export class param extends AST {
 }
 
 export class Param extends param {
-  name: string | null = null;
+  name: identifier | null = null;
   default: expr | null = null;
   type: expr | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
@@ -835,7 +852,7 @@ export class arg extends AST {
 
 export class Arg extends arg {
   value: expr | null = null;
-  name: string | null = null;
+  name: identifier | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['value', 'name'] as const;
 
@@ -896,8 +913,8 @@ export class cmnt extends AST {
 }
 
 export class Comment extends cmnt {
-  value: string | null = null;
-  kind: string | null = null;
+  value: py_string | null = null;
+  kind: py_string | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['value', 'kind'] as const;
 
