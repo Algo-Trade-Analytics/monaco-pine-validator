@@ -1,4 +1,4 @@
-import { ForIn, ForTo, If, Switch, While, stmt } from './node';
+import { EnumDef, ForIn, ForTo, If, Switch, While, stmt } from './node';
 import { NodeVisitor } from './visitor';
 
 const STRUCTURE_NODES = new Set([ForTo, ForIn, While, If, Switch]);
@@ -25,6 +25,10 @@ export class StatementCollector extends NodeVisitor {
 
   override visit_TypeDef(node: any): Iterable<stmt> {
     return this.visitWithBody(node);
+  }
+
+  override visit_EnumDef(node: EnumDef): Iterable<stmt> {
+    return [node];
   }
 
   override visit_Assign(node: any): Iterable<stmt> {

@@ -21,6 +21,7 @@ module Pinescript
 
      stmt = FunctionDef(identifier name, param* args, stmt* body, int? method, int? export, string* annotations)
           | TypeDef(identifier name, stmt* body, int? export, string* annotations)
+          | EnumDef(identifier name, enum_member* values, int? export, string* annotations)
           | Assign(expr target, expr? value, expr? type, decl_mode? mode, string* annotations)
           | ReAssign(expr target, expr value)
           | AugAssign(expr target, operator op, expr value)
@@ -85,6 +86,11 @@ module Pinescript
          attributes (int lineno, int col_offset, int? end_lineno, int? end_col_offset)
 
      case = Case(stmt* body, expr? pattern)
+
+          -- col_offset is the byte offset in the utf8 string the parser uses
+          attributes (int lineno, int col_offset, int? end_lineno, int? end_col_offset)
+
+     enum_member = EnumMember(identifier name, expr? value)
 
           -- col_offset is the byte offset in the utf8 string the parser uses
           attributes (int lineno, int col_offset, int? end_lineno, int? end_col_offset)

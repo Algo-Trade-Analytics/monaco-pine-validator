@@ -79,6 +79,16 @@ class TypeDef(stmt):
 
 
 @_dataclasses.dataclass
+class EnumDef(stmt):
+    name: identifier = _dataclasses.field(default=None)
+    values: _builtins.list[enum_member] = _dataclasses.field(default_factory=_builtins.list)
+    export: int | None = _dataclasses.field(default=None)
+    annotations: _builtins.list[string] = _dataclasses.field(default_factory=_builtins.list)
+    _fields: _typing.ClassVar[_builtins.list[_builtins.str]] = ["name", "values", "export", "annotations"]
+    __hash__ = _builtins.object.__hash__
+
+
+@_dataclasses.dataclass
 class Assign(stmt):
     target: expr = _dataclasses.field(default=None)
     value: expr | None = _dataclasses.field(default=None)
@@ -528,6 +538,29 @@ class Case(case):
 
 
 @_dataclasses.dataclass
+class enum_member(AST):
+    lineno: int = _dataclasses.field(default=None, repr=False, compare=False, kw_only=True)
+    col_offset: int = _dataclasses.field(default=None, repr=False, compare=False, kw_only=True)
+    end_lineno: int | None = _dataclasses.field(default=None, repr=False, compare=False, kw_only=True)
+    end_col_offset: int | None = _dataclasses.field(default=None, repr=False, compare=False, kw_only=True)
+    _attributes: _typing.ClassVar[_builtins.list[_builtins.str]] = [
+        "lineno",
+        "col_offset",
+        "end_lineno",
+        "end_col_offset",
+    ]
+    __hash__ = _builtins.object.__hash__
+
+
+@_dataclasses.dataclass
+class EnumMember(enum_member):
+    name: identifier = _dataclasses.field(default=None)
+    value: expr | None = _dataclasses.field(default=None)
+    _fields: _typing.ClassVar[_builtins.list[_builtins.str]] = ["name", "value"]
+    __hash__ = _builtins.object.__hash__
+
+
+@_dataclasses.dataclass
 class cmnt(AST):
     lineno: int = _dataclasses.field(default=None, repr=False, compare=False, kw_only=True)
     col_offset: int = _dataclasses.field(default=None, repr=False, compare=False, kw_only=True)
@@ -562,6 +595,7 @@ __all__ = [
     "stmt",
     "FunctionDef",
     "TypeDef",
+    "EnumDef",
     "Assign",
     "ReAssign",
     "AugAssign",
@@ -625,6 +659,8 @@ __all__ = [
     "Arg",
     "case",
     "Case",
+    "enum_member",
+    "EnumMember",
     "cmnt",
     "Comment",
 ]
