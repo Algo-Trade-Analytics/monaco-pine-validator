@@ -1,4 +1,5 @@
 import dataclasses
+
 from pathlib import Path
 
 from ast_common import load_pinescript_module, sanitize_identifier
@@ -6,6 +7,19 @@ from ast_common import load_pinescript_module, sanitize_identifier
 OUTPUT_PATH = Path('pynescript/ast/node.ts')
 
 module = load_pinescript_module()
+
+import importlib.util
+import sys
+from pathlib import Path
+
+SRC_PATH = Path('pynescript-0.2.0/src/pynescript/ast/grammar/asdl/generated/PinescriptASTNode.py')
+OUTPUT_PATH = Path('pynescript/ast/node.ts')
+
+spec = importlib.util.spec_from_file_location('pinescript_ast', SRC_PATH)
+module = importlib.util.module_from_spec(spec)
+sys.modules['pinescript_ast'] = module
+spec.loader.exec_module(module)
+
 
 python_type_to_ts = {
     str: 'string',
@@ -63,6 +77,15 @@ if 'constant' not in alias_types:
     alias_types['constant'] = 'any'
 
 import ast as pyast
+
+
+
+RESERVED_IDENTIFIERS = {
+    'case': 'SwitchCase',
+}
+
+def sanitize_identifier(name: str) -> str:
+    return RESERVED_IDENTIFIERS.get(name, name)
 
 name_map: dict[str, str] = {}
 
@@ -176,6 +199,7 @@ for name, value in dataclass_items:
             ts_type = f'{ts_type} | null'
         fields.append((field.name, ts_type, has_default, default_code))
     class_infos.append((name_map[name], bases, fields, class_vars))
+
 
 header = "// Auto-generated from PinescriptASTNode.py\n// DO NOT EDIT MANUALLY\n\n"
 lines = [header]
