@@ -122,6 +122,10 @@ plot(series)
 };
 
 const snippetEntries = Object.entries(SAMPLE_SNIPPETS);
+const PYODIDE_URL = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.mjs';
+const PYODIDE_INDEX_URL = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/';
+
+type ViewMode = 'validator' | 'ast';
 
 export default function App() {
   const validatorRef = useRef<EnhancedModularValidator>();
@@ -193,6 +197,15 @@ export default function App() {
     setCode(snippet);
   }, []);
 
+  const [viewMode, setViewMode] = useState<ViewMode>('validator');
+  const runtimePromiseRef = useRef<Promise<any> | null>(null);
+  const pyodideInstanceRef = useRef<any>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [runtimeMessage, setRuntimeMessage] = useState('');
+  const [astOutput, setAstOutput] = useState('');
+  const [astError, setAstError] = useState<string | null>(null);
+  const [astRunning, setAstRunning] = useState(false);
+
   const validationStatus = useMemo(() => {
     if (!result) return { label: 'Idle', tone: 'warning' as const };
     if (result.errors.length > 0) return { label: `${result.errors.length} error(s)`, tone: 'invalid' as const };
@@ -200,81 +213,237 @@ export default function App() {
     return { label: 'No issues detected', tone: 'valid' as const };
   }, [result]);
 
+  const runtimeBadge = useMemo(() => {
+    if (runtimeStatus === 'ready') return { label: 'Runtime ready', tone: 'valid' as const };
+    if (runtimeStatus === 'loading') return { label: 'Preparing runtime…', tone: 'warning' as const };
+    if (runtimeStatus === 'error') return { label: 'Runtime error', tone: 'invalid' as const };
+    return { label: 'Runtime idle', tone: 'warning' as const };
+  }, [runtimeStatus]);
+
+  const ensurePyodide = useCallback(async () => {
+    if (pyodideInstanceRef.current) {
+      return pyodideInstanceRef.current;
+    }
+
+    if (!runtimePromiseRef.current) {
+      setRuntimeStatus('loading');
+      setRuntimeMessage('Downloading Python runtime…');
+      runtimePromiseRef.current = (async () => {
+        try {
+          const module = await import(/* @vite-ignore */ PYODIDE_URL);
+          const pyodide = await module.loadPyodide({ indexURL: PYODIDE_INDEX_URL });
+          setRuntimeMessage('Installing pynescript…');
+          await pyodide.loadPackage('micropip');
+          await pyodide.runPythonAsync(`
+import micropip
+await micropip.install('pynescript==0.2.0')
+`);
+          pyodideInstanceRef.current = pyodide;
+          setRuntimeStatus('ready');
+          setRuntimeMessage('');
+          return pyodide;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          setRuntimeStatus('error');
+          setRuntimeMessage(message);
+          runtimePromiseRef.current = null;
+          throw error;
+        }
+      })();
+    }
+
+    const instance = await runtimePromiseRef.current;
+    pyodideInstanceRef.current = instance;
+    return instance;
+  }, []);
+
+  const handleRunAst = useCallback(async () => {
+    setAstRunning(true);
+    setAstError(null);
+    try {
+      const pyodide = await ensurePyodide();
+      pyodide.globals.set('pine_source', code);
+      const output = await pyodide.runPythonAsync(`
+from pynescript.ast import parse
+from pynescript.ast.helper import dump
+tree = parse(pine_source)
+dump(tree, indent=2, include_attributes=True)
+`);
+      setAstOutput(String(output));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setAstError(message);
+    } finally {
+      try {
+        const pyodide = pyodideInstanceRef.current;
+        pyodide?.globals?.delete('pine_source');
+      } catch {
+        // Ignore cleanup errors
+      }
+      setAstRunning(false);
+    }
+  }, [code, ensurePyodide]);
+
+  useEffect(() => {
+    if (viewMode === 'ast' && runtimeStatus === 'idle') {
+      ensurePyodide().catch(() => undefined);
+    }
+  }, [ensurePyodide, runtimeStatus, viewMode]);
+
   return (
-    <div className="app-shell">
-      <div className="editor-wrapper">
-        <div className="controls">
-          <span className={`status-badge ${validationStatus.tone}`}>{validationStatus.label}</span>
-          <button onClick={toggleTheme} className="secondary">Switch Theme</button>
-          {snippetEntries.map(([label, snippet]) => (
-            <button key={label} className="secondary" onClick={() => handleSnippetPick(snippet)}>
-              {label}
-            </button>
-          ))}
+    <div className="playground-shell">
+      <header className="top-bar">
+        <h1 className="app-title">Pine Validator Playground</h1>
+        <div className="view-tabs">
+          <button
+            type="button"
+            className={`tab-button ${viewMode === 'validator' ? 'active' : ''}`}
+            onClick={() => setViewMode('validator')}
+          >
+            Validator
+          </button>
+          <button
+            type="button"
+            className={`tab-button ${viewMode === 'ast' ? 'active' : ''}`}
+            onClick={() => setViewMode('ast')}
+          >
+            AST Explorer
+          </button>
         </div>
-        <Editor
-          height="calc(100% - 48px)"
-          defaultLanguage="pinescript"
-          value={code}
-          onChange={onEditorChange}
-          onMount={handleEditorMount}
-          beforeMount={handleEditorWillMount}
-          theme={theme}
-          options={{
-            fontSize: 14,
-            minimap: { enabled: false },
-            automaticLayout: true,
-            scrollBeyondLastLine: false
-          }}
-        />
-      </div>
-      <aside className="panel">
-        <header>Validation Output</header>
-        <div className="panel-content">
-          <section>
-            <strong>Summary</strong>
-            <div>
-              Errors: {result.errors.length} · Warnings: {result.warnings.length} · Info: {result.info?.length ?? 0}
+      </header>
+
+      {viewMode === 'validator' ? (
+        <div className="app-shell">
+          <div className="editor-wrapper">
+            <div className="controls">
+              <span className={`status-badge ${validationStatus.tone}`}>{validationStatus.label}</span>
+              <button onClick={toggleTheme} className="secondary">Switch Theme</button>
+              {snippetEntries.map(([label, snippet]) => (
+                <button key={label} className="secondary" onClick={() => handleSnippetPick(snippet)}>
+                  {label}
+                </button>
+              ))}
             </div>
-          </section>
+            <Editor
+              height="calc(100% - 48px)"
+              defaultLanguage="pinescript"
+              value={code}
+              onChange={onEditorChange}
+              onMount={handleEditorMount}
+              beforeMount={handleEditorWillMount}
+              theme={theme}
+              options={{
+                fontSize: 14,
+                minimap: { enabled: false },
+                automaticLayout: true,
+                scrollBeyondLastLine: false
+              }}
+            />
+          </div>
+          <aside className="panel">
+            <header>Validation Output</header>
+            <div className="panel-content">
+              <section>
+                <strong>Summary</strong>
+                <div>
+                  Errors: {result.errors.length} · Warnings: {result.warnings.length} · Info: {result.info?.length ?? 0}
+                </div>
+              </section>
 
-          {result.errors.length > 0 && (
-            <section>
-              <h4>Errors</h4>
-              <ul className="validation-list">
-                {result.errors.map((error, idx) => (
-                  <li className="validation-item error" key={`error-${idx}`}>
-                    <div>
-                      <strong>{error.code ?? 'error'}</strong> — line {error.line}, column {error.column}
-                    </div>
-                    <pre>{error.message}</pre>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+              {result.errors.length > 0 && (
+                <section>
+                  <h4>Errors</h4>
+                  <ul className="validation-list">
+                    {result.errors.map((error, idx) => (
+                      <li className="validation-item error" key={`error-${idx}`}>
+                        <div>
+                          <strong>{error.code ?? 'error'}</strong> — line {error.line}, column {error.column}
+                        </div>
+                        <pre>{error.message}</pre>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
 
-          {result.warnings.length > 0 && (
-            <section>
-              <h4>Warnings</h4>
-              <ul className="validation-list">
-                {result.warnings.map((warning, idx) => (
-                  <li className="validation-item warning" key={`warning-${idx}`}>
-                    <div>
-                      <strong>{warning.code ?? 'warning'}</strong> — line {warning.line}, column {warning.column}
-                    </div>
-                    <pre>{warning.message}</pre>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+              {result.warnings.length > 0 && (
+                <section>
+                  <h4>Warnings</h4>
+                  <ul className="validation-list">
+                    {result.warnings.map((warning, idx) => (
+                      <li className="validation-item warning" key={`warning-${idx}`}>
+                        <div>
+                          <strong>{warning.code ?? 'warning'}</strong> — line {warning.line}, column {warning.column}
+                        </div>
+                        <pre>{warning.message}</pre>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
 
-          {result.errors.length === 0 && result.warnings.length === 0 && (
-            <p>No validation issues detected. Modify the script to explore validator feedback in real time.</p>
-          )}
+              {result.errors.length === 0 && result.warnings.length === 0 && (
+                <p>No validation issues detected. Modify the script to explore validator feedback in real time.</p>
+              )}
+            </div>
+          </aside>
         </div>
-      </aside>
+      ) : (
+        <div className="app-shell">
+          <div className="editor-wrapper">
+            <div className="controls">
+              <span className={`status-badge ${runtimeBadge.tone}`}>{runtimeBadge.label}</span>
+              <button onClick={toggleTheme} className="secondary">Switch Theme</button>
+              {snippetEntries.map(([label, snippet]) => (
+                <button key={label} className="secondary" onClick={() => handleSnippetPick(snippet)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <Editor
+              height="calc(100% - 48px)"
+              defaultLanguage="pinescript"
+              value={code}
+              onChange={onEditorChange}
+              onMount={handleEditorMount}
+              beforeMount={handleEditorWillMount}
+              theme={theme}
+              options={{
+                fontSize: 14,
+                minimap: { enabled: false },
+                automaticLayout: true,
+                scrollBeyondLastLine: false
+              }}
+            />
+          </div>
+          <aside className="panel">
+            <header>AST Output</header>
+            <div className="panel-content">
+              <section>
+                <p>Run the official <code>pynescript</code> parser directly in the browser to inspect the generated AST.</p>
+                <div className="ast-actions">
+                  <button onClick={handleRunAst} disabled={astRunning || runtimeStatus === 'loading'}>
+                    {astRunning ? 'Parsing…' : 'Generate AST'}
+                  </button>
+                  {runtimeMessage && <span className="status-text">{runtimeMessage}</span>}
+                </div>
+                {astError && (
+                  <div className="validation-item error">
+                    <strong>Parser Error</strong>
+                    <pre>{astError}</pre>
+                  </div>
+                )}
+                {astOutput && !astError && (
+                  <pre className="ast-output monospace">{astOutput}</pre>
+                )}
+                {!astOutput && !astError && runtimeStatus === 'ready' && !astRunning && (
+                  <p className="status-text">Click "Generate AST" to parse the current script.</p>
+                )}
+              </section>
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }
