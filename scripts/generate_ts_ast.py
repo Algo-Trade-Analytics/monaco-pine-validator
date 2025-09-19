@@ -68,6 +68,16 @@ if 'constant' not in alias_types:
 
 import ast as pyast
 
+
+RESERVED_IDENTIFIERS = {
+    'case': 'SwitchCase',
+}
+
+def sanitize_identifier(name: str) -> str:
+    return RESERVED_IDENTIFIERS.get(name, name)
+
+name_map: dict[str, str] = {}
+
 def parse_type_expr(expr) -> str:
     if isinstance(expr, str):
         expr_ast = pyast.parse(expr, mode='eval').body
@@ -80,7 +90,9 @@ def parse_type_expr(expr) -> str:
             return 'null'
         if name in alias_types:
             return alias_types[name]
-        return name
+        if name in name_map:
+            return name_map[name]
+        return sanitize_identifier(name)
     if isinstance(expr, pyast.Attribute):
         return expr.attr
     if isinstance(expr, pyast.Subscript):
@@ -121,49 +133,62 @@ def parse_type_expr(expr) -> str:
 
 from dataclasses import is_dataclass, MISSING
 
+dataclass_items = [
+    (name, value)
+    for name, value in module.__dict__.items()
+    if dataclasses.is_dataclass(value)
+]
+
+for original_name, _ in dataclass_items:
+    name_map[original_name] = sanitize_identifier(original_name)
+
 class_infos = []
-for name, value in module.__dict__.items():
-    if dataclasses.is_dataclass(value):
-        bases = [base.__name__ for base in value.__bases__ if base is not object]
-        fields = []
-        class_vars = []
-        base_field_names = set()
-        for base in value.__mro__[1:]:
-            if dataclasses.is_dataclass(base):
-                for base_field in base.__dataclass_fields__.values():
-                    type_repr = base_field.type
-                    if isinstance(type_repr, str) and 'ClassVar' in type_repr:
-                        continue
-                    base_field_names.add(base_field.name)
-        for field in value.__dataclass_fields__.values():
-            type_repr = field.type
-            if isinstance(type_repr, str) and 'ClassVar' in type_repr:
-                default_value = field.default
-                if default_value is MISSING:
-                    default_value = None
-                class_vars.append((field.name, default_value))
-                continue
-            if field.name in base_field_names:
-                continue
-            ts_type = parse_type_expr(type_repr)
-            has_default = False
-            default_code = None
-            if field.default is not MISSING:
-                has_default = True
-                default_code = field.default
-            elif field.default_factory is not MISSING:
-                has_default = True
-                factory = field.default_factory
-                if factory is list:
-                    default_code = []
-                elif factory is dict:
-                    default_code = {}
-                elif factory is set:
-                    default_code = 'new Set()'
-            if has_default and default_code is None and 'null' not in ts_type:
-                ts_type = f'{ts_type} | null'
-            fields.append((field.name, ts_type, has_default, default_code))
-        class_infos.append((name, bases, fields, class_vars))
+for name, value in dataclass_items:
+    bases = [
+        name_map.get(base.__name__, sanitize_identifier(base.__name__))
+        for base in value.__bases__
+        if base is not object
+    ]
+    fields = []
+    class_vars = []
+    base_field_names = set()
+    for base in value.__mro__[1:]:
+        if dataclasses.is_dataclass(base):
+            for base_field in base.__dataclass_fields__.values():
+                type_repr = base_field.type
+                if isinstance(type_repr, str) and 'ClassVar' in type_repr:
+                    continue
+                base_field_names.add(base_field.name)
+    for field in value.__dataclass_fields__.values():
+        type_repr = field.type
+        if isinstance(type_repr, str) and 'ClassVar' in type_repr:
+            default_value = field.default
+            if default_value is MISSING:
+                default_value = None
+            class_vars.append((field.name, default_value))
+            continue
+        if field.name in base_field_names:
+            continue
+        ts_type = parse_type_expr(type_repr)
+        has_default = False
+        default_code = None
+        if field.default is not MISSING:
+            has_default = True
+            default_code = field.default
+        elif field.default_factory is not MISSING:
+            has_default = True
+            factory = field.default_factory
+            if factory is list:
+                default_code = []
+            elif factory is dict:
+                default_code = {}
+            elif factory is set:
+                default_code = 'new Set()'
+        if has_default and default_code is None and 'null' not in ts_type:
+            ts_type = f'{ts_type} | null'
+        fields.append((field.name, ts_type, has_default, default_code))
+    class_infos.append((name_map[name], bases, fields, class_vars))
+
 
 header = "// Auto-generated from PinescriptASTNode.py\n// DO NOT EDIT MANUALLY\n\n"
 lines = [header]
