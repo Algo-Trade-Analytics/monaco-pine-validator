@@ -437,6 +437,7 @@ export class If extends expr {
 }
 
 export class Switch extends expr {
+
   cases: SwitchCase[] = [];
   subject: expr | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
@@ -847,12 +848,15 @@ export class Arg extends arg {
   }
 }
 
+
 export class SwitchCase extends AST {
+
   lineno: number | null = null;
   col_offset: number | null = null;
   end_lineno: number | null = null;
   end_col_offset: number | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
+
 
   constructor(init?: Partial<SwitchCase>) {
     super(init);
@@ -862,7 +866,9 @@ export class SwitchCase extends AST {
   }
 }
 
+
 export class Case extends SwitchCase {
+
   body: stmt[] = [];
   pattern: expr | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;

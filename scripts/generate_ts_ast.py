@@ -68,6 +68,7 @@ if 'constant' not in alias_types:
 
 import ast as pyast
 
+
 RESERVED_IDENTIFIERS = {
     'case': 'SwitchCase',
 }
@@ -187,6 +188,7 @@ for name, value in dataclass_items:
             ts_type = f'{ts_type} | null'
         fields.append((field.name, ts_type, has_default, default_code))
     class_infos.append((name_map[name], bases, fields, class_vars))
+
 
 header = "// Auto-generated from PinescriptASTNode.py\n// DO NOT EDIT MANUALLY\n\n"
 lines = [header]
