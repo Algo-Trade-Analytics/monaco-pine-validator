@@ -87,6 +87,7 @@ alias_types['constant'] = (
     'py_string | number | Complex | boolean | readonly constant[] | '
     'ReadonlySet<constant> | null | ellipsis'
 )
+
 alias_types['string'] = 'py_string'
 
 import ast as pyast

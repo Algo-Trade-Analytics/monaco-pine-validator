@@ -44,7 +44,7 @@ export class mod extends AST {
 
 export class Script extends mod {
   body: stmt[] = [];
-  annotations: py_string[] = [];
+  annotations: string[] = [];
   static readonly _fields = ['body', 'annotations'] as const;
 
   constructor(init?: Partial<Script>) {
@@ -88,7 +88,7 @@ export class FunctionDef extends stmt {
   body: stmt[] = [];
   method: number | null = null;
   export: number | null = null;
-  annotations: py_string[] = [];
+  annotations: string[] = [];
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['name', 'args', 'body', 'method', 'export', 'annotations'] as const;
 
@@ -104,7 +104,7 @@ export class TypeDef extends stmt {
   name: string | null = null;
   body: stmt[] = [];
   export: number | null = null;
-  annotations: py_string[] = [];
+  annotations: string[] = [];
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['name', 'body', 'export', 'annotations'] as const;
 
@@ -120,7 +120,7 @@ export class EnumDef extends stmt {
   name: string | null = null;
   values: enum_member[] = [];
   export: number | null = null;
-  annotations: py_string[] = [];
+  annotations: string[] = [];
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['name', 'values', 'export', 'annotations'] as const;
 
@@ -137,7 +137,7 @@ export class Assign extends stmt {
   value: expr | null = null;
   type: expr | null = null;
   mode: decl_mode | null = null;
-  annotations: py_string[] = [];
+  annotations: string[] = [];
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['target', 'value', 'type', 'mode', 'annotations'] as const;
 
@@ -333,7 +333,7 @@ export class Call extends expr {
 
 export class Constant extends expr {
   value: py_string | number | Complex | boolean | readonly constant[] | ReadonlySet<constant> | null | ellipsis = null;
-  kind: py_string | null = null;
+  kind: string | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['value', 'kind'] as const;
 
@@ -949,8 +949,8 @@ export class cmnt extends AST {
 }
 
 export class Comment extends cmnt {
-  value: py_string | null = null;
-  kind: py_string | null = null;
+  value: string | null = null;
+  kind: string | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['value', 'kind'] as const;
 
