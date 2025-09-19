@@ -1,4 +1,13 @@
 import dataclasses
+
+from pathlib import Path
+
+from ast_common import load_pinescript_module, sanitize_identifier
+
+OUTPUT_PATH = Path('pynescript/ast/node.ts')
+
+module = load_pinescript_module()
+
 import importlib.util
 import sys
 from pathlib import Path
@@ -10,6 +19,7 @@ spec = importlib.util.spec_from_file_location('pinescript_ast', SRC_PATH)
 module = importlib.util.module_from_spec(spec)
 sys.modules['pinescript_ast'] = module
 spec.loader.exec_module(module)
+
 
 python_type_to_ts = {
     str: 'string',
@@ -67,6 +77,7 @@ if 'constant' not in alias_types:
     alias_types['constant'] = 'any'
 
 import ast as pyast
+
 
 
 RESERVED_IDENTIFIERS = {
