@@ -5,7 +5,7 @@
  * It imports and runs all individual test modules to provide complete coverage.
  */
 
-import { describe } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // Import all test modules
 import './array-validation.spec';
