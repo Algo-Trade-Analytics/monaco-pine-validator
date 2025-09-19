@@ -58,6 +58,15 @@ cd /Users/egr/Desktop/TradeSync
 npm run test:all
 ```
 
+### Monaco Playground
+```bash
+cd pine-validator/playground
+npm install
+npm run dev
+```
+
+This launches a lightweight Monaco editor wired to `EnhancedModularValidator` for interactive experimentation.
+
 ### Using the Validator
 ```typescript
 import { validatePineScriptV6Enhanced } from './pine-validator';
