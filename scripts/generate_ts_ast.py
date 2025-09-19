@@ -27,7 +27,7 @@ python_type_to_ts = {
     float: 'number',
     complex: 'number',
     bool: 'boolean',
-    bytes: 'string',
+    bytes: 'bytes',
     type(None): 'null',
 }
 
@@ -38,8 +38,10 @@ def convert_alias(name: str, value) -> str:
         parts = [p.strip() for p in value.split('|')]
         ts_parts = []
         for part in parts:
-            if part in {'str', 'bytes'}:
+            if part == 'str':
                 ts_parts.append('string')
+            elif part == 'bytes':
+                ts_parts.append('bytes')
             elif part in {'int', 'float', 'complex'}:
                 ts_parts.append('number')
             elif part in {'bool'}:
@@ -85,6 +87,8 @@ alias_types['constant'] = (
     'py_string | number | Complex | boolean | readonly constant[] | '
     'ReadonlySet<constant> | null | ellipsis'
 )
+
+alias_types['string'] = 'py_string'
 
 import ast as pyast
 
