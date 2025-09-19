@@ -21,21 +21,16 @@ export type identifier = string;
 export type int = number;
 export type bytes = Uint8Array;
 export type py_string = string | bytes;
+
 export interface Complex {
   readonly real: number;
   readonly imag: number;
 }
+
 export const PY_ELLIPSIS = Symbol('Ellipsis');
 export type ellipsis = typeof PY_ELLIPSIS;
-export type constant =
-  | py_string
-  | number
-  | Complex
-  | boolean
-  | readonly constant[]
-  | ReadonlySet<constant>
-  | null
-  | ellipsis;
+export type constant = py_string | number | Complex | boolean | readonly constant[] | ReadonlySet<constant> | null | ellipsis;
+
 
 export class mod extends AST {
 
@@ -88,11 +83,11 @@ export class stmt extends AST {
 }
 
 export class FunctionDef extends stmt {
-  name: identifier | null = null;
+  name: string | null = null;
   args: param[] = [];
   body: stmt[] = [];
-  method: int | null = null;
-  export: int | null = null;
+  method: number | null = null;
+  export: number | null = null;
   annotations: py_string[] = [];
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['name', 'args', 'body', 'method', 'export', 'annotations'] as const;
@@ -106,14 +101,30 @@ export class FunctionDef extends stmt {
 }
 
 export class TypeDef extends stmt {
-  name: identifier | null = null;
+  name: string | null = null;
   body: stmt[] = [];
-  export: int | null = null;
+  export: number | null = null;
   annotations: py_string[] = [];
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['name', 'body', 'export', 'annotations'] as const;
 
   constructor(init?: Partial<TypeDef>) {
+    super(init);
+    if (init) {
+      Object.assign(this, init);
+    }
+  }
+}
+
+export class EnumDef extends stmt {
+  name: string | null = null;
+  values: enum_member[] = [];
+  export: number | null = null;
+  annotations: py_string[] = [];
+  static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
+  static readonly _fields = ['name', 'values', 'export', 'annotations'] as const;
+
+  constructor(init?: Partial<EnumDef>) {
     super(init);
     if (init) {
       Object.assign(this, init);
@@ -168,10 +179,10 @@ export class AugAssign extends stmt {
 }
 
 export class Import extends stmt {
-  namespace: identifier | null = null;
-  name: identifier | null = null;
-  version: int | null = null;
-  alias: identifier | null = null;
+  namespace: string | null = null;
+  name: string | null = null;
+  version: number | null = null;
+  alias: string | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['namespace', 'name', 'version', 'alias'] as const;
 
@@ -321,7 +332,7 @@ export class Call extends expr {
 }
 
 export class Constant extends expr {
-  value: constant | null = null;
+  value: py_string | number | Complex | boolean | readonly constant[] | ReadonlySet<constant> | null | ellipsis = null;
   kind: py_string | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['value', 'kind'] as const;
@@ -336,7 +347,7 @@ export class Constant extends expr {
 
 export class Attribute extends expr {
   value: expr | null = null;
-  attr: identifier | null = null;
+  attr: string | null = null;
   ctx: expr_context | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['value', 'attr', 'ctx'] as const;
@@ -365,7 +376,7 @@ export class Subscript extends expr {
 }
 
 export class Name extends expr {
-  id: identifier | null = null;
+  id: string | null = null;
   ctx: expr_context | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['id', 'ctx'] as const;
@@ -821,7 +832,7 @@ export class param extends AST {
 }
 
 export class Param extends param {
-  name: identifier | null = null;
+  name: string | null = null;
   default: expr | null = null;
   type: expr | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
@@ -852,7 +863,7 @@ export class arg extends AST {
 
 export class Arg extends arg {
   value: expr | null = null;
-  name: identifier | null = null;
+  name: string | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['value', 'name'] as const;
 
@@ -865,13 +876,11 @@ export class Arg extends arg {
 }
 
 export class SwitchCase extends AST {
-
   lineno: number | null = null;
   col_offset: number | null = null;
   end_lineno: number | null = null;
   end_col_offset: number | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
-
 
   constructor(init?: Partial<SwitchCase>) {
     super(init);
@@ -881,15 +890,42 @@ export class SwitchCase extends AST {
   }
 }
 
-
 export class Case extends SwitchCase {
-
   body: stmt[] = [];
   pattern: expr | null = null;
   static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
   static readonly _fields = ['body', 'pattern'] as const;
 
   constructor(init?: Partial<Case>) {
+    super(init);
+    if (init) {
+      Object.assign(this, init);
+    }
+  }
+}
+
+export class enum_member extends AST {
+  lineno: number | null = null;
+  col_offset: number | null = null;
+  end_lineno: number | null = null;
+  end_col_offset: number | null = null;
+  static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
+
+  constructor(init?: Partial<enum_member>) {
+    super(init);
+    if (init) {
+      Object.assign(this, init);
+    }
+  }
+}
+
+export class EnumMember extends enum_member {
+  name: string | null = null;
+  value: expr | null = null;
+  static readonly _attributes = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] as const;
+  static readonly _fields = ['name', 'value'] as const;
+
+  constructor(init?: Partial<EnumMember>) {
     super(init);
     if (init) {
       Object.assign(this, init);

@@ -34,6 +34,34 @@ describe('PineScript AST node definitions', () => {
     expect((assign.type as Nodes.Name).id).toBe('series');
   });
 
+  it('supports enum declarations with typed annotations', () => {
+    const enumDef = new Nodes.EnumDef({
+      name: 'OrderSide',
+      values: [
+        new Nodes.EnumMember({ name: 'BUY' }),
+        new Nodes.EnumMember({
+          name: 'SELL',
+          value: new Nodes.Name({ id: 'OrderSide.BUY' })
+        })
+      ],
+      annotations: [new Uint8Array([64, 118, 54])] // //@version=6 in UTF-8
+    });
+
+    expect(enumDef.name).toBe('OrderSide');
+    expect(enumDef.values).toHaveLength(2);
+    expect(enumDef.annotations[0]).toBeInstanceOf(Uint8Array);
+    expect(enumDef.values[1]!.value).toBeInstanceOf(Nodes.Name);
+  });
+
+  it('accepts Uint8Array payloads for py_string fields', () => {
+    const kindBytes = new Uint8Array([107]);
+    const constant = new Nodes.Constant({ kind: kindBytes });
+    const comment = new Nodes.Comment({ value: kindBytes });
+
+    expect(constant.kind).toBe(kindBytes);
+    expect(comment.value).toBe(kindBytes);
+  });
+
   it('creates fresh mutable field defaults for each instance', () => {
     for (const { name, ctor } of constructors) {
       const first = new ctor();

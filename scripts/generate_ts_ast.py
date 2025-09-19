@@ -27,7 +27,7 @@ python_type_to_ts = {
     float: 'number',
     complex: 'number',
     bool: 'boolean',
-    bytes: 'string',
+    bytes: 'bytes',
     type(None): 'null',
 }
 
@@ -38,8 +38,10 @@ def convert_alias(name: str, value) -> str:
         parts = [p.strip() for p in value.split('|')]
         ts_parts = []
         for part in parts:
-            if part in {'str', 'bytes'}:
+            if part == 'str':
                 ts_parts.append('string')
+            elif part == 'bytes':
+                ts_parts.append('bytes')
             elif part in {'int', 'float', 'complex'}:
                 ts_parts.append('number')
             elif part in {'bool'}:
@@ -75,6 +77,17 @@ for name, value in module.__dict__.items():
 
 if 'constant' not in alias_types:
     alias_types['constant'] = 'any'
+
+# Normalise core aliases that are easier to consume from TypeScript.
+alias_types['identifier'] = 'string'
+alias_types['int'] = 'number'
+alias_types['bytes'] = 'Uint8Array'
+alias_types['py_string'] = 'string | bytes'
+alias_types['constant'] = (
+    'py_string | number | Complex | boolean | readonly constant[] | '
+    'ReadonlySet<constant> | null | ellipsis'
+)
+alias_types['string'] = 'py_string'
 
 import ast as pyast
 
@@ -220,8 +233,30 @@ lines.append('    }\n')
 lines.append('  }\n')
 lines.append('}\n\n')
 
-for name, ts_type in alias_types.items():
-    if name in {'int', 'string'}:
+manual_alias_items = {
+    'identifier': 'string',
+    'int': 'number',
+    'bytes': 'Uint8Array',
+    'py_string': 'string | bytes',
+}
+
+for name, ts_type in manual_alias_items.items():
+    lines.append(f'export type {name} = {ts_type};\n')
+
+lines.append('\n')
+lines.append('export interface Complex {\n')
+lines.append('  readonly real: number;\n')
+lines.append('  readonly imag: number;\n')
+lines.append('}\n\n')
+lines.append("export const PY_ELLIPSIS = Symbol('Ellipsis');\n")
+lines.append('export type ellipsis = typeof PY_ELLIPSIS;\n')
+lines.append("export type constant = py_string | number | Complex | boolean | readonly constant[] | ReadonlySet<constant> | null | ellipsis;\n\n")
+
+for name in list(manual_alias_items.keys()) + ['constant']:
+    alias_types.pop(name, None)
+
+for name, ts_type in sorted(alias_types.items()):
+    if name in {'string'}:
         continue
     lines.append(f'export type {name} = {ts_type};\n')
 lines.append('\n')

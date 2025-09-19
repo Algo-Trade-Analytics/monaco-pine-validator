@@ -5,6 +5,8 @@ import {
   Case,
   Constant,
   Continue,
+  EnumDef,
+  EnumMember,
   Expr,
   FunctionDef,
   If,
@@ -62,5 +64,21 @@ describe('StatementCollector', () => {
     expect(statements.some((stmt) => stmt instanceof Continue)).toBe(true);
     expect(statements.some((stmt) => stmt instanceof Expr)).toBe(true);
     expect(statements.some((stmt) => stmt === innerAssign)).toBe(true);
+  });
+
+  it('treats enum declarations as collectable statements', () => {
+    const enumDef = new EnumDef({
+      name: 'OrderSide',
+      values: [
+        new EnumMember({ name: 'BUY' }),
+        new EnumMember({ name: 'SELL', value: new Name({ id: 'OrderSide.BUY' }) })
+      ],
+    });
+
+    const script = new Script({ body: [enumDef] });
+    const collector = new StatementCollector();
+    const statements = Array.from(collector.visit(script));
+
+    expect(statements).toContain(enumDef);
   });
 });
