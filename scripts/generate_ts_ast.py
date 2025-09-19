@@ -69,7 +69,7 @@ if 'constant' not in alias_types:
 import ast as pyast
 
 RESERVED_IDENTIFIERS = {
-    'case': 'CaseBase',
+    'case': 'SwitchCase',
 }
 
 def sanitize_identifier(name: str) -> str:
