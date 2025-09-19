@@ -60,7 +60,7 @@ npm run test:all
 
 ### Using the Validator
 ```typescript
-import { validatePineScriptV6Enhanced } from './src/client/functional-app/pine-script-ai-editor/utils/validator';
+import { validatePineScriptV6Enhanced } from './pine-validator';
 
 const result = validatePineScriptV6Enhanced(pineScriptCode);
 console.log(`Valid: ${result.isValid}, Errors: ${result.errors.length}`);
@@ -110,7 +110,7 @@ The validator is a large, modular codebase (≈50 modules) backed by dozens of V
 ## Documentation Structure
 
 ```
-📁 src/client/functional-app/pine-script-ai-editor/utils/validator/docs/
+📁 pine-validator/docs/
 ├── 📄 validator-README.md                                    # This file - documentation overview
 ├── 📄 validator-architecture.md                              # Complete architectural analysis  
 ├── 📄 validator-test-coverage.md                             # Comprehensive test documentation
@@ -122,7 +122,7 @@ The validator is a large, modular codebase (≈50 modules) backed by dozens of V
 ## Related Directories
 
 - **Validator Source**: `../` (validator root directory)
-- **Test Suite**: `/tests/` (47+ test files)
+- **Test Suite**: `/tests/specs/` (47+ test files)
 - **Core Utilities**: `../core/` (types, constants, shared utilities)
 - **Validation Modules**: `../modules/` (47 specialized validation modules)
 - **Archive**: `../archive/` (legacy implementations)
@@ -162,17 +162,17 @@ The validator is a large, modular codebase (≈50 modules) backed by dozens of V
 
 The combination of automated coverage scripts and the scenario fixtures keeps the validator aligned with TradingView’s v6 reference.  Run these checks whenever allowlists change:
 
-- `node src/client/functional-app/pine-script-ai-editor/utils/validator/run-coverage-analysis.js`
+- `node pine-validator/run-coverage-analysis.js`
 - `STRICT_SCENARIOS=1 SNAPSHOT_SCENARIOS=1 npm run test:scenarios`
 
-Both commands should finish cleanly before new work lands.  If they flag missing identifiers or unexpected validator codes, update `core/constants.ts`, the relevant modules, and the fixtures in `tests/validator-scenarios.json`.
+Both commands should finish cleanly before new work lands.  If they flag missing identifiers or unexpected validator codes, update `core/constants.ts`, the relevant modules, and the fixtures in `tests/specs/validator-scenarios.json`.
 
 ## Contributing
 
 When adding new validation features:
 
 1. **Create/Update Modules**: Add new validation modules in `/modules/`
-2. **Write Tests**: Add comprehensive test coverage in `/tests/`
+2. **Write Tests**: Add comprehensive test coverage in `/tests/specs/`
 3. **Update Test Suite**: Add new test imports to `all-validation-tests.spec.ts`
 4. **Update Documentation**: Update these docs to reflect new capabilities
 5. **Run Tests**: Ensure all tests pass with `npm run test:all`

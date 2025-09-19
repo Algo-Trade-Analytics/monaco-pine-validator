@@ -4,7 +4,7 @@
 
 The TradeSync Pine Script v6 validator continues to provide end-to-end coverage for the language surface. Snapshot from the most recent automated comparison:
 
-- ✅ **160 / 160 documented identifiers covered** (keywords, namespaces, pseudo vars) — `node src/client/functional-app/pine-script-ai-editor/utils/validator/run-coverage-analysis.js`
+- ✅ **160 / 160 documented identifiers covered** (keywords, namespaces, pseudo vars) — `node pine-validator/run-coverage-analysis.js`
 - ✅ **0 missing, 0 partial namespaces** (audited on **2025-09-19**)
 - ✅ **50+ specialized validation modules** kept in sync with TradingView’s v6 reference
 
@@ -127,7 +127,7 @@ The TradeSync Pine Script v6 validator continues to provide end-to-end coverage 
 
 ## Automated Coverage Workflow
 
-- `node src/client/functional-app/pine-script-ai-editor/utils/validator/run-coverage-analysis.js`
+- `node pine-validator/run-coverage-analysis.js`
   - Compares `KEYWORDS`, `PSEUDO_VARS`, and `NS_MEMBERS` against the documented identifier list used in the coverage script.
   - Prints a coverage summary (total, covered, missing) alongside suggested allowlist updates when gaps exist.
 - If the script reports differences, update `core/constants.ts`, rerun the command, then refresh this document with the new snapshot.

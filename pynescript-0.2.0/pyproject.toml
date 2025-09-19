@@ -1,0 +1,180 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pynescript"
+dynamic = ["version"]
+description = "Handle Pinescript using Python"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "LGPL-3.0-or-later"
+keywords = ["python", "tradingview", "pinescript"]
+authors = [
+  { name = "Yunseong Hwang", email = "kika1492@gmail.com" },
+]
+maintainers = [
+  { name = "Yunseong Hwang", email = "kika1492@gmail.com" },
+]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+  "antlr4-python3-runtime>=4.13.1",
+  "click>=8.1.7",
+]
+
+[project.urls]
+Documentation = "https://github.com/elbakramer/pynescript#readme"
+Issues = "https://github.com/elbakramer/pynescript/issues"
+Source = "https://github.com/elbakramer/pynescript"
+
+[project.scripts]
+pynescript = "pynescript.__main__:cli"
+
+[project.entry-points."pygments.lexers"]
+pinescript = "pynescript.ext.pygments.lexers:PinescriptLexer"
+
+[tool.hatch.version]
+path = "src/pynescript/__about__.py"
+
+[tool.hatch.envs.test]
+dependencies = [
+  "coverage[toml]>=7.4.2",
+  "pytest>=8.0.1",
+  "pytest-cov>=4.1.0",
+  "pytest-xdist>=3.5.0",
+]
+[tool.hatch.envs.test.scripts]
+test = [
+  "pytest -n auto -d {args:tests}",
+]
+test-cov = [
+  "pytest -n auto -d --cov=src/pynescript --cov=tests --cov-report=term --cov-report=lcov {args:tests}",
+]
+coverage = [
+  "coverage run -m pytest {args:tests}",
+  "coverage combine",
+  "coverage lcov",
+  "coverage report",
+]
+
+[[tool.hatch.envs.test.matrix]]
+python = ["3.10", "3.11", "3.12"]
+
+[tool.hatch.envs.lint]
+detached = true
+dependencies = [
+  "black>=24.2.0",
+  "mypy>=1.8.0",
+  "ruff>=0.2.2",
+]
+[tool.hatch.envs.lint.scripts]
+typing = [
+  "mypy --install-types --non-interactive {args:src/pynescript tests}",
+]
+style = [
+  "ruff {args:.}",
+  "black --check --diff {args:.}",
+]
+format = [
+  "black {args:.}",
+  "ruff --fix {args:.}",
+  "style",
+]
+all = [
+  "style",
+  "typing",
+]
+
+[tool.hatch.envs.docs]
+detached = true
+dependencies = [
+  "furo>=2024.1.29",
+  "myst-parser>=2.0.0",
+  "pygments>=2.17.2",
+  "sphinx>=7.2.6",
+  "sphinx-click>=5.1.0",
+  "sphinx-autobuild>=2024.2.4",
+]
+
+[tool.hatch.envs.docs.scripts]
+build = [
+  "sphinx-build docs docs/_build",
+]
+
+[tool.black]
+target-version = ["py310"]
+line-length = 120
+skip-string-normalization = true
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+extend-exclude = ["generated"]
+
+[tool.ruff.lint]
+select = [
+  "A",
+  "ARG",
+  "B",
+  "C",
+  "DTZ",
+  "E",
+  "EM",
+  "F",
+  "FBT",
+  "I",
+  "ICN",
+  "ISC",
+  "N",
+  "PLC",
+  "PLE",
+  "PLR",
+  "PLW",
+  "Q",
+  "RUF",
+  "S",
+  "T",
+  "TID",
+  "UP",
+  "W",
+  "YTT",
+]
+ignore = [
+  "ISC001",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pynescript"]
+force-single-line = true
+lines-between-types = 1
+lines-after-imports = 2
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["PLR2004", "S101", "TID252"]
+
+[tool.coverage.run]
+source_pkgs = ["pynescript", "tests"]
+branch = true
+parallel = true
+omit = [
+  "src/pynescript/__about__.py",
+]
+
+[tool.coverage.paths]
+pynescript = ["src/pynescript", "*/pynescript/src/pynescript"]
+tests = ["tests", "*/pynescript/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]

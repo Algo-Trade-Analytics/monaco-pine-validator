@@ -42,7 +42,7 @@ const COLOR_FUNCTIONS = [
 
 **Test Coverage Achieved**: 25 tests ✅
 **Files Created**: ✅ COMPLETED
-- `tests/color-functions-validation.spec.ts`
+- `tests/specs/color-functions-validation.spec.ts`
 
 #### 1.2 Request Functions Enhancement ✅ ALREADY COMPLETED
 **Priority**: Critical | **Impact**: High | **Status**: ✅ PREVIOUSLY IMPLEMENTED
@@ -72,7 +72,7 @@ const ADVANCED_REQUEST_FUNCTIONS = [
 **Test Coverage Achieved**: 44+ tests ✅ (far exceeded target of 30)
 **Files Enhanced**: ✅ ALREADY COMPLETED
 - Enhanced `modules/dynamic-data-validator.ts` (806 lines of comprehensive validation)
-- Enhanced `tests/dynamic-data-validation.spec.ts` (665 lines with extensive test coverage)
+- Enhanced `tests/specs/dynamic-data-validation.spec.ts` (665 lines with extensive test coverage)
 
 ### ✅ Phase 2: Important Gaps - LARGELY COMPLETED
 
@@ -104,7 +104,7 @@ const POLYLINE_FUNCTIONS = [
 **Test Coverage Achieved**: 38 tests ✅ (exceeded target)
 **Files Created**: ✅ COMPLETED
 - `modules/polyline-functions-validator.ts`
-- `tests/polyline-functions-validation.spec.ts`
+- `tests/specs/polyline-functions-validation.spec.ts`
 
 #### 2.2 Advanced Input Parameters ✅ COMPLETED
 **Priority**: Important | **Impact**: Medium | **Status**: ✅ DONE
@@ -132,7 +132,7 @@ const INPUT_PARAMETERS = [
 **Test Coverage Achieved**: 15 tests ✅ (met target exactly)
 **Files Enhanced**: ✅ COMPLETED
 - Enhanced `modules/input-functions-validator.ts`
-- Created `tests/advanced-input-parameters-validation.spec.ts`
+- Created `tests/specs/advanced-input-parameters-validation.spec.ts`
 
 #### 2.3 Advanced Strategy Functions ✅ COMPLETED
 **Priority**: Important | **Impact**: Medium | **Status**: ✅ DONE
@@ -152,7 +152,7 @@ const ADVANCED_STRATEGY_FUNCTIONS = [
 
 **Test Coverage Achieved**: 27 tests ✅ (exceeded target significantly)
 **Files Created**: ✅ COMPLETED
-- `tests/advanced-strategy-functions-validation.spec.ts`
+- `tests/specs/advanced-strategy-functions-validation.spec.ts`
 
 ### 🟡 Phase 3: Enhancement Opportunities (Weeks 9-12)
 
@@ -175,7 +175,7 @@ const ADVANCED_STRATEGY_FUNCTIONS = [
 
 **Files Created**: ✅ COMPLETED
 - `modules/alert-functions-validator.ts`
-- `tests/alert-functions-validation.spec.ts`
+- `tests/specs/alert-functions-validation.spec.ts`
 
 #### 3.3 Table Advanced Functions ✅ ALREADY COMPLETED
 **Target Functions**: ✅ Advanced table styling, table.cell_set_*, table formatting - ALL IMPLEMENTED
@@ -188,7 +188,7 @@ const ADVANCED_STRATEGY_FUNCTIONS = [
 - ✅ Already integrated in test suite (included in all-validation-tests.spec.ts)
 
 **Files Created**: ✅ ALREADY COMPLETED
-- `tests/table-advanced-validation.spec.ts`
+- `tests/specs/table-advanced-validation.spec.ts`
 
 #### 3.4 Advanced Built-in Variables - Week 12
 **Target Variables**: session.*, chart.*, advanced barstate properties

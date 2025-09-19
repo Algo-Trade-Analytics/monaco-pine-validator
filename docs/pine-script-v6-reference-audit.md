@@ -7,7 +7,7 @@
 
 ## Current Coverage Snapshot — 2025-09-19
 
-- ✅ `node src/client/functional-app/pine-script-ai-editor/utils/validator/run-coverage-analysis.js` reports **160 / 160 documented identifiers covered** (0 missing, 0 partial).
+- ✅ `node pine-validator/run-coverage-analysis.js` reports **160 / 160 documented identifiers covered** (0 missing, 0 partial).
 - ✅ All previously flagged gaps (arrays, map.includes, strategy percent metrics, TA additions, timeframe helpers, syminfo fundamentals, `input.hline`) are now present in `core/constants.ts` and have regression tests.
 - ✅ Invalid allowlist entries (`static`, `func`, `syminfo.exchange`, etc.) were removed; the coverage script now emits an empty “missing” section.
 
@@ -46,7 +46,7 @@ All of the above entries now appear in `core/constants.ts` (and supporting modul
 
 ## Recommendations
 1. ✅ Completed: invalid identifiers purged, missing documented items imported, regression tests added alongside the allowlist updates.
-2. 🔁 Ongoing hygiene: run `node src/client/functional-app/pine-script-ai-editor/utils/validator/run-coverage-analysis.js` (or wire it into CI) whenever allowlists shift.
+2. 🔁 Ongoing hygiene: run `node pine-validator/run-coverage-analysis.js` (or wire it into CI) whenever allowlists shift.
 3. 🔁 Keep `validator-coverage-summary.md` and this audit in sync with the automated output to highlight any future drift.
 
 ## Next Steps

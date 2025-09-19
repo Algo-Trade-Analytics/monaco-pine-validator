@@ -1,0 +1,1593 @@
+[
+  {
+    "name": "missing_version",
+    "code": "indicator(title=\"Missing Version\")\n",
+    "expect": {
+      "errors": [
+        "PS012"
+      ],
+      "warnings": [
+        "PS014"
+      ]
+    }
+  },
+  {
+    "name": "array_percentile",
+    "code": "//@version=6\nindicator(title=\"Array Percentile\")\nvalues = array.new_float(5, close)\np50 = array.percentile_linear_interpolation(values, 50)\nplot(p50)\n",
+    "expect": {
+      "errors": [],
+      "warnings": []
+    }
+  },
+  {
+    "name": "strategy_metrics",
+    "code": "//@version=6\nstrategy(\"Percent Metrics\", overlay=false)\nif ta.crossover(close, ta.sma(close, 10))\n    strategy.entry(\"Long\", strategy.long)\nplot(strategy.netprofit_percent)\n",
+    "expect": {
+      "errors": [],
+      "warnings": [
+        "PSV6-LAZY-EVAL-CONDITIONAL",
+        "PSV6-STRATEGY-NO-EXIT",
+        "PSV6-STRATEGY-PERF-NESTED",
+        "PSV6-STRATEGY-REALISM",
+        "PSV6-TA-PERF-NESTED"
+      ]
+    }
+  },
+  {
+    "name": "syminfo_fundamentals",
+    "code": "//@version=6\nindicator(\"Syminfo Fundamentals\")\nplot(float(syminfo.target_price_average))\n",
+    "expect": {
+      "errors": [],
+      "warnings": []
+    }
+  },
+  {
+    "name": "invalid_box_function",
+    "code": "//@version=6\nindicator(\"Invalid Box\", overlay=true)\nmy_box = box.new(left=0, top=1, right=1, bottom=0)\ncurrent = box.get_text(my_box)\nplot(close)\n",
+    "expect": {
+      "errors": [
+        "PSV6-BOX-UNKNOWN-FUNCTION",
+        "PSV6-FUNCTION-NAMESPACE"
+      ],
+      "warnings": [
+        "PSV6-BOX-COORDINATE-TYPE"
+      ]
+    }
+  },
+  {
+    "name": "no_plot_warning",
+    "code": "//@version=6\nindicator(\"No Plot\", overlay=true)\n",
+    "expect": {
+      "warnings": [
+        "PS014"
+      ]
+    }
+  },
+  {
+    "name": "strategy_no_orders",
+    "code": "//@version=6\nstrategy(\"No Orders\")\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PS015",
+        "PSV6-STRATEGY-REALISM"
+      ]
+    }
+  },
+  {
+    "name": "invalid_timezone_constant",
+    "code": "//@version=6\nindicator(\"TZ\")\nclose_time = time_close(\"60\", session.regular, timezone.unknown)\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-TIMEZONE-INVALID",
+        "PSV6-TIMEZONE-UNKNOWN",
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "timestamp_invalid_month",
+    "code": "//@version=6\nindicator(\"TS\")\nts = timestamp(2024, 13, 1, 0, 0, 0)\nplot(close)\n",
+    "expect": {
+      "errors": [
+        "PSV6-PARAM-MAX",
+        "PSV6-TIMESTAMP-MONTH-RANGE"
+      ]
+    }
+  },
+  {
+    "name": "array_index_bounds",
+    "code": "//@version=6\nindicator(\"Idx\")\na = array.new<float>(5)\narray.set(a, 6, close)\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-ARRAY-INDEX-BOUNDS"
+      ]
+    }
+  },
+  {
+    "name": "array_not_array_error",
+    "code": "//@version=6\nindicator(\"NotArray\")\nx = close\nvalue = array.get(x, 0)\nplot(close)\n",
+    "expect": {
+      "errors": [
+        "PSV6-ARRAY-NOT-ARRAY"
+      ]
+    }
+  },
+  {
+    "name": "migration_non_namespaced_ta",
+    "code": "//@version=6\nindicator(\"Migration\")\ns = sma(close, 10)\nplot(s)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-NAMESPACE"
+      ],
+      "warnings": [
+        "PSV6-MIG-SYNTAX"
+      ]
+    }
+  },
+  {
+    "name": "wrong_namespace_math_sma",
+    "code": "//@version=6\nindicator(\"NS\")\nval = math.sma(close, 10)\nplot(val)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-NAMESPACE"
+      ],
+      "warnings": [
+        "PSV6-MATH-FUNCTION-UNKNOWN: Unknown Math function: math.sma"
+      ]
+    }
+  },
+  {
+    "name": "unsupported_math_function_median",
+    "code": "//@version=6\nindicator(\"Median\")\nv = math.median(close, 10)\nplot(v)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-NAMESPACE"
+      ],
+      "warnings": [
+        "PSV6-MATH-FUNCTION-UNKNOWN: Unknown Math function: math.median"
+      ]
+    }
+  },
+  {
+    "name": "missing_script_declaration",
+    "code": "//@version=6\nplot(close)\n",
+    "expect": {
+      "errors": [
+        "PS013"
+      ]
+    }
+  },
+  {
+    "name": "library_restrict_strategy_calls",
+    "code": "//@version=6\nlibrary(\"Lib\")\nstrategy.entry(\"L\", strategy.long)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-UNKNOWN"
+      ],
+      "warnings": [
+        "PSV6-STRATEGY-PERF-NESTED"
+      ]
+    }
+  },
+  {
+    "name": "map_method_missing_param",
+    "code": "//@version=6\nindicator(\"Map\")\nsize = map.size()\nplot(close)\n",
+    "expect": {
+      "errors": [
+        "PSV6-MAP-METHOD-PARAMS"
+      ]
+    }
+  },
+  {
+    "name": "box_set_text_wrong_arity",
+    "code": "//@version=6\nindicator(\"Box\", overlay=true)\nb = box.new(left=0, top=1, right=1, bottom=0)\nbox.set_text(b)\nplot(close)\n",
+    "expect": {
+      "errors": [
+        "PSV6-BOX-UNKNOWN-FUNCTION",
+        "PSV6-FUNCTION-PARAM-COUNT"
+      ],
+      "warnings": [
+        "PSV6-BOX-COORDINATE-TYPE"
+      ]
+    }
+  },
+  {
+    "name": "udt_basic_methods_valid",
+    "code": "//@version=6\nindicator(\"UDT Basic\", overlay=true)\n\ntype Point\n    float x\n    float y\n\n    method move(this<Point>, float newX, float newY) =>\n        this.x := newX\n        this.y := newY\n\n    method distance(this<Point>, Point other) =>\n        math.sqrt(math.pow(this.x - other.x, 2) + math.pow(this.y - other.y, 2))\n\nvar Point point1 = Point.new(10.0, 20.0)\nvar Point point2 = Point.new(30.0, 40.0)\npoint1.move(15.0, 25.0)\ndist = point1.distance(point2)\nplot(dist)\n",
+    "expect": {
+      "errors": [],
+      "warnings": [
+        "PSV6-MATH-PERF-NESTED",
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "udt_duplicate_field_error",
+    "code": "//@version=6\nindicator(\"UDT Duplicate\")\n\ntype Rectangle\n    float width\n    float width\n\nplot(close)\n",
+    "expect": {
+      "errors": [
+        "PSV6-UDT-DUPLICATE-FIELD"
+      ]
+    }
+  },
+  {
+    "name": "udt_method_missing_this",
+    "code": "//@version=6\nindicator(\"UDT Missing This\")\n\ntype Counter\n    float total\n\nmethod add(float amount) =>\n    total := total + amount\n\nvar Counter counter = Counter.new(0.0)\ncounter.add(1.0)\nplot(counter.total)\n",
+    "expect": {
+      "errors": [
+        "PS016",
+        "PSV6-METHOD-THIS"
+      ],
+      "warnings": [
+        "PSU03"
+      ]
+    }
+  },
+  {
+    "name": "method_call_on_primitive",
+    "code": "//@version=6\nindicator(\"Primitive Method Call\")\nvalue = close\nvalue.normalize()\nplot(value)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-UNKNOWN"
+      ],
+      "warnings": []
+    }
+  },
+  {
+    "name": "matrix_index_out_of_bounds",
+    "code": "//@version=6\nindicator(\"Matrix Index\")\nm = matrix.new<float>(2, 2)\nmatrix.set(m, 0, 0, close)\nmatrix.set(m, 2, 1, close)\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-MATRIX-INDEX-BOUNDS"
+      ]
+    }
+  },
+  {
+    "name": "udt_field_missing_error",
+    "code": "//@version=6\nindicator(\"UDT Field Missing\")\n\ntype Point\n    float x\n    float y\n\nvar Point p = Point.new(1.0, 2.0)\nplot(p.z)\n",
+    "expect": {
+      "errors": [
+        "PSV6-UDT-FIELD-NOT-FOUND"
+      ],
+      "warnings": []
+    }
+  },
+  {
+    "name": "enum_undefined_value",
+    "code": "//@version=6\nindicator(\"Enum Undefined\")\n\nenum Direction\n    Long\n    Short\n\nvar Direction dir = Direction.Long\nif dir == Direction.Sideways\n    plot(1)\nplot(0)\n",
+    "expect": {
+      "errors": [
+        "PSV6-ENUM-UNDEFINED-VALUE"
+      ],
+      "warnings": [
+        "PSU02"
+      ]
+    }
+  },
+  {
+    "name": "alertcondition_missing_title",
+    "code": "//@version=6\nindicator(\"Alerts\")\ncond = close > open\nalertcondition(cond, \"\", \"message\")\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-ALERTCONDITION-NO-TITLE"
+      ]
+    }
+  },
+  {
+    "name": "input_defval_type_error",
+    "code": "//@version=6\nindicator(\"Input Defval\")\nlen = input.int(title=\"Length\", defval=\"10\")\nplot(ta.sma(close, len))\n",
+    "expect": {
+      "errors": [
+        "PSV6-INPUT-DEFVAL-TYPE"
+      ],
+      "warnings": []
+    }
+  },
+  {
+    "name": "varip_in_function_scope",
+    "code": "//@version=6\nindicator(\"Varip Scope\")\n\nfoo() =>\n    varip counter = 0\n    counter += 1\n\nfoo()\nplot(close)\n",
+    "expect": {
+      "errors": [
+        "PSV6-VARIP-SCOPE-FUNCTION"
+      ],
+      "warnings": [
+        "PSV6-FUNCTION-STYLE-DOCS"
+      ]
+    }
+  },
+  {
+    "name": "na_comparison_warning",
+    "code": "//@version=6\nindicator(\"NA Comparison\")\ncond = close == na\nplot(cond ? 1 : 0)\n",
+    "expect": {
+      "warnings": [
+        "PS023",
+        "PSV6-TYPE-SAFETY-NA-COMPARISON",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "while_infinite_loop_warning",
+    "code": "//@version=6\nindicator(\"While Loop\")\nvar int i = 0\nwhile true\n    i += 1\nplot(i)\n",
+    "expect": {
+      "errors": [
+        "PSV6-WHILE-INFINITE-LOOP"
+      ]
+    }
+  },
+  {
+    "name": "migration_security_function",
+    "code": "//@version=6\nindicator(\"Security Migration\")\nsec = security(syminfo.tickerid, \"D\", close)\nplot(sec)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-NAMESPACE"
+      ],
+      "warnings": [
+        "PSV6-MIG-SYNTAX"
+      ]
+    }
+  },
+  {
+    "name": "request_unknown_function",
+    "code": "//@version=6\nindicator(\"Request Unknown\")\ndata = request.foobar(\"AAPL\", close)\nplot(close)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-UNKNOWN",
+        "PSV6-REQUEST-UNKNOWN"
+      ]
+    }
+  },
+  {
+    "name": "type_inference_crossover_strategy_entry",
+    "code": "//@version=6\nstrategy(\"Percent Metrics\", overlay=false)\nif ta.crossover(close, ta.sma(close, 10))\n    strategy.entry(\"Long\", strategy.long)\nplot(strategy.netprofit_percent)\n",
+    "expect": {}
+  },
+  {
+    "name": "request_security_missing_param",
+    "code": "//@version=6\nindicator(\"Request Security\")\nres = request.security(syminfo.tickerid, \"D\")\nplot(res)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-COUNT",
+        "PSV6-FUNCTION-PARAM-TYPE",
+        "PSV6-REQUEST-PARAMS"
+      ],
+      "warnings": [
+        "PSV6-REPAINT-SECURITY",
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-DYNAMIC-SYMBOL"
+      ]
+    }
+  },
+  {
+    "name": "request_seed_repository_dynamic",
+    "code": "//@version=6\nindicator(\"Seed Repo Dynamic\")\nrepo = syminfo.ticker\nseed = request.seed(repo, \"DATA.csv\", na)\nplot(seed)\n",
+    "expect": {
+      "errors": [
+        "PSV6-REQUEST-SEED-EXPRESSION"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-SEED-EXT",
+        "PSV6-REQUEST-SEED-SOURCE",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_quandl_invalid_format",
+    "code": "//@version=6\nindicator(\"Request Quandl Invalid\")\nq = request.quandl(\"FRED\", \"GDP\")\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-QUANDL-FORMAT"
+      ]
+    }
+  },
+  {
+    "name": "request_dividends_missing_field",
+    "code": "//@version=6\nindicator(\"Request Dividends Missing\")\ndiv = request.dividends(\"AAPL\")\nplot(div)\n",
+    "expect": {
+      "errors": [
+        "PSV6-REQUEST-DIVIDENDS-PARAMS"
+      ]
+    }
+  },
+  {
+    "name": "request_dividends_invalid_field",
+    "code": "//@version=6\nindicator(\"Request Dividends Invalid\")\ndiv = request.dividends(\"AAPL\", \"dividends.invalid_field\")\nplot(div)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-DIVIDENDS-FIELD"
+      ]
+    }
+  },
+  {
+    "name": "request_security_in_loop",
+    "code": "//@version=6\nindicator(\"Request Security Loop\")\nfloat total = 0.0\nfor i = 0 to 1\n    total += request.security(\"AAPL\", \"D\", close)\nplot(total)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-FUNCTION-PERF-LOOP",
+        "PSV6-LAZY-EVAL-LOOP",
+        "PSV6-REPAINT-SECURITY",
+        "PSV6-REQUEST-PERF-LOOP"
+      ]
+    }
+  },
+  {
+    "name": "input_minmax_warning",
+    "code": "//@version=6\nindicator(\"Input MinMax\")\nlen = input.int(title=\"Length\", defval=10, minval=20, maxval=5)\nplot(ta.sma(close, len))\n",
+    "expect": {
+      "warnings": [
+        "PSV6-INPUT-MINVAL-WARNING",
+        "PSV6-INPUT-MAXVAL-WARNING"
+      ]
+    }
+  },
+  {
+    "name": "alert_invalid_frequency",
+    "code": "//@version=6\nindicator(\"Alert Invalid Frequency\")\nalert(\"Check\", alert.freq_custom)\nplot(close)\n",
+    "expect": {
+      "errors": [
+        "PSV6-ALERT-FREQ-INVALID"
+      ],
+      "warnings": []
+    }
+  },
+  {
+    "name": "alert_no_params",
+    "code": "//@version=6\nindicator(\"Alert No Params\")\nalert()\nplot(close)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-COUNT",
+        "PSV6-ALERT-NO-PARAMS"
+      ]
+    }
+  },
+  {
+    "name": "alert_empty_message",
+    "code": "//@version=6\nindicator(\"Alert Empty Message\")\nalert(\"\", alert.freq_all)\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-ALERT-EMPTY-MESSAGE"
+      ]
+    }
+  },
+  {
+    "name": "request_financial_missing_params",
+    "code": "//@version=6\nindicator(\"Request Financial Missing\")\nfin = request.financial(\"AAPL\", \"TOTAL_REVENUE\")\nplot(fin)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-COUNT",
+        "PSV6-REQUEST-FINANCIAL-PARAMS"
+      ],
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_financial_invalid_period",
+    "code": "//@version=6\nindicator(\"Request Financial Period\")\nfin = request.financial(\"AAPL\", \"INVALID_ID\", \"INVALID\")\nplot(fin)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION",
+        "PSV6-REQUEST-FINANCIAL-ID",
+        "PSV6-REQUEST-FINANCIAL-PERIOD"
+      ]
+    }
+  },
+  {
+    "name": "request_financial_invalid_gaps",
+    "code": "//@version=6\nindicator(\"Request Financial Invalid Gaps\")\nfin = request.financial(\"AAPL\", \"TOTAL_REVENUE\", \"FY\", \"invalid\")\nplot(fin)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION",
+        "PSV6-REQUEST-GAPS-INVALID"
+      ]
+    }
+  },
+  {
+    "name": "request_dividends_named_gaps_type",
+    "code": "//@version=6\nindicator(\"Request Dividends Named Gaps\")\ndiv = request.dividends(\"AAPL\", \"dividends.amount\", gaps = \"foo\")\nplot(div)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-DIVIDENDS-FIELD",
+        "PSV6-REQUEST-GAPS-INVALID"
+      ]
+    }
+  },
+  {
+    "name": "request_financial_barmarge_invalid",
+    "code": "//@version=6\nindicator(\"Request Financial Barmarge\")\nfin = request.financial(\"AAPL\", \"TOTAL_REVENUE\", \"FY\", barmerge.gaps_middle)\nplot(fin)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION",
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-GAPS-BARMERGE"
+      ]
+    }
+  },
+  {
+    "name": "request_economic_unknown_country",
+    "code": "//@version=6\nindicator(\"Request Economic Unknown\")\necon = request.economic(\"ZZ\", \"unknown_field\")\nplot(econ)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-ECONOMIC-COUNTRY",
+        "PSV6-REQUEST-ECONOMIC-FIELD"
+      ]
+    }
+  },
+  {
+    "name": "alertcondition_simple_true",
+    "code": "//@version=6\nindicator(\"Alertcondition Simple\")\nalertcondition(true, \"Always\", \"message\")\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-ALERTCONDITION-SIMPLE"
+      ]
+    }
+  },
+  {
+    "name": "alert_many_conditions",
+    "code": "//@version=6\nindicator(\"Alert Many Conditions\")\nalertcondition(close > open, \"Cond1\", \"msg1\")\nalertcondition(close < open, \"Cond2\", \"msg2\")\nalertcondition(hl2 > open, \"Cond3\", \"msg3\")\nalertcondition(hlc3 > open, \"Cond4\", \"msg4\")\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-PERF-ALERT-CONSOLIDATE",
+        "PSV6-ALERT-MANY-CONDITIONS"
+      ]
+    }
+  },
+  {
+    "name": "alert_mixed_frequencies",
+    "code": "//@version=6\nindicator(\"Alert Mixed Frequencies\")\nalert(\"All\", alert.freq_all)\nalert(\"Once\", alert.freq_once_per_bar)\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-PERF-ALERT-CONSOLIDATE",
+        "PSV6-ALERT-MIXED-FREQUENCIES"
+      ]
+    }
+  },
+  {
+    "name": "alert_in_loop",
+    "code": "//@version=6\nindicator(\"Alert In Loop\")\nfor i = 0 to 1\n    alert(\"loop\", alert.freq_all)\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-ALERT-IN-LOOP"
+      ]
+    }
+  },
+  {
+    "name": "alert_many_calls_performance",
+    "code": "//@version=6\nindicator(\"Alert Performance\")\nalert(\"1\", alert.freq_all)\nalert(\"2\", alert.freq_all)\nalert(\"3\", alert.freq_once_per_bar)\nalert(\"4\", alert.freq_once_per_bar_close)\nalert(\"5\", alert.freq_all)\nalert(\"6\", alert.freq_all)\nalert(\"7\", alert.freq_all)\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-PERF-ALERT-CONSOLIDATE",
+        "PSV6-ALERT-MIXED-FREQUENCIES",
+        "PSV6-ALERT-PERFORMANCE",
+        "PSV6-ALERT-SPAM-RISK"
+      ]
+    }
+  },
+  {
+    "name": "request_security_lower_tf_missing",
+    "code": "//@version=6\nindicator(\"Request Security Lower TF\")\nres = request.security_lower_tf(\"AAPL\", \"D\")\nplot(res)\n",
+    "expect": {
+      "errors": [
+        "PSV6-TYPE-FUNCTION-PARAM-MISMATCH",
+        "PSV6-FUNCTION-PARAM-COUNT",
+        "PSV6-FUNCTION-PARAM-TYPE",
+        "PSV6-REQUEST-SECURITY-LOWER-TF-PARAMS"
+      ]
+    }
+  },
+  {
+    "name": "request_currency_rate_missing_params",
+    "code": "//@version=6\nindicator(\"Request Currency Rate Missing\")\nrate = request.currency_rate(\"USD\")\nplot(rate)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-COUNT",
+        "PSV6-REQUEST-CURRENCY-RATE-PARAMS"
+      ]
+    }
+  },
+  {
+    "name": "request_quandl_missing_params",
+    "code": "//@version=6\nindicator(\"Request Quandl Missing\")\nq = request.quandl(\"FRED\")\nplot(q)\n",
+    "expect": {
+      "errors": [
+        "PSV6-REQUEST-QUANDL-PARAMS"
+      ],
+      "warnings": [
+        "PSV6-REQUEST-QUANDL-FORMAT"
+      ]
+    }
+  },
+  {
+    "name": "request_splits_missing_field",
+    "code": "//@version=6\nindicator(\"Request Splits Missing\")\nsplit_ratio = request.splits(\"AAPL\")\nplot(split_ratio)",
+    "expect": {
+      "errors": [
+        "PSV6-REQUEST-SPLITS-PARAMS"
+      ]
+    }
+  },
+  {
+    "name": "request_splits_invalid_field",
+    "code": "//@version=6\nindicator(\"Request Splits Invalid Field\")\nsplit_ratio = request.splits(\"AAPL\", \"splits.unknown\")\nplot(split_ratio)",
+    "expect": {
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-SPLITS-FIELD"
+      ]
+    }
+  },
+  {
+    "name": "request_splits_invalid_gaps",
+    "code": "//@version=6\nindicator(\"Request Splits Invalid Gaps\")\nsplit_ratio = request.splits(\"AAPL\", \"splits.ratio\", \"invalid\")\nplot(split_ratio)",
+    "expect": {
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-GAPS-INVALID",
+        "PSV6-REQUEST-SPLITS-FIELD"
+      ]
+    }
+  },
+  {
+    "name": "request_splits_named_gaps_type",
+    "code": "//@version=6\nindicator(\"Request Splits Named Gaps\")\nsplit_ratio = request.splits(\"AAPL\", \"splits.ratio\", gaps = \"foo\")\nplot(split_ratio)",
+    "expect": {
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-GAPS-INVALID",
+        "PSV6-REQUEST-SPLITS-FIELD"
+      ]
+    }
+  },
+  {
+    "name": "request_splits_barmarge_invalid",
+    "code": "//@version=6\nindicator(\"Request Splits Barmarge\")\nsplit_ratio = request.splits(\"AAPL\", \"splits.ratio\", barmerge.gaps_middle)\nplot(split_ratio)",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-GAPS-BARMERGE",
+        "PSV6-REQUEST-SPLITS-FIELD"
+      ]
+    }
+  },
+  {
+    "name": "request_earnings_missing_field",
+    "code": "//@version=6\nindicator(\"Request Earnings Missing\")\nearn = request.earnings(\"AAPL\")\nplot(earn)",
+    "expect": {
+      "errors": [
+        "PSV6-REQUEST-EARNINGS-PARAMS"
+      ]
+    }
+  },
+  {
+    "name": "request_earnings_invalid_field",
+    "code": "//@version=6\nindicator(\"Request Earnings Invalid Field\")\nearn = request.earnings(\"AAPL\", \"earnings.unknown\")\nplot(earn)",
+    "expect": {
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-EARNINGS-FIELD"
+      ]
+    }
+  },
+  {
+    "name": "request_earnings_invalid_gaps",
+    "code": "//@version=6\nindicator(\"Request Earnings Invalid Gaps\")\nearn = request.earnings(\"AAPL\", \"earnings.revenue\", \"invalid\")\nplot(earn)",
+    "expect": {
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-EARNINGS-FIELD",
+        "PSV6-REQUEST-GAPS-INVALID"
+      ]
+    }
+  },
+  {
+    "name": "request_earnings_named_gaps_type",
+    "code": "//@version=6\nindicator(\"Request Earnings Named Gaps\")\nearn = request.earnings(\"AAPL\", \"earnings.revenue\", gaps = \"foo\")\nplot(earn)",
+    "expect": {
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-EARNINGS-FIELD",
+        "PSV6-REQUEST-GAPS-INVALID"
+      ]
+    }
+  },
+  {
+    "name": "request_earnings_barmarge_invalid",
+    "code": "//@version=6\nindicator(\"Request Earnings Barmarge\")\nearn = request.earnings(\"AAPL\", \"earnings.revenue\", barmerge.gaps_middle)\nplot(earn)",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-EARNINGS-FIELD",
+        "PSV6-REQUEST-GAPS-BARMERGE"
+      ]
+    }
+  },
+  {
+    "name": "request_economic_missing_params",
+    "code": "//@version=6\nindicator(\"Request Economic Missing\")\necon = request.economic(\"US\")\nplot(econ)",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-COUNT",
+        "PSV6-REQUEST-ECONOMIC-PARAMS"
+      ]
+    }
+  },
+  {
+    "name": "request_economic_invalid_gaps",
+    "code": "//@version=6\nindicator(\"Request Economic Invalid Gaps\")\necon = request.economic(\"US\", \"gdp\", \"invalid\")\nplot(econ)",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-GAPS-INVALID"
+      ]
+    }
+  },
+  {
+    "name": "request_economic_named_gaps_type",
+    "code": "//@version=6\nindicator(\"Request Economic Named Gaps\")\necon = request.economic(\"US\", \"gdp\", gaps = \"foo\")\nplot(econ)",
+    "expect": {
+      "warnings": []
+    }
+  },
+  {
+    "name": "request_economic_barmarge_invalid",
+    "code": "//@version=6\nindicator(\"Request Economic Barmarge\")\necon = request.economic(\"US\", \"gdp\", barmerge.gaps_middle)\nplot(econ)",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-GAPS-BARMERGE"
+      ]
+    }
+  },
+  {
+    "name": "request_currency_rate_missing_param",
+    "code": "//@version=6\nindicator(\"Request Currency Missing\")\nrate = request.currency_rate(\"USD\")\nplot(rate)",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-COUNT",
+        "PSV6-REQUEST-CURRENCY-RATE-PARAMS"
+      ]
+    }
+  },
+  {
+    "name": "request_currency_rate_invalid",
+    "code": "//@version=6\nindicator(\"Request Currency Invalid\")\nrate = request.currency_rate(\"INVALID\", \"USD\")\nplot(rate)",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-CURRENCY-CODE"
+      ]
+    }
+  },
+  {
+    "name": "request_seed_missing_params",
+    "code": "//@version=6\nindicator(\"Request Seed Missing\")\nseed = request.seed(\"FRED\")\nplot(seed)",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-COUNT",
+        "PSV6-REQUEST-SEED-PARAMS"
+      ]
+    }
+  },
+  {
+    "name": "request_seed_dynamic_symbol",
+    "code": "//@version=6\nindicator(\"Request Seed Dynamic\")\nfloat x = close\nseed = request.seed(\"FRED\", str.tostring(x), close)\nplot(seed)",
+    "expect": {
+    "errors": [
+      "PSV6-REQUEST-SEED-PARAMS"
+    ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_seed_calc_bars_series",
+    "code": "//@version=6\nindicator(\"Request Seed Bars\")\nseed = request.seed(\"FRED\", \"AAPL\", close, calc_bars_count = close)\nplot(seed)",
+    "expect": {
+      "warnings": []
+    }
+  },
+  {
+    "name": "request_security_dynamic_timeframe",
+    "code": "//@version=6\nindicator(\"Request Security Dynamic TF\")\ntimeframe = timeframe.period + \"\"\nres = request.security(\"AAPL\", timeframe, close)\nplot(res)",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-REPAINT-HTF",
+        "PSV6-REPAINT-SECURITY",
+        "PSV6-REQUEST-DYNAMIC-TIMEFRAME",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_security_dynamic_symbol",
+    "code": "//@version=6\nindicator(\"Request Security Dynamic Symbol\")\nsymbol = syminfo.tickerid + \"\"\nres = request.security(symbol, \"D\", close)\nplot(res)",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-REPAINT-SECURITY",
+        "PSV6-REQUEST-DYNAMIC-SYMBOL",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_security_many_calls",
+    "code": "//@version=6\nindicator(\"Request Security Many\")\nfloat sum = 0.0\nsum += request.security(\"AAPL\", \"D\", close)\nsum += request.security(\"MSFT\", \"D\", close)\nsum += request.security(\"NVDA\", \"D\", close)\nsum += request.security(\"GOOG\", \"D\", close)\nsum += request.security(\"AMZN\", \"D\", close)\nsum += request.security(\"META\", \"D\", close)\nsum += request.security(\"TSLA\", \"D\", close)\nsum += request.security(\"NFLX\", \"D\", close)\nplot(sum)",
+    "expect": {
+      "warnings": [
+        "PSV6-REPAINT-SECURITY"
+      ]
+    }
+  },
+  {
+    "name": "request_security_limit_thresholds",
+    "code": "//@version=6\nindicator(\"Request Security Limit\")\nfloat total = 0.0\ntotal += request.security(\"AAPL\", \"D\", close)\ntotal += request.security(\"MSFT\", \"D\", close)\ntotal += request.security(\"NVDA\", \"D\", close)\ntotal += request.security(\"GOOG\", \"D\", close)\ntotal += request.security(\"AMZN\", \"D\", close)\ntotal += request.security(\"META\", \"D\", close)\ntotal += request.security(\"TSLA\", \"D\", close)\ntotal += request.security(\"NFLX\", \"D\", close)\ntotal += request.security(\"CRM\", \"D\", close)\ntotal += request.security(\"ADBE\", \"D\", close)\ntotal += request.security(\"PYPL\", \"D\", close)\ntotal += request.security(\"UBER\", \"D\", close)\ntotal += request.security(\"SPOT\", \"D\", close)\ntotal += request.security(\"BABA\", \"D\", close)\ntotal += request.security(\"ORCL\", \"D\", close)\ntotal += request.security(\"INTC\", \"D\", close)\ntotal += request.security(\"AMD\", \"D\", close)\ntotal += request.security(\"AVGO\", \"D\", close)\ntotal += request.security(\"IBM\", \"D\", close)\ntotal += request.security(\"SAP\", \"D\", close)\ntotal += request.security(\"SONY\", \"D\", close)\ntotal += request.security(\"SHOP\", \"D\", close)\ntotal += request.security(\"SQ\", \"D\", close)\ntotal += request.security(\"DAL\", \"D\", close)\ntotal += request.security(\"BA\", \"D\", close)\ntotal += request.security(\"LUV\", \"D\", close)\ntotal += request.security(\"GE\", \"D\", close)\ntotal += request.security(\"F\", \"D\", close)\ntotal += request.security(\"GM\", \"D\", close)\ntotal += request.security(\"TM\", \"D\", close)\ntotal += request.security(\"HMC\", \"D\", close)\ntotal += request.security(\"V\", \"D\", close)\ntotal += request.security(\"MA\", \"D\", close)\ntotal += request.security(\"JPM\", \"D\", close)\ntotal += request.security(\"BAC\", \"D\", close)\ntotal += request.security(\"C\", \"D\", close)\ntotal += request.security(\"WFC\", \"D\", close)\ntotal += request.security(\"GS\", \"D\", close)\ntotal += request.security(\"MS\", \"D\", close)\ntotal += request.security(\"BLK\", \"D\", close)\ntotal += request.security(\"SCHW\", \"D\", close)\ntotal += request.security(\"ICE\", \"D\", close)\nplot(total)",
+    "expect": {
+      "warnings": [
+        "PSV6-REPAINT-SECURITY",
+        "PSV6-REQUEST-PERF-COUNT",
+        "PSV6-REQUEST-LIMIT-NEAR",
+        "PSV6-REQUEST-LIMIT-APPROACHING"
+      ]
+    }
+  },
+  {
+    "name": "request_security_dynamic_loop",
+    "code": "//@version=6\nindicator(\"Request Dynamic Loop\")\nfloat total = 0.0\nfor i = 0 to 3\n    string sym = \"AAPL\" + str.tostring(i)\n    total += request.security(sym, \"D\", close[i])\nplot(total)",
+    "expect": {
+      "warnings": [
+        "PSV6-FUNCTION-PERF-LOOP",
+        "PSV6-LAZY-EVAL-LOOP",
+        "PSV6-REPAINT-SECURITY",
+        "PSV6-REQUEST-DYNAMIC-LOOP",
+        "PSV6-REQUEST-PERF-LOOP",
+        "PSV6-HISTORY-PERF-LOOP",
+        "PSV6-HISTORY-FUNCTION-PARAM",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION",
+        "PSV6-STR-PERF-LOOP",
+        "PSV6-REQUEST-DYNAMIC-SYMBOL"
+      ]
+    }
+  },
+  {
+    "name": "request_security_dynamic_conditional",
+    "code": "//@version=6\nindicator(\"Request Dynamic Conditional\")\nvar float res = close\nif close > open\n    res := request.security(\"AAPL\", \"D\", close[1])\nplot(res)",
+    "expect": {
+      "warnings": [
+        "PSV6-LAZY-EVAL-CONDITIONAL",
+        "PSV6-REPAINT-SECURITY",
+        "PSV6-REQUEST-DYNAMIC-CONDITIONAL",
+        "PSV6-HISTORY-FUNCTION-PARAM",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_security_ignore_invalid_timeframe",
+    "code": "//@version=6\nindicator(\"Request Security Ignore TF\")\nres = request.security_lower_tf(\"AAPL\", \"60\", close, ignore_invalid_timeframe = true)\nplot(res)",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE",
+        "PSV6-TYPE-FUNCTION-PARAM-MISMATCH"
+      ],
+      "warnings": []
+    }
+  },
+  {
+    "name": "input_int_default_string",
+    "code": "//@version=6\nindicator(\"Input Int Default String\")\nlen = input.int(\"ten\", \"Len\")\nplot(len)",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-INPUT-DEFAULT-TYPE"
+      ]
+    }
+  },
+  {
+    "name": "input_float_default_string",
+    "code": "//@version=6\nindicator(\"Input Float Default String\")\nvalue = input.float(\"a\", \"Float\")\nplot(value)",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-INPUT-DEFAULT-TYPE"
+      ]
+    }
+  },
+  {
+    "name": "input_bool_default_number",
+    "code": "//@version=6\nindicator(\"Input Bool Default Number\")\nflag = input.bool(1, \"Flag\")\nplot(flag ? 1 : 0)",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-INPUT-DEFAULT-TYPE"
+      ]
+    }
+  },
+  {
+    "name": "input_string_default_non_literal",
+    "code": "//@version=6\nindicator(\"Input String Non Literal\")\nname = input.string(close, \"Name\")\nplot(close)",
+    "expect": {
+      "warnings": [
+        "PSV6-INPUT-DEFAULT-TYPE",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "input_session_invalid_default",
+    "code": "//@version=6\nindicator(\"Input Session Invalid\")\nsess = input.session(\"ZZZZ\", \"Session\")\nplot(close)",
+    "expect": {
+      "warnings": [
+        "PSV6-INPUT-DEFAULT-TYPE"
+      ]
+    }
+  },
+  {
+    "name": "input_symbol_invalid_default",
+    "code": "//@version=6\nindicator(\"Input Symbol Invalid\")\nsym = input.symbol(1, \"Symbol\")\nplot(close)",
+    "expect": {
+      "warnings": [
+        "PSV6-INPUT-DEFAULT-TYPE"
+      ]
+    }
+  },
+  {
+    "name": "input_timeframe_invalid_default",
+    "code": "//@version=6\nindicator(\"Input Timeframe Invalid\")\ntf = input.timeframe(1, \"TF\")\nplot(close)",
+    "expect": {}
+  },
+  {
+    "name": "input_float_step_negative",
+    "code": "//@version=6\nindicator(\"Input Float Negative Step\")\nvalue = input.float(1.0, \"Float\", step = -0.5)\nplot(value)",
+    "expect": {
+      "warnings": [
+        "PSV6-INPUT-STEP-WARNING"
+      ]
+    }
+  },
+  {
+    "name": "input_int_step_negative",
+    "code": "//@version=6\nindicator(\"Input Int Negative Step\")\nlen = input.int(10, \"Len\", step = -1)\nplot(len)",
+    "expect": {
+      "warnings": [
+        "PSV6-INPUT-STEP-WARNING"
+      ]
+    }
+  },
+  {
+    "name": "input_float_step_small",
+    "code": "//@version=6\nindicator(\"Input Float Small Step\")\nvalue = input.float(1.0, \"Float\", step = 0.00001)\nplot(value)",
+    "expect": {
+      "warnings": [
+        "PSV6-INPUT-STEP-WARNING"
+      ]
+    }
+  },
+  {
+    "name": "input_options_not_array",
+    "code": "//@version=6\nindicator(\"Input Options Not Array\")\nchoice = input.string(\"a\", \"Choice\", options = \"abc\")\nplot(close)",
+    "expect": {
+      "warnings": [
+        "PSV6-INPUT-OPTIONS-WARNING"
+      ]
+    }
+  },
+  {
+    "name": "input_options_empty_array",
+    "code": "//@version=6\nindicator(\"Input Options Empty\")\nchoice = input.string(\"a\", \"Choice\", options = [])\nplot(close)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-INPUT-OPTIONS-WARNING"
+      ]
+    }
+  },
+  {
+    "name": "request_currency_rate_lowercase_codes",
+    "code": "//@version=6\nindicator(\"Currency Lowercase\")\nrate = request.currency_rate(\"us\", \"eur\")\nplot(rate)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-CURRENCY-CODE"
+      ]
+    }
+  },
+  {
+    "name": "request_currency_rate_ignore_string",
+    "code": "//@version=6\nindicator(\"Currency Ignore String\")\nrate = request.currency_rate(\"USD\", \"EUR\", \"yes\")\nplot(rate)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-REQUEST-CURRENCY-IGNORE"
+      ]
+    }
+  },
+  {
+    "name": "request_currency_rate_dynamic_inputs",
+    "code": "//@version=6\nindicator(\"Currency Dynamic\")\nvar string from = syminfo.currency\nrate = request.currency_rate(from, \"JPY\")\nplot(rate)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_currency_rate_same_currency",
+    "code": "//@version=6\nindicator(\"Currency Same\")\nrate = request.currency_rate(\"USD\", \"USD\")\nplot(rate)\n",
+    "expect": {}
+  },
+  {
+    "name": "request_currency_rate_constant_enum",
+    "code": "//@version=6\nindicator(\"Currency Enum\")\nrate = request.currency_rate(currency.USD, currency.EUR)\nplot(rate)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "request_currency_rate_numeric_code",
+    "code": "//@version=6\nindicator(\"Currency Numeric\")\nrate = request.currency_rate(\"123\", \"USD\")\nplot(rate)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-CURRENCY-CODE"
+      ]
+    }
+  },
+  {
+    "name": "request_currency_rate_series_source",
+    "code": "//@version=6\nindicator(\"Currency Series Source\")\nstring base = syminfo.currency\nrate = request.currency_rate(base, \"GBP\")\nplot(rate)\n",
+    "expect": {
+      "errors": [
+        "PSV6-ENUM-UNDEFINED-TYPE",
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": []
+    }
+  },
+  {
+    "name": "request_currency_rate_concat_symbol",
+    "code": "//@version=6\nindicator(\"Currency Concat\")\nstring derived = syminfo.currency + \"\"\nrate = request.currency_rate(derived, \"CHF\")\nplot(rate)\n",
+    "expect": {
+      "errors": [
+        "PSV6-ENUM-UNDEFINED-TYPE",
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": []
+    }
+  },
+  {
+    "name": "request_seed_valid_tuple",
+    "code": "//@version=6\nindicator(\"Seed Valid\")\n[series1] = request.seed(\"seed_crypto_santiment\", \"BTC_DEV_ACTIVITY\", [close])\nplot(series1)\n",
+    "expect": {
+      "warnings": []
+    }
+  },
+  {
+    "name": "request_seed_symbol_number",
+    "code": "//@version=6\nindicator(\"Seed Symbol Number\")\nseed = request.seed(\"seed_repo\", 123, close)\nplot(seed)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-REQUEST-SEED-SYMBOL"
+      ]
+    }
+  },
+  {
+    "name": "request_seed_source_number",
+    "code": "//@version=6\nindicator(\"Seed Source Number\")\nseed = request.seed(123, \"DATA\", close)\nplot(seed)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-REQUEST-SEED-SOURCE"
+      ]
+    }
+  },
+  {
+    "name": "request_seed_calc_bars_string",
+    "code": "//@version=6\nindicator(\"Seed Calc Bars String\")\nseed = request.seed(\"seed_repo\", \"DATA\", close, calc_bars_count = \"1000\")\nplot(seed)\n",
+    "expect": {
+      "warnings": []
+    }
+  },
+  {
+    "name": "request_seed_calc_bars_dynamic",
+    "code": "//@version=6\nindicator(\"Seed Calc Bars Dynamic\")\nint bars = bar_index\nseed = request.seed(\"seed_repo\", \"DATA\", close, calc_bars_count = bars)\nplot(seed)\n",
+    "expect": {
+    "errors": [],
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_seed_ignore_invalid_true",
+    "code": "//@version=6\nindicator(\"Seed Ignore\")\nseed = request.seed(\"seed_repo\", \"DATA\", close, ignore_invalid_symbol = true)\nplot(seed)\n",
+    "expect": {
+      "warnings": []
+    }
+  },
+  {
+    "name": "request_seed_expression_function",
+    "code": "//@version=6\nindicator(\"Seed Expr Function\")\nseed = request.seed(\"seed_crypto_santiment\", \"BTC_DEV_ACTIVITY\", ta.sma(close, 10))\nplot(seed)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "request_seed_symbol_variable",
+    "code": "//@version=6\nindicator(\"Seed Symbol Var\")\nstring file = \"DATA\"\nseed = request.seed(\"seed_repo\", file, close)\nplot(seed)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-SEED-SYMBOL"
+      ]
+    }
+  },
+  {
+    "name": "request_financial_valid_usage",
+    "code": "//@version=6\nindicator(\"Financial Valid\")\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", \"FY\")\nplot(fin)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_financial_dynamic_symbol",
+    "code": "//@version=6\nindicator(\"Financial Dynamic Symbol\")\nstring sym = syminfo.tickerid\nfin = request.financial(sym, \"TOTAL_REVENUE\", \"FY\")\nplot(fin)\n",
+    "expect": {
+      "errors": [
+        "PSV6-ENUM-UNDEFINED-TYPE",
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-REQUEST-SYMBOL-FORMAT",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_financial_dynamic_field",
+    "code": "//@version=6\nindicator(\"Financial Dynamic Field\")\nstring field = \"TOTAL_REVENUE\"\nfin = request.financial(\"NASDAQ:AAPL\", field, \"FY\")\nplot(fin)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-FINANCIAL-FIELD",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_financial_unknown_period",
+    "code": "//@version=6\nindicator(\"Financial Period Unknown\")\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", \"ABC\")\nplot(fin)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-FINANCIAL-PERIOD",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_financial_invalid_currency_literal",
+    "code": "//@version=6\nindicator(\"Financial Currency\")\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", \"FY\", currency=\"XYZ\")\nplot(fin)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_financial_named_gaps_invalid",
+    "code": "//@version=6\nindicator(\"Financial Gaps Invalid\")\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", \"FY\", gaps=\"foo\")\nplot(fin)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_financial_lookahead_invalid",
+    "code": "//@version=6\nindicator(\"Financial Lookahead Invalid\")\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", \"FY\", lookahead=barmerge.lookahead_middle)\nplot(fin)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_financial_period_dynamic",
+    "code": "//@version=6\nindicator(\"Financial Period Dynamic\")\nstring per = \"FY\"\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", per)\nplot(fin)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_advanced_performance_multiple",
+    "code": "//@version=6\nindicator(\"Request Advanced Load\")\nrequest.dividends(\"NASDAQ:AAPL\", \"dividends.gross\")\nrequest.dividends(\"NASDAQ:MSFT\", \"dividends.net\")\nrequest.splits(\"NASDAQ:AAPL\", \"splits.denominator\")\nrequest.earnings(\"NASDAQ:MSFT\", \"earnings.actual\")\nrequest.economic(\"US\", \"gdp\")\nrequest.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", \"FY\")\nplot(close)",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-PERFORMANCE-MULTIPLE",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION",
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "request_economic_valid_usage",
+    "code": "//@version=6\nindicator(\"Economic Valid\")\necon = request.economic(\"US\", \"gdp\")\nplot(econ)\n",
+    "expect": {}
+  },
+  {
+    "name": "request_economic_invalid_country",
+    "code": "//@version=6\nindicator(\"Economic Country Invalid\")\necon = request.economic(\"ZZ\", \"gdp\")\nplot(econ)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-ECONOMIC-COUNTRY"
+      ]
+    }
+  },
+  {
+    "name": "request_economic_invalid_field",
+    "code": "//@version=6\nindicator(\"Economic Field Invalid\")\necon = request.economic(\"US\", \"unknown\")\nplot(econ)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-ECONOMIC-FIELD"
+      ]
+    }
+  },
+  {
+    "name": "request_economic_invalid_gaps_literal",
+    "code": "//@version=6\nindicator(\"Economic Gaps Invalid\")\necon = request.economic(\"US\", \"gdp\", \"foo\")\nplot(econ)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REQUEST-GAPS-INVALID"
+      ]
+    }
+  },
+  {
+    "name": "request_economic_gaps_barmerge",
+    "code": "//@version=6\nindicator(\"Economic Gaps Valid\")\necon = request.economic(\"US\", \"gdp\", barmerge.gaps_off)\nplot(econ)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "request_economic_dynamic_country",
+    "code": "//@version=6\nindicator(\"Economic Country Dynamic\")\nstring country = syminfo.country\necon = request.economic(country, \"gdp\")\nplot(econ)\n",
+    "expect": {
+      "errors": [
+        "PSV6-ENUM-UNDEFINED-TYPE",
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_dividends_valid_usage",
+    "code": "//@version=6\nindicator(\"Dividends Valid\")\ndiv = request.dividends(\"NASDAQ:AAPL\", dividends.gross, gaps=barmerge.gaps_off)\nplot(div)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "request_dividends_invalid_lookahead",
+    "code": "//@version=6\nindicator(\"Dividends Lookahead Invalid\")\ndiv = request.dividends(\"NASDAQ:AAPL\", dividends.gross, lookahead=barmerge.lookahead_middle)\nplot(div)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-LOOKAHEAD-INVALID"
+      ]
+    }
+  },
+  {
+    "name": "request_dividends_bool_gaps",
+    "code": "//@version=6\nindicator(\"Dividends Bool Gaps\")\ndiv = request.dividends(\"NASDAQ:AAPL\", dividends.gross, gaps=true)\nplot(div)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "request_dividends_currency_override",
+    "code": "//@version=6\nindicator(\"Dividends Currency\")\ndiv = request.dividends(\"NASDAQ:AAPL\", dividends.net, currency=\"EUR\")\nplot(div)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "request_earnings_valid_usage",
+    "code": "//@version=6\nindicator(\"Earnings Valid\")\nearn = request.earnings(\"NASDAQ:AAPL\", earnings.actual, gaps=barmerge.gaps_off)\nplot(earn)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "request_earnings_invalid_lookahead",
+    "code": "//@version=6\nindicator(\"Earnings Lookahead Invalid\")\nearn = request.earnings(\"NASDAQ:AAPL\", earnings.actual, lookahead=barmerge.lookahead_middle)\nplot(earn)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-LOOKAHEAD-INVALID"
+      ]
+    }
+  },
+  {
+    "name": "request_earnings_currency_override",
+    "code": "//@version=6\nindicator(\"Earnings Currency\")\nearn = request.earnings(\"NASDAQ:AAPL\", earnings.actual, currency=\"USD\")\nplot(earn)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "request_earnings_named_gaps_invalid",
+    "code": "//@version=6\nindicator(\"Earnings Gaps Invalid\")\nearn = request.earnings(\"NASDAQ:AAPL\", earnings.actual, gaps=\"foo\")\nplot(earn)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-GAPS-INVALID"
+      ]
+    }
+  },
+  {
+    "name": "request_splits_valid_usage",
+    "code": "//@version=6\nindicator(\"Splits Valid\")\nsplit = request.splits(\"NASDAQ:AAPL\", splits.denominator, gaps=barmerge.gaps_off)\nplot(split)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_splits_invalid_lookahead",
+    "code": "//@version=6\nindicator(\"Splits Lookahead Invalid\")\nsplit = request.splits(\"NASDAQ:AAPL\", splits.denominator, lookahead=barmerge.lookahead_middle)\nplot(split)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
+        "PSV6-REQUEST-LOOKAHEAD-INVALID",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_splits_bool_gaps",
+    "code": "//@version=6\nindicator(\"Splits Bool Gaps\")\nsplit = request.splits(\"NASDAQ:AAPL\", splits.numerator, gaps=true)\nplot(split)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "request_splits_field_numerator",
+    "code": "//@version=6\nindicator(\"Splits Numerator\")\nsplit = request.splits(\"NASDAQ:AAPL\", splits.numerator)\nplot(split)\n",
+    "expect": {
+      "errors": [
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+      ]
+    }
+  },
+  {
+    "name": "request_security_valid_usage",
+    "code": "//@version=6\nindicator(\"Security Valid\")\nres = request.security(\"AAPL\", \"D\", close)\nplot(res)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REPAINT-SECURITY"
+      ]
+    }
+  },
+  {
+    "name": "request_security_dynamic_timeframe_expr",
+    "code": "//@version=6\nindicator(\"Security Dynamic TF\")\nstring tf = timeframe.period + \"\"\nres = request.security(\"AAPL\", tf, close)\nplot(res)\n",
+    "expect": {
+      "errors": [
+        "PSV6-ENUM-TYPE-MISMATCH",
+        "PSV6-FUNCTION-PARAM-TYPE"
+      ],
+      "warnings": [
+        "PSV6-REPAINT-SECURITY",
+        "PSV6-REQUEST-DYNAMIC-TIMEFRAME",
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
+    }
+  },
+  {
+    "name": "request_security_empty_symbol",
+    "code": "//@version=6\nindicator(\"Security Empty Symbol\")\nres = request.security(\"\", \"D\", close)\nplot(res)\n",
+    "expect": {
+      "errors": [
+        "PSV6-REQUEST-SYMBOL-EMPTY"
+      ],
+      "warnings": [
+        "PSV6-REPAINT-SECURITY"
+      ]
+    }
+  },
+  {
+    "name": "request_security_invalid_symbol_chars",
+    "code": "//@version=6\nindicator(\"Security Symbol Chars\")\nres = request.security(\"AAP L\", \"D\", close)\nplot(res)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REPAINT-SECURITY",
+        "PSV6-REQUEST-SYMBOL-CHARS",
+        "PSV6-REQUEST-SYMBOL-FORMAT"
+      ]
+    }
+  },
+  {
+    "name": "request_security_unknown_exchange",
+    "code": "//@version=6\nindicator(\"Security Unknown Exchange\")\nres = request.security(\"FOO:AAPL\", \"D\", close)\nplot(res)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REPAINT-SECURITY"
+      ]
+    }
+  },
+  {
+    "name": "request_security_long_symbol",
+    "code": "//@version=6\nindicator(\"Security Long Symbol\")\nres = request.security(\"THISISALONGSYMBOL12345\", \"D\", close)\nplot(res)\n",
+    "expect": {
+      "warnings": [
+        "PSV6-REPAINT-SECURITY",
+        "PSV6-REQUEST-SYMBOL-LENGTH"
+      ]
+    }
+  },
+  {
+    "name": "request_quandl_valid_database",
+    "code": "//@version=6\nindicator(\"Quandl Valid\")\nq = request.quandl(\"FRED/GDP\")\nplot(q)\n",
+    "expect": {
+      "errors": [
+        "PSV6-REQUEST-QUANDL-PARAMS"
+      ]
+    }
+  },
+  {
+    "name": "request_quandl_deprecated_index_param",
+    "code": "//@version=6\nindicator(\"Quandl Index\")\nq = request.quandl(\"FRED/GDP\", index=1)\nplot(q)\n",
+    "expect": {}
+  },
+  {
+    "name": "hex_color_literal",
+    "code": "//@version=6\nindicator(\"Hex Color\")\nmyColor = #089981\nplot(close, color = myColor)\n",
+    "expect": {
+      "errors": [],
+      "warnings": []
+    }
+  },
+  {
+    "name": "array_instance_methods",
+    "code": "//@version=6\nindicator(\"Array Instance Methods\", overlay = false)\nvar array<float> values = array.new_float()\nvalues.push(close)\nvalues.clear()\nplot(close)\n",
+    "expect": {
+      "errors": [],
+      "warnings": []
+    }
+  },
+  {
+    "name": "input_constants",
+    "code": "//@version=6\nindicator(\"Input constants\")\nMODE_TOTAL = 'Total'\nGROUP_NAME = 'Group'\nmode = input.string(MODE_TOTAL, 'Mode', group = GROUP_NAME, options = [MODE_TOTAL])\nplot(close)\n",
+    "expect": {
+      "errors": [],
+      "warnings": []
+    }
+  },
+  {
+    "name": "udt_array_generic",
+    "code": "//@version=6\nindicator(\"UDT array\")\ntype data\n    float value\nvar array<data> store = array.new<data>()\nplot(close)\n",
+    "expect": {
+      "errors": [],
+      "warnings": []
+    }
+  },
+  {
+    "name": "str_tostring_format",
+    "code": "//@version=6\nindicator(\"String Format\")\nlabel.new(bar_index, close, str.tostring(volume, format.volume))\nplot(close)\n",
+    "expect": {
+      "errors": [],
+      "warnings": []
+    }
+  },
+  {
+    "name": "chart_point_new",
+    "code": "//@version=6\nindicator(\"Chart Point\")\nvar chartPoint = chart.point.new(na, bar_index, close)\nplot(close)\n",
+    "expect": {
+      "errors": [],
+      "warnings": []
+    }
+  }
+]
