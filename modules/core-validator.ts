@@ -210,17 +210,7 @@ export class CoreValidator implements ValidationModule {
       this.context.hasVersion = true;
       this.context.firstVersionLine = lineNum;
       if (lineNum !== 1) {
-        const sourceLines = this.context.rawLines?.length ? this.context.rawLines : this.context.cleanLines;
-        const onlyCommentsAbove = sourceLines.slice(0, lineNum - 1).every(raw => {
-          const trimmed = (raw || '').trim();
-          if (trimmed === '') return true;
-          if (/^\/\//.test(trimmed)) return true;
-          if (/^\/\*/.test(trimmed) || /^\*/.test(trimmed) || /^\*\//.test(trimmed)) return true;
-          return false;
-        });
-        if (!onlyCommentsAbove) {
-          this.addWarning(lineNum, 1, 'Version directive should be on the first line.', 'PSW01');
-        }
+        this.addWarning(lineNum, 1, 'Version directive should be on the first line.', 'PSW01');
       }
       if (v < 5) {
         this.addWarning(lineNum, 1, `Pine version ${v} is deprecated. Prefer v5 or v6.`, 'PSW02');
