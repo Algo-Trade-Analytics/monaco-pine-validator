@@ -23,6 +23,7 @@ import {
   createEmptySymbolTable,
   createEmptyTypeTable,
 } from './ast/types';
+import type { ProgramNode, ScriptDeclarationNode } from './ast/nodes';
 import { createNullAstService } from './ast/service';
 import { normaliseProgramAst } from './ast/normalizer';
 import { inferProgramTypes } from './ast/type-inference';
@@ -31,6 +32,20 @@ type ConfigLayer = Partial<ValidatorConfig> | undefined;
 
 const DEFAULT_AST_FILENAME = 'input.pine';
 const AST_PARSE_ERROR_CODE = 'AST-PARSE';
+
+function findScriptDeclaration(program: ProgramNode | null): ScriptDeclarationNode | null {
+  if (!program) {
+    return null;
+  }
+
+  for (const statement of program.body) {
+    if (statement.kind === 'ScriptDeclaration') {
+      return statement as ScriptDeclarationNode;
+    }
+  }
+
+  return null;
+}
 
 function mergeValidatorConfig(layers: ConfigLayer[]): { config: ValidatorConfig; ast: AstConfig } {
   const config: ValidatorConfig = {
@@ -241,6 +256,7 @@ export abstract class BaseValidator {
     this.context.scopeGraph = createEmptyScopeGraph();
     this.context.symbolTable = createEmptySymbolTable();
     this.context.astTypes = createEmptyTypeTable();
+    this.context.scriptType = null;
 
     if (!this.astConfig || this.astConfig.mode === 'disabled') {
       return;
@@ -259,6 +275,11 @@ export abstract class BaseValidator {
       this.context.symbolTable = normalised.symbolTable;
       const typeResult = inferProgramTypes(result.ast);
       this.context.astTypes = typeResult.types;
+      const scriptDeclaration = findScriptDeclaration(result.ast);
+      if (scriptDeclaration) {
+        this.scriptType = scriptDeclaration.scriptType;
+        this.context.scriptType = scriptDeclaration.scriptType;
+      }
       for (const [name, annotation] of typeResult.types) {
         const record = this.context.symbolTable.get(name);
         if (!record) {

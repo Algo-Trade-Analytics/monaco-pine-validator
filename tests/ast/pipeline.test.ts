@@ -101,4 +101,14 @@ describe('BaseValidator AST pipeline integration', () => {
     const signalRecord = context.symbolTable.get('signal');
     expect(signalRecord?.metadata).toMatchObject({ type: 'bool', isSeries: true });
   });
+
+  it('derives script type metadata from AST script declarations', () => {
+    const validator = new TestValidator({ ast: { mode: 'shadow', service: createChevrotainAstService() } });
+    const result = validator.validate(`//@version=6\nstrategy("My Strategy")\nvar foo = 1`);
+
+    expect(result.scriptType).toBe('strategy');
+
+    const context = validator.exposeContext();
+    expect(context.scriptType).toBe('strategy');
+  });
 });
