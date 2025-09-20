@@ -32,6 +32,7 @@ type ConfigLayer = Partial<ValidatorConfig> | undefined;
 
 const DEFAULT_AST_FILENAME = 'input.pine';
 const AST_PARSE_ERROR_CODE = 'AST-PARSE';
+const AST_SYNTAX_ERROR_CODE = 'AST-SYNTAX';
 
 function findScriptDeclaration(program: ProgramNode | null): ScriptDeclarationNode | null {
   if (!program) {
@@ -280,6 +281,11 @@ export abstract class BaseValidator {
         this.scriptType = scriptDeclaration.scriptType;
         this.context.scriptType = scriptDeclaration.scriptType;
       }
+      for (const syntaxError of result.diagnostics.syntaxErrors) {
+        const { line, column } = syntaxError.loc.start;
+        this.addError(line, column, syntaxError.message, syntaxError.code ?? AST_SYNTAX_ERROR_CODE);
+      }
+
       for (const [name, annotation] of typeResult.types) {
         const record = this.context.symbolTable.get(name);
         if (!record) {

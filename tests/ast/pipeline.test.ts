@@ -111,4 +111,14 @@ describe('BaseValidator AST pipeline integration', () => {
     const context = validator.exposeContext();
     expect(context.scriptType).toBe('strategy');
   });
+
+  it('surfaces parser syntax errors as validation errors', () => {
+    const validator = new TestValidator({ ast: { mode: 'shadow', service: createChevrotainAstService() } });
+    const result = validator.validate(`//@version=6\nindicator("Missing Paren"\nvar foo = 1`);
+
+    expect(result.errors.some((error) => error.code === 'AST-SYNTAX')).toBe(true);
+
+    const context = validator.exposeContext();
+    expect(context.astDiagnostics.syntaxErrors).toHaveLength(1);
+  });
 });
