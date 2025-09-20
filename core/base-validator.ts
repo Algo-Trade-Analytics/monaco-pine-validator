@@ -23,6 +23,7 @@ import {
   createEmptySymbolTable,
 } from './ast/types';
 import { createNullAstService } from './ast/service';
+import { buildScopeGraph } from './ast/scope';
 
 type ConfigLayer = Partial<ValidatorConfig> | undefined;
 
@@ -230,6 +231,8 @@ export abstract class BaseValidator {
   protected parseAst(source: string): void {
     this.context.ast = null;
     this.context.astDiagnostics = createAstDiagnostics();
+    this.context.scopeGraph = createEmptyScopeGraph();
+    this.context.symbolTable = createEmptySymbolTable();
 
     if (!this.astConfig || this.astConfig.mode === 'disabled') {
       return;
@@ -243,10 +246,17 @@ export abstract class BaseValidator {
       const result = ensureAstParseResult(service.parse(source, { filename: DEFAULT_AST_FILENAME }));
       this.context.ast = result.ast;
       this.context.astDiagnostics = result.diagnostics;
+      if (result.ast) {
+        const { scopeGraph, symbolTable } = buildScopeGraph(result.ast);
+        this.context.scopeGraph = scopeGraph;
+        this.context.symbolTable = symbolTable;
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.context.ast = null;
       this.context.astDiagnostics = createAstDiagnostics();
+      this.context.scopeGraph = createEmptyScopeGraph();
+      this.context.symbolTable = createEmptySymbolTable();
       this.addWarning(1, 1, `AST parser error: ${message}`, AST_PARSE_ERROR_CODE);
     }
   }

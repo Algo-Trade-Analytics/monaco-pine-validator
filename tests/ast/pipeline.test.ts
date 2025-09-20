@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BaseValidator } from '../../core/base-validator';
 import type { AstValidationContext, AstService } from '../../core/types';
 import { createAstDiagnostics } from '../../core/ast/types';
-import { Script } from '../../pynescript/ast/node';
+import { type ProgramNode, createLocation, createPosition, createRange } from '../../core/ast/nodes';
 
 class TestValidator extends BaseValidator {
   protected runCoreValidation(): void {}
@@ -31,7 +31,13 @@ describe('BaseValidator AST pipeline integration', () => {
   });
 
   it('populates AST data when the service succeeds', () => {
-    const fakeAst = new Script({ body: [] });
+    const fakeAst: ProgramNode = {
+      kind: 'Program',
+      directives: [],
+      body: [],
+      loc: createLocation(createPosition(1, 1, 0), createPosition(1, 1, 0)),
+      range: createRange(0, 0),
+    };
     const parse = vi.fn(() => ({ ast: fakeAst, diagnostics: createAstDiagnostics() }));
     const service: AstService = { parse };
 
@@ -48,6 +54,9 @@ describe('BaseValidator AST pipeline integration', () => {
     const context = validator.exposeContext();
     expect(context.ast).toBe(fakeAst);
     expect(context.astDiagnostics.syntaxErrors).toEqual([]);
+    expect(context.scopeGraph.root).toBe('scope-0');
+    expect(context.scopeGraph.nodes.size).toBe(1);
+    expect(context.symbolTable.size).toBe(0);
   });
 
   it('records parser failures as warnings', () => {

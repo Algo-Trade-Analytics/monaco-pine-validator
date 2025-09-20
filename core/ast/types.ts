@@ -1,5 +1,5 @@
-import type { AST, Script } from '../../pynescript/ast/node';
 import type { SyntaxError } from '../../pynescript/ast/error';
+import type { Node, ProgramNode } from './nodes';
 
 export type AstMode = 'disabled' | 'shadow' | 'primary';
 
@@ -13,7 +13,7 @@ export interface AstParseOptions {
 }
 
 export interface AstParseResult {
-  ast: Script | null;
+  ast: ProgramNode | null;
   diagnostics: AstDiagnostics;
 }
 
@@ -36,7 +36,7 @@ export type SymbolKind =
   | 'unknown';
 
 export interface SymbolLocation {
-  node: AST | null;
+  node: Node | null;
   line: number;
   column: number;
 }
@@ -93,7 +93,7 @@ export function createSymbolRecord(name: string, kind: SymbolKind, location?: Sy
   };
 }
 
-export function createSymbolLocation(node: AST | null, line: number, column: number): SymbolLocation {
+export function createSymbolLocation(node: Node | null, line: number, column: number): SymbolLocation {
   return { node, line, column };
 }
 
