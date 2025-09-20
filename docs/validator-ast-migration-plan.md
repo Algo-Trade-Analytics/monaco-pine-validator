@@ -17,6 +17,12 @@
 
 The lack of a shared parse tree means every module re-derives syntactic structure; as more language features are supported, the imperative parsing logic becomes unstable and costly to extend.
 
+### Progress Update (Infrastructure Delivered)
+
+- A typed AST surface (`core/ast/nodes.ts`) with traversal helpers and scope graph construction is merged, giving the validator a canonical syntax tree and symbol table.
+- `BaseValidator` now hydrates `AstValidationContext` with parser outputs, scope graphs, and symbol tables whenever AST mode is enabled.
+- Focused Vitest suites cover traversal and scope graph behaviour; pipeline tests assert that AST diagnostics and context wiring behave under success, failure, and disabled modes.
+
 ## 3. Target Architecture Overview
 
 ```
@@ -77,18 +83,18 @@ Key principles:
 - Produce documentation for parser choice and AST type definitions.
 
 ### Phase 1 – Infrastructure Setup
-- Create `core/ast/` folder with lexer, parser, node definitions, traversal utilities, and error types.
-- Add new `AstValidationContext` extending existing `ValidationContext` with `ast`, `scopeGraph`, `symbolTable`.
-- Add feature-flag configuration in `BaseValidator` to toggle AST mode (dual-run to compare results).
-- Establish snapshot-based tests verifying AST output for sample Pine snippets (`tests/ast/*.test.ts`).
+- ✅ Create `core/ast/` folder with lexer, parser, node definitions, traversal utilities, and error types (landed via the AST schema + traversal commits).
+- ✅ Add new `AstValidationContext` extending existing `ValidationContext` with `ast`, `scopeGraph`, `symbolTable`.
+- ✅ Add feature-flag configuration in `BaseValidator` to toggle AST mode (dual-run to compare results).
+- 🚧 Establish snapshot-based tests verifying AST output for sample Pine snippets (`tests/ast/*.test.ts`).
 
 ### Phase 2 – Semantic Foundation Passes
-- Implement initial semantic passes operating on AST:
-  - Scope builder (collects declarations, resolves references).
-  - Type inference skeleton (basic literal + identifier typing).
-  - Control flow graph builder (for loops, conditionals) – optional if complex, but plan it early.
-- Provide reusable diagnostics helpers mapping AST ranges to Monaco `IMarkerData`.
-- Add golden tests ensuring passes populate context as expected.
+- ✅ Implement initial semantic passes operating on AST:
+  - ✅ Scope builder (collects declarations, resolves references).
+  - 🚧 Type inference skeleton (basic literal + identifier typing).
+  - ☐ Control flow graph builder (for loops, conditionals) – optional if complex, but plan it early.
+- 🚧 Provide reusable diagnostics helpers mapping AST ranges to Monaco `IMarkerData`.
+- 🚧 Add golden tests ensuring passes populate context as expected.
 
 ### Phase 3 – Module Migration (Incremental)
 - Prioritise modules with high instability and heavy parsing logic (CoreValidator, FunctionDeclarations, Scope, Type).
@@ -173,20 +179,17 @@ plan:
    - Extend the prototype to cover directives, variable declarations, and function
      bodies so upcoming semantic passes have representative node shapes.
 
-3. **AST Schema & Traversal Build-Out**
-   - Formalise discriminated union node definitions in `core/ast/nodes.ts`, wiring in
-     the positional metadata already emitted by the lexer.
-   - Implement traversal helpers (`visit`, `visitChildren`, `findAncestor`) and bake in
-     TypeScript typings so downstream validators can adopt them without ad-hoc
-     utilities.
+3. **AST Schema & Traversal Expansion**
+   - Extend the node set beyond the current expressions/statements to cover loops,
+     `switch`, matrix literals, and built-in call shapes required by near-term modules.
+   - Add utility helpers (builders, guards) for the new nodes and document traversal
+     conventions for downstream contributors.
 
 4. **Semantic Pass Bootstrapping**
-   - Start the scope builder atop the new traversal utilities, targeting declarations
-     and reference resolution needed by high-priority modules (`core-validator`,
-     `function-declarations`).
-   - Define placeholder data structures for type inference results to unblock modules
-     that need literal vs. series distinctions, even if the inference logic is still
-     stubbed.
+   - Harden the scope builder with additional fixtures (nested functions, `varip`/`var`
+     lifetimes) and surface symbol metadata needed by module migrations.
+   - Stand up the type inference skeleton covering literals, identifiers, tuples, and
+     basic call-site inference so dependent modules can start wiring AST-aware checks.
 
 5. **Dual-Run Guardrail Wiring**
    - Introduce a CLI/CI harness that executes both the legacy and AST-backed validators
