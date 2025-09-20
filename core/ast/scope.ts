@@ -13,15 +13,21 @@ import {
   type AssignmentStatementNode,
   type BlockStatementNode,
   type CallExpressionNode,
+  type ConditionalExpressionNode,
+  type ContinueStatementNode,
   type ExpressionNode,
   type ExpressionStatementNode,
+  type ForStatementNode,
   type FunctionDeclarationNode,
+  type IfStatementNode,
   type IdentifierNode,
   type ParameterNode,
   type ProgramNode,
   type ReturnStatementNode,
   type ScriptDeclarationNode,
   type StatementNode,
+  type WhileStatementNode,
+  type BreakStatementNode,
   type VariableDeclarationNode,
 } from './nodes';
 
@@ -176,6 +182,13 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         visitExpression(unary.argument);
         break;
       }
+      case 'ConditionalExpression': {
+        const conditional = expression as ConditionalExpressionNode;
+        visitExpression(conditional.test);
+        visitExpression(conditional.consequent);
+        visitExpression(conditional.alternate);
+        break;
+      }
       default:
         break;
     }
@@ -227,6 +240,38 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         popScope();
         break;
       }
+      case 'IfStatement': {
+        const ifStatement = statement as IfStatementNode;
+        visitExpression(ifStatement.test);
+        visitStatement(ifStatement.consequent);
+        if (ifStatement.alternate) {
+          visitStatement(ifStatement.alternate);
+        }
+        break;
+      }
+      case 'WhileStatement': {
+        const whileStatement = statement as WhileStatementNode;
+        visitExpression(whileStatement.test);
+        pushScope('loop', whileStatement.body, { loopType: 'while' });
+        visitStatement(whileStatement.body);
+        popScope();
+        break;
+      }
+      case 'ForStatement': {
+        const forStatement = statement as ForStatementNode;
+        pushScope('loop', forStatement.body, { loopType: 'for' });
+        if (forStatement.initializer) {
+          visitStatement(forStatement.initializer);
+        }
+        visitExpression(forStatement.test);
+        visitExpression(forStatement.update);
+        visitStatement(forStatement.body);
+        popScope();
+        break;
+      }
+      case 'BreakStatement':
+      case 'ContinueStatement':
+        break;
       case 'ScriptDeclaration': {
         const script = statement as ScriptDeclarationNode;
         declare(script.identifier, 'namespace');

@@ -25,11 +25,17 @@ export type NodeKind =
   | 'VariableDeclaration'
   | 'AssignmentStatement'
   | 'FunctionDeclaration'
+  | 'IfStatement'
+  | 'WhileStatement'
+  | 'ForStatement'
+  | 'BreakStatement'
+  | 'ContinueStatement'
   | 'Parameter'
   | 'CallExpression'
   | 'Argument'
   | 'BinaryExpression'
   | 'UnaryExpression'
+  | 'ConditionalExpression'
   | 'Identifier'
   | 'NumberLiteral'
   | 'StringLiteral'
@@ -70,6 +76,11 @@ export type StatementNode =
   | VariableDeclarationNode
   | AssignmentStatementNode
   | FunctionDeclarationNode
+  | IfStatementNode
+  | WhileStatementNode
+  | ForStatementNode
+  | BreakStatementNode
+  | ContinueStatementNode
   | ScriptDeclarationNode;
 
 export type ExpressionNode =
@@ -77,7 +88,8 @@ export type ExpressionNode =
   | LiteralNode
   | CallExpressionNode
   | BinaryExpressionNode
-  | UnaryExpressionNode;
+  | UnaryExpressionNode
+  | ConditionalExpressionNode;
 
 export type LiteralNode =
   | NumberLiteralNode
@@ -163,6 +175,35 @@ export interface ArgumentNode extends BaseNode {
   value: ExpressionNode;
 }
 
+export interface IfStatementNode extends BaseNode {
+  kind: 'IfStatement';
+  test: ExpressionNode;
+  consequent: StatementNode;
+  alternate: StatementNode | null;
+}
+
+export interface WhileStatementNode extends BaseNode {
+  kind: 'WhileStatement';
+  test: ExpressionNode;
+  body: BlockStatementNode;
+}
+
+export interface ForStatementNode extends BaseNode {
+  kind: 'ForStatement';
+  initializer: VariableDeclarationNode | AssignmentStatementNode | null;
+  test: ExpressionNode | null;
+  update: ExpressionNode | null;
+  body: BlockStatementNode;
+}
+
+export interface BreakStatementNode extends BaseNode {
+  kind: 'BreakStatement';
+}
+
+export interface ContinueStatementNode extends BaseNode {
+  kind: 'ContinueStatement';
+}
+
 export interface BinaryExpressionNode extends BaseNode {
   kind: 'BinaryExpression';
   operator: string;
@@ -175,6 +216,13 @@ export interface UnaryExpressionNode extends BaseNode {
   operator: string;
   argument: ExpressionNode;
   prefix: boolean;
+}
+
+export interface ConditionalExpressionNode extends BaseNode {
+  kind: 'ConditionalExpression';
+  test: ExpressionNode;
+  consequent: ExpressionNode;
+  alternate: ExpressionNode;
 }
 
 export interface IdentifierNode extends BaseNode {

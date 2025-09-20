@@ -5,8 +5,12 @@ import {
   type BinaryExpressionNode,
   type BlockStatementNode,
   type CallExpressionNode,
+  type ConditionalExpressionNode,
+  type ContinueStatementNode,
   type ExpressionStatementNode,
+  type ForStatementNode,
   type FunctionDeclarationNode,
+  type IfStatementNode,
   type ParameterNode,
   type ProgramNode,
   type ReturnStatementNode,
@@ -14,6 +18,8 @@ import {
   type TypeReferenceNode,
   type UnaryExpressionNode,
   type VariableDeclarationNode,
+  type WhileStatementNode,
+  type BreakStatementNode,
 } from './nodes';
 
 export interface NodePath<T extends Node = Node> {
@@ -177,6 +183,30 @@ function collectChildren(path: NodePath): ChildEntry[] {
       push(fn.body, 'body');
       break;
     }
+    case 'IfStatement': {
+      const ifStatement = node as IfStatementNode;
+      push(ifStatement.test, 'test');
+      push(ifStatement.consequent, 'consequent');
+      push(ifStatement.alternate, 'alternate');
+      break;
+    }
+    case 'WhileStatement': {
+      const whileStatement = node as WhileStatementNode;
+      push(whileStatement.test, 'test');
+      push(whileStatement.body, 'body');
+      break;
+    }
+    case 'ForStatement': {
+      const forStatement = node as ForStatementNode;
+      push(forStatement.initializer, 'initializer');
+      push(forStatement.test, 'test');
+      push(forStatement.update, 'update');
+      push(forStatement.body, 'body');
+      break;
+    }
+    case 'BreakStatement':
+    case 'ContinueStatement':
+      break;
     case 'Parameter': {
       const param = node as ParameterNode;
       push(param.identifier, 'identifier');
@@ -207,6 +237,13 @@ function collectChildren(path: NodePath): ChildEntry[] {
     case 'UnaryExpression': {
       const unary = node as UnaryExpressionNode;
       push(unary.argument, 'argument');
+      break;
+    }
+    case 'ConditionalExpression': {
+      const conditional = node as ConditionalExpressionNode;
+      push(conditional.test, 'test');
+      push(conditional.consequent, 'consequent');
+      push(conditional.alternate, 'alternate');
       break;
     }
     case 'Identifier':

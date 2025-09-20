@@ -3,7 +3,9 @@ import {
   type ArgumentNode,
   type BlockStatementNode,
   type CallExpressionNode,
+  type ConditionalExpressionNode,
   type ExpressionStatementNode,
+  type ForStatementNode,
   type FunctionDeclarationNode,
   type NumberLiteralNode,
   type ParameterNode,
@@ -11,11 +13,20 @@ import {
   type ReturnStatementNode,
   type ScriptDeclarationNode,
   type StringLiteralNode,
+  type IfStatementNode,
+  type WhileStatementNode,
+  type VariableDeclarationNode,
   createLocation,
   createPosition,
   createRange,
 } from '../../core/ast/nodes';
-import { findAncestor, visit, visitChildren, type NodePath } from '../../core/ast/traversal';
+import {
+  createPath,
+  findAncestor,
+  visit,
+  visitChildren,
+  type NodePath,
+} from '../../core/ast/traversal';
 
 function span(start: number, end: number, lineStart = 1, lineEnd = lineStart) {
   return {
@@ -262,5 +273,132 @@ describe('core AST nodes traversal', () => {
     expect(childKinds).toEqual(['Identifier', 'Parameter', 'BlockStatement']);
     expect(childKeys).toEqual(['identifier', 'params', 'body']);
     expect(childIndexes).toEqual([null, 0, null]);
+  });
+
+  it('walks control flow statements and conditional expressions', () => {
+    const conditional: ConditionalExpressionNode = {
+      kind: 'ConditionalExpression',
+      test: createIdentifier('flag', 70),
+      consequent: createIdentifier('foo', 76),
+      alternate: createIdentifier('bar', 80),
+      ...span(70, 83),
+    };
+
+    const ifBlock: BlockStatementNode = {
+      kind: 'BlockStatement',
+      body: [
+        {
+          kind: 'ExpressionStatement',
+          expression: conditional,
+          ...span(68, 84),
+        } satisfies ExpressionStatementNode,
+      ],
+      ...span(65, 90),
+    };
+
+    const ifStatement: IfStatementNode = {
+      kind: 'IfStatement',
+      test: createIdentifier('ifCond', 60),
+      consequent: ifBlock,
+      alternate: null,
+      ...span(60, 90),
+    };
+
+    const whileBody: BlockStatementNode = {
+      kind: 'BlockStatement',
+      body: [
+        {
+          kind: 'VariableDeclaration',
+          declarationKind: 'var',
+          identifier: createIdentifier('loopResult', 102),
+          typeAnnotation: null,
+          initializer: createIdentifier('loopGuard', 110),
+          ...span(100, 112),
+        } satisfies VariableDeclarationNode,
+      ],
+      ...span(98, 120),
+    };
+
+    const whileStatement: WhileStatementNode = {
+      kind: 'WhileStatement',
+      test: createIdentifier('loopGuard', 96),
+      body: whileBody,
+      ...span(95, 120),
+    };
+
+    const forInitializer: VariableDeclarationNode = {
+      kind: 'VariableDeclaration',
+      declarationKind: 'var',
+      identifier: createIdentifier('idx', 132),
+      typeAnnotation: null,
+      initializer: createNumberLiteral(0, '0', 136),
+      ...span(132, 138),
+    };
+
+    const forBody: BlockStatementNode = {
+      kind: 'BlockStatement',
+      body: [
+        {
+          kind: 'ExpressionStatement',
+          expression: createIdentifier('idx', 150),
+          ...span(148, 152),
+        } satisfies ExpressionStatementNode,
+      ],
+      ...span(145, 160),
+    };
+
+    const forStatement: ForStatementNode = {
+      kind: 'ForStatement',
+      initializer: forInitializer,
+      test: createIdentifier('hasNext', 140),
+      update: createIdentifier('idx', 142),
+      body: forBody,
+      ...span(130, 160),
+    };
+
+    const program: ProgramNode = {
+      kind: 'Program',
+      directives: [],
+      body: [ifStatement, whileStatement, forStatement],
+      ...span(50, 160),
+    };
+
+    const visited: string[] = [];
+
+    visit(program, {
+      IfStatement: { enter: () => visited.push('IfStatement') },
+      ConditionalExpression: { enter: () => visited.push('ConditionalExpression') },
+      WhileStatement: { enter: () => visited.push('WhileStatement') },
+      ForStatement: { enter: () => visited.push('ForStatement') },
+      VariableDeclaration: { enter: (path) => visited.push(`Var:${path.node.identifier.name}`) },
+      Identifier: { enter: (path) => visited.push(`Identifier:${path.node.name}`) },
+    });
+
+    expect(visited).toEqual([
+      'IfStatement',
+      'Identifier:ifCond',
+      'ConditionalExpression',
+      'Identifier:flag',
+      'Identifier:foo',
+      'Identifier:bar',
+      'WhileStatement',
+      'Identifier:loopGuard',
+      'Var:loopResult',
+      'Identifier:loopResult',
+      'Identifier:loopGuard',
+      'ForStatement',
+      'Var:idx',
+      'Identifier:idx',
+      'Identifier:hasNext',
+      'Identifier:idx',
+      'Identifier:idx',
+    ]);
+
+    const forPath = createPath(forStatement, null, 'body', 2);
+    const forChildKeys: Array<string | null> = [];
+    visitChildren(forPath, (child) => {
+      forChildKeys.push(child.key);
+    });
+    expect(forChildKeys).toEqual(['initializer', 'test', 'update', 'body']);
   });
 });

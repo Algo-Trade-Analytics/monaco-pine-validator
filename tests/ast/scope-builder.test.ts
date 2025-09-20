@@ -4,14 +4,18 @@ import {
   type ArgumentNode,
   type BlockStatementNode,
   type CallExpressionNode,
+  type ConditionalExpressionNode,
   type ExpressionStatementNode,
+  type ForStatementNode,
   type FunctionDeclarationNode,
   type IdentifierNode,
+  type IfStatementNode,
   type NumberLiteralNode,
   type ParameterNode,
   type ProgramNode,
   type ReturnStatementNode,
   type VariableDeclarationNode,
+  type WhileStatementNode,
   createLocation,
   createPosition,
   createRange,
@@ -175,5 +179,135 @@ describe('buildScopeGraph', () => {
     expect(scopeGraph.root).toBeNull();
     expect(scopeGraph.nodes.size).toBe(0);
     expect(symbolTable.size).toBe(0);
+  });
+
+  it('captures scope metadata for control-flow constructs', () => {
+    const conditionalExpression: ConditionalExpressionNode = {
+      kind: 'ConditionalExpression',
+      test: identifier('flag', 120),
+      consequent: identifier('foo', 125),
+      alternate: identifier('bar', 130),
+      loc: locFrom(120, 131),
+      range: createRange(120, 131),
+    };
+
+    const ifBlock: BlockStatementNode = {
+      kind: 'BlockStatement',
+      body: [],
+      loc: locFrom(110, 150),
+      range: createRange(110, 150),
+    };
+
+    ifBlock.body = [
+      {
+        kind: 'ExpressionStatement',
+        expression: conditionalExpression,
+        loc: locFrom(112, 140),
+        range: createRange(112, 140),
+      } satisfies ExpressionStatementNode,
+    ];
+
+    const ifStatement: IfStatementNode = {
+      kind: 'IfStatement',
+      test: identifier('ifCond', 100),
+      consequent: ifBlock,
+      alternate: null,
+      loc: locFrom(100, 150),
+      range: createRange(100, 150),
+    };
+
+    const whileBody: BlockStatementNode = {
+      kind: 'BlockStatement',
+      body: [],
+      loc: locFrom(160, 190),
+      range: createRange(160, 190),
+    };
+
+    const loopVariable: VariableDeclarationNode = {
+      kind: 'VariableDeclaration',
+      declarationKind: 'var',
+      identifier: identifier('loopResult', 165),
+      typeAnnotation: null,
+      initializer: identifier('loopGuard', 170),
+      loc: locFrom(165, 175),
+      range: createRange(165, 175),
+    };
+    whileBody.body = [loopVariable];
+
+    const whileStatement: WhileStatementNode = {
+      kind: 'WhileStatement',
+      test: identifier('loopGuard', 160),
+      body: whileBody,
+      loc: locFrom(160, 190),
+      range: createRange(160, 190),
+    };
+
+    const forBody: BlockStatementNode = {
+      kind: 'BlockStatement',
+      body: [],
+      loc: locFrom(200, 240),
+      range: createRange(200, 240),
+    };
+
+    const loopIndex = identifier('idx', 205);
+    const forInitializer: VariableDeclarationNode = {
+      kind: 'VariableDeclaration',
+      declarationKind: 'var',
+      identifier: loopIndex,
+      typeAnnotation: null,
+      initializer: numberLiteral(0, 210),
+      loc: locFrom(205, 215),
+      range: createRange(205, 215),
+    };
+
+    const forExpression: ExpressionStatementNode = {
+      kind: 'ExpressionStatement',
+      expression: identifier('idx', 225),
+      loc: locFrom(220, 226),
+      range: createRange(220, 226),
+    };
+    forBody.body = [forExpression];
+
+    const forStatement: ForStatementNode = {
+      kind: 'ForStatement',
+      initializer: forInitializer,
+      test: identifier('hasNext', 216),
+      update: identifier('idx', 218),
+      body: forBody,
+      loc: locFrom(200, 240),
+      range: createRange(200, 240),
+    };
+
+    const program: ProgramNode = {
+      kind: 'Program',
+      directives: [],
+      body: [ifStatement, whileStatement, forStatement],
+      loc: createLocation(createPosition(1, 1, 0), createPosition(1, 1, 250)),
+      range: createRange(0, 250),
+    };
+
+    const { scopeGraph, symbolTable } = buildScopeGraph(program);
+
+    const loopScopes = Array.from(scopeGraph.nodes.values()).filter((scope) => scope.kind === 'loop');
+    expect(loopScopes).toHaveLength(2);
+    expect(loopScopes.some((scope) => scope.metadata?.loopType === 'while')).toBe(true);
+    expect(loopScopes.some((scope) => scope.metadata?.loopType === 'for')).toBe(true);
+
+    const idxRecord = symbolTable.get('idx');
+    expect(idxRecord?.kind).toBe('variable');
+    expect(idxRecord?.declarations).toHaveLength(1);
+    expect(idxRecord?.references).toHaveLength(2);
+
+    const conditionRecord = symbolTable.get('ifCond');
+    expect(conditionRecord?.references).toHaveLength(1);
+
+    const flagRecord = symbolTable.get('flag');
+    expect(flagRecord?.references).toHaveLength(1);
+
+    const loopGuardRecord = symbolTable.get('loopGuard');
+    expect(loopGuardRecord?.references).toHaveLength(2);
+
+    const hasNextRecord = symbolTable.get('hasNext');
+    expect(hasNextRecord?.references).toHaveLength(1);
   });
 });
