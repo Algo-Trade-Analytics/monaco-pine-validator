@@ -9,6 +9,12 @@ import {
 } from '../../core/ast/diagnostics';
 import { createAstDiagnostics } from '../../core/ast/types';
 
+const baseError = {
+  code: 'AST-PARSER',
+  severity: 'error' as const,
+  phase: 'parsing' as const,
+};
+
 const sampleNode = {
   kind: 'Identifier' as const,
   name: 'foo',
@@ -65,6 +71,7 @@ describe('AST diagnostics helpers', () => {
   it('converts syntax errors into validation errors with overrides', () => {
     const diagnostics = createAstDiagnostics([
       {
+        ...baseError,
         message: 'Unexpected token',
         range: [5, 6],
         loc: {
@@ -89,6 +96,7 @@ describe('AST diagnostics helpers', () => {
 
   it('converts syntax errors into marker data', () => {
     const syntaxError = {
+      ...baseError,
       message: 'Missing closing parenthesis',
       range: [15, 20] as const,
       loc: {
@@ -109,6 +117,7 @@ describe('AST diagnostics helpers', () => {
   it('maps multiple syntax errors to markers', () => {
     const diagnostics = createAstDiagnostics([
       {
+        ...baseError,
         message: 'First issue',
         range: [0, 1],
         loc: {
@@ -117,6 +126,7 @@ describe('AST diagnostics helpers', () => {
         },
       },
       {
+        ...baseError,
         message: 'Second issue',
         range: [2, 3],
         loc: {
@@ -138,6 +148,7 @@ describe('AST diagnostics helpers', () => {
 
   it('creates individual validation errors from syntax errors', () => {
     const syntaxError = {
+      ...baseError,
       message: 'Something broke',
       range: [3, 4] as const,
       loc: {

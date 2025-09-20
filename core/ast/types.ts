@@ -1,12 +1,19 @@
 import type { AstNode, Position, ProgramNode, SourceLocation, SourceRange } from './nodes';
 
+export type AstDiagnosticSeverity = 'error' | 'warning' | 'info';
+
+export type AstSyntaxErrorPhase = 'lexing' | 'parsing';
+
 export type AstMode = 'disabled' | 'shadow' | 'primary';
 
 export interface AstSyntaxError {
   message: string;
-  code?: string;
+  code: string;
+  severity: AstDiagnosticSeverity;
+  phase: AstSyntaxErrorPhase;
   range: SourceRange;
   loc: SourceLocation;
+  cause?: unknown;
 }
 
 export interface AstDiagnostics {

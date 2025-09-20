@@ -82,16 +82,16 @@ Key principles:
   - ✅ Introduced `core/ast/traversal.ts` providing `NodePath` helpers, ancestor discovery, and a depth-first visitor to power upcoming AST passes.
 - ✅ Generalised script declaration nodes so the AST captures `indicator`, `strategy`, and `library` entrypoints with explicit script types.
 - Populate validator context with scope and symbol metadata derived from the AST.
-  - ⚠️ Added `core/ast/normalizer.ts` to build module scopes and symbol tables from parsed programs and wired it into `BaseValidator` initialisation, but the current implementation only models the root module scope and flat variable declarations. Nested scopes (functions, control blocks) still need explicit handling before module migrations can rely on the structure.
+  - ✅ Extended `core/ast/normalizer.ts` to build nested scopes for function bodies and control blocks, wiring scope identifiers into traversal metadata so downstream passes can discover parent scopes without recomputation.
 - ✅ Added an `AstValidationContext` that extends `ValidationContext` with AST, scope, symbol, and type tables consumed by validator modules.
 - ✅ Introduced feature-flag configuration in `BaseValidator` so AST services can run in `disabled`, `shadow`, or `primary` modes when rebuilding configs.
 - ✅ Established snapshot-based tests verifying AST output and normalisation for representative Pine snippets in `tests/ast/snapshots.test.ts`.
 
 **Phase 1 follow-up checklist**
 
-- [ ] Teach the normaliser how to create and link child scopes for blocks and function bodies.
-- [ ] Persist scope identifiers on `NodePath` metadata so downstream passes can navigate parent scopes efficiently.
-- [ ] Flesh out AST error types (currently ad-hoc objects) into a shared definition that downstream modules can narrow.
+- [x] Teach the normaliser how to create and link child scopes for blocks and function bodies.
+- [x] Persist scope identifiers on `NodePath` metadata so downstream passes can navigate parent scopes efficiently.
+- [x] Flesh out AST error types (currently ad-hoc objects) into a shared definition that downstream modules can narrow.
 
 ### Phase 2 – Semantic Foundation Passes
 - Implement initial semantic passes operating on AST:

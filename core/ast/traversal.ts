@@ -1,11 +1,16 @@
 import type { AstNode, ProgramNode } from './nodes';
 
+export interface NodePathMetadata {
+  scopeId: string | null;
+}
+
 export interface NodePath<T extends AstNode = AstNode> {
   readonly node: T;
   readonly parent: AstNode | null;
   readonly parentPath: NodePath | null;
   readonly key: string | null;
   readonly index: number | null;
+  readonly metadata: NodePathMetadata;
 }
 
 export type NodeKind = AstNode['kind'];
@@ -19,6 +24,17 @@ export type Visitor = {
   [K in NodeKind]?: (path: PathForKind<K>) => void;
 };
 
+let nodeMetadataStore = new WeakMap<AstNode, NodePathMetadata>();
+
+function ensureMetadata(node: AstNode): NodePathMetadata {
+  let metadata = nodeMetadataStore.get(node);
+  if (!metadata) {
+    metadata = { scopeId: null };
+    nodeMetadataStore.set(node, metadata);
+  }
+  return metadata;
+}
+
 function createNodePath<T extends AstNode>(
   node: T,
   parentPath: NodePath | null,
@@ -31,6 +47,7 @@ function createNodePath<T extends AstNode>(
     parentPath,
     key,
     index,
+    metadata: ensureMetadata(node),
   };
 }
 
@@ -71,6 +88,30 @@ function getChildEntries(node: AstNode): ChildEntry[] {
       return [
         { key: 'name', value: node.name ?? null },
         { key: 'value', value: node.value },
+      ];
+    case 'BlockStatement':
+      return [{ key: 'body', value: node.body }];
+    case 'IfStatement':
+      return [
+        { key: 'test', value: node.test },
+        { key: 'consequent', value: node.consequent },
+        { key: 'alternate', value: node.alternate ?? null },
+      ];
+    case 'WhileStatement':
+      return [
+        { key: 'test', value: node.test },
+        { key: 'body', value: node.body },
+      ];
+    case 'FunctionDeclaration':
+      return [
+        { key: 'name', value: node.name },
+        { key: 'parameters', value: node.parameters },
+        { key: 'body', value: node.body },
+      ];
+    case 'Parameter':
+      return [
+        { key: 'identifier', value: node.identifier },
+        { key: 'defaultValue', value: node.defaultValue ?? null },
       ];
     case 'Identifier':
     case 'BooleanLiteral':
@@ -160,4 +201,17 @@ export function forEachChild(path: NodePath, iteratee: (child: NodePath) => void
   for (const child of iterateChildren(path)) {
     iteratee(child);
   }
+}
+
+export function setNodeScopeMetadata(node: AstNode, scopeId: string | null): void {
+  const metadata = ensureMetadata(node);
+  metadata.scopeId = scopeId;
+}
+
+export function getNodeScopeMetadata(node: AstNode): NodePathMetadata | undefined {
+  return nodeMetadataStore.get(node);
+}
+
+export function resetNodePathMetadata(): void {
+  nodeMetadataStore = new WeakMap();
 }

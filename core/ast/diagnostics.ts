@@ -1,8 +1,10 @@
 import type { AstNode, SourceLocation } from './nodes';
-import type { AstDiagnostics, AstSyntaxError } from './types';
+import type {
+  AstDiagnosticSeverity,
+  AstDiagnostics,
+  AstSyntaxError,
+} from './types';
 import type { ValidationError } from '../types';
-
-export type AstDiagnosticSeverity = 'error' | 'warning' | 'info';
 
 export type MonacoMarkerSeverity = 2 | 4 | 8;
 
@@ -111,8 +113,8 @@ export function astSyntaxErrorToValidationError(
 ): ValidationError {
   return createValidationErrorFromLocation(error.loc, {
     message: error.message,
-    code: error.code ?? defaults.code,
-    severity: defaults.severity,
+    code: defaults.code ?? error.code,
+    severity: defaults.severity ?? error.severity,
   });
 }
 
@@ -131,8 +133,8 @@ export function astSyntaxErrorToMarker(
 ): AstMarkerData {
   return createMarkerFromLocation(error.loc, {
     message: error.message,
-    code: error.code ?? defaults.code,
-    severity: defaults.severity,
+    code: defaults.code ?? error.code,
+    severity: defaults.severity ?? error.severity,
   });
 }
 

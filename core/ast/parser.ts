@@ -27,6 +27,7 @@ import {
   AstParseResult,
   AstService,
   AstSyntaxError,
+  AstSyntaxErrorPhase,
   createAstDiagnostics,
   type Position,
 } from './types';
@@ -465,7 +466,13 @@ class PineCstParser extends EmbeddedActionsParser {
   });
 }
 
-function buildSyntaxError(message: string, token: IToken | undefined): AstSyntaxError {
+function buildSyntaxError(
+  message: string,
+  token: IToken | undefined,
+  phase: AstSyntaxErrorPhase,
+  code: string,
+  cause?: unknown,
+): AstSyntaxError {
   if (token) {
     const start: Position = {
       line: token.startLine ?? token.endLine ?? 1,
@@ -486,16 +493,24 @@ function buildSyntaxError(message: string, token: IToken | undefined): AstSyntax
     };
     return {
       message,
+      code,
+      severity: 'error',
+      phase,
       range: createRange(start.offset, end.offset),
       loc: createLocation(start, end),
+      cause,
     };
   }
 
   const fallback: Position = { line: 1, column: 1, offset: 0 };
   return {
     message,
+    code,
+    severity: 'error',
+    phase,
     range: createRange(0, 0),
     loc: createLocation(fallback, fallback),
+    cause,
   };
 }
 
@@ -509,14 +524,16 @@ class ChevrotainAstService implements AstService {
 
     for (const error of lexResult.errors) {
       diagnostics.push(
-        buildSyntaxError(error.message, error.token),
+        buildSyntaxError(error.message, error.token, 'lexing', 'AST-LEXER', error),
       );
     }
 
     const ast = parser.program();
 
     for (const error of parser.errors) {
-      diagnostics.push(buildSyntaxError(error.message, error.token));
+      diagnostics.push(
+        buildSyntaxError(error.message, error.token, 'parsing', 'AST-PARSER', error),
+      );
     }
 
     const allowErrors = options?.allowErrors ?? false;

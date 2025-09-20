@@ -48,6 +48,12 @@ export interface BooleanLiteralNode extends BaseNode {
 
 export type LiteralNode = NumberLiteralNode | StringLiteralNode | BooleanLiteralNode;
 
+export interface ParameterNode extends BaseNode {
+  kind: 'Parameter';
+  identifier: IdentifierNode;
+  defaultValue?: ExpressionNode | null;
+}
+
 export type BinaryOperator =
   | 'and'
   | 'or'
@@ -75,6 +81,31 @@ export interface ArgumentNode extends BaseNode {
   kind: 'Argument';
   name?: IdentifierNode | null;
   value: ExpressionNode;
+}
+
+export interface BlockStatementNode extends BaseNode {
+  kind: 'BlockStatement';
+  body: StatementNode[];
+}
+
+export interface IfStatementNode extends BaseNode {
+  kind: 'IfStatement';
+  test: ExpressionNode;
+  consequent: BlockStatementNode;
+  alternate?: BlockStatementNode | IfStatementNode | null;
+}
+
+export interface WhileStatementNode extends BaseNode {
+  kind: 'WhileStatement';
+  test: ExpressionNode;
+  body: BlockStatementNode;
+}
+
+export interface FunctionDeclarationNode extends BaseNode {
+  kind: 'FunctionDeclaration';
+  name: IdentifierNode;
+  parameters: ParameterNode[];
+  body: BlockStatementNode;
 }
 
 export interface CallExpressionNode extends BaseNode {
@@ -113,7 +144,11 @@ export type StatementNode =
   | ScriptDeclarationNode
   | VariableDeclarationNode
   | AssignmentNode
-  | ExpressionStatementNode;
+  | ExpressionStatementNode
+  | BlockStatementNode
+  | IfStatementNode
+  | WhileStatementNode
+  | FunctionDeclarationNode;
 
 export interface ProgramNode extends BaseNode {
   kind: 'Program';
@@ -126,7 +161,8 @@ export type AstNode =
   | VersionDirectiveNode
   | StatementNode
   | ExpressionNode
-  | ArgumentNode;
+  | ArgumentNode
+  | ParameterNode;
 
 export function createLocation(start: Position, end: Position): SourceLocation {
   return { start, end };

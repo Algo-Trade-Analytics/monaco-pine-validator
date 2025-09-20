@@ -2,6 +2,8 @@ import type { IdentifierNode, ProgramNode } from './nodes';
 import {
   type NodePath,
   type PathForKind,
+  resetNodePathMetadata,
+  setNodeScopeMetadata,
   traverse,
 } from './traversal';
 import {
@@ -27,9 +29,19 @@ function isNamedArgument(path: PathForKind<'Identifier'>): boolean {
 }
 
 function isDeclarationIdentifier(path: PathForKind<'Identifier'>): boolean {
-  return (
-    path.parentPath?.node.kind === 'VariableDeclaration' && path.key === 'identifier'
-  );
+  if (path.parentPath?.node.kind === 'VariableDeclaration' && path.key === 'identifier') {
+    return true;
+  }
+
+  if (path.parentPath?.node.kind === 'FunctionDeclaration' && path.key === 'name') {
+    return true;
+  }
+
+  if (path.parentPath?.node.kind === 'Parameter' && path.key === 'identifier') {
+    return true;
+  }
+
+  return false;
 }
 
 function isCallCallee(path: PathForKind<'Identifier'>): boolean {
@@ -74,6 +86,8 @@ export function normaliseProgramAst(program: ProgramNode | null): AstNormalizati
     return { scopeGraph, symbolTable };
   }
 
+  resetNodePathMetadata();
+
   let scopeCounter = 0;
   const makeScopeId = (kind: ScopeKind): string => `${kind}-${scopeCounter++}`;
 
@@ -89,7 +103,14 @@ export function normaliseProgramAst(program: ProgramNode | null): AstNormalizati
 
   const scopeStack: string[] = [rootId];
   const nodeScopes = new WeakMap<AstNode, string>();
-  nodeScopes.set(program, rootId);
+  const scopeCreators = new WeakSet<AstNode>();
+
+  const registerNodeScope = (node: AstNode, scopeId: string) => {
+    nodeScopes.set(node, scopeId);
+    setNodeScopeMetadata(node, scopeId);
+  };
+
+  registerNodeScope(program, rootId);
 
   const currentScopeId = () => scopeStack[scopeStack.length - 1] ?? rootId;
 
@@ -100,17 +121,78 @@ export function normaliseProgramAst(program: ProgramNode | null): AstNormalizati
     }
   };
 
+  const createChildScope = (kind: ScopeKind, node: AstNode): string => {
+    const id = makeScopeId(kind);
+    const parentId = currentScopeId();
+    const parentNode = scopeGraph.nodes.get(parentId);
+
+    scopeGraph.nodes.set(id, {
+      id,
+      kind,
+      parent: parentId,
+      children: new Set(),
+      symbols: new Set(),
+    });
+
+    parentNode?.children.add(id);
+    scopeStack.push(id);
+    scopeCreators.add(node);
+    registerNodeScope(node, id);
+    return id;
+  };
+
+  const assignExistingScope = (node: AstNode, scopeId: string) => {
+    registerNodeScope(node, scopeId);
+  };
+
+  const resolveBlockScopeKind = (path: NodePath): ScopeKind => {
+    const parentKind = path.parentPath?.node.kind;
+    switch (parentKind) {
+      case 'FunctionDeclaration':
+        return 'function';
+      case 'WhileStatement':
+        return 'loop';
+      case 'IfStatement':
+        return 'conditional';
+      default:
+        return 'block';
+    }
+  };
+
+  const determineScopeKind = (path: NodePath): ScopeKind | null => {
+    if (path.node.kind === 'BlockStatement') {
+      return resolveBlockScopeKind(path);
+    }
+    return null;
+  };
+
   traverse(program, {
     enter(path: NodePath) {
       if (path.node.kind === 'Program') {
+        path.metadata.scopeId = rootId;
         return;
       }
 
-      // Future scopes (functions/blocks) will be handled here.
+      const parentScope = currentScopeId();
+      const scopeKind = determineScopeKind(path);
+
+      if (scopeKind) {
+        const scopeId = createChildScope(scopeKind, path.node as AstNode);
+        path.metadata.scopeId = scopeId;
+        return;
+      }
+
+      assignExistingScope(path.node as AstNode, parentScope);
+      path.metadata.scopeId = parentScope;
     },
     exit(path: NodePath) {
       const scopeId = nodeScopes.get(path.node as AstNode);
-      if (scopeId && scopeId !== rootId && scopeStack[scopeStack.length - 1] === scopeId) {
+      if (
+        scopeId &&
+        scopeId !== rootId &&
+        scopeCreators.has(path.node as AstNode) &&
+        scopeStack[scopeStack.length - 1] === scopeId
+      ) {
         scopeStack.pop();
       }
     },
