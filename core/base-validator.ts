@@ -27,6 +27,7 @@ import type { ProgramNode, ScriptDeclarationNode } from './ast/nodes';
 import { createNullAstService } from './ast/service';
 import { normaliseProgramAst } from './ast/normalizer';
 import { inferProgramTypes } from './ast/type-inference';
+import { astSyntaxErrorsToValidationErrors } from './ast/diagnostics';
 
 type ConfigLayer = Partial<ValidatorConfig> | undefined;
 
@@ -281,10 +282,10 @@ export abstract class BaseValidator {
         this.scriptType = scriptDeclaration.scriptType;
         this.context.scriptType = scriptDeclaration.scriptType;
       }
-      for (const syntaxError of result.diagnostics.syntaxErrors) {
-        const { line, column } = syntaxError.loc.start;
-        this.addError(line, column, syntaxError.message, syntaxError.code ?? AST_SYNTAX_ERROR_CODE);
-      }
+      const syntaxErrors = astSyntaxErrorsToValidationErrors(result.diagnostics, {
+        code: AST_SYNTAX_ERROR_CODE,
+      });
+      this.addErrors(syntaxErrors);
 
       for (const [name, annotation] of typeResult.types) {
         const record = this.context.symbolTable.get(name);

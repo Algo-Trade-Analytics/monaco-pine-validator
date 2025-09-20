@@ -93,7 +93,7 @@ Key principles:
   - ✅ Type inference skeleton (basic literal + identifier typing) capturing literal, identifier, and call expression flows in a shared type table.
   - ✅ Extended the parser and inference rules to cover boolean comparisons and logical expressions so signal-style assignments resolve to `bool` with proper series propagation.
   - Control flow graph builder (for loops, conditionals) – optional if complex, but plan it early.
-- Provide reusable diagnostics helpers mapping AST ranges to Monaco `IMarkerData`.
+- ✅ Provide reusable diagnostics helpers mapping AST ranges to Monaco `IMarkerData`.
 - Add golden tests ensuring passes populate context as expected.
 
 ### Phase 3 – Module Migration (Incremental)

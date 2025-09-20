@@ -6,3 +6,4 @@ export * from './parser';
 export * from './traversal';
 export * from './normalizer';
 export * from './type-inference';
+export * from './diagnostics';
