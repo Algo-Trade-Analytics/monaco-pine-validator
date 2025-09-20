@@ -54,11 +54,17 @@ export type Node =
   | VariableDeclarationNode
   | AssignmentStatementNode
   | FunctionDeclarationNode
+  | IfStatementNode
+  | WhileStatementNode
+  | ForStatementNode
+  | BreakStatementNode
+  | ContinueStatementNode
   | ParameterNode
   | CallExpressionNode
   | ArgumentNode
   | BinaryExpressionNode
   | UnaryExpressionNode
+  | ConditionalExpressionNode
   | IdentifierNode
   | NumberLiteralNode
   | StringLiteralNode
