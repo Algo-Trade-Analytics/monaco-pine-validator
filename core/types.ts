@@ -2,6 +2,14 @@
  * Core types and interfaces for the modular Pine Script v6 validator
  */
 
+import type { Script } from '../pynescript/ast/node';
+import type {
+  AstConfig,
+  AstDiagnostics,
+  ScopeGraph,
+  SymbolTable,
+} from './ast/types';
+
 export interface ValidationError {
   line: number;
   column: number;
@@ -48,6 +56,13 @@ export interface ValidationContext {
   firstVersionLine: number | null;
 }
 
+export interface AstValidationContext extends ValidationContext {
+  ast: Script | null;
+  astDiagnostics: AstDiagnostics;
+  scopeGraph: ScopeGraph;
+  symbolTable: SymbolTable;
+}
+
 export interface ValidatorConfig {
   targetVersion: 4 | 5 | 6;
   strictMode: boolean;
@@ -61,6 +76,7 @@ export interface ValidatorConfig {
   enableInfo?: boolean;
   customRules: ValidationRule[];
   ignoredCodes: string[];
+  ast?: AstConfig;
 }
 
 export interface ValidationRule {
@@ -77,6 +93,20 @@ export interface ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult;
   getDependencies(): string[];
 }
+
+export type {
+  AstConfig,
+  AstDiagnostics,
+  AstParseOptions,
+  AstParseResult,
+  AstService,
+  ScopeGraph,
+  ScopeKind,
+  ScopeNode,
+  SymbolKind,
+  SymbolRecord,
+  SymbolTable,
+} from './ast/types';
 
 export interface ScopeInfo {
   indent: number;
