@@ -83,9 +83,9 @@ Key principles:
 - ✅ Generalised script declaration nodes so the AST captures `indicator`, `strategy`, and `library` entrypoints with explicit script types.
 - Populate validator context with scope and symbol metadata derived from the AST.
   - ✅ Added `core/ast/normalizer.ts` to build module scopes and symbol tables from parsed programs and wired it into `BaseValidator` initialisation.
-- Add new `AstValidationContext` extending existing `ValidationContext` with `ast`, `scopeGraph`, `symbolTable`.
-- Add feature-flag configuration in `BaseValidator` to toggle AST mode (dual-run to compare results).
-- Establish snapshot-based tests verifying AST output for sample Pine snippets (`tests/ast/*.test.ts`).
+- ✅ Added an `AstValidationContext` that extends `ValidationContext` with AST, scope, symbol, and type tables consumed by validator modules.
+- ✅ Introduced feature-flag configuration in `BaseValidator` so AST services can run in `disabled`, `shadow`, or `primary` modes when rebuilding configs.
+- ✅ Established snapshot-based tests verifying AST output and normalisation for representative Pine snippets in `tests/ast/snapshots.test.ts`.
 
 ### Phase 2 – Semantic Foundation Passes
 - Implement initial semantic passes operating on AST:
