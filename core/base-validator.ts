@@ -2,24 +2,104 @@
  * Base validator class for the modular Pine Script v6 validator
  */
 
-import { 
-  ValidationError, 
-  ValidationResult, 
-  ValidationContext, 
-  ValidatorConfig, 
+import {
+  ValidationError,
+  ValidationResult,
+  ValidationContext,
+  AstValidationContext,
+  ValidatorConfig,
   ValidationModule,
   TypeInfo,
-  ScopeInfo
+  ScopeInfo,
 } from './types';
 import { KEYWORDS, NAMESPACES, NS_MEMBERS, PSEUDO_VARS, WILDCARD_IDENT } from './constants';
+import {
+  AstConfig,
+  AstDiagnostics,
+  AstParseResult,
+  AstService,
+  createAstDiagnostics,
+  createEmptyScopeGraph,
+  createEmptySymbolTable,
+  createEmptyTypeTable,
+} from './ast/types';
+import { createNullAstService } from './ast/service';
+import { normaliseProgramAst } from './ast/normalizer';
+import { inferProgramTypes } from './ast/type-inference';
+
+type ConfigLayer = Partial<ValidatorConfig> | undefined;
+
+const DEFAULT_AST_FILENAME = 'input.pine';
+const AST_PARSE_ERROR_CODE = 'AST-PARSE';
+
+function mergeValidatorConfig(layers: ConfigLayer[]): { config: ValidatorConfig; ast: AstConfig } {
+  const config: ValidatorConfig = {
+    targetVersion: 6,
+    strictMode: false,
+    allowDeprecated: true,
+    enableTypeChecking: true,
+    enableControlFlowAnalysis: true,
+    enablePerformanceAnalysis: false,
+    customRules: [],
+    ignoredCodes: [],
+  };
+  const ast: AstConfig = { mode: 'disabled', service: null };
+
+  for (const layer of layers) {
+    if (!layer) {
+      continue;
+    }
+    const { ast: astLayer, ...rest } = layer;
+    Object.assign(config, rest);
+    if (astLayer) {
+      if (astLayer.mode !== undefined) {
+        ast.mode = astLayer.mode;
+      }
+      if (astLayer.service !== undefined) {
+        ast.service = astLayer.service;
+      }
+    }
+  }
+
+  config.customRules = Array.isArray(config.customRules) ? [...config.customRules] : [];
+  config.ignoredCodes = Array.isArray(config.ignoredCodes) ? [...config.ignoredCodes] : [];
+  config.ast = ast;
+
+  return { config, ast };
+}
+
+function normaliseDiagnostics(diagnostics?: AstDiagnostics): AstDiagnostics {
+  if (!diagnostics) {
+    return createAstDiagnostics();
+  }
+  return {
+    syntaxErrors: Array.isArray(diagnostics.syntaxErrors)
+      ? [...diagnostics.syntaxErrors]
+      : [],
+  };
+}
+
+function ensureAstParseResult(result: AstParseResult | null | undefined): AstParseResult {
+  if (!result) {
+    return { ast: null, diagnostics: createAstDiagnostics() };
+  }
+  return {
+    ast: result.ast ?? null,
+    diagnostics: normaliseDiagnostics(result.diagnostics),
+  };
+}
 
 export abstract class BaseValidator {
   protected errors: ValidationError[] = [];
   protected warnings: ValidationError[] = [];
   protected info: ValidationError[] = [];
   protected typeMap = new Map<string, TypeInfo>();
-  protected context: ValidationContext;
+  protected context: AstValidationContext;
   protected modules: ValidationModule[] = [];
+  protected config: ValidatorConfig;
+  protected astConfig: AstConfig;
+  protected astService: AstService;
+  private readonly baseConfigOverrides: Partial<ValidatorConfig>;
 
   // State tracking
   protected declared = new Map<string, number>();
@@ -50,34 +130,21 @@ export abstract class BaseValidator {
   protected sawTabIndent = false;
   protected sawSpaceIndent = false;
 
-  constructor(protected config: Partial<ValidatorConfig> = {}) {
-    this.config = {
-      targetVersion: 6,
-      strictMode: false,
-      allowDeprecated: true,
-      enableTypeChecking: true,
-      enableControlFlowAnalysis: true,
-      enablePerformanceAnalysis: false,
-      customRules: [],
-      ignoredCodes: [],
-      ...config
+  constructor(config: Partial<ValidatorConfig> = {}) {
+    this.baseConfigOverrides = {
+      ...config,
+      ast: config.ast ? { ...config.ast } : undefined,
     };
 
-    this.context = {
-      lines: [],
-      cleanLines: [],
-      rawLines: [],
-      typeMap: this.typeMap,
-      usedVars: this.used,
-      declaredVars: this.declared,
-      functionNames: this.functionNames,
-      methodNames: this.methodNames,
-      functionParams: this.functionParams,
-      scriptType: null,
-      version: this.config.targetVersion || 6,
-      hasVersion: false,
-      firstVersionLine: null
-    };
+    const { config: mergedConfig, ast } = mergeValidatorConfig([this.baseConfigOverrides]);
+    this.config = mergedConfig;
+    this.astConfig = ast;
+    this.astService = this.astConfig.service ?? createNullAstService();
+    if (!this.astConfig.service) {
+      this.astConfig.service = this.astService;
+    }
+
+    this.context = this.createInitialContext();
   }
 
   /**
@@ -91,10 +158,125 @@ export abstract class BaseValidator {
    * Main validation entry point
    */
   validate(code: string): ValidationResult {
+    this.rebuildConfig();
     this.reset();
     this.prepareContext(code);
     this.runValidation();
     return this.buildResult();
+  }
+
+  protected rebuildConfig(...overrides: Array<Partial<ValidatorConfig> | undefined>): void {
+    const layers: ConfigLayer[] = [this.baseConfigOverrides, ...overrides];
+    const { config, ast } = mergeValidatorConfig(layers);
+    this.config = config;
+    this.astConfig = ast;
+    this.astService = this.astConfig.service ?? createNullAstService();
+    if (!this.astConfig.service) {
+      this.astConfig.service = this.astService;
+    }
+  }
+
+  protected createInitialContext(): AstValidationContext {
+    const baseContext: ValidationContext = {
+      lines: [],
+      cleanLines: [],
+      rawLines: [],
+      typeMap: this.typeMap,
+      usedVars: this.used,
+      declaredVars: this.declared,
+      functionNames: this.functionNames,
+      methodNames: this.methodNames,
+      functionParams: this.functionParams,
+      scriptType: null,
+      version: this.config.targetVersion || 6,
+      hasVersion: false,
+      firstVersionLine: null,
+    };
+
+    const context = this.normaliseContext(baseContext);
+    context.ast = null;
+    context.astDiagnostics = createAstDiagnostics();
+    context.scopeGraph = createEmptyScopeGraph();
+    context.symbolTable = createEmptySymbolTable();
+    context.astTypes = createEmptyTypeTable();
+    return context;
+  }
+
+  protected normaliseContext(context: ValidationContext): AstValidationContext {
+    const astContext = context as AstValidationContext;
+
+    if (typeof astContext.ast === 'undefined') {
+      astContext.ast = null;
+    }
+
+    astContext.astDiagnostics = normaliseDiagnostics(astContext.astDiagnostics);
+
+    if (!astContext.scopeGraph || !(astContext.scopeGraph.nodes instanceof Map)) {
+      astContext.scopeGraph = createEmptyScopeGraph();
+    } else {
+      astContext.scopeGraph = {
+        root: astContext.scopeGraph.root ?? null,
+        nodes: astContext.scopeGraph.nodes,
+      };
+    }
+
+    if (!(astContext.symbolTable instanceof Map)) {
+      astContext.symbolTable = createEmptySymbolTable();
+    }
+
+    if (!(astContext.astTypes instanceof Map)) {
+      astContext.astTypes = createEmptyTypeTable();
+    }
+
+    if (!astContext.typeMap) {
+      astContext.typeMap = this.typeMap;
+    }
+
+    return astContext;
+  }
+
+  protected parseAst(source: string): void {
+    this.context.ast = null;
+    this.context.astDiagnostics = createAstDiagnostics();
+    this.context.scopeGraph = createEmptyScopeGraph();
+    this.context.symbolTable = createEmptySymbolTable();
+    this.context.astTypes = createEmptyTypeTable();
+
+    if (!this.astConfig || this.astConfig.mode === 'disabled') {
+      return;
+    }
+
+    const service = this.astConfig.service ?? this.astService ?? createNullAstService();
+    this.astService = service;
+    this.astConfig.service = service;
+
+    try {
+      const result = ensureAstParseResult(service.parse(source, { filename: DEFAULT_AST_FILENAME }));
+      this.context.ast = result.ast;
+      this.context.astDiagnostics = result.diagnostics;
+      const normalised = normaliseProgramAst(result.ast);
+      this.context.scopeGraph = normalised.scopeGraph;
+      this.context.symbolTable = normalised.symbolTable;
+      const typeResult = inferProgramTypes(result.ast);
+      this.context.astTypes = typeResult.types;
+      for (const [name, annotation] of typeResult.types) {
+        const record = this.context.symbolTable.get(name);
+        if (!record) {
+          continue;
+        }
+        record.metadata ??= {};
+        record.metadata.type = annotation.kind;
+        record.metadata.isSeries = annotation.isSeries;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.context.ast = null;
+      this.context.astDiagnostics = createAstDiagnostics();
+      this.context.scopeGraph = createEmptyScopeGraph();
+      this.context.symbolTable = createEmptySymbolTable();
+      this.context.astTypes = createEmptyTypeTable();
+      this.addWarning(1, 1, `AST parser error: ${message}`, AST_PARSE_ERROR_CODE);
+    }
   }
 
   /**
@@ -128,6 +310,8 @@ export abstract class BaseValidator {
     this.sawBrace = false;
     this.sawTabIndent = false;
     this.sawSpaceIndent = false;
+
+    this.context = this.createInitialContext();
   }
 
   /**
@@ -137,20 +321,25 @@ export abstract class BaseValidator {
     // Strip BOM and normalize newlines
     code = code.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
 
-    this.context.rawLines = code.split('\n');
-    this.context.lines = this.context.rawLines.slice();
-    this.context.cleanLines = this.stripLineCommentsKeepingStrings(code).split('\n');
+    const context = this.context;
+    context.rawLines = code.split('\n');
+    context.lines = context.rawLines.slice();
+    context.cleanLines = this.stripLineCommentsKeepingStrings(code).split('\n');
+    context.scopeGraph = createEmptyScopeGraph();
+    context.symbolTable = createEmptySymbolTable();
+    context.version = this.config.targetVersion || 6;
 
-    // Update context with current state
-    this.context.typeMap = this.typeMap;
-    this.context.usedVars = this.used;
-    this.context.declaredVars = this.declared;
-    this.context.functionNames = this.functionNames;
-    this.context.methodNames = this.methodNames;
-    this.context.functionParams = this.functionParams;
-    this.context.scriptType = this.scriptType;
-    this.context.hasVersion = this.hasVersion;
-    this.context.firstVersionLine = this.firstVersionLine;
+    this.parseAst(code);
+
+    context.typeMap = this.typeMap;
+    context.usedVars = this.used;
+    context.declaredVars = this.declared;
+    context.functionNames = this.functionNames;
+    context.methodNames = this.methodNames;
+    context.functionParams = this.functionParams;
+    context.scriptType = this.scriptType;
+    context.hasVersion = this.hasVersion;
+    context.firstVersionLine = this.firstVersionLine;
   }
 
   /**
@@ -163,7 +352,7 @@ export abstract class BaseValidator {
     // Run registered modules
     for (const module of this.modules) {
       try {
-        const moduleResult = module.validate(this.context, this.config as ValidatorConfig);
+        const moduleResult = module.validate(this.context, this.config);
         this.addErrors(moduleResult.errors);
         this.addWarnings(moduleResult.warnings);
         this.addInfoMessages(moduleResult.info);
@@ -193,7 +382,7 @@ export abstract class BaseValidator {
       errors: this.errors,
       warnings: this.warnings,
       info: this.info,
-      typeMap: this.typeMap,
+      typeMap: this.context.typeMap,
       scriptType: this.scriptType
     };
   }

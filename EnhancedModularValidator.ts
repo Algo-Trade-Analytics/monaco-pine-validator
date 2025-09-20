@@ -142,9 +142,9 @@ export class EnhancedModularValidator extends BaseValidator {
       return super.validate(codeOrContext);
     } else {
       // Use the provided context and config
+      this.rebuildConfig(config);
       this.reset();
-      this.context = codeOrContext;
-      this.config = config!;
+      this.context = this.normaliseContext(codeOrContext);
       this.runValidation();
       return this.buildResult();
     }

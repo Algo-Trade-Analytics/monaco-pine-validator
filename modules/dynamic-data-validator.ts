@@ -541,11 +541,26 @@ export class DynamicDataValidator implements ValidationModule {
       return;
     }
     const field = parts[1]?.trim();
-    if (field && this.isStringLiteral(field)) {
-      const value = field.replace(/['"]/g, '');
-      const valid = ['earnings.actual','earnings.estimate','earnings.standardized'];
-      if (!valid.includes(value)) {
-        this.addWarning(lineNum, 1, `Unknown earnings field: ${value}. Valid fields: ${valid.join(', ')}`, 'PSV6-REQUEST-EARNINGS-FIELD');
+    if (field) {
+      const valid = ['earnings.actual', 'earnings.estimate', 'earnings.standardized'];
+      let fieldName: string | null = null;
+
+      if (this.isStringLiteral(field)) {
+        fieldName = field.replace(/['"]/g, '');
+      } else {
+        const identMatch = field.match(/^(earnings\.[A-Za-z_][A-Za-z0-9_]*)$/);
+        if (identMatch) {
+          fieldName = identMatch[1];
+        }
+      }
+
+      if (fieldName && !valid.includes(fieldName)) {
+        this.addWarning(
+          lineNum,
+          1,
+          `Unknown earnings field: ${fieldName}. Valid fields: ${valid.join(', ')}`,
+          'PSV6-REQUEST-EARNINGS-FIELD'
+        );
       }
     }
     if (parts.length >= 3) this.validateGapsParameter(parts[2], lineNum, 'earnings');

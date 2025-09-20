@@ -110,7 +110,10 @@ export class WhileLoopValidator implements ValidationModule {
       }
 
       while (whileStack.length && indent <= whileStack[whileStack.length - 1].indent) {
-        whileStack.pop();
+        const orphan = whileStack.pop();
+        if (orphan) {
+          this.addError(orphan.line, 1, 'While loop missing end statement', 'PSV6-WHILE-MISSING-END');
+        }
       }
 
       const whileMatch = line.match(/^\s*while\s*(.*)$/);

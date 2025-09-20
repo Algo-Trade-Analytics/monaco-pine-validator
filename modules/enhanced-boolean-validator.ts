@@ -197,7 +197,20 @@ export class EnhancedBooleanValidator implements ValidationModule {
     
     // Presence of comparison/logical operators suggests boolean; otherwise flag
     if (!/(==|!=|<=|>=|<|>|\band\b|\bor\b|\bnot\b)/.test(cond)) {
-      if (/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(cond)) {
+      const simpleIdentifier = cond.match(/^([A-Za-z_][A-Za-z0-9_]*)(\.[A-Za-z_][A-Za-z0-9_]*)?$/);
+      if (simpleIdentifier) {
+        const baseName = simpleIdentifier[1];
+        const typeInfo = context?.typeMap instanceof Map ? context.typeMap.get(baseName) : undefined;
+        if (typeInfo && (typeInfo.type === 'bool' || typeInfo.type === 'series')) {
+          return;
+        }
+        result.errors.push({
+          line: lineNum,
+          column: 1,
+          message: 'Non-boolean condition used in if',
+          severity: 'error',
+          code: 'PSV6-FUNCTION-NAMESPACE'
+        });
         return;
       }
       result.errors.push({

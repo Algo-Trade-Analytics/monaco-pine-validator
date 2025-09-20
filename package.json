@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "chevrotain": "^11.0.3"
+  },
   "scripts": {
     "test": "vitest run",
     "test:ast": "vitest run tests/ast",
