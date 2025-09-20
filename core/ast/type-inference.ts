@@ -1,5 +1,6 @@
 import type {
   AssignmentNode,
+  BinaryExpressionNode,
   CallExpressionNode,
   ExpressionNode,
   IdentifierNode,
@@ -39,6 +40,16 @@ const LITERAL_TYPE_MAP: Record<LiteralKind, AstTypeKind> = {
   StringLiteral: 'string',
   BooleanLiteral: 'bool',
 };
+
+const LOGICAL_OPERATORS = new Set<BinaryExpressionNode['operator']>(['and', 'or']);
+const COMPARISON_OPERATORS = new Set<BinaryExpressionNode['operator']>([
+  '==',
+  '!=',
+  '<',
+  '<=',
+  '>',
+  '>=',
+]);
 
 const SERIES_KEYWORDS = new Set<VariableDeclarationNode['keyword']>(['var', 'varip']);
 
@@ -129,6 +140,8 @@ function analyseExpression(expression: ExpressionNode, env: TypeEnv): InferredTy
       return analyseIdentifier(expression as IdentifierNode, env);
     case 'CallExpression':
       return analyseCallExpression(expression as CallExpressionNode);
+    case 'BinaryExpression':
+      return analyseBinaryExpression(expression as BinaryExpressionNode, env);
     case 'NumberLiteral':
     case 'StringLiteral':
     case 'BooleanLiteral': {
@@ -163,6 +176,26 @@ function handleAssignment(
 ): void {
   const inferred = analyseExpression(assignment.value, env);
   recordType(env, table, assignment.identifier.name, inferred, assignment.value, 'assignment');
+}
+
+function analyseBinaryExpression(expression: BinaryExpressionNode, env: TypeEnv): InferredType {
+  const left = analyseExpression(expression.left, env);
+  const right = analyseExpression(expression.right, env);
+  const isSeries =
+    left.isSeries ||
+    right.isSeries ||
+    left.kind === 'unknown' ||
+    right.kind === 'unknown';
+
+  if (LOGICAL_OPERATORS.has(expression.operator) || COMPARISON_OPERATORS.has(expression.operator)) {
+    const annotation = createAnnotation('bool', expression, 'binary');
+    annotation.isSeries = isSeries;
+    return annotation;
+  }
+
+  const annotation = createAnnotation('unknown', expression, 'binary');
+  annotation.isSeries = isSeries;
+  return annotation;
 }
 
 function analyseStatement(

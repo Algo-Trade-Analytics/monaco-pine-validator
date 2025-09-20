@@ -31,4 +31,36 @@ describe('Chevrotain-based Pine parser', () => {
     const [error] = diagnostics.syntaxErrors;
     expect(error.message).toContain('Expecting token of type');
   });
+
+  it('parses binary comparison and logical expressions', () => {
+    const source = `//@version=6\nindicator("Logic")\nsignal = close > open\nconfirm = signal and volume != 0`;
+
+    const { ast, diagnostics } = service.parse(source);
+
+    expect(diagnostics.syntaxErrors).toEqual([]);
+    const [signalAssign, confirmAssign] = ast?.body.slice(-2) ?? [];
+
+    expect(signalAssign?.kind).toBe('AssignmentStatement');
+    if (signalAssign?.kind === 'AssignmentStatement') {
+      expect(signalAssign.value.kind).toBe('BinaryExpression');
+      if (signalAssign.value.kind === 'BinaryExpression') {
+        expect(signalAssign.value.operator).toBe('>');
+        expect(signalAssign.value.left.kind).toBe('Identifier');
+        expect(signalAssign.value.right.kind).toBe('Identifier');
+      }
+    }
+
+    expect(confirmAssign?.kind).toBe('AssignmentStatement');
+    if (confirmAssign?.kind === 'AssignmentStatement') {
+      expect(confirmAssign.value.kind).toBe('BinaryExpression');
+      if (confirmAssign.value.kind === 'BinaryExpression') {
+        expect(confirmAssign.value.operator).toBe('and');
+        expect(confirmAssign.value.left.kind).toBe('Identifier');
+        expect(confirmAssign.value.right.kind).toBe('BinaryExpression');
+        if (confirmAssign.value.right.kind === 'BinaryExpression') {
+          expect(confirmAssign.value.right.operator).toBe('!=');
+        }
+      }
+    }
+  });
 });

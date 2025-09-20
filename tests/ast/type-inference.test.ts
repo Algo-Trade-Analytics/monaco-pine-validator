@@ -37,4 +37,14 @@ describe('AST type inference', () => {
     expect(annotation?.kind).toBe('unknown');
     expect(annotation?.sources.length).toBeGreaterThanOrEqual(4);
   });
+
+  it('infers boolean results for logical expressions', () => {
+    const source = `//@version=6\nindicator("Demo")\nsignal = close > open\nconfirm = signal and volume != 0`;
+    const { ast } = service.parse(source);
+
+    const { types } = inferProgramTypes(ast);
+
+    expect(types.get('signal')).toMatchObject({ kind: 'bool', isSeries: true });
+    expect(types.get('confirm')).toMatchObject({ kind: 'bool', isSeries: true });
+  });
 });

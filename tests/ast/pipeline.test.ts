@@ -82,17 +82,23 @@ describe('BaseValidator AST pipeline integration', () => {
 
   it('stores inferred types in the AST context and symbol metadata', () => {
     const validator = new TestValidator({ ast: { mode: 'shadow', service: createChevrotainAstService() } });
-    validator.validate(`//@version=6\nindicator("Demo")\nvar foo = 1\nbar = foo`);
+    validator.validate(
+      `//@version=6\nindicator("Demo")\nvar foo = 1\nbar = foo\nsignal = close > open`,
+    );
 
     const context = validator.exposeContext();
 
     expect(context.astTypes.get('foo')).toMatchObject({ kind: 'float', isSeries: true });
     expect(context.astTypes.get('bar')).toMatchObject({ kind: 'float', isSeries: true });
+    expect(context.astTypes.get('signal')).toMatchObject({ kind: 'bool', isSeries: true });
 
     const fooRecord = context.symbolTable.get('foo');
     expect(fooRecord?.metadata).toMatchObject({ storage: 'var', type: 'float', isSeries: true });
 
     const barRecord = context.symbolTable.get('bar');
     expect(barRecord?.metadata).toMatchObject({ type: 'float', isSeries: true });
+
+    const signalRecord = context.symbolTable.get('signal');
+    expect(signalRecord?.metadata).toMatchObject({ type: 'bool', isSeries: true });
   });
 });

@@ -75,7 +75,14 @@ export interface ScopeGraph {
 
 export type AstTypeKind = 'float' | 'int' | 'bool' | 'string' | 'series' | 'unknown';
 
-export type AstTypeSourceReason = 'literal' | 'identifier' | 'call' | 'declaration' | 'assignment' | 'unknown';
+export type AstTypeSourceReason =
+  | 'literal'
+  | 'identifier'
+  | 'call'
+  | 'binary'
+  | 'declaration'
+  | 'assignment'
+  | 'unknown';
 
 export interface AstTypeSource {
   node: AstNode | null;

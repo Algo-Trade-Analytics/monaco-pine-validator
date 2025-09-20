@@ -48,7 +48,28 @@ export interface BooleanLiteralNode extends BaseNode {
 
 export type LiteralNode = NumberLiteralNode | StringLiteralNode | BooleanLiteralNode;
 
-export type ExpressionNode = CallExpressionNode | IdentifierNode | LiteralNode;
+export type BinaryOperator =
+  | 'and'
+  | 'or'
+  | '=='
+  | '!='
+  | '<'
+  | '<='
+  | '>'
+  | '>=';
+
+export interface BinaryExpressionNode extends BaseNode {
+  kind: 'BinaryExpression';
+  operator: BinaryOperator;
+  left: ExpressionNode;
+  right: ExpressionNode;
+}
+
+export type ExpressionNode =
+  | BinaryExpressionNode
+  | CallExpressionNode
+  | IdentifierNode
+  | LiteralNode;
 
 export interface ArgumentNode extends BaseNode {
   kind: 'Argument';
@@ -110,4 +131,23 @@ export function createLocation(start: Position, end: Position): SourceLocation {
 
 export function createRange(startOffset: number, endOffset: number): SourceRange {
   return [startOffset, endOffset];
+}
+
+export function spanRange(
+  left: BaseNode | null | undefined,
+  right: BaseNode | null | undefined,
+): {
+  loc: SourceLocation;
+  range: SourceRange;
+} {
+  const fallbackPosition: Position = { line: 1, column: 1, offset: 0 };
+  const start = left?.loc?.start ?? right?.loc?.start ?? fallbackPosition;
+  const end = right?.loc?.end ?? left?.loc?.end ?? fallbackPosition;
+  const startOffset = left?.range?.[0] ?? right?.range?.[0] ?? 0;
+  const endOffset = right?.range?.[1] ?? left?.range?.[1] ?? startOffset;
+
+  return {
+    loc: { start, end },
+    range: [startOffset, endOffset],
+  };
 }

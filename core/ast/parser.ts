@@ -2,6 +2,8 @@ import { EmbeddedActionsParser, Lexer, createToken, tokenMatcher, type IToken } 
 import {
   ArgumentNode,
   AssignmentNode,
+  BinaryExpressionNode,
+  BinaryOperator,
   BooleanLiteralNode,
   CallExpressionNode,
   createLocation,
@@ -15,6 +17,7 @@ import {
   StringLiteralNode,
   VariableDeclarationNode,
   VersionDirectiveNode,
+  spanRange,
   type ExpressionNode,
   type StatementNode,
 } from './nodes';
@@ -39,6 +42,14 @@ const Var = createToken({ name: 'Var', pattern: /var\b/ });
 const BooleanLiteral = createToken({ name: 'BooleanLiteral', pattern: /(?:true|false)\b/ });
 const NumberLiteral = createToken({ name: 'NumberLiteral', pattern: /\d+(?:\.\d+)?/ });
 const StringLiteral = createToken({ name: 'StringLiteral', pattern: /"(?:\\.|[^"\\])*"/, line_breaks: true });
+const And = createToken({ name: 'And', pattern: /and\b/ });
+const Or = createToken({ name: 'Or', pattern: /or\b/ });
+const Equal = createToken({ name: 'Equal', pattern: /==/ });
+const NotEqual = createToken({ name: 'NotEqual', pattern: /!=/ });
+const LessThanEqual = createToken({ name: 'LessThanEqual', pattern: /<=/ });
+const GreaterThanEqual = createToken({ name: 'GreaterThanEqual', pattern: />=/ });
+const LessThan = createToken({ name: 'LessThan', pattern: /</ });
+const GreaterThan = createToken({ name: 'GreaterThan', pattern: />/ });
 const Identifier = createToken({ name: 'Identifier', pattern: /[A-Za-z_][A-Za-z0-9_]*/ });
 const Comma = createToken({ name: 'Comma', pattern: /,/ });
 const Assign = createToken({ name: 'Assign', pattern: /=/ });
@@ -55,6 +66,14 @@ const ALL_TOKENS = [
   BooleanLiteral,
   NumberLiteral,
   StringLiteral,
+  And,
+  Or,
+  Equal,
+  NotEqual,
+  LessThanEqual,
+  GreaterThanEqual,
+  LessThan,
+  GreaterThan,
   Identifier,
   Comma,
   Assign,
@@ -294,6 +313,49 @@ class PineCstParser extends EmbeddedActionsParser {
   });
 
   private expression = this.RULE<ExpressionNode>('expression', () => {
+    return this.SUBRULE(this.logicalOrExpression);
+  });
+
+  private logicalOrExpression = this.RULE<ExpressionNode>('logicalOrExpression', () => {
+    let left = this.SUBRULE(this.logicalAndExpression);
+    this.MANY(() => {
+      const operator = this.track(this.CONSUME(Or));
+      const right = this.SUBRULE2(this.logicalAndExpression);
+      left = this.buildBinaryExpression(left, operator.image as BinaryOperator, right);
+    });
+    return left;
+  });
+
+  private logicalAndExpression = this.RULE<ExpressionNode>('logicalAndExpression', () => {
+    let left = this.SUBRULE(this.comparisonExpression);
+    this.MANY(() => {
+      const operator = this.track(this.CONSUME(And));
+      const right = this.SUBRULE2(this.comparisonExpression);
+      left = this.buildBinaryExpression(left, operator.image as BinaryOperator, right);
+    });
+    return left;
+  });
+
+  private comparisonExpression = this.RULE<ExpressionNode>('comparisonExpression', () => {
+    let left = this.SUBRULE(this.primaryExpression);
+    this.MANY(() => {
+      const operator = this.track(
+        this.OR<IToken>([
+          { ALT: () => this.CONSUME(Equal) },
+          { ALT: () => this.CONSUME(NotEqual) },
+          { ALT: () => this.CONSUME(LessThanEqual) },
+          { ALT: () => this.CONSUME(GreaterThanEqual) },
+          { ALT: () => this.CONSUME(LessThan) },
+          { ALT: () => this.CONSUME(GreaterThan) },
+        ]),
+      );
+      const right = this.SUBRULE2(this.primaryExpression);
+      left = this.buildBinaryExpression(left, operator.image as BinaryOperator, right);
+    });
+    return left;
+  });
+
+  private primaryExpression = this.RULE<ExpressionNode>('primaryExpression', () => {
     return this.OR<ExpressionNode>([
       {
         GATE: () => tokenMatcher(this.LA(1), Identifier) && tokenMatcher(this.LA(2), LParen),
@@ -303,6 +365,22 @@ class PineCstParser extends EmbeddedActionsParser {
       { ALT: () => this.SUBRULE(this.identifier) },
     ]);
   });
+
+  private buildBinaryExpression(
+    left: ExpressionNode,
+    operator: BinaryOperator,
+    right: ExpressionNode,
+  ): BinaryExpressionNode {
+    const { loc, range } = spanRange(left, right);
+    return {
+      kind: 'BinaryExpression',
+      operator,
+      left,
+      right,
+      loc,
+      range,
+    };
+  }
 
   private callExpression = this.RULE<CallExpressionNode>('callExpression', () => {
     const start = this.startToken();
