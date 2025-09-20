@@ -1,6 +1,8 @@
 export * from './types';
 export * from './service';
 export * from './lexer';
+export * from './nodes';
+export * from './traversal';
 
 export * as nodes from '../../pynescript/ast/node';
 export * as helpers from '../../pynescript/ast/helper';
