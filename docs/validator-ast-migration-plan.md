@@ -23,6 +23,14 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - `BaseValidator` now hydrates `AstValidationContext` with parser outputs, scope graphs, and symbol tables whenever AST mode is enabled.
 - Focused Vitest suites cover traversal and scope graph behaviour; pipeline tests assert that AST diagnostics and context wiring behave under success, failure, and disabled modes.
 
+### Near-Term TODOs
+
+1. **Stabilise AST Fixtures** – add snapshot-based assertions for representative Pine snippets so AST structure changes surface clearly in reviews.
+2. **Prototype Type Inference Skeleton** – formalise literal and identifier typing in a dedicated pass and surface the results on the validation context.
+3. **Wire Diagnostic Helpers** – introduce utilities that translate AST node ranges into Monaco `IMarkerData` instances for reuse across modules.
+4. **Author Golden Semantic Tests** – capture end-to-end fixtures that exercise scope + type metadata to validate the new passes.
+5. **Update Migration Tracking Table** – reflect delivered infrastructure (AST context, scope graph) and link owners for upcoming module migrations.
+
 ## 3. Target Architecture Overview
 
 ```
