@@ -152,14 +152,63 @@ Suggested migration order:
 | history-referencing-validator | High | ☐ Not Started | Needs AST index expressions |
 | ... | ... | ... | Extend table as modules migrate |
 
-## 10. Definition of Done
+## 10. Immediate Next Steps (Post-Review)
+
+The initial AST plumbing is already landing (feature-flagged parsing in `BaseValidator`,
+`AstValidationContext` extensions, lexer scaffolding, and validation smoke tests). To
+capitalise on this progress, align the next iteration around the following workstream
+plan:
+
+1. **Document & Harden the Current Foundations**
+   - Update internal docs and tracking tables to reflect the landed AST scaffolding so
+     contributors have an accurate baseline.
+   - Expand the existing Vitest coverage to capture the behaviour of the merged
+     `parseAst` flow (success, failure, disabled mode) and lock in diagnostics
+     formatting with snapshots.
+
+2. **Parser RFC Closure & Prototype Upgrade**
+   - Finalise the parser technology RFC by enumerating findings from the current
+     lexer/prototype experiments and logging open questions (incremental parsing,
+     error recovery hooks).
+   - Extend the prototype to cover directives, variable declarations, and function
+     bodies so upcoming semantic passes have representative node shapes.
+
+3. **AST Schema & Traversal Build-Out**
+   - Formalise discriminated union node definitions in `core/ast/nodes.ts`, wiring in
+     the positional metadata already emitted by the lexer.
+   - Implement traversal helpers (`visit`, `visitChildren`, `findAncestor`) and bake in
+     TypeScript typings so downstream validators can adopt them without ad-hoc
+     utilities.
+
+4. **Semantic Pass Bootstrapping**
+   - Start the scope builder atop the new traversal utilities, targeting declarations
+     and reference resolution needed by high-priority modules (`core-validator`,
+     `function-declarations`).
+   - Define placeholder data structures for type inference results to unblock modules
+     that need literal vs. series distinctions, even if the inference logic is still
+     stubbed.
+
+5. **Dual-Run Guardrail Wiring**
+   - Introduce a CLI/CI harness that executes both the legacy and AST-backed validators
+     against a shared fixture suite, capturing diagnostic diffs for visibility.
+   - Use the harness to populate the migration tracking table with confidence levels
+     (e.g., ✅ parity, ⚠️ gaps) once individual modules begin switching to AST inputs.
+
+6. **Module Migration Prep**
+   - For the first migration targets (`core-validator`, `function-declarations`), audit
+     existing tests and author any missing behavioural cases so parity checks are
+     meaningful.
+   - Decompose each module into AST-ready subtasks (parsing, traversal, diagnostics)
+     and assign owners/due dates in the roadmap tracker.
+
+## 11. Definition of Done
 
 - All validation modules run exclusively on AST-derived data structures.
 - Parser + AST layers have ≥90% test coverage with regression fixtures for previously reported bugs.
 - Monaco integration consumes AST diagnostics and exposes improved language features.
 - Legacy text-based parsing utilities removed; documentation updated to describe AST-first architecture.
 
-## 11. References & Best Practices
+## 12. References & Best Practices
 
 - Monaco editor diagnostics best practices: produce stable `owner`, `source`, `code`, and `relatedInformation` entries for AST diagnostics.
 - Keep parser pure and side-effect free; semantic passes handle context-specific logic.
