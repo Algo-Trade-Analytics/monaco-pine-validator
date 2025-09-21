@@ -584,6 +584,158 @@ describe('CoreValidator AST integration', () => {
     expect(assignmentWarnings[0]?.line).toBe(4);
   });
 
+  it('flags invalid var/const combinations through AST variable declarations', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'var const foo = 1',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const fooIdentifier = createIdentifier('foo', 10, 3);
+    const fooInitializer = createNumberLiteral(1, '1', 16, 3);
+    const fooDeclaration = createVariableDeclaration(fooIdentifier, 10, 17, 3, {
+      declarationKind: 'var',
+      initializer: fooInitializer,
+    });
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, fooDeclaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const invalidDeclarations = result.errors.filter((error) => error.code === 'PSD01');
+    expect(invalidDeclarations).toHaveLength(1);
+    expect(invalidDeclarations[0]?.line).toBe(3);
+  });
+
+  it('flags := usage in declarations via AST analysis', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'var foo := 1',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const fooIdentifier = createIdentifier('foo', 4, 3);
+    const fooInitializer = createNumberLiteral(1, '1', 11, 3);
+    const fooDeclaration = createVariableDeclaration(fooIdentifier, 4, 12, 3, {
+      declarationKind: 'var',
+      initializer: fooInitializer,
+    });
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, fooDeclaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const assignErrors = result.errors.filter((error) => error.code === 'PSD02');
+    expect(assignErrors).toHaveLength(1);
+    expect(assignErrors[0]?.line).toBe(3);
+  });
+
+  it('prevents const reassignment with = using AST assignments', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'const limit = 5',
+      'limit = limit + 1',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const limitIdentifier = createIdentifier('limit', 6, 3);
+    const limitInitializer = createNumberLiteral(5, '5', 14, 3);
+    const limitDeclaration = createVariableDeclaration(limitIdentifier, 6, 15, 3, {
+      declarationKind: 'const',
+      initializer: limitInitializer,
+    });
+    const assignmentLeft = createIdentifier('limit', 0, 4);
+    const assignmentRight = createBinaryExpression(
+      '+',
+      createIdentifier('limit', 8, 4),
+      createNumberLiteral(1, '1', 16, 4),
+      8,
+      17,
+      4,
+    );
+    const reassignment = createAssignmentStatement(assignmentLeft, assignmentRight, 0, 17, 4);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, limitDeclaration, reassignment]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const constErrors = result.errors.filter((error) => error.code === 'PS019');
+    expect(constErrors).toHaveLength(1);
+    expect(constErrors[0]?.line).toBe(4);
+    expect(constErrors[0]?.message).toContain("with '='");
+  });
+
+  it('prevents const reassignment with := using AST assignments', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'const limit = 5',
+      'limit := limit + 1',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const limitIdentifier = createIdentifier('limit', 6, 3);
+    const limitInitializer = createNumberLiteral(5, '5', 14, 3);
+    const limitDeclaration = createVariableDeclaration(limitIdentifier, 6, 15, 3, {
+      declarationKind: 'const',
+      initializer: limitInitializer,
+    });
+    const assignmentLeft = createIdentifier('limit', 0, 4);
+    const assignmentRight = createBinaryExpression(
+      '+',
+      createIdentifier('limit', 9, 4),
+      createNumberLiteral(1, '1', 17, 4),
+      9,
+      18,
+      4,
+    );
+    const reassignment = createAssignmentStatement(assignmentLeft, assignmentRight, 0, 18, 4);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, limitDeclaration, reassignment]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const constErrors = result.errors.filter((error) => error.code === 'PS019');
+    expect(constErrors).toHaveLength(1);
+    expect(constErrors[0]?.line).toBe(4);
+    expect(constErrors[0]?.message).toContain("with ':='");
+  });
+
   it('reports numeric literal loop conditions for v6 for statements via AST traversal', () => {
     const source = [
       '//@version=6',

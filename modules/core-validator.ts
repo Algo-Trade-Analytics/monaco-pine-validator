@@ -22,6 +22,7 @@ import {
 } from '../core/constants';
 import type {
   ArgumentNode,
+  AssignmentStatementNode,
   BinaryExpressionNode,
   BlockStatementNode,
   CallExpressionNode,
@@ -139,6 +140,7 @@ export class CoreValidator implements ValidationModule {
   private astProcessedFunctionDeclarations = false;
   private astProcessedAssignmentInConditions = false;
   private astProcessedExpensiveOperations = false;
+  private astProcessedVariableStatements = false;
   private astStrategyUsageErrorLines = new Set<number>();
   private inLoop = false;
   private inFunction = false;
@@ -224,6 +226,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedFunctionDeclarations = false;
     this.astProcessedAssignmentInConditions = false;
     this.astProcessedExpensiveOperations = false;
+    this.astProcessedVariableStatements = false;
     this.astStrategyUsageErrorLines.clear();
     this.sawBrace = false;
     this.sawTabIndent = false;
@@ -263,10 +266,21 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedInvalidOperators = true;
     this.astProcessedAssignmentInConditions = true;
     this.astProcessedExpensiveOperations = true;
+    this.astProcessedVariableStatements = true;
 
     let loopDepth = 0;
 
     visit(program, {
+      VariableDeclaration: {
+        enter: ({ node }) => {
+          this.processAstVariableDeclaration(node as VariableDeclarationNode);
+        },
+      },
+      AssignmentStatement: {
+        enter: ({ node }) => {
+          this.processAstAssignmentStatement(node as AssignmentStatementNode);
+        },
+      },
       CallExpression: {
         enter: ({ node }) => {
           this.processAstCallExpression(node);
@@ -340,6 +354,80 @@ export class CoreValidator implements ValidationModule {
         },
       },
     });
+  }
+
+  private processAstVariableDeclaration(declaration: VariableDeclarationNode): void {
+    const line = declaration.loc.start.line;
+    const rawLine = this.context.rawLines[line - 1] ?? '';
+    const strippedNoStrings = this.stripStringsAndLineComment(rawLine);
+
+    if (/^\s*(?:var|varip)\s+const\b/.test(strippedNoStrings)) {
+      this.addError(line, 1, 'Invalid declaration: use either var/varip or const, not both.', 'PSD01');
+    }
+
+    if (/^\s*(?:(?:var|varip|const)\s+|(?:(?:int|float|bool|string|color|line|label|box|table|array|matrix|map)\s+))[A-Za-z_][A-Za-z0-9_]*\s*:=/.test(strippedNoStrings)) {
+      this.addError(line, 1, 'Use "=" (not ":=") in declarations.', 'PSD02');
+    }
+
+    const identifier = declaration.identifier;
+    const name = identifier.name;
+    const identifierColumn = identifier.loc.start.column;
+    this.handleNewVar(name, line, identifierColumn);
+
+    const rhs = this.extractAssignmentRight(rawLine);
+    const isConst = declaration.declarationKind === 'const';
+    this.registerTypeHeuristic(name, rhs, line, identifierColumn, isConst);
+  }
+
+  private processAstAssignmentStatement(statement: AssignmentStatementNode): void {
+    const line = statement.loc.start.line;
+    const rawLine = this.context.rawLines[line - 1] ?? '';
+    const left = statement.left;
+    const operatorInfo = this.resolveAssignmentOperator(rawLine, left.loc.end.column);
+    const operator = operatorInfo?.operator ?? '=';
+    const rhs = operatorInfo?.rhs ?? '';
+
+    if (left.kind === 'MemberExpression') {
+      if (operator === ':=' && this.isThisMemberExpression(left as MemberExpressionNode)) {
+        return;
+      }
+      return;
+    }
+
+    if (left.kind !== 'Identifier') {
+      return;
+    }
+
+    const identifier = left as IdentifierNode;
+    const name = identifier.name;
+    const column = identifier.loc.start.column;
+
+    if (this.constNames.has(name)) {
+      this.addError(line, column, `Cannot reassign const '${name}' with '${operator}'.`, 'PS019');
+      return;
+    }
+
+    if (operator === ':=') {
+      if (this.isMethodParameter(name, line)) {
+        return;
+      }
+      if (!this.declared.has(name) && !KEYWORDS.has(name)) {
+        return;
+      }
+      return;
+    }
+
+    if (KEYWORDS.has(name)) {
+      return;
+    }
+
+    if (!this.declared.has(name)) {
+      this.handleNewVar(name, line, column);
+    }
+
+    if (rhs) {
+      this.registerTypeHeuristic(name, rhs, line, column, false);
+    }
   }
 
   private processAstCallExpression(call: CallExpressionNode): void {
@@ -1171,6 +1259,10 @@ export class CoreValidator implements ValidationModule {
   }
 
   private handleVariableDeclarations(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (this.astProcessedVariableStatements) {
+      return;
+    }
+
     if (/^\s*[A-Za-z_][A-Za-z0-9_]*\s*=>/.test(line)) {
       return;
     }
@@ -2090,6 +2182,37 @@ export class CoreValidator implements ValidationModule {
       declaredAt: { line, column: col },
       usages: []
     });
+  }
+
+  private extractAssignmentRight(line: string): string {
+    const index = line.indexOf('=');
+    if (index === -1) {
+      return '';
+    }
+    return line.slice(index + 1);
+  }
+
+  private resolveAssignmentOperator(line: string, expressionEndColumn: number): { operator: ':=' | '='; rhs: string } | null {
+    const sliceStart = Math.max(0, Math.min(line.length, expressionEndColumn - 1));
+    const afterLeft = line.slice(sliceStart);
+    const match = afterLeft.match(/^(\s*)(:=|=)/);
+    if (!match) {
+      return null;
+    }
+    const operator = match[2] as ':=' | '=';
+    const rhs = afterLeft.slice(match[0].length);
+    return { operator, rhs };
+  }
+
+  private isThisMemberExpression(expression: MemberExpressionNode): boolean {
+    if (expression.object.kind !== 'Identifier') {
+      return false;
+    }
+    if (expression.computed) {
+      return false;
+    }
+    const identifier = expression.object as IdentifierNode;
+    return identifier.name === 'this';
   }
 
   private scanReferences(line: string, lineNum: number, strippedNoStrings: string): void {
