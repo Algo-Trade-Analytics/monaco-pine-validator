@@ -177,7 +177,7 @@ Suggested migration order:
 | builtin-variables-validator | Medium | ✅ Migrated | Module Owners Guild | Validator now reads AST member expressions for constants, having removed the legacy line-scanner path |
 | ta-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Awaiting expanded call-site inference for strategy/TA helpers |
 | strategy-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Needs richer series/type propagation to avoid regressions |
-| history-referencing-validator | High | 🛠️ Blocked on index nodes | Module Owners Guild | Model historical reference expressions + guard via snapshots |
+| history-referencing-validator | High | ✅ Migrated | Module Owners Guild | Index expression traversal now powers negative index, loop, and varip diagnostics without regex scanning |
 | ... | ... | ... | ... | Extend table as modules migrate |
 
 ## 10. Immediate Next Steps (Post-Review)

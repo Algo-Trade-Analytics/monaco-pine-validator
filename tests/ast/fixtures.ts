@@ -96,6 +96,16 @@ export function createNullLiteral(start: number, line = 1): NullLiteralNode {
   };
 }
 
+export function createTypeReference(name: string, start: number, line = 1): TypeReferenceNode {
+  const identifier = createIdentifier(name, start, line);
+  return {
+    kind: 'TypeReference',
+    name: identifier,
+    generics: [],
+    ...createSpan({ start, end: identifier.range[1], lineStart: line }),
+  };
+}
+
 export function createArgument(
   value: ExpressionNode,
   start: number,
@@ -797,5 +807,103 @@ export function createBuiltinConstantsProgram(): ProgramNode {
       backadjustmentDecl,
     ],
     ...createSpan({ start: 0, end: 50, lineStart: 3, lineEnd: 10 }),
+  };
+}
+
+export function createHistoryReferencingProgram(): ProgramNode {
+  const negativeIndex = createIndexExpression(
+    createIdentifier('close', 12, 1),
+    createUnaryExpression('-', createNumberLiteral(1, '1', 18, 1), 17, 20, 1),
+    12,
+    20,
+    1,
+  );
+  const negativeDecl = createVariableDeclaration(createIdentifier('negative', 4, 1), 0, 21, 1, {
+    declarationKind: 'var',
+    initializer: negativeIndex,
+  });
+
+  const largeIndex = createIndexExpression(
+    createIdentifier('close', 11, 2),
+    createNumberLiteral(5001, '5001', 17, 2),
+    11,
+    22,
+    2,
+  );
+  const largeDecl = createVariableDeclaration(createIdentifier('large', 4, 2), 0, 23, 2, {
+    declarationKind: 'var',
+    initializer: largeIndex,
+  });
+
+  const loopAccess = createIndexExpression(
+    createIdentifier('close', 8, 4),
+    createIdentifier('i', 14, 4),
+    8,
+    15,
+    4,
+  );
+  const loopExpression: ExpressionStatementNode = {
+    kind: 'ExpressionStatement',
+    expression: loopAccess,
+    ...createSpan({ start: 6, end: 17, lineStart: 4 }),
+  };
+  const loopBody = createBlock([loopExpression], 6, 18, 4, 4);
+  const loopTest = createIdentifier('condition', 6, 3);
+  const whileStatement = createWhileStatement(loopTest, loopBody, 0, 18, 3);
+
+  const innerHistory = createIndexExpression(
+    createIdentifier('high', 18, 5),
+    createNumberLiteral(1, '1', 23, 5),
+    18,
+    24,
+    5,
+  );
+  const nestedIndex = createIndexExpression(createIdentifier('close', 11, 5), innerHistory, 11, 25, 5);
+  const nestedDecl = createVariableDeclaration(createIdentifier('nested', 4, 5), 0, 26, 5, {
+    declarationKind: 'var',
+    initializer: nestedIndex,
+  });
+
+  const varipDecl = createVariableDeclaration(createIdentifier('counter', 6, 6), 0, 16, 6, {
+    declarationKind: 'varip',
+    initializer: createNumberLiteral(0, '0', 17, 6),
+  });
+
+  const counterIdentifier = createIdentifier('counter', 0, 7);
+  const counterRight = createBinaryExpression(
+    '+',
+    createIdentifier('counter', 10, 7),
+    createIndexExpression(createIdentifier('close', 20, 7), createNumberLiteral(1, '1', 26, 7), 20, 27, 7),
+    10,
+    28,
+    7,
+  );
+  const varipAssignment = createAssignmentStatement(counterIdentifier, counterRight, 0, 28, 7);
+
+  const functionArg = createIndexExpression(createIdentifier('close', 18, 8), createNumberLiteral(1, '1', 24, 8), 18, 25, 8);
+  const callArgument = createArgument(functionArg, 17, 26, 8);
+  const callExpression = createCallExpression(createIdentifier('process', 8, 8), [callArgument], 8, 27, 8);
+  const callStatement: ExpressionStatementNode = {
+    kind: 'ExpressionStatement',
+    expression: callExpression,
+    ...createSpan({ start: 8, end: 27, lineStart: 8 }),
+  };
+
+  const typedInitializer = createIndexExpression(createIdentifier('close', 21, 9), createNumberLiteral(1, '1', 27, 9), 21, 28, 9);
+  const typeAnnotation = createTypeReference('int', 4, 9);
+  const typedDeclaration: VariableDeclarationNode = {
+    kind: 'VariableDeclaration',
+    declarationKind: 'simple',
+    identifier: createIdentifier('prevClose', 8, 9),
+    typeAnnotation,
+    initializer: typedInitializer,
+    ...createSpan({ start: 4, end: 28, lineStart: 9 }),
+  };
+
+  return {
+    kind: 'Program',
+    directives: [],
+    body: [negativeDecl, largeDecl, whileStatement, nestedDecl, varipDecl, varipAssignment, callStatement, typedDeclaration],
+    ...createSpan({ start: 0, end: 28, lineStart: 1, lineEnd: 9 }),
   };
 }
