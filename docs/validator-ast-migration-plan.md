@@ -165,7 +165,7 @@ Suggested migration order:
 | scope-validator | High | 🚧 Planning | Semantic Working Group | Scope graph + symbol tables available; need module-level dual-run harness |
 | switch-validator | Medium | 🛠️ Blocked on node coverage | Language Infra | Extend AST to cover `switch` branches prior to migration |
 | while-loop-validator | Medium | 🛠️ Blocked on node coverage | Language Infra | Loop constructs present; finalise control-flow metadata before port |
-| builtin-variables-validator | Medium | ✅ Migrated | Module Owners Guild | Validator now reads AST member expressions for constants with legacy scanning as a fallback |
+| builtin-variables-validator | Medium | ✅ Migrated | Module Owners Guild | Validator now reads AST member expressions for constants, having removed the legacy line-scanner path |
 | ta-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Awaiting expanded call-site inference for strategy/TA helpers |
 | strategy-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Needs richer series/type propagation to avoid regressions |
 | history-referencing-validator | High | 🛠️ Blocked on index nodes | Module Owners Guild | Model historical reference expressions + guard via snapshots |
