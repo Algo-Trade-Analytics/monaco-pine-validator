@@ -739,6 +739,72 @@ describe('CoreValidator AST integration', () => {
     expect(constErrors[0]?.message).toContain("with '='");
   });
 
+  it('emits PS016 when := assigns to an undeclared identifier in AST mode', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'foo := 1',
+      'plot(close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const assignmentLeft = createIdentifier('foo', 0, 3);
+    const assignmentRight = createNumberLiteral(1, '1', 7, 3);
+    const reassignment = createAssignmentStatement(assignmentLeft, assignmentRight, 0, 8, 3);
+    const plotCall = createCallExpression(createIdentifier('plot', 0, 4), [createArgument(createIdentifier('close', 5, 4), 5, 10, 4)], 0, 10, 4);
+    const plotStatement = createExpressionStatement(plotCall, 0, 10, 4);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, reassignment, plotStatement]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const errors = result.errors.filter((error) => error.code === 'PS016');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.line).toBe(3);
+    expect(errors[0]?.message).toContain("Use '=' on first assignment");
+  });
+
+  it('emits PS017 when compound assignments target undeclared identifiers', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'foo += 1',
+      'plot(close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const assignmentLeft = createIdentifier('foo', 0, 3);
+    const assignmentRight = createNumberLiteral(1, '1', 7, 3);
+    const compoundAssignment = createAssignmentStatement(assignmentLeft, assignmentRight, 0, 8, 3);
+    const plotCall = createCallExpression(createIdentifier('plot', 0, 4), [createArgument(createIdentifier('close', 5, 4), 5, 10, 4)], 0, 10, 4);
+    const plotStatement = createExpressionStatement(plotCall, 0, 10, 4);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, compoundAssignment, plotStatement]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const errors = result.errors.filter((error) => error.code === 'PS017');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.line).toBe(3);
+    expect(errors[0]?.message).toContain("Use '=' for first assignment");
+  });
+
   it('warns when AST-tracked variables shadow function parameters', () => {
     const source = [
       '//@version=6',

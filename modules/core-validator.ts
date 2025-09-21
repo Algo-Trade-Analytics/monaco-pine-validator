@@ -77,6 +77,8 @@ const EXPENSIVE_LOOP_CALLEES = new Set([
   'ta.macd',
 ]);
 
+type AssignmentOperator = '=' | ':=' | '+=' | '-=' | '*=' | '/=' | '%=';
+
 function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
   return 'ast' in context;
 }
@@ -167,6 +169,8 @@ export class CoreValidator implements ValidationModule {
   private astFunctionStack: Array<{ name: string | null; params: Set<string> }> = [];
   private astHistoryReferenceCounts = new Map<number, number>();
   private astHistoryReferenceWarnedLines = new Set<number>();
+  private astReassignmentErrorSites = new Set<string>();
+  private astCompoundAssignmentErrorSites = new Set<string>();
 
   private scopeStack: ScopeInfo[] = [];
   private indentStack: number[] = [0];
@@ -245,6 +249,8 @@ export class CoreValidator implements ValidationModule {
     this.astStrategyUsageErrorLines.clear();
     this.astHistoryReferenceCounts.clear();
     this.astHistoryReferenceWarnedLines.clear();
+    this.astReassignmentErrorSites.clear();
+    this.astCompoundAssignmentErrorSites.clear();
     this.sawBrace = false;
     this.sawTabIndent = false;
     this.sawSpaceIndent = false;
@@ -446,23 +452,47 @@ export class CoreValidator implements ValidationModule {
     const identifier = left as IdentifierNode;
     const name = identifier.name;
     const column = identifier.loc.start.column;
+    const isParameter = this.isAstFunctionParameter(name) || this.isMethodParameter(name, line);
 
     if (this.constNames.has(name)) {
       this.addError(line, column, `Cannot reassign const '${name}' with '${operator}'.`, 'PS019');
       return;
     }
 
+    if (KEYWORDS.has(name)) {
+      return;
+    }
+
     if (operator === ':=') {
-      if (this.isMethodParameter(name, line)) {
-        return;
-      }
-      if (!this.declared.has(name) && !KEYWORDS.has(name)) {
+      if (!this.declared.has(name) && !isParameter) {
+        const siteKey = `${line}:${name}`;
+        if (!this.astReassignmentErrorSites.has(siteKey)) {
+          this.astReassignmentErrorSites.add(siteKey);
+          this.addError(
+            line,
+            column,
+            `Variable '${name}' not declared before ':='. Use '=' on first assignment.`,
+            'PS016',
+          );
+        }
         return;
       }
       return;
     }
 
-    if (KEYWORDS.has(name)) {
+    if (operator !== '=') {
+      if (!this.declared.has(name) && !isParameter) {
+        const siteKey = `${line}:${name}`;
+        if (!this.astCompoundAssignmentErrorSites.has(siteKey)) {
+          this.astCompoundAssignmentErrorSites.add(siteKey);
+          this.addError(
+            line,
+            column,
+            `Variable '${name}' not declared before '${operator}'. Use '=' for first assignment or declare it.`,
+            'PS017',
+          );
+        }
+      }
       return;
     }
 
@@ -478,13 +508,18 @@ export class CoreValidator implements ValidationModule {
   private processAstTupleDestructuring(
     statement: AssignmentStatementNode,
     tuple: TupleExpressionNode,
-    operator: ':=' | '=',
+    operator: AssignmentOperator,
   ): void {
     const tupleLine = statement.loc.start.line;
     const tupleColumn = tuple.loc.start.column;
 
-    if (operator === ':=') {
-      this.addError(tupleLine, tupleColumn, 'Tuple destructuring must use "=" (not ":=").', 'PST03');
+    if (operator !== '=') {
+      this.addError(
+        tupleLine,
+        tupleColumn,
+        `Tuple destructuring must use "=" (not '${operator}').`,
+        'PST03',
+      );
     }
 
     let hasEmptySlot = false;
@@ -749,6 +784,16 @@ export class CoreValidator implements ValidationModule {
       this.paramUsage.get(fn.name)!.add(name);
       break;
     }
+  }
+
+  private isAstFunctionParameter(name: string): boolean {
+    for (let index = this.astFunctionStack.length - 1; index >= 0; index--) {
+      const fn = this.astFunctionStack[index];
+      if (fn.params.has(name)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private processAstIndexExpression(indexExpression: IndexExpressionNode): void {
@@ -2487,14 +2532,17 @@ export class CoreValidator implements ValidationModule {
     return line.slice(index + 1);
   }
 
-  private resolveAssignmentOperator(line: string, expressionEndColumn: number): { operator: ':=' | '='; rhs: string } | null {
+  private resolveAssignmentOperator(
+    line: string,
+    expressionEndColumn: number,
+  ): { operator: AssignmentOperator; rhs: string } | null {
     const sliceStart = Math.max(0, Math.min(line.length, expressionEndColumn - 1));
     const afterLeft = line.slice(sliceStart);
-    const match = afterLeft.match(/^(\s*)(:=|=)/);
+    const match = afterLeft.match(/^(\s*)(:=|\+=|-=|\*=|\/=|%=|=)/);
     if (!match) {
       return null;
     }
-    const operator = match[2] as ':=' | '=';
+    const operator = match[2] as AssignmentOperator;
     const rhs = afterLeft.slice(match[0].length);
     return { operator, rhs };
   }
