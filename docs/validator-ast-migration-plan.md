@@ -26,6 +26,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Golden semantic coverage snapshots assert the combined scope, symbol, and type metadata for representative scripts to guard end-to-end analysis.
 - Control-flow graph construction models branch merges, loop back-edges, and return terminators while exposing the graph on the validation context for future analyses.
 - Member expression nodes model namespaced property access (e.g., timeframe.period) with traversal, scope, and type inference coverage so builtin-variable validators can rely on structured AST data.
+- The built-in variables validator now consumes AST member expressions to detect namespace constants, keeping Monaco diagnostics aligned with Pine nodes while falling back to legacy scanning only when AST data is unavailable.
 
 ### Near-Term TODOs
 
@@ -164,7 +165,7 @@ Suggested migration order:
 | scope-validator | High | 🚧 Planning | Semantic Working Group | Scope graph + symbol tables available; need module-level dual-run harness |
 | switch-validator | Medium | 🛠️ Blocked on node coverage | Language Infra | Extend AST to cover `switch` branches prior to migration |
 | while-loop-validator | Medium | 🛠️ Blocked on node coverage | Language Infra | Loop constructs present; finalise control-flow metadata before port |
-| builtin-variables-validator | Medium | 🔄 Ready for AST port | Module Owners Guild | Identifier/type metadata supports replacement of regex scanning |
+| builtin-variables-validator | Medium | ✅ Migrated | Module Owners Guild | Validator now reads AST member expressions for constants with legacy scanning as a fallback |
 | ta-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Awaiting expanded call-site inference for strategy/TA helpers |
 | strategy-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Needs richer series/type propagation to avoid regressions |
 | history-referencing-validator | High | 🛠️ Blocked on index nodes | Module Owners Guild | Model historical reference expressions + guard via snapshots |

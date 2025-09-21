@@ -12,14 +12,23 @@
  * Phase 3.5: Final 1% - Specialized Built-in Variables
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
-import { 
+import {
+  type AstValidationContext,
+  type ValidationContext,
+  type ValidationError,
+  type ValidationModule,
+  type ValidationResult,
+  type ValidatorConfig,
+} from '../core/types';
+import {
   DISPLAY_CONSTANTS_EXTENDED as DISPLAY_CONSTANTS,
   TIMEFRAME_CONSTANTS,
   CURRENCY_CONSTANTS
 } from '../core/constants-registry';
 import { findConstantsInLine } from '../core/scanner';
 import { Codes } from '../core/codes';
+import { visit } from '../core/ast/traversal';
+import type { ExpressionNode, MemberExpressionNode } from '../core/ast/nodes';
 
 // TIMEFRAME_CONSTANTS and CURRENCY_CONSTANTS now imported from shared registry
 // DISPLAY_CONSTANTS now imported from shared registry
@@ -83,15 +92,19 @@ export class BuiltinVariablesValidator implements ValidationModule {
     this.adjustmentConstantUsage.clear();
     this.backadjustmentConstantUsage.clear();
 
-    // Validate built-in variable constants
-    this.validateTimeframeConstants();
-    this.validateDisplayConstants();
-    this.validateExtendConstants();
-    this.validateFormatConstants();
-    this.validateCurrencyConstants();
-    this.validateScaleConstants();
-    this.validateAdjustmentConstants();
-    this.validateBackadjustmentConstants();
+    const usedAst = this.tryValidateWithAst(config);
+
+    if (!usedAst) {
+      // Validate built-in variable constants using legacy scanners when AST data is unavailable
+      this.validateTimeframeConstants();
+      this.validateDisplayConstants();
+      this.validateExtendConstants();
+      this.validateFormatConstants();
+      this.validateCurrencyConstants();
+      this.validateScaleConstants();
+      this.validateAdjustmentConstants();
+      this.validateBackadjustmentConstants();
+    }
 
     // Provide usage information
     this.analyzeConstantUsage();
@@ -106,21 +119,143 @@ export class BuiltinVariablesValidator implements ValidationModule {
     };
   }
 
+  private canUseAst(context: ValidationContext, config: ValidatorConfig): context is AstValidationContext {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return false;
+    }
+    return 'ast' in context;
+  }
+
+  private tryValidateWithAst(config: ValidatorConfig): boolean {
+    if (!this.canUseAst(this.context, config)) {
+      return false;
+    }
+
+    const astContext = this.context as AstValidationContext;
+    const program = astContext.ast;
+    if (!program) {
+      return false;
+    }
+
+    visit(program, {
+      MemberExpression: {
+        enter: ({ node }) => {
+          const constant = this.getMemberQualifiedName(node);
+          if (!constant) {
+            return;
+          }
+
+          const position = node.property.loc?.start ?? node.loc.start;
+          const line = position?.line ?? 1;
+          const column = position?.column ?? 1;
+          this.recordConstantUsage(constant, line, column);
+        },
+      },
+    });
+
+    return true;
+  }
+
+  private getMemberQualifiedName(member: MemberExpressionNode): string | null {
+    if (member.computed) {
+      return null;
+    }
+
+    const objectName = this.getExpressionQualifiedName(member.object);
+    if (!objectName) {
+      return null;
+    }
+
+    return `${objectName}.${member.property.name}`;
+  }
+
+  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return expression.name;
+    }
+    if (expression.kind === 'MemberExpression') {
+      if (expression.computed) {
+        return null;
+      }
+      const objectName = this.getExpressionQualifiedName(expression.object);
+      if (!objectName) {
+        return null;
+      }
+      return `${objectName}.${expression.property.name}`;
+    }
+    return null;
+  }
+
+  private incrementUsage(map: Map<string, number>, constant: string): void {
+    map.set(constant, (map.get(constant) || 0) + 1);
+  }
+
+  private addConstantInfo(code: string, message: string, line: number, column: number): void {
+    this.info.push({
+      code,
+      message,
+      line,
+      column,
+      severity: 'info'
+    });
+  }
+
+  private recordConstantUsage(constant: string, line: number, column: number): void {
+    if (TIMEFRAME_CONSTANTS.has(constant)) {
+      this.incrementUsage(this.timeframeConstantUsage, constant);
+      this.addConstantInfo(Codes.TIMEFRAME_CONSTANT, `Timeframe constant '${constant}' detected`, line, column);
+      return;
+    }
+
+    if (DISPLAY_CONSTANTS.has(constant)) {
+      this.incrementUsage(this.displayConstantUsage, constant);
+      this.addConstantInfo(Codes.DISPLAY_CONSTANT, `Display constant '${constant}' detected`, line, column);
+      return;
+    }
+
+    if (EXTEND_CONSTANTS.has(constant)) {
+      this.incrementUsage(this.extendConstantUsage, constant);
+      this.addConstantInfo(Codes.EXTEND_CONSTANT, `Extend constant '${constant}' detected`, line, column);
+      return;
+    }
+
+    if (FORMAT_CONSTANTS.has(constant)) {
+      this.incrementUsage(this.formatConstantUsage, constant);
+      this.addConstantInfo(Codes.FORMAT_CONSTANT, `Format constant '${constant}' detected`, line, column);
+      return;
+    }
+
+    if (CURRENCY_CONSTANTS.has(constant)) {
+      this.incrementUsage(this.currencyConstantUsage, constant);
+      this.addConstantInfo(Codes.CURRENCY_CONSTANT, `Currency constant '${constant}' detected`, line, column);
+      return;
+    }
+
+    if (SCALE_CONSTANTS.has(constant)) {
+      this.incrementUsage(this.scaleConstantUsage, constant);
+      this.addConstantInfo(Codes.SCALE_CONSTANT, `Scale constant '${constant}' detected`, line, column);
+      return;
+    }
+
+    if (ADJUSTMENT_CONSTANTS.has(constant)) {
+      this.incrementUsage(this.adjustmentConstantUsage, constant);
+      this.addConstantInfo(Codes.ADJUSTMENT_CONSTANT, `Adjustment constant '${constant}' detected`, line, column);
+      return;
+    }
+
+    if (BACKADJUSTMENT_CONSTANTS.has(constant)) {
+      this.incrementUsage(this.backadjustmentConstantUsage, constant);
+      this.addConstantInfo(Codes.BACKADJUSTMENT_CONSTANT, `Backadjustment constant '${constant}' detected`, line, column);
+    }
+  }
+
   private validateTimeframeConstants(): void {
     for (let i = 0; i < this.context.lines.length; i++) {
       const cleanLine = this.context.cleanLines[i];
       const hits = findConstantsInLine(cleanLine, TIMEFRAME_CONSTANTS);
-      
+
       for (const hit of hits) {
-        this.timeframeConstantUsage.set(hit.constant, (this.timeframeConstantUsage.get(hit.constant) || 0) + 1);
-        
-        this.info.push({
-          code: Codes.TIMEFRAME_CONSTANT,
-          message: `Timeframe constant '${hit.constant}' detected`,
-          line: i + 1,
-          column: hit.index + 1,
-          severity: 'info'
-        });
+        this.recordConstantUsage(hit.constant, i + 1, hit.index + 1);
       }
     }
   }
@@ -130,14 +265,7 @@ export class BuiltinVariablesValidator implements ValidationModule {
       const cleanLine = this.context.cleanLines[i];
       const hits = findConstantsInLine(cleanLine, DISPLAY_CONSTANTS);
       for (const h of hits) {
-        this.displayConstantUsage.set(h.constant, (this.displayConstantUsage.get(h.constant) || 0) + 1);
-        this.info.push({
-          code: Codes.DISPLAY_CONSTANT,
-          message: `Display constant '${h.constant}' detected`,
-          line: i + 1,
-          column: h.index + 1,
-          severity: 'info'
-        });
+        this.recordConstantUsage(h.constant, i + 1, h.index + 1);
       }
     }
   }
@@ -146,17 +274,9 @@ export class BuiltinVariablesValidator implements ValidationModule {
     for (let i = 0; i < this.context.lines.length; i++) {
       const cleanLine = this.context.cleanLines[i];
       const hits = findConstantsInLine(cleanLine, EXTEND_CONSTANTS);
-      
+
       for (const hit of hits) {
-        this.extendConstantUsage.set(hit.constant, (this.extendConstantUsage.get(hit.constant) || 0) + 1);
-        
-        this.info.push({
-          code: Codes.EXTEND_CONSTANT,
-          message: `Extend constant '${hit.constant}' detected`,
-          line: i + 1,
-          column: hit.index + 1,
-          severity: 'info'
-        });
+        this.recordConstantUsage(hit.constant, i + 1, hit.index + 1);
       }
     }
   }
@@ -165,17 +285,9 @@ export class BuiltinVariablesValidator implements ValidationModule {
     for (let i = 0; i < this.context.lines.length; i++) {
       const cleanLine = this.context.cleanLines[i];
       const hits = findConstantsInLine(cleanLine, FORMAT_CONSTANTS);
-      
+
       for (const hit of hits) {
-        this.formatConstantUsage.set(hit.constant, (this.formatConstantUsage.get(hit.constant) || 0) + 1);
-        
-        this.info.push({
-          code: Codes.FORMAT_CONSTANT,
-          message: `Format constant '${hit.constant}' detected`,
-          line: i + 1,
-          column: hit.index + 1,
-          severity: 'info'
-        });
+        this.recordConstantUsage(hit.constant, i + 1, hit.index + 1);
       }
     }
   }
@@ -184,37 +296,20 @@ export class BuiltinVariablesValidator implements ValidationModule {
     for (let i = 0; i < this.context.lines.length; i++) {
       const cleanLine = this.context.cleanLines[i];
       const hits = findConstantsInLine(cleanLine, CURRENCY_CONSTANTS);
-      
+
       for (const hit of hits) {
-        this.currencyConstantUsage.set(hit.constant, (this.currencyConstantUsage.get(hit.constant) || 0) + 1);
-        
-        this.info.push({
-          code: Codes.CURRENCY_CONSTANT,
-          message: `Currency constant '${hit.constant}' detected`,
-          line: i + 1,
-          column: hit.index + 1,
-          severity: 'info'
-        });
+        this.recordConstantUsage(hit.constant, i + 1, hit.index + 1);
       }
     }
   }
 
   private validateScaleConstants(): void {
     for (let i = 0; i < this.context.lines.length; i++) {
-      const line = this.context.lines[i];
       const cleanLine = this.context.cleanLines[i];
 
-      for (const constant of Array.from(SCALE_CONSTANTS)) {
+      for (const constant of SCALE_CONSTANTS) {
         if (cleanLine.includes(constant)) {
-          this.scaleConstantUsage.set(constant, (this.scaleConstantUsage.get(constant) || 0) + 1);
-          
-          this.info.push({
-            code: Codes.SCALE_CONSTANT,
-            message: `Scale constant '${constant}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(constant) + 1,
-            severity: 'info'
-          });
+          this.recordConstantUsage(constant, i + 1, cleanLine.indexOf(constant) + 1);
         }
       }
     }
@@ -222,20 +317,11 @@ export class BuiltinVariablesValidator implements ValidationModule {
 
   private validateAdjustmentConstants(): void {
     for (let i = 0; i < this.context.lines.length; i++) {
-      const line = this.context.lines[i];
       const cleanLine = this.context.cleanLines[i];
 
-      for (const constant of Array.from(ADJUSTMENT_CONSTANTS)) {
+      for (const constant of ADJUSTMENT_CONSTANTS) {
         if (cleanLine.includes(constant)) {
-          this.adjustmentConstantUsage.set(constant, (this.adjustmentConstantUsage.get(constant) || 0) + 1);
-          
-          this.info.push({
-            code: Codes.ADJUSTMENT_CONSTANT,
-            message: `Adjustment constant '${constant}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(constant) + 1,
-            severity: 'info'
-          });
+          this.recordConstantUsage(constant, i + 1, cleanLine.indexOf(constant) + 1);
         }
       }
     }
@@ -243,20 +329,11 @@ export class BuiltinVariablesValidator implements ValidationModule {
 
   private validateBackadjustmentConstants(): void {
     for (let i = 0; i < this.context.lines.length; i++) {
-      const line = this.context.lines[i];
       const cleanLine = this.context.cleanLines[i];
 
-      for (const constant of Array.from(BACKADJUSTMENT_CONSTANTS)) {
+      for (const constant of BACKADJUSTMENT_CONSTANTS) {
         if (cleanLine.includes(constant)) {
-          this.backadjustmentConstantUsage.set(constant, (this.backadjustmentConstantUsage.get(constant) || 0) + 1);
-          
-          this.info.push({
-            code: Codes.BACKADJUSTMENT_CONSTANT,
-            message: `Backadjustment constant '${constant}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(constant) + 1,
-            severity: 'info'
-          });
+          this.recordConstantUsage(constant, i + 1, cleanLine.indexOf(constant) + 1);
         }
       }
     }
