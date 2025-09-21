@@ -24,6 +24,9 @@ import {
   createReturn,
   createStringLiteral,
   createScriptDeclaration,
+  createTypeReference,
+  createTypeDeclaration,
+  createTypeField,
   createUnaryExpression,
   createWhileStatement,
   createVariableDeclaration,
@@ -380,6 +383,49 @@ describe('CoreValidator AST integration', () => {
     expect(plottingErrors[0]?.line).toBe(3);
     expect(inputErrors).toHaveLength(1);
     expect(inputErrors[0]?.line).toBe(4);
+  });
+
+  it('registers type declarations and their fields through AST traversal', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'type Point',
+      '    float x',
+      '    float y',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleValue = createStringLiteral('Example', '"Example"', 18, 2);
+    const titleArgument = createArgument(titleValue, 15, 26, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 27, 2);
+
+    const typeIdentifier = createIdentifier('Point', 5, 3);
+    const xType = createTypeReference('float', 4, 4);
+    const xIdentifier = createIdentifier('x', 10, 4);
+    const xField = createTypeField(xIdentifier, xType, 4, xIdentifier.range[1], 4);
+    const yType = createTypeReference('float', 4, 5);
+    const yIdentifier = createIdentifier('y', 10, 5);
+    const yField = createTypeField(yIdentifier, yType, 4, yIdentifier.range[1], 5);
+    const typeDeclaration = createTypeDeclaration(typeIdentifier, [xField, yField], 0, yIdentifier.range[1], 3, 5);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, typeDeclaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    validator.validate(source);
+
+    const context = validator.exposeContext();
+    expect(context.declaredVars.get('Point')).toBe(3);
+
+    const coreModule = ((validator as any).modules[0] ?? null) as CoreValidator | null;
+    expect(coreModule).not.toBeNull();
+
+    const typeFields: Map<string, Set<string>> = (coreModule as any).typeFields;
+    expect(typeFields.get('Point')).toEqual(new Set(['x', 'y']));
   });
 
   it('reports duplicate version directives surfaced by the AST', () => {

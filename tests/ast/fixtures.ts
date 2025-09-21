@@ -22,6 +22,8 @@ import {
   type ScriptDeclarationNode,
   type StatementNode,
   type StringLiteralNode,
+  type TypeDeclarationNode,
+  type TypeFieldNode,
   type SwitchCaseNode,
   type SwitchStatementNode,
   type UnaryExpressionNode,
@@ -400,6 +402,38 @@ export function createMatrixLiteral(
   return {
     kind: 'MatrixLiteral',
     rows,
+    ...createSpan({ start, end, lineStart, lineEnd }),
+  };
+}
+
+export function createTypeField(
+  identifier: IdentifierNode,
+  typeAnnotation: TypeReferenceNode | null,
+  start: number,
+  end: number,
+  lineStart = 1,
+  lineEnd = lineStart,
+): TypeFieldNode {
+  return {
+    kind: 'TypeField',
+    identifier,
+    typeAnnotation,
+    ...createSpan({ start, end, lineStart, lineEnd }),
+  };
+}
+
+export function createTypeDeclaration(
+  identifier: IdentifierNode,
+  fields: TypeFieldNode[],
+  start: number,
+  end: number,
+  lineStart = 1,
+  lineEnd = lineStart,
+): TypeDeclarationNode {
+  return {
+    kind: 'TypeDeclaration',
+    identifier,
+    fields,
     ...createSpan({ start, end, lineStart, lineEnd }),
   };
 }

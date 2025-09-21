@@ -40,6 +40,7 @@ import type {
   ScriptDeclarationNode,
   StatementNode,
   StringLiteralNode,
+  TypeDeclarationNode,
   TypeReferenceNode,
   UnaryExpressionNode,
   VersionDirectiveNode,
@@ -144,6 +145,7 @@ export class CoreValidator implements ValidationModule {
   private astProcessedIdentifierUsage = false;
   private astProcessedInputPlacement = false;
   private astProcessedHistoryReferenceDensity = false;
+  private astProcessedTypeDeclarations = false;
   private astStrategyUsageErrorLines = new Set<number>();
   private inLoop = false;
   private inFunction = false;
@@ -236,6 +238,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedIdentifierUsage = false;
     this.astProcessedInputPlacement = false;
     this.astProcessedHistoryReferenceDensity = false;
+    this.astProcessedTypeDeclarations = false;
     this.astStrategyUsageErrorLines.clear();
     this.astHistoryReferenceCounts.clear();
     this.astHistoryReferenceWarnedLines.clear();
@@ -282,6 +285,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedIdentifierUsage = true;
     this.astProcessedInputPlacement = true;
     this.astProcessedHistoryReferenceDensity = true;
+    this.astProcessedTypeDeclarations = true;
 
     let loopDepth = 0;
 
@@ -373,6 +377,11 @@ export class CoreValidator implements ValidationModule {
         },
         exit: () => {
           this.astFunctionStack.pop();
+        },
+      },
+      TypeDeclaration: {
+        enter: (path) => {
+          this.processAstTypeDeclaration(path.node as TypeDeclarationNode);
         },
       },
       Identifier: {
@@ -521,6 +530,28 @@ export class CoreValidator implements ValidationModule {
         );
       }
     }
+  }
+
+  private processAstTypeDeclaration(type: TypeDeclarationNode): void {
+    const name = type.identifier.name;
+    const typeLine = type.loc.start.line;
+    const typeIndent = Math.max(0, type.loc.start.column - 1);
+
+    this.declared.set(name, typeLine);
+    this.declIndent.set(name, typeIndent);
+    this.context.declaredVars.set(name, typeLine);
+
+    const fields = new Set<string>();
+    for (const field of type.fields) {
+      const fieldName = field.identifier.name;
+      fields.add(fieldName);
+      const fieldLine = field.loc.start.line;
+      const fieldIndent = Math.max(0, field.loc.start.column - 1);
+      this.declared.set(fieldName, fieldLine);
+      this.declIndent.set(fieldName, fieldIndent);
+    }
+
+    this.typeFields.set(name, fields);
   }
 
   private resolveCalleePath(expression: ExpressionNode): string[] | null {
@@ -1383,6 +1414,9 @@ export class CoreValidator implements ValidationModule {
   }
 
   private handleTypeDeclaration(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (this.astProcessedTypeDeclarations) {
+      return;
+    }
     const mType = /^\s*type\s+([A-Za-z_][A-Za-z0-9_]*)\b/.exec(strippedNoStrings);
     if (mType) {
       const name = mType[1];

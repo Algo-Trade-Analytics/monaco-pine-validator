@@ -24,6 +24,8 @@ export type NodeKind =
   | 'ReturnStatement'
   | 'VariableDeclaration'
   | 'AssignmentStatement'
+  | 'TypeDeclaration'
+  | 'TypeField'
   | 'FunctionDeclaration'
   | 'IfStatement'
   | 'WhileStatement'
@@ -58,6 +60,8 @@ export type Node =
   | ReturnStatementNode
   | VariableDeclarationNode
   | AssignmentStatementNode
+  | TypeDeclarationNode
+  | TypeFieldNode
   | FunctionDeclarationNode
   | IfStatementNode
   | WhileStatementNode
@@ -91,6 +95,7 @@ export type StatementNode =
   | ReturnStatementNode
   | VariableDeclarationNode
   | AssignmentStatementNode
+  | TypeDeclarationNode
   | FunctionDeclarationNode
   | IfStatementNode
   | WhileStatementNode
@@ -166,6 +171,18 @@ export interface AssignmentStatementNode extends BaseNode {
   kind: 'AssignmentStatement';
   left: ExpressionNode;
   right: ExpressionNode | null;
+}
+
+export interface TypeDeclarationNode extends BaseNode {
+  kind: 'TypeDeclaration';
+  identifier: IdentifierNode;
+  fields: TypeFieldNode[];
+}
+
+export interface TypeFieldNode extends BaseNode {
+  kind: 'TypeField';
+  identifier: IdentifierNode;
+  typeAnnotation: TypeReferenceNode | null;
 }
 
 export interface FunctionDeclarationNode extends BaseNode {

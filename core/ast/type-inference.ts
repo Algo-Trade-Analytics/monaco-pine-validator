@@ -26,6 +26,7 @@ import {
   type NumberLiteralNode,
   type ProgramNode,
   type ReturnStatementNode,
+  type TypeDeclarationNode,
   type StatementNode,
   type SwitchStatementNode,
   type UnaryExpressionNode,
@@ -595,6 +596,14 @@ function visitStatement(environment: TypeEnvironment, statement: StatementNode):
       break;
     case 'ScriptDeclaration':
       visitScriptDeclaration(environment, statement);
+      break;
+    case 'TypeDeclaration':
+      assignIdentifier(
+        environment,
+        (statement as TypeDeclarationNode).identifier,
+        createTypeMetadata('udt', 'type:declaration', 'certain'),
+        'type:declaration',
+      );
       break;
     case 'BreakStatement':
     case 'ContinueStatement':

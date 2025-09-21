@@ -28,6 +28,7 @@ import {
   type ProgramNode,
   type ReturnStatementNode,
   type ScriptDeclarationNode,
+  type TypeDeclarationNode,
   type StatementNode,
   type SwitchStatementNode,
   type WhileStatementNode,
@@ -231,6 +232,14 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         const assignment = statement as AssignmentStatementNode;
         visitExpression(assignment.left);
         visitExpression(assignment.right);
+        break;
+      }
+      case 'TypeDeclaration': {
+        const typeDeclaration = statement as TypeDeclarationNode;
+        declare(typeDeclaration.identifier, 'type');
+        typeDeclaration.fields.forEach((field) => {
+          declare(field.identifier, 'variable');
+        });
         break;
       }
       case 'ExpressionStatement': {
