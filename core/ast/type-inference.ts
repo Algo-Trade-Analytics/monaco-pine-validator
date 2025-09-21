@@ -34,6 +34,32 @@ const COMPARISON_OPERATORS = new Set(['==', '!=', '>=', '<=', '>', '<']);
 const LOGICAL_OPERATORS = new Set(['and', 'or', '&&', '||']);
 const BOOLEAN_UNARY_OPERATORS = new Set(['not', '!']);
 const NUMERIC_UNARY_OPERATORS = new Set(['+', '-']);
+const SERIES_IDENTIFIERS = new Set(['open', 'high', 'low', 'close', 'volume']);
+
+const BUILTIN_CALL_RETURN_TYPES: Record<
+  string,
+  { kind: InferredTypeKind; certainty?: TypeCertainty }
+> = {
+  nz: { kind: 'series' },
+  sma: { kind: 'series' },
+  ema: { kind: 'series' },
+  'ta.crossover': { kind: 'bool', certainty: 'certain' },
+  'ta.crossunder': { kind: 'bool', certainty: 'certain' },
+  'ta.valuewhen': { kind: 'series' },
+  'math.round': { kind: 'float' },
+  'math.floor': { kind: 'float' },
+  'math.ceil': { kind: 'float' },
+  plot: { kind: 'void', certainty: 'certain' },
+};
+
+function createBuiltinCallMetadata(name: string): TypeMetadata | null {
+  const override = BUILTIN_CALL_RETURN_TYPES[name];
+  if (!override) {
+    return null;
+  }
+
+  return createTypeMetadata(override.kind, `call:builtin:${name}`, override.certainty ?? 'inferred');
+}
 
 function combineCertainty(...metadatas: TypeMetadata[]): TypeCertainty {
   if (metadatas.some((metadata) => metadata.certainty === 'conflict')) {
@@ -91,7 +117,10 @@ function recordIdentifierUsage(
 ): TypeMetadata {
   const existing = environment.identifiers.get(identifier.name);
   if (!existing) {
-    const metadata = createUnknown(reason);
+    const builtinSeries = SERIES_IDENTIFIERS.has(identifier.name)
+      ? createTypeMetadata('series', 'identifier:builtin:series', 'certain')
+      : null;
+    const metadata = builtinSeries ?? createUnknown(reason);
     environment.identifiers.set(identifier.name, metadata);
     environment.nodeTypes.set(identifier, metadata);
     return metadata;
@@ -118,7 +147,13 @@ function determineNumericLiteralKind(literal: NumberLiteralNode): InferredTypeKi
 function inferCallExpression(environment: TypeEnvironment, expression: CallExpressionNode): TypeMetadata {
   inferExpression(environment, expression.callee, 'call:callee');
   expression.args.forEach((arg) => inferArgument(environment, arg));
-  const metadata = createUnknown('call:return');
+  let metadata: TypeMetadata | null = null;
+  if (expression.callee.kind === 'Identifier') {
+    metadata = createBuiltinCallMetadata(expression.callee.name);
+  }
+  if (!metadata) {
+    metadata = createUnknown('call:return');
+  }
   return annotateNode(environment, expression, metadata);
 }
 
@@ -127,6 +162,15 @@ function inferBinaryExpression(environment: TypeEnvironment, expression: BinaryE
   const rightType = inferExpression(environment, expression.right, 'binary:right');
 
   if (NUMERIC_BINARY_OPERATORS.has(expression.operator)) {
+    if (leftType.kind === 'series' || rightType.kind === 'series') {
+      const certainty = combineCertainty(leftType, rightType);
+      return annotateNode(
+        environment,
+        expression,
+        createTypeMetadata('series', `binary:${expression.operator}`, certainty),
+      );
+    }
+
     if (
       expression.operator === '+' &&
       (leftType.kind === 'string' || rightType.kind === 'string') &&
@@ -174,6 +218,14 @@ function inferUnaryExpression(environment: TypeEnvironment, expression: UnaryExp
 
   if (BOOLEAN_UNARY_OPERATORS.has(expression.operator)) {
     return annotateNode(environment, expression, createTypeMetadata('bool', `unary:${expression.operator}`));
+  }
+
+  if (argumentType.kind === 'series' && NUMERIC_UNARY_OPERATORS.has(expression.operator)) {
+    return annotateNode(
+      environment,
+      expression,
+      createTypeMetadata('series', `unary:${expression.operator}`, argumentType.certainty),
+    );
   }
 
   if (NUMERIC_UNARY_OPERATORS.has(expression.operator) && isNumericKind(argumentType.kind)) {

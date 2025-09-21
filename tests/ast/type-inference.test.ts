@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { inferTypes } from '../../core/ast/type-inference';
 import {
+  createArgument,
   createAssignmentStatement,
   createBinaryExpression,
   createBooleanLiteral,
+  createCallExpression,
   createIdentifier,
   createNumberLiteral,
   createStringLiteral,
+  createUnaryExpression,
   createVariableDeclaration,
 } from './fixtures';
 import {
@@ -113,5 +116,67 @@ describe('inferTypes', () => {
     const conditionalType = environment.nodeTypes.get(conditional);
     expect(conditionalType?.kind).toBe('unknown');
     expect(conditionalType?.certainty).toBe('conflict');
+  });
+
+  it('infers builtin series identifiers and propagates series arithmetic', () => {
+    const closeIdentifier = createIdentifier('close', 0, 1);
+    const addition = createBinaryExpression(
+      '+',
+      closeIdentifier,
+      createNumberLiteral(1, '1', 6, 1),
+      0,
+      7,
+      1,
+    );
+    const additionStatement: ExpressionStatementNode = {
+      kind: 'ExpressionStatement',
+      expression: addition,
+      loc: createLocation(createPosition(1, 1, 0), createPosition(1, 8, 7)),
+      range: createRange(0, 7),
+    };
+
+    const negate = createUnaryExpression('-', createIdentifier('close', 9, 1), 9, 11, 1);
+    const negateStatement: ExpressionStatementNode = {
+      kind: 'ExpressionStatement',
+      expression: negate,
+      loc: createLocation(createPosition(1, 10, 9), createPosition(1, 12, 11)),
+      range: createRange(9, 11),
+    };
+
+    const program = createProgram([additionStatement, negateStatement]);
+    const environment = inferTypes(program);
+
+    const seriesMetadata = environment.identifiers.get('close');
+    expect(seriesMetadata?.kind).toBe('series');
+    expect(seriesMetadata?.certainty).toBe('certain');
+
+    const additionType = environment.nodeTypes.get(addition);
+    expect(additionType?.kind).toBe('series');
+
+    const negateType = environment.nodeTypes.get(negate);
+    expect(negateType?.kind).toBe('series');
+  });
+
+  it('applies builtin call return heuristics', () => {
+    const fastSeries = createIdentifier('close', 14, 1);
+    const slowSeries = createIdentifier('open', 22, 1);
+    const args = [
+      createArgument(fastSeries, 14, 19, 1),
+      createArgument(slowSeries, 20, 24, 1),
+    ];
+    const call = createCallExpression(createIdentifier('ta.crossover', 0, 1), args, 0, 24, 1);
+    const statement: ExpressionStatementNode = {
+      kind: 'ExpressionStatement',
+      expression: call,
+      loc: createLocation(createPosition(1, 1, 0), createPosition(1, 25, 24)),
+      range: createRange(0, 24),
+    };
+
+    const program = createProgram([statement]);
+    const environment = inferTypes(program);
+
+    const callType = environment.nodeTypes.get(call);
+    expect(callType?.kind).toBe('bool');
+    expect(callType?.certainty).toBe('certain');
   });
 });

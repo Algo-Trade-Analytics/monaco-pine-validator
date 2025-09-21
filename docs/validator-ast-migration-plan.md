@@ -26,8 +26,8 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 
 ### Near-Term TODOs
 
-1. **Stabilise AST Fixtures** – add snapshot-based assertions for representative Pine snippets so AST structure changes surface clearly in reviews.
-2. **Expand Type Inference Coverage** – extend the skeleton to propagate call-site semantics, unary `not`, and collection literals while enriching diagnostic hooks.
+1. ✅ **Stabilise AST Fixtures** – snapshot suites now exercise representative Pine snippets so AST structure changes surface clearly in reviews.
+2. **Expand Type Inference Coverage** – extend the skeleton with builtin call heuristics, `series` propagation rules, and richer metadata for downstream diagnostics.
 3. **Wire Diagnostic Helpers** – introduce utilities that translate AST node ranges into Monaco `IMarkerData` instances for reuse across modules.
 4. **Author Golden Semantic Tests** – capture end-to-end fixtures that exercise scope + type metadata to validate the new passes.
 5. **Update Migration Tracking Table** – reflect delivered infrastructure (AST context, scope graph) and link owners for upcoming module migrations.
