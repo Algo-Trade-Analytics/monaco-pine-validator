@@ -34,6 +34,7 @@ import {
   type WhileStatementNode,
   type BreakStatementNode,
   type VariableDeclarationNode,
+  type TupleExpressionNode,
 } from './nodes';
 
 export interface ScopeBuildResult {
@@ -205,6 +206,13 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
           row.forEach((element) => {
             visitExpression(element);
           });
+        });
+        break;
+      }
+      case 'TupleExpression': {
+        const tuple = expression as TupleExpressionNode;
+        tuple.elements.forEach((element) => {
+          visitExpression(element);
         });
         break;
       }

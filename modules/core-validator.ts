@@ -42,6 +42,7 @@ import type {
   StringLiteralNode,
   TypeDeclarationNode,
   TypeReferenceNode,
+  TupleExpressionNode,
   UnaryExpressionNode,
   VersionDirectiveNode,
   WhileStatementNode,
@@ -146,6 +147,7 @@ export class CoreValidator implements ValidationModule {
   private astProcessedInputPlacement = false;
   private astProcessedHistoryReferenceDensity = false;
   private astProcessedTypeDeclarations = false;
+  private astProcessedTupleDestructuring = false;
   private astStrategyUsageErrorLines = new Set<number>();
   private inLoop = false;
   private inFunction = false;
@@ -239,6 +241,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedInputPlacement = false;
     this.astProcessedHistoryReferenceDensity = false;
     this.astProcessedTypeDeclarations = false;
+    this.astProcessedTupleDestructuring = false;
     this.astStrategyUsageErrorLines.clear();
     this.astHistoryReferenceCounts.clear();
     this.astHistoryReferenceWarnedLines.clear();
@@ -286,6 +289,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedInputPlacement = true;
     this.astProcessedHistoryReferenceDensity = true;
     this.astProcessedTypeDeclarations = true;
+    this.astProcessedTupleDestructuring = true;
 
     let loopDepth = 0;
 
@@ -423,6 +427,11 @@ export class CoreValidator implements ValidationModule {
     const operator = operatorInfo?.operator ?? '=';
     const rhs = operatorInfo?.rhs ?? '';
 
+    if (left.kind === 'TupleExpression') {
+      this.processAstTupleDestructuring(statement, left as TupleExpressionNode, operator);
+      return;
+    }
+
     if (left.kind === 'MemberExpression') {
       if (operator === ':=' && this.isThisMemberExpression(left as MemberExpressionNode)) {
         return;
@@ -463,6 +472,53 @@ export class CoreValidator implements ValidationModule {
 
     if (rhs) {
       this.registerTypeHeuristic(name, rhs, line, column, false);
+    }
+  }
+
+  private processAstTupleDestructuring(
+    statement: AssignmentStatementNode,
+    tuple: TupleExpressionNode,
+    operator: ':=' | '=',
+  ): void {
+    const tupleLine = statement.loc.start.line;
+    const tupleColumn = tuple.loc.start.column;
+
+    if (operator === ':=') {
+      this.addError(tupleLine, tupleColumn, 'Tuple destructuring must use "=" (not ":=").', 'PST03');
+    }
+
+    let hasEmptySlot = false;
+
+    tuple.elements.forEach((element) => {
+      if (!element || element.kind === 'NullLiteral') {
+        hasEmptySlot = true;
+        return;
+      }
+
+      if (element.kind === 'Identifier') {
+        const identifier = element as IdentifierNode;
+        if (identifier.name === '_') {
+          return;
+        }
+        this.handleNewVar(identifier.name, identifier.loc.start.line, identifier.loc.start.column);
+        return;
+      }
+
+      if (element.kind === 'MemberExpression') {
+        const member = element as MemberExpressionNode;
+        this.addWarning(
+          member.loc.start.line,
+          member.loc.start.column,
+          'Dotted names in tuple destructuring are unusual and may indicate an error.',
+          'PST01',
+          'Did you mean to destructure into plain identifiers (e.g., [a, b] = foo())?',
+        );
+        return;
+      }
+    });
+
+    if (hasEmptySlot) {
+      this.addWarning(tupleLine, tupleColumn, 'Empty slot in destructuring tuple.', 'PST02');
     }
   }
 
@@ -1427,10 +1483,13 @@ export class CoreValidator implements ValidationModule {
   }
 
   private handleTupleDestructuring(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (this.astProcessedTupleDestructuring) {
+      return;
+    }
     if (TUPLE_REASSIGN_RE.test(strippedNoStrings)) {
       this.addError(lineNum, 1, 'Tuple destructuring must use "=" (not ":=").', 'PST03');
     }
-    
+
     const tupleMatch = line.match(TUPLE_DECL_RE);
     if (tupleMatch) {
       const content = tupleMatch[1];

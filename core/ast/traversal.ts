@@ -23,6 +23,7 @@ import {
   type SwitchCaseNode,
   type SwitchStatementNode,
   type TypeReferenceNode,
+  type TupleExpressionNode,
   type UnaryExpressionNode,
   type VariableDeclarationNode,
   type WhileStatementNode,
@@ -179,6 +180,13 @@ function collectChildren(path: NodePath): ChildEntry[] {
       const assignment = node as AssignmentStatementNode;
       push(assignment.left, 'left');
       push(assignment.right, 'right');
+      break;
+    }
+    case 'TupleExpression': {
+      const tuple = node as TupleExpressionNode;
+      tuple.elements.forEach((element, elementIndex) => {
+        push(element, 'elements', elementIndex);
+      });
       break;
     }
     case 'TypeDeclaration': {

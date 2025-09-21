@@ -31,6 +31,7 @@ import {
   type WhileStatementNode,
   type MemberExpressionNode,
   type VersionDirectiveNode,
+  type TupleExpressionNode,
   createLocation,
   createPosition,
   createRange,
@@ -305,6 +306,19 @@ export function createAssignmentStatement(
     kind: 'AssignmentStatement',
     left,
     right,
+    ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
+export function createTupleExpression(
+  elements: (ExpressionNode | null)[],
+  start: number,
+  end: number,
+  line = 1,
+): TupleExpressionNode {
+  return {
+    kind: 'TupleExpression',
+    elements,
     ...createSpan({ start, end, lineStart: line }),
   };
 }

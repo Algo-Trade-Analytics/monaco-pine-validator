@@ -41,6 +41,7 @@ export type NodeKind =
   | 'BinaryExpression'
   | 'UnaryExpression'
   | 'ConditionalExpression'
+  | 'TupleExpression'
   | 'IndexExpression'
   | 'MatrixLiteral'
   | 'Identifier'
@@ -77,6 +78,7 @@ export type Node =
   | BinaryExpressionNode
   | UnaryExpressionNode
   | ConditionalExpressionNode
+  | TupleExpressionNode
   | IndexExpressionNode
   | MatrixLiteralNode
   | IdentifierNode
@@ -113,6 +115,7 @@ export type ExpressionNode =
   | UnaryExpressionNode
   | MemberExpressionNode
   | ConditionalExpressionNode
+  | TupleExpressionNode
   | IndexExpressionNode
   | MatrixLiteralNode;
 
@@ -171,6 +174,11 @@ export interface AssignmentStatementNode extends BaseNode {
   kind: 'AssignmentStatement';
   left: ExpressionNode;
   right: ExpressionNode | null;
+}
+
+export interface TupleExpressionNode extends BaseNode {
+  kind: 'TupleExpression';
+  elements: (ExpressionNode | null)[];
 }
 
 export interface TypeDeclarationNode extends BaseNode {

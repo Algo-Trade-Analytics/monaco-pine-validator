@@ -27,6 +27,7 @@ import {
   createTypeReference,
   createTypeDeclaration,
   createTypeField,
+  createTupleExpression,
   createUnaryExpression,
   createWhileStatement,
   createVariableDeclaration,
@@ -780,6 +781,117 @@ describe('CoreValidator AST integration', () => {
     expect(constErrors).toHaveLength(1);
     expect(constErrors[0]?.line).toBe(4);
     expect(constErrors[0]?.message).toContain("with ':='");
+  });
+
+  it('enforces = usage for tuple destructuring via AST assignments', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      '[fast, slow] := request.security("TICKER", "D", close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const fastIdentifier = createIdentifier('fast', 1, 3);
+    const slowIdentifier = createIdentifier('slow', 7, 3);
+    const tuplePattern = createTupleExpression([fastIdentifier, slowIdentifier], 0, 12, 3);
+    const requestIdentifier = createIdentifier('request', 15, 3);
+    const securityProperty = createIdentifier('security', 23, 3);
+    const requestMember = createMemberExpression(requestIdentifier, securityProperty, 15, 31, 3);
+    const tickerArgument = createArgument(createStringLiteral('TICKER', '"TICKER"', 32, 3), 32, 41, 3);
+    const timeframeArgument = createArgument(createStringLiteral('D', '"D"', 43, 3), 43, 47, 3);
+    const closeArgument = createArgument(createIdentifier('close', 49, 3), 49, 54, 3);
+    const requestCall = createCallExpression(requestMember, [tickerArgument, timeframeArgument, closeArgument], 15, 55, 3);
+    const assignment = createAssignmentStatement(tuplePattern, requestCall, 0, 55, 3);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, assignment]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const tupleErrors = result.errors.filter((error) => error.code === 'PST03');
+    expect(tupleErrors).toHaveLength(1);
+    expect(tupleErrors[0]?.line).toBe(3);
+  });
+
+  it('warns on dotted tuple bindings through AST member expressions', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      '[foo, this.bar] = array.shift(myArray)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const fooIdentifier = createIdentifier('foo', 1, 3);
+    const thisIdentifier = createIdentifier('this', 7, 3);
+    const barIdentifier = createIdentifier('bar', 12, 3);
+    const memberBinding = createMemberExpression(thisIdentifier, barIdentifier, 7, 15, 3);
+    const tuplePattern = createTupleExpression([fooIdentifier, memberBinding], 0, 15, 3);
+    const arrayNamespace = createIdentifier('array', 18, 3);
+    const shiftProperty = createIdentifier('shift', 24, 3);
+    const shiftMember = createMemberExpression(arrayNamespace, shiftProperty, 18, 27, 3);
+    const arrayArgument = createArgument(createIdentifier('myArray', 29, 3), 29, 36, 3);
+    const shiftCall = createCallExpression(shiftMember, [arrayArgument], 18, 37, 3);
+    const assignment = createAssignmentStatement(tuplePattern, shiftCall, 0, 37, 3);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, assignment]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const dottedWarnings = result.warnings.filter((warning) => warning.code === 'PST01');
+    expect(dottedWarnings).toHaveLength(1);
+    expect(dottedWarnings[0]?.line).toBe(3);
+  });
+
+  it('emits empty-slot tuple warnings when AST patterns include gaps', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      '[first, , third] = request.security("TICKER", "D", close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const firstIdentifier = createIdentifier('first', 1, 3);
+    const thirdIdentifier = createIdentifier('third', 10, 3);
+    const tuplePattern = createTupleExpression([firstIdentifier, null, thirdIdentifier], 0, 15, 3);
+    const requestIdentifier = createIdentifier('request', 18, 3);
+    const securityProperty = createIdentifier('security', 26, 3);
+    const requestMember = createMemberExpression(requestIdentifier, securityProperty, 18, 34, 3);
+    const tickerArgument = createArgument(createStringLiteral('TICKER', '"TICKER"', 35, 3), 35, 44, 3);
+    const timeframeArgument = createArgument(createStringLiteral('D', '"D"', 46, 3), 46, 50, 3);
+    const closeArgument = createArgument(createIdentifier('close', 52, 3), 52, 57, 3);
+    const requestCall = createCallExpression(requestMember, [tickerArgument, timeframeArgument, closeArgument], 18, 58, 3);
+    const assignment = createAssignmentStatement(tuplePattern, requestCall, 0, 58, 3);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, assignment]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const tupleWarnings = result.warnings.filter((warning) => warning.code === 'PST02');
+    expect(tupleWarnings).toHaveLength(1);
+    expect(tupleWarnings[0]?.line).toBe(3);
   });
 
   it('reports numeric literal loop conditions for v6 for statements via AST traversal', () => {
