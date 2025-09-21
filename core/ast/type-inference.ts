@@ -18,12 +18,15 @@ import {
   type ForStatementNode,
   type FunctionDeclarationNode,
   type IdentifierNode,
+  type IndexExpressionNode,
+  type MatrixLiteralNode,
   type MemberExpressionNode,
   type IfStatementNode,
   type NumberLiteralNode,
   type ProgramNode,
   type ReturnStatementNode,
   type StatementNode,
+  type SwitchStatementNode,
   type UnaryExpressionNode,
   type VariableDeclarationNode,
   type WhileStatementNode,
@@ -322,6 +325,35 @@ function inferExpression(
       return inferUnaryExpression(environment, expression as UnaryExpressionNode);
     case 'ConditionalExpression':
       return inferConditionalExpression(environment, expression as ConditionalExpressionNode);
+    case 'IndexExpression': {
+      const indexExpression = expression as IndexExpressionNode;
+      const objectType = inferExpression(environment, indexExpression.object, `${reason}:object`);
+      inferExpression(environment, indexExpression.index, `${reason}:index`);
+      if (objectType.kind === 'series') {
+        return annotateNode(
+          environment,
+          expression,
+          createTypeMetadata('series', `${reason}:historical`, objectType.certainty),
+        );
+      }
+      if (objectType.kind === 'matrix') {
+        return annotateNode(
+          environment,
+          expression,
+          createTypeMetadata('unknown', `${reason}:matrix-index`),
+        );
+      }
+      return annotateNode(environment, expression, createUnknown(`${reason}:index`));
+    }
+    case 'MatrixLiteral': {
+      const matrixLiteral = expression as MatrixLiteralNode;
+      matrixLiteral.rows.forEach((row, rowIndex) => {
+        row.forEach((element, columnIndex) => {
+          inferExpression(environment, element, `${reason}:matrix[${rowIndex}][${columnIndex}]`);
+        });
+      });
+      return annotateNode(environment, expression, createTypeMetadata('matrix', `${reason}:matrix`, 'certain'));
+    }
     default:
       return annotateNode(environment, expression, createUnknown(reason));
   }
@@ -355,6 +387,18 @@ function visitForStatement(environment: TypeEnvironment, statement: ForStatement
     inferExpression(environment, statement.update, 'for:update');
   }
   visitStatement(environment, statement.body);
+}
+
+function visitSwitchStatement(environment: TypeEnvironment, statement: SwitchStatementNode): void {
+  inferExpression(environment, statement.discriminant, 'switch:discriminant');
+  statement.cases.forEach((caseNode, index) => {
+    if (caseNode.test) {
+      inferExpression(environment, caseNode.test, `switch:case:${index}:test`);
+    }
+    caseNode.consequent.forEach((caseStatement) => {
+      visitStatement(environment, caseStatement);
+    });
+  });
 }
 
 function visitFunctionDeclaration(
@@ -455,6 +499,9 @@ function visitStatement(environment: TypeEnvironment, statement: StatementNode):
       break;
     case 'ForStatement':
       visitForStatement(environment, statement as ForStatementNode);
+      break;
+    case 'SwitchStatement':
+      visitSwitchStatement(environment, statement as SwitchStatementNode);
       break;
     case 'ScriptDeclaration':
       visitScriptDeclaration(environment, statement);

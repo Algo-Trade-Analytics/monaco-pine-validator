@@ -9,8 +9,10 @@ import {
   type ExpressionNode,
   type ForStatementNode,
   type IfStatementNode,
+  type Node,
   type ProgramNode,
   type StatementNode,
+  type SwitchStatementNode,
   type WhileStatementNode,
 } from './nodes';
 
@@ -19,9 +21,9 @@ interface GraphSegment {
   exits: string[];
 }
 
-interface LoopContext {
-  continueTarget: string;
+interface ControlContext {
   breakTarget: string;
+  continueTarget?: string;
 }
 
 export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowGraph {
@@ -34,11 +36,11 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
   const nodes = graph.nodes;
   let nodeCounter = 0;
   const terminalNodes = new Set<string>();
-  const loopStack: LoopContext[] = [];
+  const controlStack: ControlContext[] = [];
 
   const createNode = (
     kind: ControlFlowNodeKind,
-    astNode: StatementNode | ExpressionNode | ProgramNode | null,
+    astNode: Node | null,
     metadata?: Record<string, unknown>,
   ): string => {
     const id = `cf-${nodeCounter++}`;
@@ -179,9 +181,9 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
       role: 'loop-exit',
     });
 
-    loopStack.push({ continueTarget: testNode, breakTarget: exitNode });
+    controlStack.push({ continueTarget: testNode, breakTarget: exitNode });
     const bodySegment = buildBlock(statement.body);
-    loopStack.pop();
+    controlStack.pop();
 
     connect(testNode, exitNode, 'false');
     connect(testNode, bodySegment.entry, 'true');
@@ -205,9 +207,9 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
     const updateSegment = buildExpressionAsStatement(statement.update, 'loop-update');
     const continueTarget = updateSegment ? updateSegment.entry : testNode;
 
-    loopStack.push({ continueTarget, breakTarget: exitNode });
+    controlStack.push({ continueTarget, breakTarget: exitNode });
     const bodySegment = buildBlock(statement.body);
-    loopStack.pop();
+    controlStack.pop();
 
     if (initializerSegment) {
       const initExits = initializerSegment.exits.length > 0 ? initializerSegment.exits : [initializerSegment.entry];
@@ -239,6 +241,50 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
     return { entry, exits: [exitNode] };
   };
 
+  const buildSwitchStatement = (statement: SwitchStatementNode): GraphSegment => {
+    const branchNode = createNode('branch', statement, {
+      statementKind: statement.kind,
+      role: 'switch-discriminant',
+    });
+    const exitNode = createNode('merge', null, {
+      sourceKind: statement.kind,
+      role: 'switch-exit',
+    });
+
+    controlStack.push({ breakTarget: exitNode });
+    const caseSegments = statement.cases.map((caseNode, caseIndex) => {
+      const caseEntry = createNode('statement', caseNode, {
+        statementKind: caseNode.kind,
+        caseIndex,
+        isDefault: caseNode.test == null,
+      });
+
+      if (caseNode.consequent.length === 0) {
+        return { entry: caseEntry, exits: [caseEntry] };
+      }
+
+      const statementsSegment = buildStatements(caseNode.consequent);
+      connect(caseEntry, statementsSegment.entry, 'normal');
+      const exits = statementsSegment.exits.length > 0 ? statementsSegment.exits : [statementsSegment.entry];
+      return { entry: caseEntry, exits };
+    });
+    controlStack.pop();
+
+    if (caseSegments.length === 0) {
+      connect(branchNode, exitNode);
+      return { entry: branchNode, exits: [exitNode] };
+    }
+
+    caseSegments.forEach((segment) => {
+      connect(branchNode, segment.entry, 'case');
+      segment.exits.forEach((exit) => {
+        connect(exit, exitNode);
+      });
+    });
+
+    return { entry: branchNode, exits: [exitNode] };
+  };
+
   const buildStatement = (statement: StatementNode): GraphSegment => {
     switch (statement.kind) {
       case 'BlockStatement':
@@ -262,11 +308,13 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
         return buildWhileStatement(statement);
       case 'ForStatement':
         return buildForStatement(statement);
+      case 'SwitchStatement':
+        return buildSwitchStatement(statement);
       case 'BreakStatement': {
         const node = createNode('jump', statement, { statementKind: statement.kind, jump: 'break' });
-        const loop = loopStack[loopStack.length - 1];
-        if (loop) {
-          connect(node, loop.breakTarget, 'break');
+        const context = [...controlStack].reverse().find((entry) => entry.breakTarget);
+        if (context) {
+          connect(node, context.breakTarget, 'break');
         } else {
           recordTerminator(node);
         }
@@ -274,9 +322,9 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
       }
       case 'ContinueStatement': {
         const node = createNode('jump', statement, { statementKind: statement.kind, jump: 'continue' });
-        const loop = loopStack[loopStack.length - 1];
-        if (loop) {
-          connect(node, loop.continueTarget, 'continue');
+        const context = [...controlStack].reverse().find((entry) => entry.continueTarget);
+        if (context && context.continueTarget) {
+          connect(node, context.continueTarget, 'continue');
         } else {
           recordTerminator(node);
         }

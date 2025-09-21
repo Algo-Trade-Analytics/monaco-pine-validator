@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { buildControlFlowGraph } from '../../core/ast/control-flow';
 import { createLocation, createPosition, createRange, type ProgramNode } from '../../core/ast/nodes';
-import { createIndicatorScriptFixture, createControlFlowFixture, createReturn } from './fixtures';
+import {
+  createIndicatorScriptFixture,
+  createControlFlowFixture,
+  createReturn,
+  createSwitchMatrixFixture,
+} from './fixtures';
 
 describe('buildControlFlowGraph', () => {
   it('connects sequential statements in order', () => {
@@ -81,5 +86,24 @@ describe('buildControlFlowGraph', () => {
     expect(returnNode?.kind).toBe('terminator');
     const exitEdge = returnNode?.successors.find((edge) => edge.kind === 'return');
     expect(exitEdge?.target).toBe(graph.exit);
+  });
+
+  it('models switch statements with case edges and an exit merge', () => {
+    const program = createSwitchMatrixFixture();
+    const graph = buildControlFlowGraph(program);
+
+    const switchNode = Array.from(graph.nodes.values()).find((node) => node.astNode?.kind === 'SwitchStatement');
+    expect(switchNode?.kind).toBe('branch');
+
+    const caseEdges = switchNode?.successors.filter((edge) => edge.kind === 'case') ?? [];
+    expect(caseEdges).toHaveLength(3);
+
+    const exitNode = Array.from(graph.nodes.values()).find(
+      (node) => node.metadata?.role === 'switch-exit' && node.kind === 'merge',
+    );
+    expect(exitNode).toBeDefined();
+
+    const exitPredecessors = Array.from(exitNode?.predecessors ?? []);
+    expect(exitPredecessors.length).toBeGreaterThan(0);
   });
 });

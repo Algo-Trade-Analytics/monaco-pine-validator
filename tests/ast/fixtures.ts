@@ -11,7 +11,9 @@ import {
   type ForStatementNode,
   type FunctionDeclarationNode,
   type IdentifierNode,
+  type IndexExpressionNode,
   type IfStatementNode,
+  type MatrixLiteralNode,
   type NullLiteralNode,
   type NumberLiteralNode,
   type ParameterNode,
@@ -20,6 +22,8 @@ import {
   type ScriptDeclarationNode,
   type StatementNode,
   type StringLiteralNode,
+  type SwitchCaseNode,
+  type SwitchStatementNode,
   type UnaryExpressionNode,
   type VariableDeclarationNode,
   type WhileStatementNode,
@@ -339,6 +343,67 @@ export function createMemberExpression(
   };
 }
 
+export function createIndexExpression(
+  object: ExpressionNode,
+  index: ExpressionNode,
+  start: number,
+  end: number,
+  line = 1,
+): IndexExpressionNode {
+  return {
+    kind: 'IndexExpression',
+    object,
+    index,
+    ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
+export function createMatrixLiteral(
+  rows: ExpressionNode[][],
+  start: number,
+  end: number,
+  lineStart = 1,
+  lineEnd = lineStart,
+): MatrixLiteralNode {
+  return {
+    kind: 'MatrixLiteral',
+    rows,
+    ...createSpan({ start, end, lineStart, lineEnd }),
+  };
+}
+
+export function createSwitchCase(
+  test: ExpressionNode | null,
+  consequent: StatementNode[],
+  start: number,
+  end: number,
+  lineStart = 1,
+  lineEnd = lineStart,
+): SwitchCaseNode {
+  return {
+    kind: 'SwitchCase',
+    test,
+    consequent,
+    ...createSpan({ start, end, lineStart, lineEnd }),
+  };
+}
+
+export function createSwitchStatement(
+  discriminant: ExpressionNode,
+  cases: SwitchCaseNode[],
+  start: number,
+  end: number,
+  lineStart = 1,
+  lineEnd = lineStart,
+): SwitchStatementNode {
+  return {
+    kind: 'SwitchStatement',
+    discriminant,
+    cases,
+    ...createSpan({ start, end, lineStart, lineEnd }),
+  };
+}
+
 export function createIndicatorScriptFixture(): ProgramNode {
   const directive = {
     kind: 'VersionDirective' as const,
@@ -470,6 +535,93 @@ export function createControlFlowFixture(): ProgramNode {
     directives: [],
     body: [ifStatement, whileStatement, forStatement],
     ...createSpan({ start: 50, end: 160, lineStart: 3, lineEnd: 9 }),
+  };
+}
+
+export function createSwitchMatrixFixture(): ProgramNode {
+  const matrixLiteral = createMatrixLiteral(
+    [
+      [createNumberLiteral(1, '1', 10, 1), createNumberLiteral(2, '2', 13, 1)],
+      [createNumberLiteral(3, '3', 18, 1), createNumberLiteral(4, '4', 21, 1)],
+    ],
+    9,
+    22,
+    1,
+  );
+
+  const matrixDeclaration = createVariableDeclaration(createIdentifier('weights', 0, 1), 0, 25, 1, {
+    declarationKind: 'var',
+    initializer: matrixLiteral,
+  });
+
+  const indexedAccess = createIndexExpression(
+    createIdentifier('close', 30, 2),
+    createNumberLiteral(1, '1', 36, 2),
+    30,
+    37,
+    2,
+  );
+
+  const switchCases: SwitchCaseNode[] = [
+    createSwitchCase(
+      createIdentifier('long', 50, 3),
+      [
+        createAssignmentStatement(
+          createIdentifier('signal', 55, 3),
+          createIdentifier('close', 63, 3),
+          55,
+          68,
+          3,
+        ),
+      ],
+      48,
+      70,
+      3,
+    ),
+    createSwitchCase(
+      createIdentifier('short', 72, 4),
+      [
+        createAssignmentStatement(
+          createIdentifier('signal', 77, 4),
+          indexedAccess,
+          77,
+          92,
+          4,
+        ),
+      ],
+      70,
+      94,
+      4,
+    ),
+    createSwitchCase(
+      null,
+      [
+        {
+          kind: 'ExpressionStatement',
+          expression: createIdentifier('signal', 100, 5),
+          ...createSpan({ start: 100, end: 106, lineStart: 5 }),
+        } satisfies ExpressionStatementNode,
+      ],
+      96,
+      108,
+      5,
+    ),
+  ];
+
+  const switchStatement = createSwitchStatement(
+    createIdentifier('direction', 40, 2),
+    switchCases,
+    40,
+    108,
+    2,
+    5,
+  );
+
+  return {
+    kind: 'Program',
+    directives: [],
+    body: [matrixDeclaration, switchStatement],
+    ...createSpan({ start: 0, end: 108, lineStart: 1, lineEnd: 5 }),
   };
 }
 export function createBuiltinConstantsProgram(): ProgramNode {

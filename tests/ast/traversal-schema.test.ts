@@ -15,6 +15,7 @@ import {
   createControlFlowFixture,
   createIndicatorScriptFixture,
   createNamespaceAccessFixture,
+  createSwitchMatrixFixture,
 } from './fixtures';
 
 describe('core AST nodes traversal', () => {
@@ -192,5 +193,30 @@ describe('core AST nodes traversal', () => {
       forChildKeys.push(child.key);
     });
     expect(forChildKeys).toEqual(['initializer', 'test', 'update', 'body']);
+  });
+
+  it('walks switch statements, matrix literals, and index expressions', () => {
+    const program = createSwitchMatrixFixture();
+    const visited: string[] = [];
+
+    visit(program, {
+      SwitchStatement: { enter: () => visited.push('SwitchStatement') },
+      SwitchCase: {
+        enter: (path) => {
+          visited.push(path.node.test ? 'SwitchCase:test' : 'SwitchCase:default');
+        },
+      },
+      MatrixLiteral: { enter: () => visited.push('MatrixLiteral') },
+      IndexExpression: { enter: () => visited.push('IndexExpression') },
+    });
+
+    expect(visited).toEqual([
+      'MatrixLiteral',
+      'SwitchStatement',
+      'SwitchCase:test',
+      'SwitchCase:test',
+      'IndexExpression',
+      'SwitchCase:default',
+    ]);
   });
 });

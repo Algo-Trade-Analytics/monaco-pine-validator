@@ -28,6 +28,8 @@ export type NodeKind =
   | 'IfStatement'
   | 'WhileStatement'
   | 'ForStatement'
+  | 'SwitchStatement'
+  | 'SwitchCase'
   | 'MemberExpression'
   | 'BreakStatement'
   | 'ContinueStatement'
@@ -37,6 +39,8 @@ export type NodeKind =
   | 'BinaryExpression'
   | 'UnaryExpression'
   | 'ConditionalExpression'
+  | 'IndexExpression'
+  | 'MatrixLiteral'
   | 'Identifier'
   | 'NumberLiteral'
   | 'StringLiteral'
@@ -58,6 +62,8 @@ export type Node =
   | IfStatementNode
   | WhileStatementNode
   | ForStatementNode
+  | SwitchStatementNode
+  | SwitchCaseNode
   | BreakStatementNode
   | ContinueStatementNode
   | ParameterNode
@@ -67,6 +73,8 @@ export type Node =
   | BinaryExpressionNode
   | UnaryExpressionNode
   | ConditionalExpressionNode
+  | IndexExpressionNode
+  | MatrixLiteralNode
   | IdentifierNode
   | NumberLiteralNode
   | StringLiteralNode
@@ -87,6 +95,7 @@ export type StatementNode =
   | IfStatementNode
   | WhileStatementNode
   | ForStatementNode
+  | SwitchStatementNode
   | BreakStatementNode
   | ContinueStatementNode
   | ScriptDeclarationNode;
@@ -98,7 +107,9 @@ export type ExpressionNode =
   | BinaryExpressionNode
   | UnaryExpressionNode
   | MemberExpressionNode
-  | ConditionalExpressionNode;
+  | ConditionalExpressionNode
+  | IndexExpressionNode
+  | MatrixLiteralNode;
 
 export type LiteralNode =
   | NumberLiteralNode
@@ -212,6 +223,18 @@ export interface ForStatementNode extends BaseNode {
   body: BlockStatementNode;
 }
 
+export interface SwitchStatementNode extends BaseNode {
+  kind: 'SwitchStatement';
+  discriminant: ExpressionNode;
+  cases: SwitchCaseNode[];
+}
+
+export interface SwitchCaseNode extends BaseNode {
+  kind: 'SwitchCase';
+  test: ExpressionNode | null;
+  consequent: StatementNode[];
+}
+
 export interface BreakStatementNode extends BaseNode {
   kind: 'BreakStatement';
 }
@@ -239,6 +262,17 @@ export interface ConditionalExpressionNode extends BaseNode {
   test: ExpressionNode;
   consequent: ExpressionNode;
   alternate: ExpressionNode;
+}
+
+export interface IndexExpressionNode extends BaseNode {
+  kind: 'IndexExpression';
+  object: ExpressionNode;
+  index: ExpressionNode;
+}
+
+export interface MatrixLiteralNode extends BaseNode {
+  kind: 'MatrixLiteral';
+  rows: ExpressionNode[][];
 }
 
 export interface IdentifierNode extends BaseNode {

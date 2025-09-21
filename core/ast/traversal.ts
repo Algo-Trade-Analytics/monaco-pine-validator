@@ -12,10 +12,14 @@ import {
   type ForStatementNode,
   type FunctionDeclarationNode,
   type IfStatementNode,
+  type IndexExpressionNode,
+  type MatrixLiteralNode,
   type ParameterNode,
   type ProgramNode,
   type ReturnStatementNode,
   type ScriptDeclarationNode,
+  type SwitchCaseNode,
+  type SwitchStatementNode,
   type TypeReferenceNode,
   type UnaryExpressionNode,
   type VariableDeclarationNode,
@@ -211,6 +215,22 @@ function collectChildren(path: NodePath): ChildEntry[] {
       push(forStatement.body, 'body');
       break;
     }
+    case 'SwitchStatement': {
+      const switchStatement = node as SwitchStatementNode;
+      push(switchStatement.discriminant, 'discriminant');
+      switchStatement.cases.forEach((caseNode, caseIndex) => {
+        push(caseNode, 'cases', caseIndex);
+      });
+      break;
+    }
+    case 'SwitchCase': {
+      const switchCase = node as SwitchCaseNode;
+      push(switchCase.test, 'test');
+      switchCase.consequent.forEach((statement, statementIndex) => {
+        push(statement, 'consequent', statementIndex);
+      });
+      break;
+    }
     case 'BreakStatement':
     case 'ContinueStatement':
       break;
@@ -251,6 +271,21 @@ function collectChildren(path: NodePath): ChildEntry[] {
       push(conditional.test, 'test');
       push(conditional.consequent, 'consequent');
       push(conditional.alternate, 'alternate');
+      break;
+    }
+    case 'IndexExpression': {
+      const indexExpression = node as IndexExpressionNode;
+      push(indexExpression.object, 'object');
+      push(indexExpression.index, 'index');
+      break;
+    }
+    case 'MatrixLiteral': {
+      const matrix = node as MatrixLiteralNode;
+      matrix.rows.forEach((row, rowIndex) => {
+        row.forEach((element, columnIndex) => {
+          push(element, `rows.${rowIndex}`, columnIndex);
+        });
+      });
       break;
     }
     case 'Identifier':

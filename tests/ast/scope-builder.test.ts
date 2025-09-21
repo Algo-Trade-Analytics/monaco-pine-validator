@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildScopeGraph } from '../../core/ast/scope';
-import { createNamespaceAccessFixture } from './fixtures';
+import { createNamespaceAccessFixture, createSwitchMatrixFixture } from './fixtures';
 import {
   type ArgumentNode,
   type BlockStatementNode,
@@ -325,5 +325,19 @@ describe('buildScopeGraph', () => {
 
     const hasNextRecord = symbolTable.get('hasNext');
     expect(hasNextRecord?.references).toHaveLength(1);
+  });
+
+  it('collects references inside switch statements and index expressions', () => {
+    const program = createSwitchMatrixFixture();
+    const { symbolTable } = buildScopeGraph(program);
+
+    const directionRecord = symbolTable.get('direction');
+    expect(directionRecord?.references).toHaveLength(1);
+
+    const closeRecord = symbolTable.get('close');
+    expect(closeRecord?.references).toHaveLength(2);
+
+    const signalRecord = symbolTable.get('signal');
+    expect(signalRecord?.references).toHaveLength(3);
   });
 });

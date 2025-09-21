@@ -76,7 +76,15 @@ export type ControlFlowNodeKind =
   | 'jump'
   | 'terminator';
 
-export type ControlFlowEdgeKind = 'normal' | 'true' | 'false' | 'loop' | 'break' | 'continue' | 'return';
+export type ControlFlowEdgeKind =
+  | 'normal'
+  | 'true'
+  | 'false'
+  | 'loop'
+  | 'break'
+  | 'continue'
+  | 'return'
+  | 'case';
 
 export interface ControlFlowEdge {
   target: string;
@@ -102,7 +110,7 @@ export type TypeCertainty = 'certain' | 'inferred' | 'conflict';
 
 export type PinePrimitiveType = 'int' | 'float' | 'bool' | 'string' | 'void';
 
-export type InferredTypeKind = PinePrimitiveType | 'function' | 'series' | 'unknown';
+export type InferredTypeKind = PinePrimitiveType | 'function' | 'series' | 'matrix' | 'unknown';
 
 export interface TypeMetadata {
   kind: InferredTypeKind;

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createControlFlowFixture, createIndicatorScriptFixture, createNamespaceAccessFixture } from './fixtures';
+import {
+  createControlFlowFixture,
+  createIndicatorScriptFixture,
+  createNamespaceAccessFixture,
+  createSwitchMatrixFixture,
+} from './fixtures';
+import type { AssignmentStatementNode, SwitchStatementNode } from '../../core/ast/nodes';
 
 describe('AST fixtures', () => {
   it('matches the indicator script snapshot', () => {
@@ -1114,5 +1120,22 @@ describe('AST fixtures', () => {
         ],
       }
     `);
+  });
+
+  it('describes the switch and matrix fixture structure', () => {
+    const program = createSwitchMatrixFixture();
+    expect(program.body.map((node) => node.kind)).toEqual(['VariableDeclaration', 'SwitchStatement']);
+
+    const switchNode = program.body[1] as SwitchStatementNode;
+    expect(switchNode.cases).toHaveLength(3);
+    expect(switchNode.cases.map((caseNode) => (caseNode.test ? 'test' : 'default'))).toEqual([
+      'test',
+      'test',
+      'default',
+    ]);
+
+    const secondCase = switchNode.cases[1];
+    const assignment = secondCase.consequent[0] as AssignmentStatementNode;
+    expect(assignment.right?.kind).toBe('IndexExpression');
   });
 });

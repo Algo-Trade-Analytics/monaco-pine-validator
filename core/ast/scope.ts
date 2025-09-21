@@ -18,6 +18,8 @@ import {
   type ExpressionNode,
   type ExpressionStatementNode,
   type ForStatementNode,
+  type IndexExpressionNode,
+  type MatrixLiteralNode,
   type MemberExpressionNode,
   type FunctionDeclarationNode,
   type IfStatementNode,
@@ -27,6 +29,7 @@ import {
   type ReturnStatementNode,
   type ScriptDeclarationNode,
   type StatementNode,
+  type SwitchStatementNode,
   type WhileStatementNode,
   type BreakStatementNode,
   type VariableDeclarationNode,
@@ -189,6 +192,21 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         recordReference(member.property);
         break;
       }
+      case 'IndexExpression': {
+        const indexExpression = expression as IndexExpressionNode;
+        visitExpression(indexExpression.object);
+        visitExpression(indexExpression.index);
+        break;
+      }
+      case 'MatrixLiteral': {
+        const matrix = expression as MatrixLiteralNode;
+        matrix.rows.forEach((row) => {
+          row.forEach((element) => {
+            visitExpression(element);
+          });
+        });
+        break;
+      }
       case 'ConditionalExpression': {
         const conditional = expression as ConditionalExpressionNode;
         visitExpression(conditional.test);
@@ -274,6 +292,19 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         visitExpression(forStatement.update);
         visitStatement(forStatement.body);
         popScope();
+        break;
+      }
+      case 'SwitchStatement': {
+        const switchStatement = statement as SwitchStatementNode;
+        visitExpression(switchStatement.discriminant);
+        switchStatement.cases.forEach((caseNode) => {
+          if (caseNode.test) {
+            visitExpression(caseNode.test);
+          }
+          caseNode.consequent.forEach((caseStatement) => {
+            visitStatement(caseStatement);
+          });
+        });
         break;
       }
       case 'BreakStatement':

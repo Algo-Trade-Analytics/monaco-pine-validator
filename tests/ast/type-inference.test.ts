@@ -7,8 +7,12 @@ import {
   createBooleanLiteral,
   createCallExpression,
   createIdentifier,
+  createIndexExpression,
+  createMatrixLiteral,
   createNumberLiteral,
   createStringLiteral,
+  createSwitchCase,
+  createSwitchStatement,
   createUnaryExpression,
   createVariableDeclaration,
   createMemberExpression,
@@ -203,5 +207,86 @@ describe('inferTypes', () => {
     const callType = environment.nodeTypes.get(call);
     expect(callType?.kind).toBe('bool');
     expect(callType?.certainty).toBe('certain');
+  });
+
+  it('annotates matrix literals and historical index expressions', () => {
+    const matrixLiteral = createMatrixLiteral(
+      [
+        [createNumberLiteral(1, '1', 6, 1), createNumberLiteral(2, '2', 9, 1)],
+        [createNumberLiteral(3, '3', 14, 1), createNumberLiteral(4, '4', 17, 1)],
+      ],
+      5,
+      18,
+      1,
+    );
+    const matrixDeclaration = createVariableDeclaration(createIdentifier('weights', 0, 1), 0, 20, 1, {
+      declarationKind: 'var',
+      initializer: matrixLiteral,
+    });
+
+    const indexExpression = createIndexExpression(
+      createIdentifier('close', 25, 2),
+      createNumberLiteral(1, '1', 31, 2),
+      25,
+      32,
+      2,
+    );
+
+    const firstCase = createSwitchCase(
+      createIdentifier('long', 40, 3),
+      [
+        createAssignmentStatement(
+          createIdentifier('signal', 45, 3),
+          createIdentifier('close', 53, 3),
+          45,
+          58,
+          3,
+        ),
+      ],
+      38,
+      60,
+      3,
+    );
+
+    const secondCase = createSwitchCase(
+      null,
+      [
+        createAssignmentStatement(
+          createIdentifier('signal', 62, 4),
+          indexExpression,
+          62,
+          78,
+          4,
+        ),
+      ],
+      60,
+      78,
+      4,
+    );
+
+    const switchStatement = createSwitchStatement(
+      createIdentifier('direction', 22, 2),
+      [firstCase, secondCase],
+      22,
+      78,
+      2,
+      4,
+    );
+
+    const program = createProgram([matrixDeclaration, switchStatement]);
+    const environment = inferTypes(program);
+
+    const matrixMetadata = environment.nodeTypes.get(matrixLiteral);
+    expect(matrixMetadata?.kind).toBe('matrix');
+    expect(matrixMetadata?.certainty).toBe('certain');
+
+    const weightsMetadata = environment.identifiers.get('weights');
+    expect(weightsMetadata?.kind).toBe('matrix');
+
+    const indexMetadata = environment.nodeTypes.get(indexExpression);
+    expect(indexMetadata?.kind).toBe('series');
+
+    const directionMetadata = environment.identifiers.get('direction');
+    expect(directionMetadata?.kind).toBe('unknown');
   });
 });

@@ -27,12 +27,13 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Control-flow graph construction models branch merges, loop back-edges, and return terminators while exposing the graph on the validation context for future analyses.
 - Member expression nodes model namespaced property access (e.g., timeframe.period) with traversal, scope, and type inference coverage so builtin-variable validators can rely on structured AST data.
 - The built-in variables validator now consumes AST member expressions to detect namespace constants, keeping Monaco diagnostics aligned with Pine nodes without relying on legacy line-based scanning.
+- Switch statements, matrix literals, and historical index expressions now have dedicated AST nodes with traversal, scope, type inference, and control-flow coverage, unblocking downstream modules that depend on these constructs.
 
 ### Near-Term TODOs
 
 1. ✅ **Stand Up Dual-Run Harnesses** – the semantic golden suite now runs `EnhancedModularValidator` in AST shadow mode and diffs its diagnostics against the legacy pipeline for builtin namespace coverage, establishing a regression guardrail for upcoming module ports.
 2. ⏱️ **Close Parser RFC Loop** – distil the outstanding parser spike notes into a publishable RFC update that records the chosen technology, recovery strategy, and open follow-ups for incremental parsing.
-3. ⏱️ **Broaden AST Node Coverage** – add structural nodes for `switch`, matrix literals, and historical index expressions so currently blocked validators can migrate without bespoke fallbacks.
+3. ✅ **Broaden AST Node Coverage** – added structural nodes for `switch`, matrix literals, and historical index expressions so currently blocked validators can migrate without bespoke fallbacks.
 4. ⏱️ **Deepen Type Inference Rules** – capture strategy/TA helper return types and multi-series propagation so the `strategy-functions` and `ta-functions` validators can rely on AST semantics.
 5. ⏱️ **Document Monaco Integration Plan** – outline how AST diagnostics, hovers, and code lenses will be surfaced through the Monaco worker now that diagnostic helpers exist.
 
