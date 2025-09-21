@@ -221,7 +221,7 @@ export function createExpressionStatement(
 }
 
 export function createIfStatement(
-  test: IdentifierNode,
+  test: ExpressionNode,
   consequent: StatementNode,
   alternate: StatementNode | null,
   start: number,

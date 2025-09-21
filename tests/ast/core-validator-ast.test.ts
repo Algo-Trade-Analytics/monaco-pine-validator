@@ -7,15 +7,19 @@ import type { AstValidationContext } from '../../core/types';
 import {
   createArgument,
   createAssignmentStatement,
+  createBlock,
+  createBinaryExpression,
   createCallExpression,
   createExpressionStatement,
   createIdentifier,
   createIndexExpression,
+  createIfStatement,
   createMemberExpression,
   createNumberLiteral,
   createStringLiteral,
   createScriptDeclaration,
   createUnaryExpression,
+  createVariableDeclaration,
   createVersionDirective,
 } from './fixtures';
 import {
@@ -355,5 +359,156 @@ describe('CoreValidator AST integration', () => {
     const historyErrors = result.errors.filter((error) => error.code === 'PS024');
     expect(historyErrors).toHaveLength(1);
     expect(historyErrors[0]?.line).toBe(3);
+  });
+
+  it('reports numeric literal conditions for v6 scripts via AST traversal', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'if 1',
+      '    plot(close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const literalCondition = createNumberLiteral(1, '1', 4, 3);
+    const plotArg = createArgument(createIdentifier('close', 14, 4), 14, 19, 4);
+    const plotCall = createCallExpression(createIdentifier('plot', 9, 4), [plotArg], 9, 19, 4);
+    const plotStatement = createExpressionStatement(plotCall, 9, 19, 4);
+    const consequentBlock = createBlock([plotStatement], 8, 20, 3, 4);
+    const ifStatement = createIfStatement(literalCondition, consequentBlock, null, 4, 20, 3);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, ifStatement]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const numericLiteralErrors = result.errors.filter((error) => error.code === 'PSV6-001');
+    expect(numericLiteralErrors).toHaveLength(1);
+    expect(numericLiteralErrors[0]?.line).toBe(3);
+  });
+
+  it('reports numeric identifier conditions using AST type metadata', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'var value = 1',
+      'if value',
+      '    plot(close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const valueIdentifier = createIdentifier('value', 4, 3);
+    const valueInitializer = createNumberLiteral(1, '1', 13, 3);
+    const valueDeclaration = createVariableDeclaration(valueIdentifier, 4, 15, 3, {
+      declarationKind: 'var',
+      initializer: valueInitializer,
+    });
+    const valueReference = createIdentifier('value', 4, 4);
+    const plotArg = createArgument(createIdentifier('close', 14, 5), 14, 19, 5);
+    const plotCall = createCallExpression(createIdentifier('plot', 9, 5), [plotArg], 9, 19, 5);
+    const plotStatement = createExpressionStatement(plotCall, 9, 19, 5);
+    const consequentBlock = createBlock([plotStatement], 8, 20, 4, 5);
+    const ifStatement = createIfStatement(valueReference, consequentBlock, null, 4, 20, 4);
+
+    const program = createProgramFromSource(
+      source,
+      [directive],
+      [scriptDeclaration, valueDeclaration, ifStatement],
+    );
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const numericIdentifierErrors = result.errors.filter((error) => error.code === 'PSV6-001');
+    expect(numericIdentifierErrors).toHaveLength(1);
+    expect(numericIdentifierErrors[0]?.line).toBe(4);
+  });
+
+  it('reports linewidth zero arguments through AST call analysis', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'plot(close, linewidth=0)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const closeArgument = createArgument(createIdentifier('close', 5, 3), 5, 10, 3);
+    const linewidthArgument = createArgument(createNumberLiteral(0, '0', 20, 3), 16, 24, 3, 'linewidth');
+    const plotCall = createCallExpression(
+      createIdentifier('plot', 0, 3),
+      [closeArgument, linewidthArgument],
+      0,
+      25,
+      3,
+    );
+    const plotStatement = createExpressionStatement(plotCall, 0, 25, 3);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, plotStatement]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const linewidthErrors = result.errors.filter((error) => error.code === 'PSV6-002');
+    expect(linewidthErrors).toHaveLength(1);
+    expect(linewidthErrors[0]?.line).toBe(3);
+  });
+
+  it('warns on direct na comparisons through AST binary expressions', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'value = close == na',
+      'plot(close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const closeIdentifier = createIdentifier('close', 9, 3);
+    const naIdentifier = createIdentifier('na', 18, 3);
+    const equalityExpression = createBinaryExpression('==', closeIdentifier, naIdentifier, 9, 20, 3);
+    const assignment = createAssignmentStatement(createIdentifier('value', 0, 3), equalityExpression, 0, 20, 3);
+    const plotArgument = createArgument(createIdentifier('close', 5, 4), 5, 10, 4);
+    const plotCall = createCallExpression(createIdentifier('plot', 0, 4), [plotArgument], 0, 10, 4);
+    const plotStatement = createExpressionStatement(plotCall, 0, 10, 4);
+
+    const program = createProgramFromSource(
+      source,
+      [directive],
+      [scriptDeclaration, assignment, plotStatement],
+    );
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const naWarnings = result.warnings.filter((warning) => warning.code === 'PS023');
+    expect(naWarnings).toHaveLength(1);
+    expect(naWarnings[0]?.line).toBe(3);
   });
 });

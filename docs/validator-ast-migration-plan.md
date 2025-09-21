@@ -34,6 +34,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Core validator AST analysis now inspects member expressions so strategy namespace usage in indicators is flagged even when no call expression is present, ensuring parity with the legacy scanner.
 - Core validator AST analysis now inspects index expressions so negative history references on series data trigger PS024 errors without the legacy line scanner.
 - A Monaco worker harness now exercises the AST-backed validator in a simulated worker environment, translating semantic output and syntax errors into Monaco-compatible markers for upcoming editor integration work.
+- Core validator AST analysis now inspects conditional tests, call arguments, and binary expressions to enforce v6 boolean guardrails, linewidth minimums, and `na` comparison warnings without relying on regex fallbacks.
 
 ### Near-Term TODOs
 

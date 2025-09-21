@@ -22,17 +22,20 @@ import {
 } from '../core/constants';
 import type {
   ArgumentNode,
+  BinaryExpressionNode,
   CallExpressionNode,
   ExpressionNode,
   IdentifierNode,
+  IfStatementNode,
   IndexExpressionNode,
   MemberExpressionNode,
+  NumberLiteralNode,
   ProgramNode,
   ScriptDeclarationNode,
   StringLiteralNode,
-  NumberLiteralNode,
   UnaryExpressionNode,
   VersionDirectiveNode,
+  WhileStatementNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 import type { TypeMetadata } from '../core/ast/types';
@@ -113,6 +116,9 @@ export class CoreValidator implements ValidationModule {
   private astProcessedPlottingUsage = false;
   private astProcessedLibraryRestrictions = false;
   private astProcessedNegativeHistory = false;
+  private astProcessedNumericConditions = false;
+  private astProcessedLinewidthZero = false;
+  private astProcessedNaComparisons = false;
   private astStrategyUsageErrorLines = new Set<number>();
   private inLoop = false;
   private inFunction = false;
@@ -190,6 +196,9 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedPlottingUsage = false;
     this.astProcessedLibraryRestrictions = false;
     this.astProcessedNegativeHistory = false;
+    this.astProcessedNumericConditions = false;
+    this.astProcessedLinewidthZero = false;
+    this.astProcessedNaComparisons = false;
     this.astStrategyUsageErrorLines.clear();
     this.sawBrace = false;
     this.sawTabIndent = false;
@@ -223,6 +232,9 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedPlottingUsage = true;
     this.astProcessedLibraryRestrictions = true;
     this.astProcessedNegativeHistory = true;
+    this.astProcessedNumericConditions = true;
+    this.astProcessedLinewidthZero = true;
+    this.astProcessedNaComparisons = true;
 
     visit(program, {
       CallExpression: {
@@ -238,6 +250,21 @@ export class CoreValidator implements ValidationModule {
       MemberExpression: {
         enter: (path) => {
           this.processAstMemberExpression(path as NodePath<MemberExpressionNode>);
+        },
+      },
+      IfStatement: {
+        enter: ({ node }) => {
+          this.processAstConditionalTest((node as IfStatementNode).test);
+        },
+      },
+      WhileStatement: {
+        enter: ({ node }) => {
+          this.processAstConditionalTest((node as WhileStatementNode).test);
+        },
+      },
+      BinaryExpression: {
+        enter: ({ node }) => {
+          this.processAstBinaryExpression(node as BinaryExpressionNode);
         },
       },
     });
@@ -282,6 +309,28 @@ export class CoreValidator implements ValidationModule {
           call.loc.start.column,
           "Inputs aren't allowed in libraries.",
           'PS026',
+        );
+      }
+    }
+
+    const targetVersion = this.config.targetVersion ?? 6;
+    if (targetVersion >= 6) {
+      for (const argument of call.args) {
+        if (!argument.name || argument.name.name !== 'linewidth') {
+          continue;
+        }
+
+        const numericValue = this.extractNumericLiteral(argument.value);
+        if (numericValue === null || numericValue !== 0) {
+          continue;
+        }
+
+        const { line, column } = argument.value.loc.start;
+        this.addError(
+          line,
+          column,
+          "The value for 'linewidth' must be >= 1, but it was 0.",
+          'PSV6-002',
         );
       }
     }
@@ -356,6 +405,73 @@ export class CoreValidator implements ValidationModule {
 
     const { line, column } = path.node.loc.start;
     this.addStrategyNamespaceError(line, column);
+  }
+
+  private processAstConditionalTest(test: ExpressionNode): void {
+    const targetVersion = this.config.targetVersion ?? 6;
+    if (targetVersion < 6) {
+      return;
+    }
+
+    const literalValue = this.extractNumericLiteral(test);
+    if (literalValue !== null) {
+      const { line, column } = test.loc.start;
+      this.addError(
+        line,
+        column,
+        'Numeric literals are not implicitly converted to booleans in v6.',
+        'PSV6-001',
+        'Use a comparison like `if value > 0` or `if value != 0`.',
+      );
+      return;
+    }
+
+    if (test.kind !== 'Identifier') {
+      return;
+    }
+
+    const metadata = this.resolveExpressionType(test);
+    if (!metadata) {
+      return;
+    }
+
+    if (metadata.kind === 'bool') {
+      return;
+    }
+
+    if (metadata.kind === 'float' || metadata.kind === 'int' || metadata.kind === 'series') {
+      const { line, column } = test.loc.start;
+      this.addError(
+        line,
+        column,
+        'Numeric variables are not implicitly converted to booleans in v6.',
+        'PSV6-001',
+        'Use a comparison like `if value > 0` or `if value != 0`.',
+      );
+    }
+  }
+
+  private processAstBinaryExpression(expression: BinaryExpressionNode): void {
+    if (expression.operator !== '==' && expression.operator !== '!=') {
+      return;
+    }
+
+    if (!this.isIdentifierNamed(expression.left, 'na') && !this.isIdentifierNamed(expression.right, 'na')) {
+      return;
+    }
+
+    const { line, column } = expression.loc.start;
+    this.addWarning(
+      line,
+      column,
+      "Direct comparison with 'na' is unreliable. Use na(x), e.g., na(myValue).",
+      'PS023',
+      'Replace `x == na` with `na(x)` and `x != na` with `not na(x)`.',
+    );
+  }
+
+  private isIdentifierNamed(expression: ExpressionNode, name: string): boolean {
+    return expression.kind === 'Identifier' && (expression as IdentifierNode).name === name;
   }
 
   private addStrategyNamespaceError(line: number, column: number): void {
@@ -842,28 +958,24 @@ export class CoreValidator implements ValidationModule {
       this.addWarning(lineNum, 1, 'Assignment "=" inside condition; did you mean "=="?', 'PSO02');
     }
 
-    // V6-specific: Check for numeric literals as conditions
-    if (this.config.targetVersion >= 6) {
+    // V6-specific: Check for numeric literal/variable conditions when AST isn't available
+    if (!this.astProcessedNumericConditions && this.config.targetVersion >= 6) {
       const numericCondition = strippedNoStrings.match(/^\s*(if|while)\s+(\d+(?:\.\d+)?)\s*$/);
       if (numericCondition) {
         this.addError(lineNum, 1, 'Numeric literals are not implicitly converted to booleans in v6.', 'PSV6-001', 'Use a comparison like `if value > 0` or `if value != 0`.');
-      }
-    }
-
-    // V6-specific: Check for numeric variables as conditions (simple pattern matching)
-    if (this.config.targetVersion >= 6) {
-      const variableCondition = strippedNoStrings.match(/^\s*(if|while)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/);
-      if (variableCondition) {
-        const varName = variableCondition[2];
-        // Check if this variable was assigned a numeric value in the current scope
-        if (this.isNumericVariable(varName)) {
-          this.addError(lineNum, 1, 'Numeric variables are not implicitly converted to booleans in v6.', 'PSV6-001', 'Use a comparison like `if value > 0` or `if value != 0`.');
+      } else {
+        const variableCondition = strippedNoStrings.match(/^\s*(if|while)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/);
+        if (variableCondition) {
+          const varName = variableCondition[2];
+          if (this.isNumericVariable(varName)) {
+            this.addError(lineNum, 1, 'Numeric variables are not implicitly converted to booleans in v6.', 'PSV6-001', 'Use a comparison like `if value > 0` or `if value != 0`.');
+          }
         }
       }
     }
 
-    // V6-specific: Check for linewidth parameter with value < 1
-    if (this.config.targetVersion >= 6) {
+    // V6-specific: Check for linewidth parameter with value < 1 when AST isn't available
+    if (!this.astProcessedLinewidthZero && this.config.targetVersion >= 6) {
       const linewidthMatch = strippedNoStrings.match(/linewidth\s*=\s*0\b/);
       if (linewidthMatch) {
         this.addError(lineNum, 1, 'The value for \'linewidth\' must be >= 1, but it was 0.', 'PSV6-002');
@@ -911,8 +1023,8 @@ export class CoreValidator implements ValidationModule {
       }
     }
 
-    // Check for NA comparisons
-    if (/(\bna\s*[!=]=)|([!=]=\s*na\b)/.test(strippedNoStrings)) {
+    // Check for NA comparisons when AST isn't available
+    if (!this.astProcessedNaComparisons && /(\bna\s*[!=]=)|([!=]=\s*na\b)/.test(strippedNoStrings)) {
       this.addWarning(lineNum, 1, "Direct comparison with 'na' is unreliable. Use na(x), e.g., na(myValue).", 'PS023', 'Replace `x == na` with `na(x)` and `x != na` with `not na(x)`.');
     }
   }
