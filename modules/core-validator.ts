@@ -22,12 +22,35 @@ import {
 } from '../core/constants';
 import type {
   ArgumentNode,
+  CallExpressionNode,
   ExpressionNode,
+  IdentifierNode,
+  MemberExpressionNode,
   ProgramNode,
   ScriptDeclarationNode,
   StringLiteralNode,
   VersionDirectiveNode,
 } from '../core/ast/nodes';
+import { visit } from '../core/ast/traversal';
+
+const PLOTTING_OR_DRAWING_CALLEES = new Set([
+  'plot',
+  'plotshape',
+  'plotchar',
+  'plotarrow',
+  'plotbar',
+  'plotcandle',
+  'plotohlc',
+  'label.new',
+  'line.new',
+  'linefill.new',
+  'polyline.new',
+  'box.new',
+  'table.new',
+  'table.cell',
+  'bgcolor',
+  'fill',
+]);
 
 function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
   return 'ast' in context;
@@ -82,6 +105,9 @@ export class CoreValidator implements ValidationModule {
   private sawBrace = false;
   private sawTabIndent = false;
   private sawSpaceIndent = false;
+  private astProcessedStrategyUsage = false;
+  private astProcessedPlottingUsage = false;
+  private astProcessedLibraryRestrictions = false;
   private inLoop = false;
   private inFunction = false;
   private hasReturn = false;
@@ -154,6 +180,9 @@ export class CoreValidator implements ValidationModule {
     this.inLoop = false;
     this.inFunction = false;
     this.hasReturn = false;
+    this.astProcessedStrategyUsage = false;
+    this.astProcessedPlottingUsage = false;
+    this.astProcessedLibraryRestrictions = false;
     this.sawBrace = false;
     this.sawTabIndent = false;
     this.sawSpaceIndent = false;
@@ -178,6 +207,87 @@ export class CoreValidator implements ValidationModule {
   private processAstProgram(program: ProgramNode): void {
     this.processVersionDirectives(program.directives);
     this.processScriptDeclarations(program.body);
+    this.processAstScriptSemantics(program);
+  }
+
+  private processAstScriptSemantics(program: ProgramNode): void {
+    this.astProcessedStrategyUsage = true;
+    this.astProcessedPlottingUsage = true;
+    this.astProcessedLibraryRestrictions = true;
+
+    visit(program, {
+      CallExpression: {
+        enter: ({ node }) => {
+          this.processAstCallExpression(node);
+        },
+      },
+    });
+  }
+
+  private processAstCallExpression(call: CallExpressionNode): void {
+    const calleePath = this.resolveCalleePath(call.callee);
+    if (!calleePath || calleePath.length === 0) {
+      return;
+    }
+
+    const root = calleePath[0];
+    const fullName = calleePath.join('.');
+
+    if (root === 'strategy') {
+      if (this.scriptType === 'indicator') {
+        this.addError(
+          call.loc.start.line,
+          call.loc.start.column,
+          "Calls to 'strategy.*' are not allowed in indicators.",
+          'PS020',
+        );
+      }
+
+      if (this.scriptType === 'strategy') {
+        this.hasStrategyCalls = true;
+      }
+    }
+
+    if (this.scriptType === 'indicator' && PLOTTING_OR_DRAWING_CALLEES.has(fullName)) {
+      this.hasPlotting = true;
+    }
+
+    if (this.scriptType === 'library') {
+      if (PLOTTING_OR_DRAWING_CALLEES.has(fullName)) {
+        this.addError(
+          call.loc.start.line,
+          call.loc.start.column,
+          "Plotting functions are not allowed in libraries.",
+          'PS021',
+        );
+      }
+
+      if (root === 'input') {
+        this.addError(
+          call.loc.start.line,
+          call.loc.start.column,
+          "Inputs aren't allowed in libraries.",
+          'PS026',
+        );
+      }
+    }
+  }
+
+  private resolveCalleePath(expression: ExpressionNode): string[] | null {
+    if (expression.kind === 'Identifier') {
+      return [(expression as IdentifierNode).name];
+    }
+
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      const objectPath = this.resolveCalleePath(member.object);
+      if (!objectPath) {
+        return null;
+      }
+      return [...objectPath, member.property.name];
+    }
+
+    return null;
   }
 
   private processVersionDirectives(directives: ProgramNode['directives']): void {
@@ -518,12 +628,12 @@ export class CoreValidator implements ValidationModule {
 
   private validateScriptBoundaries(line: string, lineNum: number, strippedNoStrings: string): void {
     // Check for strategy.* calls in indicators
-    if (this.scriptType === 'indicator' && /strategy\./.test(strippedNoStrings)) {
+    if (!this.astProcessedStrategyUsage && this.scriptType === 'indicator' && /strategy\./.test(strippedNoStrings)) {
       this.addError(lineNum, 1, "Calls to 'strategy.*' are not allowed in indicators.", 'PS020');
     }
 
     // Check for plotting and inputs in libraries
-    if (this.scriptType === 'library') {
+    if (!this.astProcessedLibraryRestrictions && this.scriptType === 'library') {
       if (/^\s*plot\s*\(/.test(strippedNoStrings)) {
         this.addError(lineNum, 1, "Plotting functions are not allowed in libraries.", 'PS021');
       }
@@ -533,12 +643,12 @@ export class CoreValidator implements ValidationModule {
     }
 
     // Check for missing strategy.* calls in strategies
-    if (this.scriptType === 'strategy' && !this.hasStrategyCalls && /strategy\./.test(strippedNoStrings)) {
+    if (!this.astProcessedStrategyUsage && this.scriptType === 'strategy' && !this.hasStrategyCalls && /strategy\./.test(strippedNoStrings)) {
       this.hasStrategyCalls = true;
     }
 
     // Check for missing plotting in indicators
-    if (this.scriptType === 'indicator' && !this.hasPlotting) {
+    if (!this.astProcessedPlottingUsage && this.scriptType === 'indicator' && !this.hasPlotting) {
       const plotsSeries = /^(?:\s*plot\s*\(|\s*plotshape\s*\(|\s*plotchar\s*\(|\s*plotarrow\s*\(|\s*plotbar\s*\(|\s*plotcandle\s*\(|\s*plotohlc\s*\()/;
       const draws = /\b(label\.new|line\.new|linefill\.new|polyline\.new|box\.new|table\.new|table\.cell|bgcolor\s*\(|fill\s*\()/;
       if (plotsSeries.test(strippedNoStrings) || draws.test(strippedNoStrings)) {
