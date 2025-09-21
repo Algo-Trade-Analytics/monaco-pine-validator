@@ -33,10 +33,12 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 ### Near-Term TODOs
 
 1. ✅ **Stand Up Dual-Run Harnesses** – the semantic golden suite now runs `EnhancedModularValidator` in AST shadow mode and diffs its diagnostics against the legacy pipeline for builtin namespace coverage, establishing a regression guardrail for upcoming module ports.
-2. ⏱️ **Close Parser RFC Loop** – distil the outstanding parser spike notes into a publishable RFC update that records the chosen technology, recovery strategy, and open follow-ups for incremental parsing.
+2. ✅ **Close Parser RFC Loop** – published the Chevrotain-based parser decision record in `docs/parser-rfc-update.md`, capturing recovery strategies, benchmarks, and follow-up work.
 3. ✅ **Broaden AST Node Coverage** – added structural nodes for `switch`, matrix literals, and historical index expressions so currently blocked validators can migrate without bespoke fallbacks.
 4. ✅ **Deepen Type Inference Rules** – namespaced TA and strategy helpers now surface richer return metadata and series certainty so the `strategy-functions` and `ta-functions` validators can rely on AST semantics.
-5. ⏱️ **Document Monaco Integration Plan** – outline how AST diagnostics, hovers, and code lenses will be surfaced through the Monaco worker now that diagnostic helpers exist.
+5. ✅ **Document Monaco Integration Plan** – recorded the staged worker rollout strategy, testing plan, and dependencies in `docs/monaco-integration-plan.md`.
+6. ⏱️ **Kick Off Core Validator AST Port** – launch dual-run comparisons for `core-validator`, catalogue mismatches, and scope the implementation swap.
+7. ⏱️ **Prototype Monaco Worker Harness** – add a Vitest-driven worker harness that loads the AST pipeline and validates RPC wiring ahead of editor rollout.
 
 ## 3. Target Architecture Overview
 
@@ -191,9 +193,9 @@ plan:
    - Use the enhanced type inference heuristics to unblock the `strategy-functions` and `ta-functions` module ports, filling any remaining return overrides encountered during parity runs.
    - Ensure the migration table’s blocked modules move to “Ready” once outstanding syntax or inference gaps surface during module migrations.
 
-4. **Plan Monaco Worker Integration**
-   - Document how AST diagnostics, hovers, and code lenses will flow through the Monaco worker using the new marker helpers.
-   - Identify any additional API shims or batching logic needed before exposing the AST pipeline to the editor.
+4. **Operationalise Monaco Worker Integration**
+   - Use the plan in `docs/monaco-integration-plan.md` to sequence worker bootstrap work, RPC wiring, and lazy-loading experiments.
+   - Identify any additional API shims or batching logic needed before exposing the AST pipeline to the editor and raise follow-up tasks as necessary.
 
 ## 11. Definition of Done
 
