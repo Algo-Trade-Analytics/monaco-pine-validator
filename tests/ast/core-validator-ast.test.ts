@@ -1076,4 +1076,217 @@ describe('CoreValidator AST integration', () => {
     expect(unreachableWarnings[0]?.line).toBe(5);
     expect(unreachableWarnings[0]?.message).toContain('line 4');
   });
+
+  it('warns when input calls appear inside non-global scopes using AST placement checks', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'compute(x) =>',
+      '    input.int(1)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const functionIdentifier = createIdentifier('compute', 0, 3);
+    const functionParam = createParameter('x', 8, 3);
+    const inputNamespace = createIdentifier('input', 4, 4);
+    const inputProperty = createIdentifier('int', 10, 4);
+    const inputMember = createMemberExpression(inputNamespace, inputProperty, 4, 12, 4);
+    const inputArgument = createArgument(createNumberLiteral(1, '1', 14, 4), 13, 15, 4);
+    const inputCall = createCallExpression(inputMember, [inputArgument], 4, 16, 4);
+    const inputStatement = createExpressionStatement(inputCall, 4, 16, 4);
+    const functionBody = createBlock([inputStatement], 4, 17, 4, 4);
+    const functionDeclaration = createFunctionDeclaration(functionIdentifier, [functionParam], functionBody, 0, 17, 3, 4);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, functionDeclaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const inputWarnings = result.warnings.filter((warning) => warning.code === 'PS027');
+    expect(inputWarnings).toHaveLength(1);
+    expect(inputWarnings[0]?.line).toBe(4);
+  });
+
+  it('allows top-level input calls without emitting placement warnings', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'input.int(1)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const inputNamespace = createIdentifier('input', 0, 3);
+    const inputProperty = createIdentifier('int', 6, 3);
+    const inputMember = createMemberExpression(inputNamespace, inputProperty, 0, 8, 3);
+    const inputArgument = createArgument(createNumberLiteral(1, '1', 10, 3), 9, 11, 3);
+    const inputCall = createCallExpression(inputMember, [inputArgument], 0, 12, 3);
+    const inputStatement = createExpressionStatement(inputCall, 0, 12, 3);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, inputStatement]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const inputWarnings = result.warnings.filter((warning) => warning.code === 'PS027');
+    expect(inputWarnings).toHaveLength(0);
+  });
+
+  it('tracks function parameter usage through AST identifier traversal', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'sum(value) =>',
+      '    return value + 1',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const functionIdentifier = createIdentifier('sum', 0, 3);
+    const functionParam = createParameter('value', 4, 3);
+    const returnArgument = createBinaryExpression(
+      '+',
+      createIdentifier('value', 11, 4),
+      createNumberLiteral(1, '1', 19, 4),
+      11,
+      20,
+      4,
+    );
+    const returnStatement = createReturn(returnArgument, 4, 20, 4);
+    const functionBody = createBlock([returnStatement], 4, 21, 4, 4);
+    const functionDeclaration = createFunctionDeclaration(functionIdentifier, [functionParam], functionBody, 0, 21, 3, 4);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, functionDeclaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const paramWarnings = result.warnings.filter((warning) => warning.code === 'PSU-PARAM');
+    expect(paramWarnings).toHaveLength(0);
+  });
+
+  it('emits PSU-PARAM warnings when parameters are never referenced', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'sum(value) =>',
+      '    return 0',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const functionIdentifier = createIdentifier('sum', 0, 3);
+    const functionParam = createParameter('value', 4, 3);
+    const returnStatement = createReturn(createNumberLiteral(0, '0', 12, 4), 4, 13, 4);
+    const functionBody = createBlock([returnStatement], 4, 14, 4, 4);
+    const functionDeclaration = createFunctionDeclaration(functionIdentifier, [functionParam], functionBody, 0, 14, 3, 4);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, functionDeclaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const paramWarnings = result.warnings.filter((warning) => warning.code === 'PSU-PARAM');
+    expect(paramWarnings).toHaveLength(1);
+    expect(paramWarnings[0]?.line).toBe(3);
+  });
+
+  it('tracks variable usage through AST identifier traversal to suppress PSU01 warnings', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'var setting = input.int(1)',
+      'plot(setting)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const settingIdentifier = createIdentifier('setting', 4, 3);
+    const inputNamespace = createIdentifier('input', 15, 3);
+    const inputProperty = createIdentifier('int', 21, 3);
+    const inputMember = createMemberExpression(inputNamespace, inputProperty, 15, 23, 3);
+    const inputArgument = createArgument(createNumberLiteral(1, '1', 25, 3), 24, 26, 3);
+    const inputCall = createCallExpression(inputMember, [inputArgument], 15, 27, 3);
+    const settingDeclaration = createVariableDeclaration(settingIdentifier, 4, 27, 3, {
+      declarationKind: 'var',
+      initializer: inputCall,
+    });
+    const plotArgument = createArgument(createIdentifier('setting', 5, 4), 5, 12, 4);
+    const plotCall = createCallExpression(createIdentifier('plot', 0, 4), [plotArgument], 0, 12, 4);
+    const plotStatement = createExpressionStatement(plotCall, 0, 12, 4);
+
+    const program = createProgramFromSource(
+      source,
+      [directive],
+      [scriptDeclaration, settingDeclaration, plotStatement],
+    );
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const unusedWarnings = result.warnings.filter((warning) => warning.code === 'PSU01');
+    expect(unusedWarnings).toHaveLength(0);
+  });
+
+  it('emits PSU01 warnings when declared variables are never used', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'var unused = 1',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const unusedIdentifier = createIdentifier('unused', 4, 3);
+    const unusedDeclaration = createVariableDeclaration(unusedIdentifier, 4, 16, 3, {
+      declarationKind: 'var',
+      initializer: createNumberLiteral(1, '1', 16, 3),
+    });
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, unusedDeclaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const unusedWarnings = result.warnings.filter((warning) => warning.code === 'PSU01');
+    expect(unusedWarnings).toHaveLength(1);
+    expect(unusedWarnings[0]?.line).toBe(3);
+  });
 });
