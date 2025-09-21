@@ -983,6 +983,67 @@ describe('CoreValidator AST integration', () => {
     expect(expensiveWarnings[0]?.line).toBe(5);
   });
 
+  it('warns on dense history references when performance analysis is enabled', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Hist flood")',
+      '_ = close[1] + close[2] + close[3] + close[4] + close[5] + close[6]',
+      'plot(close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleLiteral = createStringLiteral('Hist flood', '"Hist flood"', 15, 2);
+    const titleArgument = createArgument(titleLiteral, 10, 27, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 28, 2);
+
+    const makeHistoryReference = (start: number, literal: number) => {
+      const identifier = createIdentifier('close', start, 3);
+      const literalNode = createNumberLiteral(literal, literal.toString(), start + 6, 3);
+      return createIndexExpression(identifier, literalNode, start, literalNode.range[1] + 1, 3);
+    };
+
+    const historyReferences = [
+      makeHistoryReference(4, 1),
+      makeHistoryReference(16, 2),
+      makeHistoryReference(28, 3),
+      makeHistoryReference(40, 4),
+      makeHistoryReference(52, 5),
+      makeHistoryReference(64, 6),
+    ];
+
+    const expressionStart = historyReferences[0]!.range[0];
+    let sumExpression = historyReferences[0]!;
+    for (let index = 1; index < historyReferences.length; index++) {
+      const reference = historyReferences[index]!;
+      sumExpression = createBinaryExpression('+', sumExpression, reference, expressionStart, reference.range[1], 3);
+    }
+
+    const assignmentTarget = createIdentifier('_', 0, 3);
+    const assignment = createAssignmentStatement(assignmentTarget, sumExpression, 0, sumExpression.range[1], 3);
+
+    const plotArgument = createArgument(createIdentifier('close', 5, 4), 5, 10, 4);
+    const plotCall = createCallExpression(createIdentifier('plot', 0, 4), [plotArgument], 0, 11, 4);
+    const plotStatement = createExpressionStatement(plotCall, 0, 11, 4);
+
+    const program = createProgramFromSource(
+      source,
+      [directive],
+      [scriptDeclaration, assignment, plotStatement],
+    );
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service, { enablePerformanceAnalysis: true });
+    const result = validator.validate(source);
+
+    const historyWarnings = result.warnings.filter((warning) => warning.code === 'PSP002');
+    expect(historyWarnings).toHaveLength(1);
+    expect(historyWarnings[0]?.line).toBe(3);
+  });
+
   it('warns on increment operators surfaced by AST unary expressions', () => {
     const source = [
       '//@version=6',

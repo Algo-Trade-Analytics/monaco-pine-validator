@@ -39,6 +39,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Core validator AST analysis now detects assignments inside conditional tests and surfaces expensive loop calls, replacing the PSO02 and PSP001 regex heuristics with structured traversal.
 - Core validator AST analysis now consumes variable declarations and assignments to surface PSD01/PSD02/PS019 diagnostics without the legacy regex fallbacks.
 - Core validator AST analysis now tracks identifier usage and input placement so PSU01, PSU-PARAM, and PS027 diagnostics no longer rely on line-based token scanning.
+- Core validator AST analysis now counts per-line history references so PSP002 performance warnings no longer rely on regex heuristics.
 
 ### Near-Term TODOs
 

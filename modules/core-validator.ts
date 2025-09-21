@@ -143,6 +143,7 @@ export class CoreValidator implements ValidationModule {
   private astProcessedVariableStatements = false;
   private astProcessedIdentifierUsage = false;
   private astProcessedInputPlacement = false;
+  private astProcessedHistoryReferenceDensity = false;
   private astStrategyUsageErrorLines = new Set<number>();
   private inLoop = false;
   private inFunction = false;
@@ -160,6 +161,8 @@ export class CoreValidator implements ValidationModule {
   private paramUsage = new Map<string, Set<string>>();
   private typeFields = new Map<string, Set<string>>();
   private astFunctionStack: Array<{ name: string | null; params: Set<string> }> = [];
+  private astHistoryReferenceCounts = new Map<number, number>();
+  private astHistoryReferenceWarnedLines = new Set<number>();
 
   private scopeStack: ScopeInfo[] = [];
   private indentStack: number[] = [0];
@@ -232,7 +235,10 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedVariableStatements = false;
     this.astProcessedIdentifierUsage = false;
     this.astProcessedInputPlacement = false;
+    this.astProcessedHistoryReferenceDensity = false;
     this.astStrategyUsageErrorLines.clear();
+    this.astHistoryReferenceCounts.clear();
+    this.astHistoryReferenceWarnedLines.clear();
     this.sawBrace = false;
     this.sawTabIndent = false;
     this.sawSpaceIndent = false;
@@ -275,6 +281,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedVariableStatements = true;
     this.astProcessedIdentifierUsage = true;
     this.astProcessedInputPlacement = true;
+    this.astProcessedHistoryReferenceDensity = true;
 
     let loopDepth = 0;
 
@@ -658,6 +665,8 @@ export class CoreValidator implements ValidationModule {
   }
 
   private processAstIndexExpression(indexExpression: IndexExpressionNode): void {
+    this.recordAstHistoryReference(indexExpression);
+
     const indexValue = this.extractNumericLiteral(indexExpression.index);
     if (indexValue === null || indexValue >= 0) {
       return;
@@ -689,6 +698,36 @@ export class CoreValidator implements ValidationModule {
       'Invalid history reference: negative indexes are not allowed for series data.',
       'PS024',
       'Use positive indices like close[1] for historical data, or array.get(myArray, -1) for arrays.',
+    );
+  }
+
+  private recordAstHistoryReference(indexExpression: IndexExpressionNode): void {
+    if (!this.config.enablePerformanceAnalysis) {
+      return;
+    }
+
+    if (indexExpression.index.kind !== 'NumberLiteral') {
+      return;
+    }
+
+    const line = indexExpression.loc.start.line;
+    if (this.astHistoryReferenceWarnedLines.has(line)) {
+      return;
+    }
+
+    const nextCount = (this.astHistoryReferenceCounts.get(line) ?? 0) + 1;
+    this.astHistoryReferenceCounts.set(line, nextCount);
+
+    if (nextCount <= 5) {
+      return;
+    }
+
+    this.astHistoryReferenceWarnedLines.add(line);
+    this.addWarning(
+      line,
+      1,
+      'Many history references on one line may impact performance.',
+      'PSP002',
     );
   }
 
@@ -1612,7 +1651,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     // Performance: Check for many history references on one line
-    if (this.config.enablePerformanceAnalysis) {
+    if (this.config.enablePerformanceAnalysis && !this.astProcessedHistoryReferenceDensity) {
       const histRefs = strippedNoStrings.match(/\[\s*\d+\s*\]/g);
       if (histRefs && histRefs.length > 5) {
         this.addWarning(lineNum, 1, 'Many history references on one line may impact performance.', 'PSP002');
