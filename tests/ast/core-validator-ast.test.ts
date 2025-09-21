@@ -6,13 +6,16 @@ import { createAstDiagnostics } from '../../core/ast/types';
 import type { AstValidationContext } from '../../core/types';
 import {
   createArgument,
+  createAssignmentStatement,
   createCallExpression,
   createExpressionStatement,
   createIdentifier,
+  createIndexExpression,
   createMemberExpression,
   createNumberLiteral,
   createStringLiteral,
   createScriptDeclaration,
+  createUnaryExpression,
   createVersionDirective,
 } from './fixtures';
 import {
@@ -280,5 +283,45 @@ describe('CoreValidator AST integration', () => {
     const duplicateVersionErrors = result.errors.filter((error) => error.code === 'PS002');
     expect(duplicateVersionErrors).toHaveLength(1);
     expect(duplicateVersionErrors[0]?.line).toBe(2);
+  });
+
+  it('reports negative history indexing through AST index expressions', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Example")',
+      'values = close[-1]',
+      'plot(close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const valuesIdentifier = createIdentifier('values', 0, 3);
+    const closeIdentifier = createIdentifier('close', 10, 3);
+    const negativeIndex = createUnaryExpression('-', createNumberLiteral(1, '1', 16, 3), 15, 17, 3);
+    const historyAccess = createIndexExpression(closeIdentifier, negativeIndex, 10, 17, 3);
+    const assignment = createAssignmentStatement(valuesIdentifier, historyAccess, 0, 18, 3);
+    const plotCallee = createIdentifier('plot', 0, 4);
+    const plotArg = createArgument(createIdentifier('close', 5, 4), 5, 10, 4);
+    const plotCall = createCallExpression(plotCallee, [plotArg], 0, 10, 4);
+    const plotStatement = createExpressionStatement(plotCall, 0, 10, 4);
+
+    const program = createProgramFromSource(
+      source,
+      [directive],
+      [scriptDeclaration, assignment, plotStatement],
+    );
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const historyErrors = result.errors.filter((error) => error.code === 'PS024');
+    expect(historyErrors).toHaveLength(1);
+    expect(historyErrors[0]?.line).toBe(3);
   });
 });

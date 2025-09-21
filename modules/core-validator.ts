@@ -25,13 +25,17 @@ import type {
   CallExpressionNode,
   ExpressionNode,
   IdentifierNode,
+  IndexExpressionNode,
   MemberExpressionNode,
   ProgramNode,
   ScriptDeclarationNode,
   StringLiteralNode,
+  NumberLiteralNode,
+  UnaryExpressionNode,
   VersionDirectiveNode,
 } from '../core/ast/nodes';
 import { visit } from '../core/ast/traversal';
+import type { TypeMetadata } from '../core/ast/types';
 
 const PLOTTING_OR_DRAWING_CALLEES = new Set([
   'plot',
@@ -108,6 +112,7 @@ export class CoreValidator implements ValidationModule {
   private astProcessedStrategyUsage = false;
   private astProcessedPlottingUsage = false;
   private astProcessedLibraryRestrictions = false;
+  private astProcessedNegativeHistory = false;
   private inLoop = false;
   private inFunction = false;
   private hasReturn = false;
@@ -183,6 +188,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedStrategyUsage = false;
     this.astProcessedPlottingUsage = false;
     this.astProcessedLibraryRestrictions = false;
+    this.astProcessedNegativeHistory = false;
     this.sawBrace = false;
     this.sawTabIndent = false;
     this.sawSpaceIndent = false;
@@ -214,11 +220,17 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedStrategyUsage = true;
     this.astProcessedPlottingUsage = true;
     this.astProcessedLibraryRestrictions = true;
+    this.astProcessedNegativeHistory = true;
 
     visit(program, {
       CallExpression: {
         enter: ({ node }) => {
           this.processAstCallExpression(node);
+        },
+      },
+      IndexExpression: {
+        enter: ({ node }) => {
+          this.processAstIndexExpression(node as IndexExpressionNode);
         },
       },
     });
@@ -285,6 +297,80 @@ export class CoreValidator implements ValidationModule {
         return null;
       }
       return [...objectPath, member.property.name];
+    }
+
+    return null;
+  }
+
+  private processAstIndexExpression(indexExpression: IndexExpressionNode): void {
+    const indexValue = this.extractNumericLiteral(indexExpression.index);
+    if (indexValue === null || indexValue >= 0) {
+      return;
+    }
+
+    const location = indexExpression.index.loc.start;
+    const targetVersion = this.config.targetVersion ?? 6;
+
+    if (targetVersion < 6) {
+      this.addError(
+        location.line,
+        location.column,
+        'Invalid history reference: negative indexes are not allowed.',
+        'PS024',
+      );
+      return;
+    }
+
+    const metadata = this.resolveExpressionType(indexExpression.object);
+    const isSeries = !metadata || metadata.kind === 'series';
+
+    if (!isSeries) {
+      return;
+    }
+
+    this.addError(
+      location.line,
+      location.column,
+      'Invalid history reference: negative indexes are not allowed for series data.',
+      'PS024',
+      'Use positive indices like close[1] for historical data, or array.get(myArray, -1) for arrays.',
+    );
+  }
+
+  private extractNumericLiteral(expression: ExpressionNode): number | null {
+    if (expression.kind === 'NumberLiteral') {
+      return (expression as NumberLiteralNode).value;
+    }
+    if (expression.kind === 'UnaryExpression') {
+      const unary = expression as UnaryExpressionNode;
+      const argumentValue = this.extractNumericLiteral(unary.argument);
+      if (argumentValue === null) {
+        return null;
+      }
+      if (unary.operator === '-') {
+        return -argumentValue;
+      }
+      if (unary.operator === '+') {
+        return argumentValue;
+      }
+    }
+    return null;
+  }
+
+  private resolveExpressionType(expression: ExpressionNode): TypeMetadata | null {
+    if (!this.astContext) {
+      return null;
+    }
+
+    const { typeEnvironment } = this.astContext;
+    const direct = typeEnvironment.nodeTypes.get(expression);
+    if (direct) {
+      return direct;
+    }
+
+    if (expression.kind === 'Identifier') {
+      const identifier = expression as IdentifierNode;
+      return typeEnvironment.identifiers.get(identifier.name) ?? null;
     }
 
     return null;
@@ -769,22 +855,24 @@ export class CoreValidator implements ValidationModule {
     }
 
     // Check for negative history references (but allow negative array indices in v6)
-    const negHist = strippedNoStrings.match(/\[\s*-\d+\s*\]/);
-    if (negHist) {
-      // In Pine Script v6, negative indices are allowed for arrays but not for history references
-      if (this.config.targetVersion >= 6) {
-        // Check if this is an array operation (array.get, array.set, etc.)
-        const beforeBracket = strippedNoStrings.substring(0, negHist.index);
-        const isArrayOperation = /array\.(get|set|slice|remove|insert|indexof|lastindexof)\s*\(\s*[^,)]+\s*,\s*$/.test(beforeBracket);
-        
-        if (!isArrayOperation) {
-          // This is a history reference like close[-1], which is still invalid
-          this.addError(lineNum, (negHist.index ?? 0) + 1, 'Invalid history reference: negative indexes are not allowed for series data.', 'PS024', 'Use positive indices like close[1] for historical data, or array.get(myArray, -1) for arrays.');
+    if (!this.astProcessedNegativeHistory) {
+      const negHist = strippedNoStrings.match(/\[\s*-\d+\s*\]/);
+      if (negHist) {
+        // In Pine Script v6, negative indices are allowed for arrays but not for history references
+        if (this.config.targetVersion >= 6) {
+          // Check if this is an array operation (array.get, array.set, etc.)
+          const beforeBracket = strippedNoStrings.substring(0, negHist.index);
+          const isArrayOperation = /array\.(get|set|slice|remove|insert|indexof|lastindexof)\s*\(\s*[^,)]+\s*,\s*$/.test(beforeBracket);
+
+          if (!isArrayOperation) {
+            // This is a history reference like close[-1], which is still invalid
+            this.addError(lineNum, (negHist.index ?? 0) + 1, 'Invalid history reference: negative indexes are not allowed for series data.', 'PS024', 'Use positive indices like close[1] for historical data, or array.get(myArray, -1) for arrays.');
+          }
+          // If it's an array operation, allow it (ArrayValidator will handle bounds checking)
+        } else {
+          // Pre-v6: all negative indices are invalid
+          this.addError(lineNum, (negHist.index ?? 0) + 1, 'Invalid history reference: negative indexes are not allowed.', 'PS024');
         }
-        // If it's an array operation, allow it (ArrayValidator will handle bounds checking)
-      } else {
-        // Pre-v6: all negative indices are invalid
-        this.addError(lineNum, (negHist.index ?? 0) + 1, 'Invalid history reference: negative indexes are not allowed.', 'PS024');
       }
     }
 
