@@ -30,11 +30,11 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 
 ### Near-Term TODOs
 
-1. ✅ **Stabilise AST Fixtures** – snapshot suites now exercise representative Pine snippets so AST structure changes surface clearly in reviews.
-2. ✅ **Expand Type Inference Coverage** – builtin call heuristics, `series` propagation rules, and richer metadata for downstream diagnostics are captured in the current skeleton.
-3. ✅ **Wire Diagnostic Helpers** – introduce utilities that translate AST node ranges into Monaco `IMarkerData` instances for reuse across modules.
-4. ✅ **Author Golden Semantic Tests** – Vitest golden coverage now snapshots scope, symbol, and type metadata for representative programs.
-5. ✅ **Update Migration Tracking Table** – reflect delivered infrastructure (AST context, scope graph) and link owners for upcoming module migrations.
+1. ⏱️ **Stand Up Dual-Run Harnesses** – extend the semantic golden suite to diff legacy vs. AST diagnostics for `core-validator` and other high-complexity modules before their ports begin.
+2. ⏱️ **Close Parser RFC Loop** – distil the outstanding parser spike notes into a publishable RFC update that records the chosen technology, recovery strategy, and open follow-ups for incremental parsing.
+3. ⏱️ **Broaden AST Node Coverage** – add structural nodes for `switch`, matrix literals, and historical index expressions so currently blocked validators can migrate without bespoke fallbacks.
+4. ⏱️ **Deepen Type Inference Rules** – capture strategy/TA helper return types and multi-series propagation so the `strategy-functions` and `ta-functions` validators can rely on AST semantics.
+5. ⏱️ **Document Monaco Integration Plan** – outline how AST diagnostics, hovers, and code lenses will be surfaced through the Monaco worker now that diagnostic helpers exist.
 
 ## 3. Target Architecture Overview
 
@@ -179,46 +179,19 @@ capitalise on this progress, align the next iteration around the following works
 plan:
 
 1. **Kick Off Phase 3 Module Ports**
-   - Select the first validator (e.g., `core-validator`) for AST migration and scaffold a dual-run harness that compares legacy vs. AST diagnostics.
+   - Select the first validator (e.g., `core-validator`) for AST migration and wire a dual-run harness into the semantic golden suite so legacy vs. AST diagnostics are diffed automatically.
    - Define parity exit criteria and owners for the initial tranche of modules listed in the migration table, now that scope, types, and control flow graphs are available.
-2. **Document & Harden the Current Foundations**
-   - Update internal docs and tracking tables to reflect the landed AST scaffolding so
-     contributors have an accurate baseline.
-   - Expand the existing Vitest coverage to capture the behaviour of the merged
-     `parseAst` flow (success, failure, disabled mode) and lock in diagnostics
-     formatting with snapshots.
+2. **Close the Parser RFC Loop**
+   - Finalise the parser technology RFC by capturing findings from the lexer/prototype experiments, documenting the selected approach, and listing follow-ups like incremental parsing and recovery tuning.
+   - Extend the prototype to cover directives, variable declarations, and function bodies so upcoming semantic passes have representative node shapes.
 
-3. **Parser RFC Closure & Prototype Upgrade**
-   - Finalise the parser technology RFC by enumerating findings from the current
-     lexer/prototype experiments and logging open questions (incremental parsing,
-     error recovery hooks).
-   - Extend the prototype to cover directives, variable declarations, and function
-     bodies so upcoming semantic passes have representative node shapes.
+3. **Expand Semantic Coverage**
+   - Add AST nodes for `switch`, matrix literals, and historical index access while deepening type inference rules for strategy/TA helpers.
+   - Ensure the migration table’s blocked modules move to “Ready” once their required syntax and inference features land.
 
-4. **AST Schema & Traversal Expansion**
-   - Extend the node set beyond the current expressions/statements to cover loops,
-     `switch`, matrix literals, and built-in call shapes required by near-term modules.
-   - Add utility helpers (builders, guards) for the new nodes and document traversal
-     conventions for downstream contributors.
-
-5. **Semantic Pass Bootstrapping**
-   - Harden the scope builder with additional fixtures (nested functions, `varip`/`var`
-     lifetimes) and surface symbol metadata needed by module migrations.
-   - Stand up the type inference skeleton covering literals, identifiers, tuples, and
-     basic call-site inference so dependent modules can start wiring AST-aware checks.
-
-6. **Dual-Run Guardrail Wiring**
-   - Introduce a CLI/CI harness that executes both the legacy and AST-backed validators
-     against a shared fixture suite, capturing diagnostic diffs for visibility.
-   - Use the harness to populate the migration tracking table with confidence levels
-     (e.g., ✅ parity, ⚠️ gaps) once individual modules begin switching to AST inputs.
-
-7. **Module Migration Prep**
-   - For the first migration targets (`core-validator`, `function-declarations`), audit
-     existing tests and author any missing behavioural cases so parity checks are
-     meaningful.
-   - Decompose each module into AST-ready subtasks (parsing, traversal, diagnostics)
-     and assign owners/due dates in the roadmap tracker.
+4. **Plan Monaco Worker Integration**
+   - Document how AST diagnostics, hovers, and code lenses will flow through the Monaco worker using the new marker helpers.
+   - Identify any additional API shims or batching logic needed before exposing the AST pipeline to the editor.
 
 ## 11. Definition of Done
 
