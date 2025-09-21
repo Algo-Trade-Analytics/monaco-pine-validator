@@ -3,10 +3,11 @@ import { BaseValidator } from '../../core/base-validator';
 import { CoreValidator } from '../../modules/core-validator';
 import { FunctionAstService } from '../../core/ast/service';
 import { createAstDiagnostics } from '../../core/ast/types';
-import type { AstValidationContext } from '../../core/types';
+import type { AstValidationContext, ValidatorConfig } from '../../core/types';
 import {
   createArgument,
   createAssignmentStatement,
+  createBooleanLiteral,
   createBlock,
   createBinaryExpression,
   createCallExpression,
@@ -24,6 +25,7 @@ import {
   createStringLiteral,
   createScriptDeclaration,
   createUnaryExpression,
+  createWhileStatement,
   createVariableDeclaration,
   createVersionDirective,
 } from './fixtures';
@@ -35,8 +37,8 @@ import {
 } from '../../core/ast/nodes';
 
 class CoreValidatorHarness extends BaseValidator {
-  constructor(service: FunctionAstService) {
-    super({ ast: { mode: 'primary', service } });
+  constructor(service: FunctionAstService, overrides: Partial<ValidatorConfig> = {}) {
+    super({ ...overrides, ast: { mode: 'primary', service } });
     this.registerModule(new CoreValidator());
   }
 
@@ -535,6 +537,53 @@ describe('CoreValidator AST integration', () => {
     expect(numericIdentifierErrors[0]?.line).toBe(4);
   });
 
+  it('warns on assignments in conditional tests using AST binary expressions', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'var value = 0',
+      'if (value = 2)',
+      '    plot(value)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const valueIdentifier = createIdentifier('value', 4, 3);
+    const valueInitializer = createNumberLiteral(0, '0', 13, 3);
+    const valueDeclaration = createVariableDeclaration(valueIdentifier, 4, 15, 3, {
+      declarationKind: 'var',
+      initializer: valueInitializer,
+    });
+    const conditionLeft = createIdentifier('value', 5, 4);
+    const conditionRight = createNumberLiteral(2, '2', 15, 4);
+    const assignmentCondition = createBinaryExpression('=', conditionLeft, conditionRight, 5, 16, 4);
+    const plotCallee = createIdentifier('plot', 5, 5);
+    const plotArgument = createArgument(createIdentifier('value', 10, 5), 10, 15, 5);
+    const plotCall = createCallExpression(plotCallee, [plotArgument], 5, 16, 5);
+    const plotStatement = createExpressionStatement(plotCall, 5, 16, 5);
+    const consequentBlock = createBlock([plotStatement], 4, 17, 4, 5);
+    const ifStatement = createIfStatement(assignmentCondition, consequentBlock, null, 4, 17, 4);
+
+    const program = createProgramFromSource(
+      source,
+      [directive],
+      [scriptDeclaration, valueDeclaration, ifStatement],
+    );
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const assignmentWarnings = result.warnings.filter((warning) => warning.code === 'PSO02');
+    expect(assignmentWarnings).toHaveLength(1);
+    expect(assignmentWarnings[0]?.line).toBe(4);
+  });
+
   it('reports numeric literal loop conditions for v6 for statements via AST traversal', () => {
     const source = [
       '//@version=6',
@@ -722,6 +771,64 @@ describe('CoreValidator AST integration', () => {
     expect(invalidOperatorWarnings).toHaveLength(1);
     expect(invalidOperatorWarnings[0]?.line).toBe(3);
     expect(invalidOperatorWarnings[0]?.message).toContain("'&&'");
+  });
+
+  it('warns on expensive operations in loops when performance analysis is enabled', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Perf")',
+      'var keepGoing = true',
+      'while keepGoing',
+      '    request.security(syminfo.tickerid, timeframe.period, close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Perf', '"Perf"', 15, 2), 10, 21, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 22, 2);
+    const keepGoingIdentifier = createIdentifier('keepGoing', 4, 3);
+    const keepGoingInitializer = createBooleanLiteral(true, 17, 3);
+    const keepGoingDeclaration = createVariableDeclaration(keepGoingIdentifier, 4, 21, 3, {
+      declarationKind: 'var',
+      initializer: keepGoingInitializer,
+    });
+    const loopTest = createIdentifier('keepGoing', 7, 4);
+    const requestNamespace = createIdentifier('request', 5, 5);
+    const securityProperty = createIdentifier('security', 13, 5);
+    const requestCallee = createMemberExpression(requestNamespace, securityProperty, 5, 22, 5);
+    const tickerNamespace = createIdentifier('syminfo', 23, 5);
+    const tickerProperty = createIdentifier('tickerid', 31, 5);
+    const tickerArgument = createMemberExpression(tickerNamespace, tickerProperty, 23, 41, 5);
+    const timeframeNamespace = createIdentifier('timeframe', 43, 5);
+    const timeframeProperty = createIdentifier('period', 52, 5);
+    const timeframeArgument = createMemberExpression(timeframeNamespace, timeframeProperty, 43, 58, 5);
+    const closeArgument = createIdentifier('close', 60, 5);
+    const requestArguments = [
+      createArgument(tickerArgument, 23, 41, 5),
+      createArgument(timeframeArgument, 43, 58, 5),
+      createArgument(closeArgument, 60, 65, 5),
+    ];
+    const requestCall = createCallExpression(requestCallee, requestArguments, 5, 66, 5);
+    const requestStatement = createExpressionStatement(requestCall, 5, 66, 5);
+    const loopBody = createBlock([requestStatement], 4, 67, 4, 5);
+    const whileStatement = createWhileStatement(loopTest, loopBody, 4, 67, 4);
+
+    const program = createProgramFromSource(
+      source,
+      [directive],
+      [scriptDeclaration, keepGoingDeclaration, whileStatement],
+    );
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service, { enablePerformanceAnalysis: true });
+    const result = validator.validate(source);
+
+    const expensiveWarnings = result.warnings.filter((warning) => warning.code === 'PSP001');
+    expect(expensiveWarnings).toHaveLength(1);
+    expect(expensiveWarnings[0]?.line).toBe(5);
   });
 
   it('warns on increment operators surfaced by AST unary expressions', () => {

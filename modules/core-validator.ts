@@ -66,6 +66,14 @@ const PLOTTING_OR_DRAWING_CALLEES = new Set([
   'fill',
 ]);
 
+const EXPENSIVE_LOOP_CALLEES = new Set([
+  'request.security',
+  'ta.sma',
+  'ta.ema',
+  'ta.rsi',
+  'ta.macd',
+]);
+
 function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
   return 'ast' in context;
 }
@@ -129,6 +137,8 @@ export class CoreValidator implements ValidationModule {
   private astProcessedControlFlow = false;
   private astProcessedInvalidOperators = false;
   private astProcessedFunctionDeclarations = false;
+  private astProcessedAssignmentInConditions = false;
+  private astProcessedExpensiveOperations = false;
   private astStrategyUsageErrorLines = new Set<number>();
   private inLoop = false;
   private inFunction = false;
@@ -212,6 +222,8 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedControlFlow = false;
     this.astProcessedInvalidOperators = false;
     this.astProcessedFunctionDeclarations = false;
+    this.astProcessedAssignmentInConditions = false;
+    this.astProcessedExpensiveOperations = false;
     this.astStrategyUsageErrorLines.clear();
     this.sawBrace = false;
     this.sawTabIndent = false;
@@ -249,11 +261,18 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedLinewidthZero = true;
     this.astProcessedNaComparisons = true;
     this.astProcessedInvalidOperators = true;
+    this.astProcessedAssignmentInConditions = true;
+    this.astProcessedExpensiveOperations = true;
+
+    let loopDepth = 0;
 
     visit(program, {
       CallExpression: {
         enter: ({ node }) => {
           this.processAstCallExpression(node);
+          if (loopDepth > 0) {
+            this.processAstLoopPerformanceCall(node);
+          }
         },
       },
       IndexExpression: {
@@ -268,20 +287,34 @@ export class CoreValidator implements ValidationModule {
       },
       IfStatement: {
         enter: ({ node }) => {
-          this.processAstConditionalTest((node as IfStatementNode).test);
+          const test = (node as IfStatementNode).test;
+          this.processAstConditionalTest(test);
+          this.processAstAssignmentInConditionalTest(test);
         },
       },
       WhileStatement: {
         enter: ({ node }) => {
-          this.processAstConditionalTest((node as WhileStatementNode).test);
+          loopDepth++;
+          const test = (node as WhileStatementNode).test;
+          this.processAstConditionalTest(test);
+          this.processAstAssignmentInConditionalTest(test);
+        },
+        exit: () => {
+          loopDepth = Math.max(0, loopDepth - 1);
         },
       },
       ForStatement: {
         enter: ({ node }) => {
-          const test = (node as ForStatementNode).test;
+          loopDepth++;
+          const forStatement = node as ForStatementNode;
+          const test = forStatement.test;
           if (test) {
             this.processAstConditionalTest(test);
+            this.processAstAssignmentInConditionalTest(test);
           }
+        },
+        exit: () => {
+          loopDepth = Math.max(0, loopDepth - 1);
         },
       },
       ConditionalExpression: {
@@ -523,6 +556,63 @@ export class CoreValidator implements ValidationModule {
 
     const { line, column } = expression.loc.start;
     this.addWarning(line, column, invalidOperatorMessage, 'PSO01');
+  }
+
+  private processAstAssignmentInConditionalTest(test: ExpressionNode): void {
+    const location = this.findAssignmentInExpression(test);
+    if (!location) {
+      return;
+    }
+
+    this.addWarning(
+      location.line,
+      location.column,
+      'Assignment "=" inside condition; did you mean "=="?',
+      'PSO02',
+    );
+  }
+
+  private findAssignmentInExpression(expression: ExpressionNode): { line: number; column: number } | null {
+    let assignmentLocation: { line: number; column: number } | null = null;
+
+    visit(expression, {
+      BinaryExpression: {
+        enter: ({ node }) => {
+          if (assignmentLocation) {
+            return false;
+          }
+
+          const binary = node as BinaryExpressionNode;
+          if (binary.operator === '=') {
+            assignmentLocation = { ...binary.loc.start };
+            return false;
+          }
+
+          return undefined;
+        },
+      },
+    });
+
+    return assignmentLocation;
+  }
+
+  private processAstLoopPerformanceCall(call: CallExpressionNode): void {
+    if (!this.config.enablePerformanceAnalysis) {
+      return;
+    }
+
+    const calleePath = this.resolveCalleePath(call.callee);
+    if (!calleePath || calleePath.length === 0) {
+      return;
+    }
+
+    const fullName = calleePath.join('.');
+    if (!EXPENSIVE_LOOP_CALLEES.has(fullName)) {
+      return;
+    }
+
+    const { line, column } = call.loc.start;
+    this.addWarning(line, column, 'Expensive operation inside loop may impact performance.', 'PSP001');
   }
 
   private processAstFunctionDeclaration(fn: FunctionDeclarationNode): void {
@@ -1190,6 +1280,9 @@ export class CoreValidator implements ValidationModule {
   }
 
   private detectLoops(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (this.astProcessedExpensiveOperations) {
+      return;
+    }
     // Simple loop detection for performance analysis
     if (/^\s*for\s+/.test(strippedNoStrings)) {
       this.inLoop = true;
@@ -1253,7 +1346,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     // Check for assignment in conditions
-    if (/^\s*(if|while|for)\s*\([^)]*=\s*[^=]/.test(strippedNoStrings)) {
+    if (!this.astProcessedAssignmentInConditions && /^\s*(if|while|for)\s*\([^)]*=\s*[^=]/.test(strippedNoStrings)) {
       this.addWarning(lineNum, 1, 'Assignment "=" inside condition; did you mean "=="?', 'PSO02');
     }
 
@@ -1290,7 +1383,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     // Performance: Check for expensive operations in loops
-    if (this.config.enablePerformanceAnalysis && this.inLoop) {
+    if (this.config.enablePerformanceAnalysis && !this.astProcessedExpensiveOperations && this.inLoop) {
       const expensiveOps = ['request.security', 'ta.sma', 'ta.ema', 'ta.rsi', 'ta.macd'];
       for (const op of expensiveOps) {
         if (strippedNoStrings.includes(op)) {
