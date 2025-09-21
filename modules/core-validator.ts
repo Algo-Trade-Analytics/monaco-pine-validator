@@ -2303,28 +2303,44 @@ export class CoreValidator implements ValidationModule {
   }
 
   private handleNewVar(name: string, line: number, col: number): void {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) { 
-      this.addError(line, col, `Invalid identifier '${name}'.`, 'PS006'); 
-      return; 
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      this.addError(line, col, `Invalid identifier '${name}'.`, 'PS006');
+      return;
     }
     if (KEYWORDS.has(name) || PSEUDO_VARS.has(name)) {
       this.addError(line, col, `Identifier '${name}' conflicts with a Pine keyword/builtin.`, 'PS007');
       return;
     }
 
-    const paramsHere = this.currentScope().params;
+    const lexicalScope = this.currentScope();
+    const activeAstScope = this.astFunctionStack.length
+      ? this.astFunctionStack[this.astFunctionStack.length - 1]!
+      : null;
+    const paramsHere = activeAstScope?.params ?? lexicalScope.params;
+
     if (paramsHere.has(name) && name !== 'this') {
-        this.addWarning(line, col, `Identifier '${name}' shadows a function parameter.`, 'PSW05', 'Rename the local or the parameter to avoid confusion.');
+      this.addWarning(
+        line,
+        col,
+        `Identifier '${name}' shadows a function parameter.`,
+        'PSW05',
+        'Rename the local or the parameter to avoid confusion.',
+      );
     }
 
     const siteKey = `${line}:${name}`;
-    if (this.declaredSites.has(siteKey)) return;
+    if (this.declaredSites.has(siteKey)) {
+      return;
+    }
+
     this.declaredSites.add(siteKey);
-    
-    const currentIndent = this.indentStack[this.indentStack.length - 1];
+    lexicalScope.variables.add(name);
+
+    const sourceLine = this.context.cleanLines[line - 1] ?? '';
+    const currentIndent = this.getLineIndentation(sourceLine);
     this.declared.set(name, line);
     this.declIndent.set(name, currentIndent);
-    
+
     // Also update the shared context for other validators
     this.context.declaredVars.set(name, line);
   }

@@ -739,6 +739,46 @@ describe('CoreValidator AST integration', () => {
     expect(constErrors[0]?.message).toContain("with '='");
   });
 
+  it('warns when AST-tracked variables shadow function parameters', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Shadow")',
+      'shadow(x) =>',
+      '    var x = 0',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Shadow', '"Shadow"', 15, 2), 10, 24, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 25, 2);
+
+    const functionIdentifier = createIdentifier('shadow', 0, 3);
+    const functionParam = createParameter('x', 7, 3);
+
+    const shadowedIdentifier = createIdentifier('x', 8, 4);
+    const zeroLiteral = createNumberLiteral(0, '0', 12, 4);
+    const shadowedDeclaration = createVariableDeclaration(shadowedIdentifier, 4, 13, 4, {
+      declarationKind: 'var',
+      initializer: zeroLiteral,
+    });
+    const functionBody = createBlock([shadowedDeclaration], 4, 13, 4, 4);
+    const functionDeclaration = createFunctionDeclaration(functionIdentifier, [functionParam], functionBody, 0, 13, 3, 4);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, functionDeclaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const shadowWarnings = result.warnings.filter((warning) => warning.code === 'PSW05');
+    expect(shadowWarnings).toHaveLength(1);
+    expect(shadowWarnings[0]?.line).toBe(4);
+    expect(shadowWarnings[0]?.column).toBe(9);
+  });
+
   it('prevents const reassignment with := using AST assignments', () => {
     const source = [
       '//@version=6',
