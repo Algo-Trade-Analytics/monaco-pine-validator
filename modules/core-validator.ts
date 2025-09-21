@@ -24,6 +24,7 @@ import type {
   ArgumentNode,
   BinaryExpressionNode,
   CallExpressionNode,
+  ConditionalExpressionNode,
   ExpressionNode,
   IdentifierNode,
   IfStatementNode,
@@ -35,6 +36,7 @@ import type {
   StringLiteralNode,
   UnaryExpressionNode,
   VersionDirectiveNode,
+  ForStatementNode,
   WhileStatementNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
@@ -260,6 +262,19 @@ export class CoreValidator implements ValidationModule {
       WhileStatement: {
         enter: ({ node }) => {
           this.processAstConditionalTest((node as WhileStatementNode).test);
+        },
+      },
+      ForStatement: {
+        enter: ({ node }) => {
+          const test = (node as ForStatementNode).test;
+          if (test) {
+            this.processAstConditionalTest(test);
+          }
+        },
+      },
+      ConditionalExpression: {
+        enter: ({ node }) => {
+          this.processAstConditionalTest((node as ConditionalExpressionNode).test);
         },
       },
       BinaryExpression: {

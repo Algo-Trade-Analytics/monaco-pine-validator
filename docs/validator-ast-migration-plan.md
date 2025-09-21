@@ -35,6 +35,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Core validator AST analysis now inspects index expressions so negative history references on series data trigger PS024 errors without the legacy line scanner.
 - A Monaco worker harness now exercises the AST-backed validator in a simulated worker environment, translating semantic output and syntax errors into Monaco-compatible markers for upcoming editor integration work.
 - Core validator AST analysis now inspects conditional tests, call arguments, and binary expressions to enforce v6 boolean guardrails, linewidth minimums, and `na` comparison warnings without relying on regex fallbacks.
+- Core validator AST analysis now inspects `for` loop tests and ternary conditional expressions so v6 boolean guardrails trigger consistently across structured control flow and expressions.
 
 ### Near-Term TODOs
 

@@ -10,7 +10,9 @@ import {
   createBlock,
   createBinaryExpression,
   createCallExpression,
+  createConditionalExpression,
   createExpressionStatement,
+  createForStatement,
   createIdentifier,
   createIndexExpression,
   createIfStatement,
@@ -436,6 +438,88 @@ describe('CoreValidator AST integration', () => {
     const numericIdentifierErrors = result.errors.filter((error) => error.code === 'PSV6-001');
     expect(numericIdentifierErrors).toHaveLength(1);
     expect(numericIdentifierErrors[0]?.line).toBe(4);
+  });
+
+  it('reports numeric literal loop conditions for v6 for statements via AST traversal', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'for i = 0 to 10',
+      '    plot(i)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const loopIdentifier = createIdentifier('i', 4, 3);
+    const initializer = createVariableDeclaration(loopIdentifier, 4, 11, 3, {
+      declarationKind: 'var',
+      initializer: createNumberLiteral(0, '0', 9, 3),
+    });
+    const loopTest = createNumberLiteral(10, '10', 15, 3);
+    const loopUpdate = createIdentifier('i', 19, 3);
+    const plotArgument = createArgument(createIdentifier('i', 9, 4), 9, 10, 4);
+    const plotCall = createCallExpression(createIdentifier('plot', 4, 4), [plotArgument], 4, 11, 4);
+    const plotStatement = createExpressionStatement(plotCall, 4, 11, 4);
+    const loopBody = createBlock([plotStatement], 4, 12, 4, 4);
+    const forStatement = createForStatement(initializer, loopTest, loopUpdate, loopBody, 0, 20, 3);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, forStatement]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const numericLoopErrors = result.errors.filter((error) => error.code === 'PSV6-001');
+    expect(numericLoopErrors).toHaveLength(1);
+    expect(numericLoopErrors[0]?.line).toBe(3);
+  });
+
+  it('reports numeric identifier ternary conditions using AST type metadata', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'var base = 1',
+      'plot(base ? close : open)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Example', '"Example"', 15, 2), 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const baseIdentifier = createIdentifier('base', 4, 3);
+    const baseDeclaration = createVariableDeclaration(baseIdentifier, 4, 13, 3, {
+      declarationKind: 'var',
+      initializer: createNumberLiteral(1, '1', 12, 3),
+    });
+    const baseCondition = createIdentifier('base', 5, 4);
+    const closeIdentifier = createIdentifier('close', 12, 4);
+    const openIdentifier = createIdentifier('open', 19, 4);
+    const conditionalExpression = createConditionalExpression(baseCondition, closeIdentifier, openIdentifier, 9, 24, 4);
+    const plotArgument = createArgument(conditionalExpression, 9, 25, 4);
+    const plotCall = createCallExpression(createIdentifier('plot', 4, 4), [plotArgument], 4, 26, 4);
+    const plotStatement = createExpressionStatement(plotCall, 4, 26, 4);
+
+    const program = createProgramFromSource(
+      source,
+      [directive],
+      [scriptDeclaration, baseDeclaration, plotStatement],
+    );
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const numericConditionalErrors = result.errors.filter((error) => error.code === 'PSV6-001');
+    expect(numericConditionalErrors).toHaveLength(1);
+    expect(numericConditionalErrors[0]?.line).toBe(4);
   });
 
   it('reports linewidth zero arguments through AST call analysis', () => {

@@ -238,7 +238,7 @@ export function createIfStatement(
 }
 
 export function createWhileStatement(
-  test: IdentifierNode,
+  test: ExpressionNode,
   body: BlockStatementNode,
   start: number,
   end: number,
@@ -254,8 +254,8 @@ export function createWhileStatement(
 
 export function createForStatement(
   initializer: VariableDeclarationNode | StatementNode | null,
-  test: IdentifierNode | null,
-  update: IdentifierNode | null,
+  test: ExpressionNode | null,
+  update: ExpressionNode | null,
   body: BlockStatementNode,
   start: number,
   end: number,
@@ -342,9 +342,9 @@ export function createUnaryExpression(
 }
 
 export function createConditionalExpression(
-  test: IdentifierNode,
-  consequent: IdentifierNode,
-  alternate: IdentifierNode,
+  test: ExpressionNode,
+  consequent: ExpressionNode,
+  alternate: ExpressionNode,
   start: number,
   end: number,
   line = 1,
