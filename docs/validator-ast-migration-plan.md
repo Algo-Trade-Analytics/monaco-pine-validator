@@ -42,6 +42,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Core validator AST analysis now tracks identifier usage and input placement so PSU01, PSU-PARAM, and PS027 diagnostics no longer rely on line-based token scanning.
 - Core validator AST analysis now counts per-line history references so PSP002 performance warnings no longer rely on regex heuristics.
 - Core validator AST analysis now registers type declarations and their fields so user-defined type metadata no longer depends on regex-driven scans.
+- Function declarations validator now consumes AST function declarations to register metadata, duplicate parameter diagnostics, and static declaration errors without relying on regex scanning.
 - Core validator AST analysis now inspects tuple destructuring patterns to raise PST01/PST02/PST03 diagnostics without regex fallbacks.
 - Core validator AST analysis now warns when local declarations shadow function parameters, removing the textual scope heuristic for PSW05.
 
@@ -179,7 +180,7 @@ Suggested migration order:
 | Module | Legacy Complexity | AST Migration Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
 | core-validator | High | 🔄 Ready for AST port | Validator Infra | AST context + diagnostics helpers landed; waiting on dual-run guardrail before switchover |
-| function-declarations | High | 🔄 Ready for AST port | Validator Infra | Function + call nodes modelled; scope builder resolves function symbols |
+| function-declarations | High | ✅ Migrated | Validator Infra | Function metadata, duplicate params, and static method errors sourced from AST traversal |
 | type-validator | High | 🚧 Planning | Semantic Working Group | Literal/type environment skeleton merged; expand inference before parity run |
 | scope-validator | High | 🚧 Planning | Semantic Working Group | Scope graph + symbol tables available; need module-level dual-run harness |
 | switch-validator | Medium | 🛠️ Blocked on node coverage | Language Infra | Extend AST to cover `switch` branches prior to migration |
