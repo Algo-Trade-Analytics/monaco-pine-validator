@@ -6,12 +6,64 @@
  */
 
 import { BaseValidator } from '../core/base-validator';
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult, ScopeInfo } from '../core/types';
-import { 
+import {
+  AstValidationContext,
+  ValidationModule,
+  ValidationContext,
+  ValidatorConfig,
+  ValidationError,
+  ValidationResult,
+  ScopeInfo,
+} from '../core/types';
+import {
   VERSION_RE, SCRIPT_START_RE, QUALIFIED_FN_RE, METHOD_DECL_RE,
   VAR_DECL_RE, SIMPLE_ASSIGN_RE, TUPLE_DECL_RE, TUPLE_REASSIGN_RE,
   KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT, IDENT
 } from '../core/constants';
+import type {
+  ArgumentNode,
+  BinaryExpressionNode,
+  CallExpressionNode,
+  ConditionalExpressionNode,
+  ExpressionNode,
+  IdentifierNode,
+  IfStatementNode,
+  IndexExpressionNode,
+  MemberExpressionNode,
+  NumberLiteralNode,
+  ProgramNode,
+  ScriptDeclarationNode,
+  StringLiteralNode,
+  UnaryExpressionNode,
+  VersionDirectiveNode,
+  ForStatementNode,
+  WhileStatementNode,
+} from '../core/ast/nodes';
+import { visit, type NodePath } from '../core/ast/traversal';
+import type { TypeMetadata } from '../core/ast/types';
+
+const PLOTTING_OR_DRAWING_CALLEES = new Set([
+  'plot',
+  'plotshape',
+  'plotchar',
+  'plotarrow',
+  'plotbar',
+  'plotcandle',
+  'plotohlc',
+  'label.new',
+  'line.new',
+  'linefill.new',
+  'polyline.new',
+  'box.new',
+  'table.new',
+  'table.cell',
+  'bgcolor',
+  'fill',
+]);
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
+}
 
 export class CoreValidator implements ValidationModule {
   name = 'CoreValidator';
@@ -62,6 +114,14 @@ export class CoreValidator implements ValidationModule {
   private sawBrace = false;
   private sawTabIndent = false;
   private sawSpaceIndent = false;
+  private astProcessedStrategyUsage = false;
+  private astProcessedPlottingUsage = false;
+  private astProcessedLibraryRestrictions = false;
+  private astProcessedNegativeHistory = false;
+  private astProcessedNumericConditions = false;
+  private astProcessedLinewidthZero = false;
+  private astProcessedNaComparisons = false;
+  private astStrategyUsageErrorLines = new Set<number>();
   private inLoop = false;
   private inFunction = false;
   private hasReturn = false;
@@ -83,11 +143,21 @@ export class CoreValidator implements ValidationModule {
   private paren = 0;
   private bracket = 0;
   private brace = 0;
+  private astContext: AstValidationContext | null = null;
+  private astVersionDirectiveLines = new Set<number>();
+  private astScriptDeclarationLines = new Set<number>();
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
     this.config = config;
+    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
+    this.astVersionDirectiveLines.clear();
+    this.astScriptDeclarationLines.clear();
+
+    if (this.astContext?.ast) {
+      this.processAstProgram(this.astContext.ast);
+    }
 
     // Function declarations are now handled by FunctionDeclarationsValidator
     // Scan each line for core validation
@@ -112,6 +182,9 @@ export class CoreValidator implements ValidationModule {
   }
 
   private reset(): void {
+    this.astContext = null;
+    this.astVersionDirectiveLines.clear();
+    this.astScriptDeclarationLines.clear();
     this.hasVersion = false;
     this.firstVersionLine = null;
     this.scriptType = null;
@@ -121,6 +194,14 @@ export class CoreValidator implements ValidationModule {
     this.inLoop = false;
     this.inFunction = false;
     this.hasReturn = false;
+    this.astProcessedStrategyUsage = false;
+    this.astProcessedPlottingUsage = false;
+    this.astProcessedLibraryRestrictions = false;
+    this.astProcessedNegativeHistory = false;
+    this.astProcessedNumericConditions = false;
+    this.astProcessedLinewidthZero = false;
+    this.astProcessedNaComparisons = false;
+    this.astStrategyUsageErrorLines.clear();
     this.sawBrace = false;
     this.sawTabIndent = false;
     this.sawSpaceIndent = false;
@@ -142,10 +223,442 @@ export class CoreValidator implements ValidationModule {
     this.brace = 0;
   }
 
+  private processAstProgram(program: ProgramNode): void {
+    this.processVersionDirectives(program.directives);
+    this.processScriptDeclarations(program.body);
+    this.processAstScriptSemantics(program);
+  }
+
+  private processAstScriptSemantics(program: ProgramNode): void {
+    this.astProcessedStrategyUsage = true;
+    this.astProcessedPlottingUsage = true;
+    this.astProcessedLibraryRestrictions = true;
+    this.astProcessedNegativeHistory = true;
+    this.astProcessedNumericConditions = true;
+    this.astProcessedLinewidthZero = true;
+    this.astProcessedNaComparisons = true;
+
+    visit(program, {
+      CallExpression: {
+        enter: ({ node }) => {
+          this.processAstCallExpression(node);
+        },
+      },
+      IndexExpression: {
+        enter: ({ node }) => {
+          this.processAstIndexExpression(node as IndexExpressionNode);
+        },
+      },
+      MemberExpression: {
+        enter: (path) => {
+          this.processAstMemberExpression(path as NodePath<MemberExpressionNode>);
+        },
+      },
+      IfStatement: {
+        enter: ({ node }) => {
+          this.processAstConditionalTest((node as IfStatementNode).test);
+        },
+      },
+      WhileStatement: {
+        enter: ({ node }) => {
+          this.processAstConditionalTest((node as WhileStatementNode).test);
+        },
+      },
+      ForStatement: {
+        enter: ({ node }) => {
+          const test = (node as ForStatementNode).test;
+          if (test) {
+            this.processAstConditionalTest(test);
+          }
+        },
+      },
+      ConditionalExpression: {
+        enter: ({ node }) => {
+          this.processAstConditionalTest((node as ConditionalExpressionNode).test);
+        },
+      },
+      BinaryExpression: {
+        enter: ({ node }) => {
+          this.processAstBinaryExpression(node as BinaryExpressionNode);
+        },
+      },
+    });
+  }
+
+  private processAstCallExpression(call: CallExpressionNode): void {
+    const calleePath = this.resolveCalleePath(call.callee);
+    if (!calleePath || calleePath.length === 0) {
+      return;
+    }
+
+    const root = calleePath[0];
+    const fullName = calleePath.join('.');
+
+    if (root === 'strategy') {
+      if (this.scriptType === 'indicator') {
+        this.addStrategyNamespaceError(call.loc.start.line, call.loc.start.column);
+      }
+
+      if (this.scriptType === 'strategy') {
+        this.hasStrategyCalls = true;
+      }
+    }
+
+    if (this.scriptType === 'indicator' && PLOTTING_OR_DRAWING_CALLEES.has(fullName)) {
+      this.hasPlotting = true;
+    }
+
+    if (this.scriptType === 'library') {
+      if (PLOTTING_OR_DRAWING_CALLEES.has(fullName)) {
+        this.addError(
+          call.loc.start.line,
+          call.loc.start.column,
+          "Plotting functions are not allowed in libraries.",
+          'PS021',
+        );
+      }
+
+      if (root === 'input') {
+        this.addError(
+          call.loc.start.line,
+          call.loc.start.column,
+          "Inputs aren't allowed in libraries.",
+          'PS026',
+        );
+      }
+    }
+
+    const targetVersion = this.config.targetVersion ?? 6;
+    if (targetVersion >= 6) {
+      for (const argument of call.args) {
+        if (!argument.name || argument.name.name !== 'linewidth') {
+          continue;
+        }
+
+        const numericValue = this.extractNumericLiteral(argument.value);
+        if (numericValue === null || numericValue !== 0) {
+          continue;
+        }
+
+        const { line, column } = argument.value.loc.start;
+        this.addError(
+          line,
+          column,
+          "The value for 'linewidth' must be >= 1, but it was 0.",
+          'PSV6-002',
+        );
+      }
+    }
+  }
+
+  private resolveCalleePath(expression: ExpressionNode): string[] | null {
+    if (expression.kind === 'Identifier') {
+      return [(expression as IdentifierNode).name];
+    }
+
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      const objectPath = this.resolveCalleePath(member.object);
+      if (!objectPath) {
+        return null;
+      }
+      return [...objectPath, member.property.name];
+    }
+
+    return null;
+  }
+
+  private processAstIndexExpression(indexExpression: IndexExpressionNode): void {
+    const indexValue = this.extractNumericLiteral(indexExpression.index);
+    if (indexValue === null || indexValue >= 0) {
+      return;
+    }
+
+    const location = indexExpression.index.loc.start;
+    const targetVersion = this.config.targetVersion ?? 6;
+
+    if (targetVersion < 6) {
+      this.addError(
+        location.line,
+        location.column,
+        'Invalid history reference: negative indexes are not allowed.',
+        'PS024',
+      );
+      return;
+    }
+
+    const metadata = this.resolveExpressionType(indexExpression.object);
+    const isSeries = !metadata || metadata.kind === 'series';
+
+    if (!isSeries) {
+      return;
+    }
+
+    this.addError(
+      location.line,
+      location.column,
+      'Invalid history reference: negative indexes are not allowed for series data.',
+      'PS024',
+      'Use positive indices like close[1] for historical data, or array.get(myArray, -1) for arrays.',
+    );
+  }
+
+  private processAstMemberExpression(path: NodePath<MemberExpressionNode>): void {
+    if (this.scriptType !== 'indicator') {
+      return;
+    }
+
+    const parent = path.parent;
+    if (parent?.node.kind === 'CallExpression' && parent.key === 'callee') {
+      return;
+    }
+
+    const memberPath = this.resolveCalleePath(path.node);
+    if (!memberPath || memberPath.length === 0 || memberPath[0] !== 'strategy') {
+      return;
+    }
+
+    const { line, column } = path.node.loc.start;
+    this.addStrategyNamespaceError(line, column);
+  }
+
+  private processAstConditionalTest(test: ExpressionNode): void {
+    const targetVersion = this.config.targetVersion ?? 6;
+    if (targetVersion < 6) {
+      return;
+    }
+
+    const literalValue = this.extractNumericLiteral(test);
+    if (literalValue !== null) {
+      const { line, column } = test.loc.start;
+      this.addError(
+        line,
+        column,
+        'Numeric literals are not implicitly converted to booleans in v6.',
+        'PSV6-001',
+        'Use a comparison like `if value > 0` or `if value != 0`.',
+      );
+      return;
+    }
+
+    if (test.kind !== 'Identifier') {
+      return;
+    }
+
+    const metadata = this.resolveExpressionType(test);
+    if (!metadata) {
+      return;
+    }
+
+    if (metadata.kind === 'bool') {
+      return;
+    }
+
+    if (metadata.kind === 'float' || metadata.kind === 'int' || metadata.kind === 'series') {
+      const { line, column } = test.loc.start;
+      this.addError(
+        line,
+        column,
+        'Numeric variables are not implicitly converted to booleans in v6.',
+        'PSV6-001',
+        'Use a comparison like `if value > 0` or `if value != 0`.',
+      );
+    }
+  }
+
+  private processAstBinaryExpression(expression: BinaryExpressionNode): void {
+    if (expression.operator !== '==' && expression.operator !== '!=') {
+      return;
+    }
+
+    if (!this.isIdentifierNamed(expression.left, 'na') && !this.isIdentifierNamed(expression.right, 'na')) {
+      return;
+    }
+
+    const { line, column } = expression.loc.start;
+    this.addWarning(
+      line,
+      column,
+      "Direct comparison with 'na' is unreliable. Use na(x), e.g., na(myValue).",
+      'PS023',
+      'Replace `x == na` with `na(x)` and `x != na` with `not na(x)`.',
+    );
+  }
+
+  private isIdentifierNamed(expression: ExpressionNode, name: string): boolean {
+    return expression.kind === 'Identifier' && (expression as IdentifierNode).name === name;
+  }
+
+  private addStrategyNamespaceError(line: number, column: number): void {
+    if (this.astStrategyUsageErrorLines.has(line)) {
+      return;
+    }
+
+    this.astStrategyUsageErrorLines.add(line);
+    this.addError(
+      line,
+      column,
+      "Calls to 'strategy.*' are not allowed in indicators.",
+      'PS020',
+    );
+  }
+
+  private extractNumericLiteral(expression: ExpressionNode): number | null {
+    if (expression.kind === 'NumberLiteral') {
+      return (expression as NumberLiteralNode).value;
+    }
+    if (expression.kind === 'UnaryExpression') {
+      const unary = expression as UnaryExpressionNode;
+      const argumentValue = this.extractNumericLiteral(unary.argument);
+      if (argumentValue === null) {
+        return null;
+      }
+      if (unary.operator === '-') {
+        return -argumentValue;
+      }
+      if (unary.operator === '+') {
+        return argumentValue;
+      }
+    }
+    return null;
+  }
+
+  private resolveExpressionType(expression: ExpressionNode): TypeMetadata | null {
+    if (!this.astContext) {
+      return null;
+    }
+
+    const { typeEnvironment } = this.astContext;
+    const direct = typeEnvironment.nodeTypes.get(expression);
+    if (direct) {
+      return direct;
+    }
+
+    if (expression.kind === 'Identifier') {
+      const identifier = expression as IdentifierNode;
+      return typeEnvironment.identifiers.get(identifier.name) ?? null;
+    }
+
+    return null;
+  }
+
+  private processVersionDirectives(directives: ProgramNode['directives']): void {
+    const versionDirectives = directives.filter(
+      (directive): directive is VersionDirectiveNode => directive.kind === 'VersionDirective',
+    );
+
+    if (versionDirectives.length === 0) {
+      return;
+    }
+
+    for (const directive of versionDirectives) {
+      this.astVersionDirectiveLines.add(directive.loc.start.line);
+    }
+
+    const [primary, ...duplicates] = versionDirectives;
+    const line = primary.loc.start.line;
+    const column = primary.loc.start.column;
+
+    this.hasVersion = true;
+    this.context.hasVersion = true;
+    this.firstVersionLine = line;
+    this.context.firstVersionLine = line;
+    this.context.version = primary.version;
+
+    if (this.config.targetVersion && primary.version !== this.config.targetVersion) {
+      const severity = primary.version < this.config.targetVersion ? 'error' : 'warning';
+      this.addBySeverity(
+        severity,
+        line,
+        column,
+        `Script declares //@version=${primary.version} but targetVersion is ${this.config.targetVersion}.`,
+        'PS001',
+      );
+    }
+
+    if (line !== 1) {
+      this.addWarning(line, column, 'Version directive should be on the first line.', 'PSW01');
+    }
+
+    if (primary.version < 5) {
+      this.addWarning(line, column, `Pine version ${primary.version} is deprecated. Prefer v5 or v6.`, 'PSW02');
+    }
+
+    for (const duplicate of duplicates) {
+      this.addError(
+        duplicate.loc.start.line,
+        duplicate.loc.start.column,
+        'Multiple //@version directives. Only one allowed.',
+        'PS002',
+      );
+    }
+  }
+
+  private processScriptDeclarations(body: ProgramNode['body']): void {
+    const scriptDeclarations = body.filter(
+      (node): node is ScriptDeclarationNode => node.kind === 'ScriptDeclaration',
+    );
+
+    if (scriptDeclarations.length === 0) {
+      return;
+    }
+
+    const [primary, ...duplicates] = scriptDeclarations;
+
+    this.astScriptDeclarationLines.add(primary.loc.start.line);
+    this.scriptType = primary.scriptType;
+    this.context.scriptType = primary.scriptType;
+    this.scriptDeclParsed = true;
+
+    const hasTitle = this.scriptDeclarationHasTitle(primary);
+    const isIndicatorWithoutTitle = primary.scriptType === 'indicator' && primary.arguments.length === 0;
+
+    if (!hasTitle && !isIndicatorWithoutTitle) {
+      this.addError(
+        primary.loc.start.line,
+        primary.loc.start.column,
+        'Script declaration should include a title (positional or title=).',
+        'PS005',
+      );
+    }
+
+    for (const duplicate of duplicates) {
+      this.astScriptDeclarationLines.add(duplicate.loc.start.line);
+      if (duplicate.scriptType !== primary.scriptType) {
+        this.addError(
+          duplicate.loc.start.line,
+          duplicate.loc.start.column,
+          `Multiple script declarations not allowed (already '${primary.scriptType}').`,
+          'PS004B',
+        );
+      }
+    }
+  }
+
+  private scriptDeclarationHasTitle(script: ScriptDeclarationNode): boolean {
+    return script.arguments.some((argument, index) => {
+      if (argument.name && argument.name.name === 'title') {
+        return true;
+      }
+      if (!argument.name && index === 0 && this.isStringLiteral(argument.value)) {
+        return true;
+      }
+      return false;
+    });
+  }
+
+  private isStringLiteral(expression: ExpressionNode): expression is StringLiteralNode {
+    return expression.kind === 'StringLiteral';
+  }
+
   private scanLine(line: string, lineNum: number): void {
     const t = line.trim();
     if (t === '') return;
-    
+
+    if (this.astVersionDirectiveLines.has(lineNum) || this.astScriptDeclarationLines.has(lineNum)) {
+      return;
+    }
+
     const strippedNoStrings = this.stripStringsAndLineComment(line);
 
     // Version directive
@@ -367,12 +880,12 @@ export class CoreValidator implements ValidationModule {
 
   private validateScriptBoundaries(line: string, lineNum: number, strippedNoStrings: string): void {
     // Check for strategy.* calls in indicators
-    if (this.scriptType === 'indicator' && /strategy\./.test(strippedNoStrings)) {
+    if (!this.astProcessedStrategyUsage && this.scriptType === 'indicator' && /strategy\./.test(strippedNoStrings)) {
       this.addError(lineNum, 1, "Calls to 'strategy.*' are not allowed in indicators.", 'PS020');
     }
 
     // Check for plotting and inputs in libraries
-    if (this.scriptType === 'library') {
+    if (!this.astProcessedLibraryRestrictions && this.scriptType === 'library') {
       if (/^\s*plot\s*\(/.test(strippedNoStrings)) {
         this.addError(lineNum, 1, "Plotting functions are not allowed in libraries.", 'PS021');
       }
@@ -382,12 +895,12 @@ export class CoreValidator implements ValidationModule {
     }
 
     // Check for missing strategy.* calls in strategies
-    if (this.scriptType === 'strategy' && !this.hasStrategyCalls && /strategy\./.test(strippedNoStrings)) {
+    if (!this.astProcessedStrategyUsage && this.scriptType === 'strategy' && !this.hasStrategyCalls && /strategy\./.test(strippedNoStrings)) {
       this.hasStrategyCalls = true;
     }
 
     // Check for missing plotting in indicators
-    if (this.scriptType === 'indicator' && !this.hasPlotting) {
+    if (!this.astProcessedPlottingUsage && this.scriptType === 'indicator' && !this.hasPlotting) {
       const plotsSeries = /^(?:\s*plot\s*\(|\s*plotshape\s*\(|\s*plotchar\s*\(|\s*plotarrow\s*\(|\s*plotbar\s*\(|\s*plotcandle\s*\(|\s*plotohlc\s*\()/;
       const draws = /\b(label\.new|line\.new|linefill\.new|polyline\.new|box\.new|table\.new|table\.cell|bgcolor\s*\(|fill\s*\()/;
       if (plotsSeries.test(strippedNoStrings) || draws.test(strippedNoStrings)) {
@@ -460,28 +973,24 @@ export class CoreValidator implements ValidationModule {
       this.addWarning(lineNum, 1, 'Assignment "=" inside condition; did you mean "=="?', 'PSO02');
     }
 
-    // V6-specific: Check for numeric literals as conditions
-    if (this.config.targetVersion >= 6) {
+    // V6-specific: Check for numeric literal/variable conditions when AST isn't available
+    if (!this.astProcessedNumericConditions && this.config.targetVersion >= 6) {
       const numericCondition = strippedNoStrings.match(/^\s*(if|while)\s+(\d+(?:\.\d+)?)\s*$/);
       if (numericCondition) {
         this.addError(lineNum, 1, 'Numeric literals are not implicitly converted to booleans in v6.', 'PSV6-001', 'Use a comparison like `if value > 0` or `if value != 0`.');
-      }
-    }
-
-    // V6-specific: Check for numeric variables as conditions (simple pattern matching)
-    if (this.config.targetVersion >= 6) {
-      const variableCondition = strippedNoStrings.match(/^\s*(if|while)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/);
-      if (variableCondition) {
-        const varName = variableCondition[2];
-        // Check if this variable was assigned a numeric value in the current scope
-        if (this.isNumericVariable(varName)) {
-          this.addError(lineNum, 1, 'Numeric variables are not implicitly converted to booleans in v6.', 'PSV6-001', 'Use a comparison like `if value > 0` or `if value != 0`.');
+      } else {
+        const variableCondition = strippedNoStrings.match(/^\s*(if|while)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/);
+        if (variableCondition) {
+          const varName = variableCondition[2];
+          if (this.isNumericVariable(varName)) {
+            this.addError(lineNum, 1, 'Numeric variables are not implicitly converted to booleans in v6.', 'PSV6-001', 'Use a comparison like `if value > 0` or `if value != 0`.');
+          }
         }
       }
     }
 
-    // V6-specific: Check for linewidth parameter with value < 1
-    if (this.config.targetVersion >= 6) {
+    // V6-specific: Check for linewidth parameter with value < 1 when AST isn't available
+    if (!this.astProcessedLinewidthZero && this.config.targetVersion >= 6) {
       const linewidthMatch = strippedNoStrings.match(/linewidth\s*=\s*0\b/);
       if (linewidthMatch) {
         this.addError(lineNum, 1, 'The value for \'linewidth\' must be >= 1, but it was 0.', 'PSV6-002');
@@ -508,27 +1017,29 @@ export class CoreValidator implements ValidationModule {
     }
 
     // Check for negative history references (but allow negative array indices in v6)
-    const negHist = strippedNoStrings.match(/\[\s*-\d+\s*\]/);
-    if (negHist) {
-      // In Pine Script v6, negative indices are allowed for arrays but not for history references
-      if (this.config.targetVersion >= 6) {
-        // Check if this is an array operation (array.get, array.set, etc.)
-        const beforeBracket = strippedNoStrings.substring(0, negHist.index);
-        const isArrayOperation = /array\.(get|set|slice|remove|insert|indexof|lastindexof)\s*\(\s*[^,)]+\s*,\s*$/.test(beforeBracket);
-        
-        if (!isArrayOperation) {
-          // This is a history reference like close[-1], which is still invalid
-          this.addError(lineNum, (negHist.index ?? 0) + 1, 'Invalid history reference: negative indexes are not allowed for series data.', 'PS024', 'Use positive indices like close[1] for historical data, or array.get(myArray, -1) for arrays.');
+    if (!this.astProcessedNegativeHistory) {
+      const negHist = strippedNoStrings.match(/\[\s*-\d+\s*\]/);
+      if (negHist) {
+        // In Pine Script v6, negative indices are allowed for arrays but not for history references
+        if (this.config.targetVersion >= 6) {
+          // Check if this is an array operation (array.get, array.set, etc.)
+          const beforeBracket = strippedNoStrings.substring(0, negHist.index);
+          const isArrayOperation = /array\.(get|set|slice|remove|insert|indexof|lastindexof)\s*\(\s*[^,)]+\s*,\s*$/.test(beforeBracket);
+
+          if (!isArrayOperation) {
+            // This is a history reference like close[-1], which is still invalid
+            this.addError(lineNum, (negHist.index ?? 0) + 1, 'Invalid history reference: negative indexes are not allowed for series data.', 'PS024', 'Use positive indices like close[1] for historical data, or array.get(myArray, -1) for arrays.');
+          }
+          // If it's an array operation, allow it (ArrayValidator will handle bounds checking)
+        } else {
+          // Pre-v6: all negative indices are invalid
+          this.addError(lineNum, (negHist.index ?? 0) + 1, 'Invalid history reference: negative indexes are not allowed.', 'PS024');
         }
-        // If it's an array operation, allow it (ArrayValidator will handle bounds checking)
-      } else {
-        // Pre-v6: all negative indices are invalid
-        this.addError(lineNum, (negHist.index ?? 0) + 1, 'Invalid history reference: negative indexes are not allowed.', 'PS024');
       }
     }
 
-    // Check for NA comparisons
-    if (/(\bna\s*[!=]=)|([!=]=\s*na\b)/.test(strippedNoStrings)) {
+    // Check for NA comparisons when AST isn't available
+    if (!this.astProcessedNaComparisons && /(\bna\s*[!=]=)|([!=]=\s*na\b)/.test(strippedNoStrings)) {
       this.addWarning(lineNum, 1, "Direct comparison with 'na' is unreliable. Use na(x), e.g., na(myValue).", 'PS023', 'Replace `x == na` with `na(x)` and `x != na` with `not na(x)`.');
     }
   }

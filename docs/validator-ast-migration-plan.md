@@ -17,6 +17,36 @@
 
 The lack of a shared parse tree means every module re-derives syntactic structure; as more language features are supported, the imperative parsing logic becomes unstable and costly to extend.
 
+### Progress Update (Infrastructure Delivered)
+
+- A typed AST surface (`core/ast/nodes.ts`) with traversal helpers and scope graph construction is merged, giving the validator a canonical syntax tree and symbol table.
+- `BaseValidator` now hydrates `AstValidationContext` with parser outputs, scope graphs, and symbol tables whenever AST mode is enabled.
+- Focused Vitest suites cover traversal and scope graph behaviour; pipeline tests assert that AST diagnostics and context wiring behave under success, failure, and disabled modes.
+- Literal-aware type inference now populates a `TypeEnvironment` on the validation context, tracking identifier and expression types for downstream semantic passes.
+- Golden semantic coverage snapshots assert the combined scope, symbol, and type metadata for representative scripts to guard end-to-end analysis.
+- Control-flow graph construction models branch merges, loop back-edges, and return terminators while exposing the graph on the validation context for future analyses.
+- Member expression nodes model namespaced property access (e.g., timeframe.period) with traversal, scope, and type inference coverage so builtin-variable validators can rely on structured AST data.
+- The built-in variables validator now consumes AST member expressions to detect namespace constants, keeping Monaco diagnostics aligned with Pine nodes without relying on legacy line-based scanning.
+- Switch statements, matrix literals, and historical index expressions now have dedicated AST nodes with traversal, scope, type inference, and control-flow coverage, unblocking downstream modules that depend on these constructs.
+- Type inference heuristics recognise namespaced TA and strategy helpers, applying return-type overrides and boosting series certainty when fed series arguments so downstream validators can rely on richer call metadata.
+- The core validator consumes AST version directives and script declarations to pre-populate script metadata, emitting Monaco-aligned diagnostics for misplaced directives, missing titles, and duplicate script declarations without re-scanning raw lines.
+- Core validator AST analysis now inspects call expressions to flag `strategy.*` usage in indicators, recognise plotting/drawing activity for PS014 guardrails, and enforce library restrictions without relying on regex fallbacks.
+- Core validator AST analysis now inspects member expressions so strategy namespace usage in indicators is flagged even when no call expression is present, ensuring parity with the legacy scanner.
+- Core validator AST analysis now inspects index expressions so negative history references on series data trigger PS024 errors without the legacy line scanner.
+- A Monaco worker harness now exercises the AST-backed validator in a simulated worker environment, translating semantic output and syntax errors into Monaco-compatible markers for upcoming editor integration work.
+- Core validator AST analysis now inspects conditional tests, call arguments, and binary expressions to enforce v6 boolean guardrails, linewidth minimums, and `na` comparison warnings without relying on regex fallbacks.
+- Core validator AST analysis now inspects `for` loop tests and ternary conditional expressions so v6 boolean guardrails trigger consistently across structured control flow and expressions.
+
+### Near-Term TODOs
+
+1. ✅ **Stand Up Dual-Run Harnesses** – the semantic golden suite now runs `EnhancedModularValidator` in AST shadow mode and diffs its diagnostics against the legacy pipeline for builtin namespace coverage, establishing a regression guardrail for upcoming module ports.
+2. ✅ **Close Parser RFC Loop** – published the Chevrotain-based parser decision record in `docs/parser-rfc-update.md`, capturing recovery strategies, benchmarks, and follow-up work.
+3. ✅ **Broaden AST Node Coverage** – added structural nodes for `switch`, matrix literals, and historical index expressions so currently blocked validators can migrate without bespoke fallbacks.
+4. ✅ **Deepen Type Inference Rules** – namespaced TA and strategy helpers now surface richer return metadata and series certainty so the `strategy-functions` and `ta-functions` validators can rely on AST semantics.
+5. ✅ **Document Monaco Integration Plan** – recorded the staged worker rollout strategy, testing plan, and dependencies in `docs/monaco-integration-plan.md`.
+6. 🔄 **Kick Off Core Validator AST Port** – AST directives now seed version/script metadata while call and index analysis drive strategy/plotting/library diagnostics and negative history checks; continue expanding coverage to the remaining core validator responsibilities.
+7. ✅ **Prototype Monaco Worker Harness** – landed a Vitest-driven worker harness that loads the AST pipeline and validates RPC wiring ahead of editor rollout.
+
 ## 3. Target Architecture Overview
 
 ```
@@ -77,18 +107,18 @@ Key principles:
 - Produce documentation for parser choice and AST type definitions.
 
 ### Phase 1 – Infrastructure Setup
-- Create `core/ast/` folder with lexer, parser, node definitions, traversal utilities, and error types.
-- Add new `AstValidationContext` extending existing `ValidationContext` with `ast`, `scopeGraph`, `symbolTable`.
-- Add feature-flag configuration in `BaseValidator` to toggle AST mode (dual-run to compare results).
-- Establish snapshot-based tests verifying AST output for sample Pine snippets (`tests/ast/*.test.ts`).
+- ✅ Create `core/ast/` folder with lexer, parser, node definitions, traversal utilities, and error types (landed via the AST schema + traversal commits).
+- ✅ Add new `AstValidationContext` extending existing `ValidationContext` with `ast`, `scopeGraph`, `symbolTable`.
+- ✅ Add feature-flag configuration in `BaseValidator` to toggle AST mode (dual-run to compare results).
+- ✅ Establish snapshot-based tests verifying AST output for sample Pine snippets (`tests/ast/*.test.ts`).
 
 ### Phase 2 – Semantic Foundation Passes
-- Implement initial semantic passes operating on AST:
-  - Scope builder (collects declarations, resolves references).
-  - Type inference skeleton (basic literal + identifier typing).
-  - Control flow graph builder (for loops, conditionals) – optional if complex, but plan it early.
-- Provide reusable diagnostics helpers mapping AST ranges to Monaco `IMarkerData`.
-- Add golden tests ensuring passes populate context as expected.
+- ✅ Implement initial semantic passes operating on AST:
+  - ✅ Scope builder (collects declarations, resolves references).
+  - ✅ Type inference skeleton (basic literal + identifier typing feeding the shared `TypeEnvironment`).
+  - ✅ Control flow graph builder (captures loops, conditionals, and terminators for downstream analyses).
+- ✅ Provide reusable diagnostics helpers mapping AST ranges to Monaco `IMarkerData`.
+- ✅ Add golden tests ensuring passes populate context as expected.
 
 ### Phase 3 – Module Migration (Incremental)
 - Prioritise modules with high instability and heavy parsing logic (CoreValidator, FunctionDeclarations, Scope, Type).
@@ -138,28 +168,50 @@ Suggested migration order:
 
 ## 9. Migration Tracking Table
 
-| Module | Legacy Complexity | AST Migration Status | Notes |
-| --- | --- | --- | --- |
-| core-validator | High | ☐ Not Started | Establishes statement ordering; migrate early |
-| function-declarations | High | ☐ Not Started | Dependent on AST function nodes |
-| type-validator | High | ☐ Not Started | Requires semantic pass outputs |
-| scope-validator | High | ☐ Not Started | Will leverage scope builder |
-| switch-validator | Medium | ☐ Not Started | Control flow constructs |
-| while-loop-validator | Medium | ☐ Not Started | Loop node traversal |
-| builtin-variables-validator | Medium | ☐ Not Started | Replace line scanning with identifier resolution |
-| ta-functions-validator | Medium | ☐ Not Started | Rely on call expressions |
-| strategy-functions-validator | Medium | ☐ Not Started | AST call classification |
-| history-referencing-validator | High | ☐ Not Started | Needs AST index expressions |
-| ... | ... | ... | Extend table as modules migrate |
+| Module | Legacy Complexity | AST Migration Status | Owner | Notes |
+| --- | --- | --- | --- | --- |
+| core-validator | High | 🔄 Ready for AST port | Validator Infra | AST context + diagnostics helpers landed; waiting on dual-run guardrail before switchover |
+| function-declarations | High | 🔄 Ready for AST port | Validator Infra | Function + call nodes modelled; scope builder resolves function symbols |
+| type-validator | High | 🚧 Planning | Semantic Working Group | Literal/type environment skeleton merged; expand inference before parity run |
+| scope-validator | High | 🚧 Planning | Semantic Working Group | Scope graph + symbol tables available; need module-level dual-run harness |
+| switch-validator | Medium | 🛠️ Blocked on node coverage | Language Infra | Extend AST to cover `switch` branches prior to migration |
+| while-loop-validator | Medium | 🛠️ Blocked on node coverage | Language Infra | Loop constructs present; finalise control-flow metadata before port |
+| builtin-variables-validator | Medium | ✅ Migrated | Module Owners Guild | Validator now reads AST member expressions for constants, having removed the legacy line-scanner path |
+| ta-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Awaiting expanded call-site inference for strategy/TA helpers |
+| strategy-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Needs richer series/type propagation to avoid regressions |
+| history-referencing-validator | High | ✅ Migrated | Module Owners Guild | Index expression traversal now powers negative index, loop, and varip diagnostics without regex scanning |
+| ... | ... | ... | ... | Extend table as modules migrate |
 
-## 10. Definition of Done
+## 10. Immediate Next Steps (Post-Review)
+
+The initial AST plumbing is already landing (feature-flagged parsing in `BaseValidator`,
+`AstValidationContext` extensions, lexer scaffolding, and validation smoke tests). To
+capitalise on this progress, align the next iteration around the following workstream
+plan:
+
+1. **Kick Off Phase 3 Module Ports**
+   - Leverage the new dual-run harness to compare `core-validator` diagnostics in shadow mode and capture mismatches as fixtures before swapping implementations.
+   - Define parity exit criteria and owners for the initial tranche of modules listed in the migration table, now that scope, types, and control flow graphs are available.
+2. **Close the Parser RFC Loop**
+   - Finalise the parser technology RFC by capturing findings from the lexer/prototype experiments, documenting the selected approach, and listing follow-ups like incremental parsing and recovery tuning.
+   - Extend the prototype to cover directives, variable declarations, and function bodies so upcoming semantic passes have representative node shapes.
+
+3. **Expand Semantic Coverage**
+   - Use the enhanced type inference heuristics to unblock the `strategy-functions` and `ta-functions` module ports, filling any remaining return overrides encountered during parity runs.
+   - Ensure the migration table’s blocked modules move to “Ready” once outstanding syntax or inference gaps surface during module migrations.
+
+4. **Operationalise Monaco Worker Integration**
+   - Use the plan in `docs/monaco-integration-plan.md` to sequence worker bootstrap work, RPC wiring, and lazy-loading experiments.
+   - Identify any additional API shims or batching logic needed before exposing the AST pipeline to the editor and raise follow-up tasks as necessary.
+
+## 11. Definition of Done
 
 - All validation modules run exclusively on AST-derived data structures.
 - Parser + AST layers have ≥90% test coverage with regression fixtures for previously reported bugs.
 - Monaco integration consumes AST diagnostics and exposes improved language features.
 - Legacy text-based parsing utilities removed; documentation updated to describe AST-first architecture.
 
-## 11. References & Best Practices
+## 12. References & Best Practices
 
 - Monaco editor diagnostics best practices: produce stable `owner`, `source`, `code`, and `relatedInformation` entries for AST diagnostics.
 - Keep parser pure and side-effect free; semantic passes handle context-specific logic.

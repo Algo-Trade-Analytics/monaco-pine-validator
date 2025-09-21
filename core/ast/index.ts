@@ -1,6 +1,12 @@
 export * from './types';
 export * from './service';
 export * from './lexer';
+export * from './nodes';
+export * from './traversal';
+export * from './scope';
+export * from './type-inference';
+export * from './diagnostics';
+export * from './control-flow';
 
 export * as nodes from '../../pynescript/ast/node';
 export * as helpers from '../../pynescript/ast/helper';

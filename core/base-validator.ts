@@ -19,10 +19,15 @@ import {
   AstParseResult,
   AstService,
   createAstDiagnostics,
+  createEmptyControlFlowGraph,
   createEmptyScopeGraph,
   createEmptySymbolTable,
+  createEmptyTypeEnvironment,
 } from './ast/types';
 import { createNullAstService } from './ast/service';
+import { buildScopeGraph } from './ast/scope';
+import { inferTypes } from './ast/type-inference';
+import { buildControlFlowGraph } from './ast/control-flow';
 
 type ConfigLayer = Partial<ValidatorConfig> | undefined;
 
@@ -195,6 +200,8 @@ export abstract class BaseValidator {
     context.astDiagnostics = createAstDiagnostics();
     context.scopeGraph = createEmptyScopeGraph();
     context.symbolTable = createEmptySymbolTable();
+    context.typeEnvironment = createEmptyTypeEnvironment();
+    context.controlFlowGraph = createEmptyControlFlowGraph();
     return context;
   }
 
@@ -220,6 +227,20 @@ export abstract class BaseValidator {
       astContext.symbolTable = createEmptySymbolTable();
     }
 
+    if (!astContext.typeEnvironment) {
+      astContext.typeEnvironment = createEmptyTypeEnvironment();
+    }
+
+    if (!astContext.controlFlowGraph || !(astContext.controlFlowGraph.nodes instanceof Map)) {
+      astContext.controlFlowGraph = createEmptyControlFlowGraph();
+    } else {
+      astContext.controlFlowGraph = {
+        entry: astContext.controlFlowGraph.entry ?? null,
+        exit: astContext.controlFlowGraph.exit ?? null,
+        nodes: astContext.controlFlowGraph.nodes,
+      };
+    }
+
     if (!astContext.typeMap) {
       astContext.typeMap = this.typeMap;
     }
@@ -230,6 +251,10 @@ export abstract class BaseValidator {
   protected parseAst(source: string): void {
     this.context.ast = null;
     this.context.astDiagnostics = createAstDiagnostics();
+    this.context.scopeGraph = createEmptyScopeGraph();
+    this.context.symbolTable = createEmptySymbolTable();
+    this.context.typeEnvironment = createEmptyTypeEnvironment();
+    this.context.controlFlowGraph = createEmptyControlFlowGraph();
 
     if (!this.astConfig || this.astConfig.mode === 'disabled') {
       return;
@@ -243,10 +268,21 @@ export abstract class BaseValidator {
       const result = ensureAstParseResult(service.parse(source, { filename: DEFAULT_AST_FILENAME }));
       this.context.ast = result.ast;
       this.context.astDiagnostics = result.diagnostics;
+      if (result.ast) {
+        const { scopeGraph, symbolTable } = buildScopeGraph(result.ast);
+        this.context.scopeGraph = scopeGraph;
+        this.context.symbolTable = symbolTable;
+        this.context.typeEnvironment = inferTypes(result.ast);
+        this.context.controlFlowGraph = buildControlFlowGraph(result.ast);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.context.ast = null;
       this.context.astDiagnostics = createAstDiagnostics();
+      this.context.scopeGraph = createEmptyScopeGraph();
+      this.context.symbolTable = createEmptySymbolTable();
+      this.context.typeEnvironment = createEmptyTypeEnvironment();
+      this.context.controlFlowGraph = createEmptyControlFlowGraph();
       this.addWarning(1, 1, `AST parser error: ${message}`, AST_PARSE_ERROR_CODE);
     }
   }
@@ -299,6 +335,8 @@ export abstract class BaseValidator {
     context.cleanLines = this.stripLineCommentsKeepingStrings(code).split('\n');
     context.scopeGraph = createEmptyScopeGraph();
     context.symbolTable = createEmptySymbolTable();
+    context.typeEnvironment = createEmptyTypeEnvironment();
+    context.controlFlowGraph = createEmptyControlFlowGraph();
     context.version = this.config.targetVersion || 6;
 
     this.parseAst(code);

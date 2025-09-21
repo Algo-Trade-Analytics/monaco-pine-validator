@@ -1,12 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { EnhancedModularValidator } from '../../EnhancedModularValidator';
 import { expectHas, expectLacks, expectValid } from './test-utils';
+import { createConstantAstService } from './ast-helpers';
 
-const createValidator = () => new EnhancedModularValidator({
-  targetVersion: 6,
-  strictMode: true,
-  enablePerformanceAnalysis: true
-});
+const createValidator = () => {
+  const service = createConstantAstService();
+
+  return new EnhancedModularValidator({
+    targetVersion: 6,
+    strictMode: true,
+    enablePerformanceAnalysis: true,
+    ast: { mode: 'primary', service },
+  });
+};
 
 describe('Built-in Variables Validation', () => {
 

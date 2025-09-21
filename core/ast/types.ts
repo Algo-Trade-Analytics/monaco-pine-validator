@@ -1,5 +1,5 @@
-import type { AST, Script } from '../../pynescript/ast/node';
 import type { SyntaxError } from '../../pynescript/ast/error';
+import type { Node, ProgramNode } from './nodes';
 
 export type AstMode = 'disabled' | 'shadow' | 'primary';
 
@@ -13,7 +13,7 @@ export interface AstParseOptions {
 }
 
 export interface AstParseResult {
-  ast: Script | null;
+  ast: ProgramNode | null;
   diagnostics: AstDiagnostics;
 }
 
@@ -36,7 +36,7 @@ export type SymbolKind =
   | 'unknown';
 
 export interface SymbolLocation {
-  node: AST | null;
+  node: Node | null;
   line: number;
   column: number;
 }
@@ -67,6 +67,62 @@ export interface ScopeGraph {
   nodes: Map<string, ScopeNode>;
 }
 
+export type ControlFlowNodeKind =
+  | 'entry'
+  | 'exit'
+  | 'statement'
+  | 'branch'
+  | 'merge'
+  | 'jump'
+  | 'terminator';
+
+export type ControlFlowEdgeKind =
+  | 'normal'
+  | 'true'
+  | 'false'
+  | 'loop'
+  | 'break'
+  | 'continue'
+  | 'return'
+  | 'case';
+
+export interface ControlFlowEdge {
+  target: string;
+  kind: ControlFlowEdgeKind;
+}
+
+export interface ControlFlowNode {
+  id: string;
+  kind: ControlFlowNodeKind;
+  astNode: Node | null;
+  predecessors: Set<string>;
+  successors: ControlFlowEdge[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ControlFlowGraph {
+  entry: string | null;
+  exit: string | null;
+  nodes: Map<string, ControlFlowNode>;
+}
+
+export type TypeCertainty = 'certain' | 'inferred' | 'conflict';
+
+export type PinePrimitiveType = 'int' | 'float' | 'bool' | 'string' | 'void';
+
+export type InferredTypeKind = PinePrimitiveType | 'function' | 'series' | 'matrix' | 'unknown';
+
+export interface TypeMetadata {
+  kind: InferredTypeKind;
+  certainty: TypeCertainty;
+  sources: string[];
+}
+
+export interface TypeEnvironment {
+  nodeTypes: WeakMap<Node, TypeMetadata>;
+  identifiers: Map<string, TypeMetadata>;
+}
+
 export interface Position {
   line: number;
   column: number;
@@ -84,6 +140,14 @@ export function createEmptyScopeGraph(): ScopeGraph {
   };
 }
 
+export function createEmptyControlFlowGraph(): ControlFlowGraph {
+  return {
+    entry: null,
+    exit: null,
+    nodes: new Map<string, ControlFlowNode>(),
+  };
+}
+
 export function createSymbolRecord(name: string, kind: SymbolKind, location?: SymbolLocation): SymbolRecord {
   return {
     name,
@@ -93,8 +157,41 @@ export function createSymbolRecord(name: string, kind: SymbolKind, location?: Sy
   };
 }
 
-export function createSymbolLocation(node: AST | null, line: number, column: number): SymbolLocation {
+export function createSymbolLocation(node: Node | null, line: number, column: number): SymbolLocation {
   return { node, line, column };
+}
+
+export function createEmptyTypeEnvironment(): TypeEnvironment {
+  return {
+    nodeTypes: new WeakMap<Node, TypeMetadata>(),
+    identifiers: new Map<string, TypeMetadata>(),
+  };
+}
+
+export function createTypeMetadata(
+  kind: InferredTypeKind,
+  source: string,
+  certainty: TypeCertainty = 'inferred',
+): TypeMetadata {
+  return { kind, certainty, sources: [source] };
+}
+
+export function cloneTypeMetadata(
+  metadata: TypeMetadata,
+  overrides: Partial<Omit<TypeMetadata, 'sources'>> & { addSource?: string } = {},
+): TypeMetadata {
+  const sources = [...metadata.sources];
+  if (overrides.addSource && !sources.includes(overrides.addSource)) {
+    sources.push(overrides.addSource);
+  }
+
+  const { addSource: _ignored, ...rest } = overrides;
+
+  return {
+    kind: rest.kind ?? metadata.kind,
+    certainty: rest.certainty ?? metadata.certainty,
+    sources,
+  };
 }
 
 export function createAstDiagnostics(errors: SyntaxError[] = []): AstDiagnostics {
