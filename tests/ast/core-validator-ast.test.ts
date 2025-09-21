@@ -12,12 +12,15 @@ import {
   createCallExpression,
   createConditionalExpression,
   createExpressionStatement,
+  createFunctionDeclaration,
   createForStatement,
   createIdentifier,
   createIndexExpression,
   createIfStatement,
   createMemberExpression,
+  createParameter,
   createNumberLiteral,
+  createReturn,
   createStringLiteral,
   createScriptDeclaration,
   createUnaryExpression,
@@ -594,5 +597,56 @@ describe('CoreValidator AST integration', () => {
     const naWarnings = result.warnings.filter((warning) => warning.code === 'PS023');
     expect(naWarnings).toHaveLength(1);
     expect(naWarnings[0]?.line).toBe(3);
+  });
+
+  it('reports unreachable statements after return using AST control flow', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Unreachable")',
+      'f(x) =>',
+      '    return x',
+      '    plot(x)',
+      'plot(close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleLiteral = createStringLiteral('Unreachable', '"Unreachable"', 10, 2);
+    const titleArgument = createArgument(titleLiteral, 10, 23, 2);
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+
+    const fnIdentifier = createIdentifier('f', 0, 3);
+    const fnParameter = createParameter('x', 2, 3);
+    const returnValue = createIdentifier('x', 11, 4);
+    const returnStatement = createReturn(returnValue, 4, 12, 4);
+    const innerPlotCallee = createIdentifier('plot', 4, 5);
+    const innerPlotArgument = createArgument(createIdentifier('x', 9, 5), 9, 10, 5);
+    const innerPlotCall = createCallExpression(innerPlotCallee, [innerPlotArgument], 4, 11, 5);
+    const innerPlotStatement = createExpressionStatement(innerPlotCall, 4, 11, 5);
+    const functionBlock = createBlock([returnStatement, innerPlotStatement], 4, 11, 4, 5);
+    const functionDeclaration = createFunctionDeclaration(fnIdentifier, [fnParameter], functionBlock, 0, 11, 3, 5);
+
+    const topPlotCallee = createIdentifier('plot', 0, 6);
+    const topPlotArgument = createArgument(createIdentifier('close', 5, 6), 5, 10, 6);
+    const topPlotCall = createCallExpression(topPlotCallee, [topPlotArgument], 0, 11, 6);
+    const topPlotStatement = createExpressionStatement(topPlotCall, 0, 11, 6);
+
+    const program = createProgramFromSource(
+      source,
+      [directive],
+      [scriptDeclaration, functionDeclaration, topPlotStatement],
+    );
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const unreachableWarnings = result.warnings.filter((warning) => warning.code === 'PSC001');
+    expect(unreachableWarnings).toHaveLength(1);
+    expect(unreachableWarnings[0]?.line).toBe(5);
+    expect(unreachableWarnings[0]?.message).toContain('line 4');
   });
 });

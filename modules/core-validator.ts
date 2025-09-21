@@ -23,9 +23,12 @@ import {
 import type {
   ArgumentNode,
   BinaryExpressionNode,
+  BlockStatementNode,
   CallExpressionNode,
   ConditionalExpressionNode,
   ExpressionNode,
+  ForStatementNode,
+  FunctionDeclarationNode,
   IdentifierNode,
   IfStatementNode,
   IndexExpressionNode,
@@ -33,10 +36,10 @@ import type {
   NumberLiteralNode,
   ProgramNode,
   ScriptDeclarationNode,
+  StatementNode,
   StringLiteralNode,
   UnaryExpressionNode,
   VersionDirectiveNode,
-  ForStatementNode,
   WhileStatementNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
@@ -121,6 +124,7 @@ export class CoreValidator implements ValidationModule {
   private astProcessedNumericConditions = false;
   private astProcessedLinewidthZero = false;
   private astProcessedNaComparisons = false;
+  private astProcessedControlFlow = false;
   private astStrategyUsageErrorLines = new Set<number>();
   private inLoop = false;
   private inFunction = false;
@@ -201,6 +205,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedNumericConditions = false;
     this.astProcessedLinewidthZero = false;
     this.astProcessedNaComparisons = false;
+    this.astProcessedControlFlow = false;
     this.astStrategyUsageErrorLines.clear();
     this.sawBrace = false;
     this.sawTabIndent = false;
@@ -280,6 +285,11 @@ export class CoreValidator implements ValidationModule {
       BinaryExpression: {
         enter: ({ node }) => {
           this.processAstBinaryExpression(node as BinaryExpressionNode);
+        },
+      },
+      FunctionDeclaration: {
+        enter: ({ node }) => {
+          this.processAstFunctionControlFlow(node as FunctionDeclarationNode);
         },
       },
     });
@@ -483,6 +493,140 @@ export class CoreValidator implements ValidationModule {
       'PS023',
       'Replace `x == na` with `na(x)` and `x != na` with `not na(x)`.',
     );
+  }
+
+  private processAstFunctionControlFlow(fn: FunctionDeclarationNode): void {
+    if (!this.config.enableControlFlowAnalysis) {
+      return;
+    }
+
+    this.astProcessedControlFlow = true;
+    this.processAstStatementSequence(fn.body.body);
+  }
+
+  private processAstStatementSequence(statements: StatementNode[]): number | null {
+    let returnLine: number | null = null;
+
+    for (const statement of statements) {
+      if (returnLine !== null) {
+        this.reportAstUnreachableStatement(statement, returnLine);
+        continue;
+      }
+
+      const nestedReturn = this.processAstStatementControlFlow(statement);
+      if (nestedReturn !== null) {
+        returnLine = nestedReturn;
+      }
+    }
+
+    return returnLine;
+  }
+
+  private processAstStatementControlFlow(statement: StatementNode): number | null {
+    switch (statement.kind) {
+      case 'ReturnStatement':
+        return statement.loc.start.line;
+      case 'BlockStatement':
+        return this.processAstStatementSequence((statement as BlockStatementNode).body);
+      case 'IfStatement': {
+        const consequentStatements = this.unwrapAstStatement(statement.consequent);
+        const consequentReturn = this.processAstStatementSequence(consequentStatements);
+        if (consequentReturn !== null) {
+          if (statement.alternate) {
+            this.reportAstUnreachableStatement(statement.alternate, consequentReturn);
+          }
+          return consequentReturn;
+        }
+
+        if (statement.alternate) {
+          const alternateStatements = this.unwrapAstStatement(statement.alternate);
+          const alternateReturn = this.processAstStatementSequence(alternateStatements);
+          if (alternateReturn !== null) {
+            return alternateReturn;
+          }
+        }
+
+        return null;
+      }
+      case 'WhileStatement':
+        return this.processAstStatementSequence(statement.body.body);
+      case 'ForStatement':
+        return this.processAstStatementSequence(statement.body.body);
+      case 'SwitchStatement': {
+        let returnLine: number | null = null;
+        for (const caseNode of statement.cases) {
+          if (returnLine !== null) {
+            this.reportAstUnreachableStatements(caseNode.consequent, returnLine);
+            continue;
+          }
+
+          const caseReturn = this.processAstStatementSequence(caseNode.consequent);
+          if (caseReturn !== null) {
+            returnLine = caseReturn;
+          }
+        }
+        return returnLine;
+      }
+      case 'FunctionDeclaration':
+        return this.processAstStatementSequence(statement.body.body);
+      default:
+        return null;
+    }
+  }
+
+  private unwrapAstStatement(statement: StatementNode): StatementNode[] {
+    if (statement.kind === 'BlockStatement') {
+      return (statement as BlockStatementNode).body;
+    }
+    return [statement];
+  }
+
+  private reportAstUnreachableStatements(statements: StatementNode[], returnLine: number): void {
+    for (const statement of statements) {
+      this.reportAstUnreachableStatement(statement, returnLine);
+    }
+  }
+
+  private reportAstUnreachableStatement(statement: StatementNode, returnLine: number): void {
+    if (statement.kind === 'BlockStatement') {
+      this.reportAstUnreachableStatements((statement as BlockStatementNode).body, returnLine);
+      return;
+    }
+
+    if (statement.kind === 'ReturnStatement') {
+      return;
+    }
+
+    const { line, column } = statement.loc.start;
+    this.addWarning(
+      line,
+      column,
+      `Unreachable code after return at line ${returnLine}.`,
+      'PSC001',
+    );
+
+    switch (statement.kind) {
+      case 'IfStatement':
+        this.reportAstUnreachableStatement(statement.consequent, returnLine);
+        if (statement.alternate) {
+          this.reportAstUnreachableStatement(statement.alternate, returnLine);
+        }
+        break;
+      case 'WhileStatement':
+      case 'ForStatement':
+        this.reportAstUnreachableStatement(statement.body, returnLine);
+        break;
+      case 'SwitchStatement':
+        for (const caseNode of statement.cases) {
+          this.reportAstUnreachableStatements(caseNode.consequent, returnLine);
+        }
+        break;
+      case 'FunctionDeclaration':
+        this.reportAstUnreachableStatements(statement.body.body, returnLine);
+        break;
+      default:
+        break;
+    }
   }
 
   private isIdentifierNamed(expression: ExpressionNode, name: string): boolean {
@@ -922,32 +1066,34 @@ export class CoreValidator implements ValidationModule {
   }
 
   private detectControlFlow(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (!this.config.enableControlFlowAnalysis || this.astProcessedControlFlow) {
+      return;
+    }
+
     // Simple control flow analysis for unreachable code detection
-    if (this.config.enableControlFlowAnalysis) {
-      // Detect function start
-      if (/^\s*\w+\s*\([^)]*\)\s*=>/.test(strippedNoStrings)) {
-        this.inFunction = true;
-        this.hasReturn = false;
-        return; // Don't check for unreachable code on the function declaration line
-      }
-      
-      // Detect return statement
-      if (this.inFunction && /^\s*return\s+/.test(strippedNoStrings)) {
-        this.hasReturn = true;
-        return; // Don't check for unreachable code on the return line itself
-      }
-      
-      // Check for unreachable code after return
-      if (this.inFunction && this.hasReturn && !/^\s*return\s+/.test(strippedNoStrings) && !/^\s*$/.test(strippedNoStrings)) {
-        this.addWarning(lineNum, 1, `Unreachable code after return at line ${lineNum - 1}.`, 'PSC001');
-      }
-      
-      // Reset function state when indentation decreases (function ends)
-      const currentIndent = line.match(/^\s*/)?.[0].length || 0;
-      if (this.inFunction && currentIndent === 0 && !/^\s*$/.test(strippedNoStrings)) {
-        this.inFunction = false;
-        this.hasReturn = false;
-      }
+    // Detect function start
+    if (/^\s*\w+\s*\([^)]*\)\s*=>/.test(strippedNoStrings)) {
+      this.inFunction = true;
+      this.hasReturn = false;
+      return; // Don't check for unreachable code on the function declaration line
+    }
+
+    // Detect return statement
+    if (this.inFunction && /^\s*return\s+/.test(strippedNoStrings)) {
+      this.hasReturn = true;
+      return; // Don't check for unreachable code on the return line itself
+    }
+
+    // Check for unreachable code after return
+    if (this.inFunction && this.hasReturn && !/^\s*return\s+/.test(strippedNoStrings) && !/^\s*$/.test(strippedNoStrings)) {
+      this.addWarning(lineNum, 1, `Unreachable code after return at line ${lineNum - 1}.`, 'PSC001');
+    }
+
+    // Reset function state when indentation decreases (function ends)
+    const currentIndent = line.match(/^\s*/)?.[0].length || 0;
+    if (this.inFunction && currentIndent === 0 && !/^\s*$/.test(strippedNoStrings)) {
+      this.inFunction = false;
+      this.hasReturn = false;
     }
   }
 
