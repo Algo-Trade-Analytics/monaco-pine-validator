@@ -14,6 +14,7 @@ import {
 import {
   createControlFlowFixture,
   createIndicatorScriptFixture,
+  createNamespaceAccessFixture,
 } from './fixtures';
 
 describe('core AST nodes traversal', () => {
@@ -127,6 +128,27 @@ describe('core AST nodes traversal', () => {
     expect(childKinds).toEqual(['Identifier', 'Parameter', 'BlockStatement']);
     expect(childKeys).toEqual(['identifier', 'params', 'body']);
     expect(childIndexes).toEqual([null, 0, null]);
+  });
+
+  it('visits member expressions and their identifiers', () => {
+    const program = createNamespaceAccessFixture();
+    const visited: string[] = [];
+
+    visit(program, {
+      MemberExpression: { enter: () => visited.push('MemberExpression') },
+      Identifier: { enter: (path) => visited.push(`Identifier:${path.node.name}`) },
+    });
+
+    expect(visited).toEqual([
+      'Identifier:tf',
+      'MemberExpression',
+      'Identifier:timeframe',
+      'Identifier:period',
+      'Identifier:isDaily',
+      'MemberExpression',
+      'Identifier:timeframe',
+      'Identifier:isdaily',
+    ]);
   });
 
   it('walks control flow statements and conditional expressions', () => {

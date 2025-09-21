@@ -11,6 +11,7 @@ import {
   createStringLiteral,
   createUnaryExpression,
   createVariableDeclaration,
+  createMemberExpression,
 } from './fixtures';
 import {
   type ConditionalExpressionNode,
@@ -83,6 +84,30 @@ describe('inferTypes', () => {
 
     expect(environment.nodeTypes.get(addition)?.kind).toBe('float');
     expect(environment.nodeTypes.get(concatenation)?.kind).toBe('string');
+  });
+
+  it('propagates metadata for member expressions', () => {
+    const timeframeNamespace = createIdentifier('timeframe', 0, 1);
+    const periodProperty = createIdentifier('period', 10, 1);
+    const memberExpression = createMemberExpression(timeframeNamespace, periodProperty, 0, 16, 1);
+
+    const declaration = createVariableDeclaration(createIdentifier('tf', 20, 1), 20, 36, 1, {
+      declarationKind: 'var',
+      initializer: memberExpression,
+    });
+
+    const program = createProgram([declaration]);
+    const environment = inferTypes(program);
+
+    const timeframeMetadata = environment.identifiers.get('timeframe');
+    expect(timeframeMetadata?.kind).toBe('unknown');
+
+    const propertyMetadata = environment.nodeTypes.get(periodProperty);
+    const memberMetadata = environment.nodeTypes.get(memberExpression);
+    expect(propertyMetadata).toBeDefined();
+    expect(memberMetadata).toBeDefined();
+    expect(memberMetadata?.kind).toBe(propertyMetadata?.kind);
+    expect(memberMetadata?.sources).toContain('variable:initializer:member');
   });
 
   it('marks conditional expressions with conflicting branch types as conflicts', () => {

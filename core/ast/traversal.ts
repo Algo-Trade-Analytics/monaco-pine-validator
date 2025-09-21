@@ -8,6 +8,7 @@ import {
   type ConditionalExpressionNode,
   type ContinueStatementNode,
   type ExpressionStatementNode,
+  type MemberExpressionNode,
   type ForStatementNode,
   type FunctionDeclarationNode,
   type IfStatementNode,
@@ -194,6 +195,12 @@ function collectChildren(path: NodePath): ChildEntry[] {
       const whileStatement = node as WhileStatementNode;
       push(whileStatement.test, 'test');
       push(whileStatement.body, 'body');
+      break;
+    }
+    case 'MemberExpression': {
+      const member = node as MemberExpressionNode;
+      push(member.object, 'object');
+      push(member.property, 'property');
       break;
     }
     case 'ForStatement': {

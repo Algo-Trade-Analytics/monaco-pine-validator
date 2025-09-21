@@ -28,6 +28,7 @@ export type NodeKind =
   | 'IfStatement'
   | 'WhileStatement'
   | 'ForStatement'
+  | 'MemberExpression'
   | 'BreakStatement'
   | 'ContinueStatement'
   | 'Parameter'
@@ -62,6 +63,7 @@ export type Node =
   | ParameterNode
   | CallExpressionNode
   | ArgumentNode
+  | MemberExpressionNode
   | BinaryExpressionNode
   | UnaryExpressionNode
   | ConditionalExpressionNode
@@ -95,6 +97,7 @@ export type ExpressionNode =
   | CallExpressionNode
   | BinaryExpressionNode
   | UnaryExpressionNode
+  | MemberExpressionNode
   | ConditionalExpressionNode;
 
 export type LiteralNode =
@@ -179,6 +182,13 @@ export interface ArgumentNode extends BaseNode {
   kind: 'Argument';
   name: IdentifierNode | null;
   value: ExpressionNode;
+}
+
+export interface MemberExpressionNode extends BaseNode {
+  kind: 'MemberExpression';
+  object: ExpressionNode;
+  property: IdentifierNode;
+  computed: boolean;
 }
 
 export interface IfStatementNode extends BaseNode {

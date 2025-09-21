@@ -25,6 +25,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Literal-aware type inference now populates a `TypeEnvironment` on the validation context, tracking identifier and expression types for downstream semantic passes.
 - Golden semantic coverage snapshots assert the combined scope, symbol, and type metadata for representative scripts to guard end-to-end analysis.
 - Control-flow graph construction models branch merges, loop back-edges, and return terminators while exposing the graph on the validation context for future analyses.
+- Member expression nodes model namespaced property access (e.g., timeframe.period) with traversal, scope, and type inference coverage so builtin-variable validators can rely on structured AST data.
 
 ### Near-Term TODOs
 

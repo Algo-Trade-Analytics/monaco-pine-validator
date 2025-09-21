@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildScopeGraph } from '../../core/ast/scope';
+import { createNamespaceAccessFixture } from './fixtures';
 import {
   type ArgumentNode,
   type BlockStatementNode,
@@ -179,6 +180,21 @@ describe('buildScopeGraph', () => {
     expect(scopeGraph.root).toBeNull();
     expect(scopeGraph.nodes.size).toBe(0);
     expect(symbolTable.size).toBe(0);
+  });
+
+  it('records references for member expressions', () => {
+    const program = createNamespaceAccessFixture();
+    const { symbolTable } = buildScopeGraph(program);
+
+    const timeframeRecord = symbolTable.get('timeframe');
+    expect(timeframeRecord).toBeDefined();
+    expect(timeframeRecord?.references).toHaveLength(2);
+
+    const periodRecord = symbolTable.get('period');
+    expect(periodRecord?.references).toHaveLength(1);
+
+    const isDailyRecord = symbolTable.get('isdaily');
+    expect(isDailyRecord?.references).toHaveLength(1);
   });
 
   it('captures scope metadata for control-flow constructs', () => {

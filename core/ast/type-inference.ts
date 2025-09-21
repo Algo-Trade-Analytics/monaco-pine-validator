@@ -18,6 +18,7 @@ import {
   type ForStatementNode,
   type FunctionDeclarationNode,
   type IdentifierNode,
+  type MemberExpressionNode,
   type IfStatementNode,
   type NumberLiteralNode,
   type ProgramNode,
@@ -213,6 +214,17 @@ function inferBinaryExpression(environment: TypeEnvironment, expression: BinaryE
   return annotateNode(environment, expression, createUnknown(`binary:${expression.operator}`));
 }
 
+function inferMemberExpression(
+  environment: TypeEnvironment,
+  expression: MemberExpressionNode,
+  reason: string,
+): TypeMetadata {
+  inferExpression(environment, expression.object, `${reason}:object`);
+  const propertyMetadata = recordIdentifierUsage(environment, expression.property, `${reason}:property`);
+  const annotated = cloneTypeMetadata(propertyMetadata, { addSource: `${reason}:member` });
+  return annotateNode(environment, expression, annotated);
+}
+
 function inferUnaryExpression(environment: TypeEnvironment, expression: UnaryExpressionNode): TypeMetadata {
   const argumentType = inferExpression(environment, expression.argument, 'unary:argument');
 
@@ -304,6 +316,8 @@ function inferExpression(
       return inferCallExpression(environment, expression as CallExpressionNode);
     case 'BinaryExpression':
       return inferBinaryExpression(environment, expression as BinaryExpressionNode);
+    case 'MemberExpression':
+      return inferMemberExpression(environment, expression as MemberExpressionNode, reason);
     case 'UnaryExpression':
       return inferUnaryExpression(environment, expression as UnaryExpressionNode);
     case 'ConditionalExpression':

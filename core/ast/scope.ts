@@ -18,6 +18,7 @@ import {
   type ExpressionNode,
   type ExpressionStatementNode,
   type ForStatementNode,
+  type MemberExpressionNode,
   type FunctionDeclarationNode,
   type IfStatementNode,
   type IdentifierNode,
@@ -180,6 +181,12 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
       case 'UnaryExpression': {
         const unary = expression;
         visitExpression(unary.argument);
+        break;
+      }
+      case 'MemberExpression': {
+        const member = expression as MemberExpressionNode;
+        visitExpression(member.object);
+        recordReference(member.property);
         break;
       }
       case 'ConditionalExpression': {

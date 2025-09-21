@@ -23,6 +23,7 @@ import {
   type UnaryExpressionNode,
   type VariableDeclarationNode,
   type WhileStatementNode,
+  type MemberExpressionNode,
   createLocation,
   createPosition,
   createRange,
@@ -321,6 +322,23 @@ export function createConditionalExpression(
   };
 }
 
+export function createMemberExpression(
+  object: ExpressionNode,
+  property: IdentifierNode,
+  start: number,
+  end: number,
+  line = 1,
+  computed = false,
+): MemberExpressionNode {
+  return {
+    kind: 'MemberExpression',
+    object,
+    property,
+    computed,
+    ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
 export function createIndicatorScriptFixture(): ProgramNode {
   const directive = {
     kind: 'VersionDirective' as const,
@@ -355,6 +373,32 @@ export function createIndicatorScriptFixture(): ProgramNode {
     directives: [directive],
     body: [scriptDeclaration, functionDeclaration, expressionStatement],
     ...createSpan({ start: 0, end: 102, lineStart: 1, lineEnd: 6 }),
+  };
+}
+
+export function createNamespaceAccessFixture(): ProgramNode {
+  const timeframeNamespace = createIdentifier('timeframe', 0, 1);
+  const periodProperty = createIdentifier('period', 10, 1);
+  const timeframePeriod = createMemberExpression(timeframeNamespace, periodProperty, 0, 16, 1);
+
+  const timeframeVar = createVariableDeclaration(createIdentifier('tf', 20, 1), 20, 36, 1, {
+    declarationKind: 'var',
+    initializer: timeframePeriod,
+  });
+
+  const timeframeNamespace2 = createIdentifier('timeframe', 40, 2);
+  const isDailyProperty = createIdentifier('isdaily', 50, 2);
+  const isDailyMember = createMemberExpression(timeframeNamespace2, isDailyProperty, 40, 58, 2);
+  const boolVar = createVariableDeclaration(createIdentifier('isDaily', 60, 2), 60, 82, 2, {
+    declarationKind: 'var',
+    initializer: isDailyMember,
+  });
+
+  return {
+    kind: 'Program',
+    directives: [],
+    body: [timeframeVar, boolVar],
+    ...createSpan({ start: 0, end: 82, lineStart: 1, lineEnd: 2 }),
   };
 }
 

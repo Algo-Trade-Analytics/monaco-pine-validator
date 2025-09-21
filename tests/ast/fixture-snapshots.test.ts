@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createControlFlowFixture, createIndicatorScriptFixture } from './fixtures';
+import { createControlFlowFixture, createIndicatorScriptFixture, createNamespaceAccessFixture } from './fixtures';
 
 describe('AST fixtures', () => {
   it('matches the indicator script snapshot', () => {
@@ -392,6 +392,236 @@ describe('AST fixtures', () => {
         "range": [
           0,
           102,
+        ],
+      }
+    `);
+  });
+
+  it('matches the namespace access snapshot', () => {
+    const program = createNamespaceAccessFixture();
+    expect(program).toMatchInlineSnapshot(`
+      {
+        "body": [
+          {
+            "declarationKind": "var",
+            "identifier": {
+              "kind": "Identifier",
+              "loc": {
+                "end": {
+                  "column": 23,
+                  "line": 1,
+                  "offset": 22,
+                },
+                "start": {
+                  "column": 21,
+                  "line": 1,
+                  "offset": 20,
+                },
+              },
+              "name": "tf",
+              "range": [
+                20,
+                22,
+              ],
+            },
+            "initializer": {
+              "computed": false,
+              "kind": "MemberExpression",
+              "loc": {
+                "end": {
+                  "column": 17,
+                  "line": 1,
+                  "offset": 16,
+                },
+                "start": {
+                  "column": 1,
+                  "line": 1,
+                  "offset": 0,
+                },
+              },
+              "object": {
+                "kind": "Identifier",
+                "loc": {
+                  "end": {
+                    "column": 10,
+                    "line": 1,
+                    "offset": 9,
+                  },
+                  "start": {
+                    "column": 1,
+                    "line": 1,
+                    "offset": 0,
+                  },
+                },
+                "name": "timeframe",
+                "range": [
+                  0,
+                  9,
+                ],
+              },
+              "property": {
+                "kind": "Identifier",
+                "loc": {
+                  "end": {
+                    "column": 17,
+                    "line": 1,
+                    "offset": 16,
+                  },
+                  "start": {
+                    "column": 11,
+                    "line": 1,
+                    "offset": 10,
+                  },
+                },
+                "name": "period",
+                "range": [
+                  10,
+                  16,
+                ],
+              },
+              "range": [
+                0,
+                16,
+              ],
+            },
+            "kind": "VariableDeclaration",
+            "loc": {
+              "end": {
+                "column": 37,
+                "line": 1,
+                "offset": 36,
+              },
+              "start": {
+                "column": 21,
+                "line": 1,
+                "offset": 20,
+              },
+            },
+            "range": [
+              20,
+              36,
+            ],
+            "typeAnnotation": null,
+          },
+          {
+            "declarationKind": "var",
+            "identifier": {
+              "kind": "Identifier",
+              "loc": {
+                "end": {
+                  "column": 68,
+                  "line": 2,
+                  "offset": 67,
+                },
+                "start": {
+                  "column": 61,
+                  "line": 2,
+                  "offset": 60,
+                },
+              },
+              "name": "isDaily",
+              "range": [
+                60,
+                67,
+              ],
+            },
+            "initializer": {
+              "computed": false,
+              "kind": "MemberExpression",
+              "loc": {
+                "end": {
+                  "column": 59,
+                  "line": 2,
+                  "offset": 58,
+                },
+                "start": {
+                  "column": 41,
+                  "line": 2,
+                  "offset": 40,
+                },
+              },
+              "object": {
+                "kind": "Identifier",
+                "loc": {
+                  "end": {
+                    "column": 50,
+                    "line": 2,
+                    "offset": 49,
+                  },
+                  "start": {
+                    "column": 41,
+                    "line": 2,
+                    "offset": 40,
+                  },
+                },
+                "name": "timeframe",
+                "range": [
+                  40,
+                  49,
+                ],
+              },
+              "property": {
+                "kind": "Identifier",
+                "loc": {
+                  "end": {
+                    "column": 58,
+                    "line": 2,
+                    "offset": 57,
+                  },
+                  "start": {
+                    "column": 51,
+                    "line": 2,
+                    "offset": 50,
+                  },
+                },
+                "name": "isdaily",
+                "range": [
+                  50,
+                  57,
+                ],
+              },
+              "range": [
+                40,
+                58,
+              ],
+            },
+            "kind": "VariableDeclaration",
+            "loc": {
+              "end": {
+                "column": 83,
+                "line": 2,
+                "offset": 82,
+              },
+              "start": {
+                "column": 61,
+                "line": 2,
+                "offset": 60,
+              },
+            },
+            "range": [
+              60,
+              82,
+            ],
+            "typeAnnotation": null,
+          },
+        ],
+        "directives": [],
+        "kind": "Program",
+        "loc": {
+          "end": {
+            "column": 83,
+            "line": 2,
+            "offset": 82,
+          },
+          "start": {
+            "column": 1,
+            "line": 1,
+            "offset": 0,
+          },
+        },
+        "range": [
+          0,
+          82,
         ],
       }
     `);
