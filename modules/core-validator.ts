@@ -34,7 +34,7 @@ import type {
   UnaryExpressionNode,
   VersionDirectiveNode,
 } from '../core/ast/nodes';
-import { visit } from '../core/ast/traversal';
+import { visit, type NodePath } from '../core/ast/traversal';
 import type { TypeMetadata } from '../core/ast/types';
 
 const PLOTTING_OR_DRAWING_CALLEES = new Set([
@@ -113,6 +113,7 @@ export class CoreValidator implements ValidationModule {
   private astProcessedPlottingUsage = false;
   private astProcessedLibraryRestrictions = false;
   private astProcessedNegativeHistory = false;
+  private astStrategyUsageErrorLines = new Set<number>();
   private inLoop = false;
   private inFunction = false;
   private hasReturn = false;
@@ -189,6 +190,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedPlottingUsage = false;
     this.astProcessedLibraryRestrictions = false;
     this.astProcessedNegativeHistory = false;
+    this.astStrategyUsageErrorLines.clear();
     this.sawBrace = false;
     this.sawTabIndent = false;
     this.sawSpaceIndent = false;
@@ -233,6 +235,11 @@ export class CoreValidator implements ValidationModule {
           this.processAstIndexExpression(node as IndexExpressionNode);
         },
       },
+      MemberExpression: {
+        enter: (path) => {
+          this.processAstMemberExpression(path as NodePath<MemberExpressionNode>);
+        },
+      },
     });
   }
 
@@ -247,12 +254,7 @@ export class CoreValidator implements ValidationModule {
 
     if (root === 'strategy') {
       if (this.scriptType === 'indicator') {
-        this.addError(
-          call.loc.start.line,
-          call.loc.start.column,
-          "Calls to 'strategy.*' are not allowed in indicators.",
-          'PS020',
-        );
+        this.addStrategyNamespaceError(call.loc.start.line, call.loc.start.column);
       }
 
       if (this.scriptType === 'strategy') {
@@ -334,6 +336,39 @@ export class CoreValidator implements ValidationModule {
       'Invalid history reference: negative indexes are not allowed for series data.',
       'PS024',
       'Use positive indices like close[1] for historical data, or array.get(myArray, -1) for arrays.',
+    );
+  }
+
+  private processAstMemberExpression(path: NodePath<MemberExpressionNode>): void {
+    if (this.scriptType !== 'indicator') {
+      return;
+    }
+
+    const parent = path.parent;
+    if (parent?.node.kind === 'CallExpression' && parent.key === 'callee') {
+      return;
+    }
+
+    const memberPath = this.resolveCalleePath(path.node);
+    if (!memberPath || memberPath.length === 0 || memberPath[0] !== 'strategy') {
+      return;
+    }
+
+    const { line, column } = path.node.loc.start;
+    this.addStrategyNamespaceError(line, column);
+  }
+
+  private addStrategyNamespaceError(line: number, column: number): void {
+    if (this.astStrategyUsageErrorLines.has(line)) {
+      return;
+    }
+
+    this.astStrategyUsageErrorLines.add(line);
+    this.addError(
+      line,
+      column,
+      "Calls to 'strategy.*' are not allowed in indicators.",
+      'PS020',
     );
   }
 

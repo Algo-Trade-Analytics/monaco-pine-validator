@@ -163,6 +163,38 @@ describe('CoreValidator AST integration', () => {
     expect(strategyNamespaceErrors[0]?.line).toBe(3);
   });
 
+  it('flags strategy namespace member usage in indicators even without calls', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'value = strategy.long',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleValue = createStringLiteral('Example', '"Example"', 15, 2);
+    const titleArgument = createArgument(titleValue, 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+    const valueIdentifier = createIdentifier('value', 0, 3);
+    const strategyNamespace = createIdentifier('strategy', 9, 3);
+    const longProperty = createIdentifier('long', 18, 3);
+    const strategyMember = createMemberExpression(strategyNamespace, longProperty, 9, 22, 3);
+    const assignment = createAssignmentStatement(valueIdentifier, strategyMember, 0, 22, 3);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, assignment]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const strategyNamespaceErrors = result.errors.filter((error) => error.code === 'PS020');
+    expect(strategyNamespaceErrors).toHaveLength(1);
+    expect(strategyNamespaceErrors[0]?.line).toBe(3);
+  });
+
   it('marks strategy scripts with namespace calls so PS015 is suppressed', () => {
     const source = [
       '//@version=6',
