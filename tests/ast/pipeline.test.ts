@@ -30,6 +30,7 @@ describe('BaseValidator AST pipeline integration', () => {
     expect(context.symbolTable.size).toBe(0);
     expect(context.typeEnvironment.identifiers.size).toBe(0);
     expect(context.typeEnvironment.nodeTypes).toBeInstanceOf(WeakMap);
+    expect(context.controlFlowGraph.nodes.size).toBe(0);
   });
 
   it('populates AST data when the service succeeds', () => {
@@ -61,6 +62,9 @@ describe('BaseValidator AST pipeline integration', () => {
     expect(context.symbolTable.size).toBe(0);
     expect(context.typeEnvironment.identifiers.size).toBe(0);
     expect(context.typeEnvironment.nodeTypes).toBeInstanceOf(WeakMap);
+    expect(context.controlFlowGraph.entry).not.toBeNull();
+    expect(context.controlFlowGraph.exit).not.toBeNull();
+    expect(context.controlFlowGraph.nodes.size).toBe(2);
   });
 
   it('records parser failures as warnings', () => {
@@ -79,5 +83,6 @@ describe('BaseValidator AST pipeline integration', () => {
     expect(context.ast).toBeNull();
     expect(context.astDiagnostics.syntaxErrors).toEqual([]);
     expect(context.typeEnvironment.identifiers.size).toBe(0);
+    expect(context.controlFlowGraph.nodes.size).toBe(0);
   });
 });

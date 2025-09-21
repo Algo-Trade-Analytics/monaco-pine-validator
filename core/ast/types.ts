@@ -67,6 +67,37 @@ export interface ScopeGraph {
   nodes: Map<string, ScopeNode>;
 }
 
+export type ControlFlowNodeKind =
+  | 'entry'
+  | 'exit'
+  | 'statement'
+  | 'branch'
+  | 'merge'
+  | 'jump'
+  | 'terminator';
+
+export type ControlFlowEdgeKind = 'normal' | 'true' | 'false' | 'loop' | 'break' | 'continue' | 'return';
+
+export interface ControlFlowEdge {
+  target: string;
+  kind: ControlFlowEdgeKind;
+}
+
+export interface ControlFlowNode {
+  id: string;
+  kind: ControlFlowNodeKind;
+  astNode: Node | null;
+  predecessors: Set<string>;
+  successors: ControlFlowEdge[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ControlFlowGraph {
+  entry: string | null;
+  exit: string | null;
+  nodes: Map<string, ControlFlowNode>;
+}
+
 export type TypeCertainty = 'certain' | 'inferred' | 'conflict';
 
 export type PinePrimitiveType = 'int' | 'float' | 'bool' | 'string' | 'void';
@@ -98,6 +129,14 @@ export function createEmptyScopeGraph(): ScopeGraph {
   return {
     root: null,
     nodes: new Map<string, ScopeNode>(),
+  };
+}
+
+export function createEmptyControlFlowGraph(): ControlFlowGraph {
+  return {
+    entry: null,
+    exit: null,
+    nodes: new Map<string, ControlFlowNode>(),
   };
 }
 

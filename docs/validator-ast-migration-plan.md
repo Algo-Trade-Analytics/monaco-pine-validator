@@ -24,6 +24,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Focused Vitest suites cover traversal and scope graph behaviour; pipeline tests assert that AST diagnostics and context wiring behave under success, failure, and disabled modes.
 - Literal-aware type inference now populates a `TypeEnvironment` on the validation context, tracking identifier and expression types for downstream semantic passes.
 - Golden semantic coverage snapshots assert the combined scope, symbol, and type metadata for representative scripts to guard end-to-end analysis.
+- Control-flow graph construction models branch merges, loop back-edges, and return terminators while exposing the graph on the validation context for future analyses.
 
 ### Near-Term TODOs
 
@@ -102,7 +103,7 @@ Key principles:
 - ✅ Implement initial semantic passes operating on AST:
   - ✅ Scope builder (collects declarations, resolves references).
   - ✅ Type inference skeleton (basic literal + identifier typing feeding the shared `TypeEnvironment`).
-  - ☐ Control flow graph builder (for loops, conditionals) – optional if complex, but plan it early.
+  - ✅ Control flow graph builder (captures loops, conditionals, and terminators for downstream analyses).
 - ✅ Provide reusable diagnostics helpers mapping AST ranges to Monaco `IMarkerData`.
 - ✅ Add golden tests ensuring passes populate context as expected.
 
@@ -175,39 +176,42 @@ The initial AST plumbing is already landing (feature-flagged parsing in `BaseVal
 capitalise on this progress, align the next iteration around the following workstream
 plan:
 
-1. **Document & Harden the Current Foundations**
+1. **Kick Off Phase 3 Module Ports**
+   - Select the first validator (e.g., `core-validator`) for AST migration and scaffold a dual-run harness that compares legacy vs. AST diagnostics.
+   - Define parity exit criteria and owners for the initial tranche of modules listed in the migration table, now that scope, types, and control flow graphs are available.
+2. **Document & Harden the Current Foundations**
    - Update internal docs and tracking tables to reflect the landed AST scaffolding so
      contributors have an accurate baseline.
    - Expand the existing Vitest coverage to capture the behaviour of the merged
      `parseAst` flow (success, failure, disabled mode) and lock in diagnostics
      formatting with snapshots.
 
-2. **Parser RFC Closure & Prototype Upgrade**
+3. **Parser RFC Closure & Prototype Upgrade**
    - Finalise the parser technology RFC by enumerating findings from the current
      lexer/prototype experiments and logging open questions (incremental parsing,
      error recovery hooks).
    - Extend the prototype to cover directives, variable declarations, and function
      bodies so upcoming semantic passes have representative node shapes.
 
-3. **AST Schema & Traversal Expansion**
+4. **AST Schema & Traversal Expansion**
    - Extend the node set beyond the current expressions/statements to cover loops,
      `switch`, matrix literals, and built-in call shapes required by near-term modules.
    - Add utility helpers (builders, guards) for the new nodes and document traversal
      conventions for downstream contributors.
 
-4. **Semantic Pass Bootstrapping**
+5. **Semantic Pass Bootstrapping**
    - Harden the scope builder with additional fixtures (nested functions, `varip`/`var`
      lifetimes) and surface symbol metadata needed by module migrations.
    - Stand up the type inference skeleton covering literals, identifiers, tuples, and
      basic call-site inference so dependent modules can start wiring AST-aware checks.
 
-5. **Dual-Run Guardrail Wiring**
+6. **Dual-Run Guardrail Wiring**
    - Introduce a CLI/CI harness that executes both the legacy and AST-backed validators
      against a shared fixture suite, capturing diagnostic diffs for visibility.
    - Use the harness to populate the migration tracking table with confidence levels
      (e.g., ✅ parity, ⚠️ gaps) once individual modules begin switching to AST inputs.
 
-6. **Module Migration Prep**
+7. **Module Migration Prep**
    - For the first migration targets (`core-validator`, `function-declarations`), audit
      existing tests and author any missing behavioural cases so parity checks are
      meaningful.

@@ -5,6 +5,7 @@
 import type {
   AstConfig,
   AstDiagnostics,
+  ControlFlowGraph,
   ScopeGraph,
   SymbolTable,
   TypeEnvironment,
@@ -63,6 +64,7 @@ export interface AstValidationContext extends ValidationContext {
   scopeGraph: ScopeGraph;
   symbolTable: SymbolTable;
   typeEnvironment: TypeEnvironment;
+  controlFlowGraph: ControlFlowGraph;
 }
 
 export interface ValidatorConfig {
@@ -102,6 +104,11 @@ export type {
   AstParseOptions,
   AstParseResult,
   AstService,
+  ControlFlowEdge,
+  ControlFlowEdgeKind,
+  ControlFlowGraph,
+  ControlFlowNode,
+  ControlFlowNodeKind,
   ScopeGraph,
   ScopeKind,
   ScopeNode,
