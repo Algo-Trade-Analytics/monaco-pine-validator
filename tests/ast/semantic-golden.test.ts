@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { EnhancedModularValidator } from '../../EnhancedModularValidator';
+import { FunctionAstService } from '../../core/ast/service';
 import { buildScopeGraph } from '../../core/ast/scope';
 import { inferTypes } from '../../core/ast/type-inference';
 import {
@@ -24,6 +26,7 @@ import {
   type StatementNode,
 } from '../../core/ast/nodes';
 import {
+  createAstDiagnostics,
   type ScopeGraph,
   type ScopeNode,
   type SymbolRecord,
@@ -31,6 +34,8 @@ import {
   type TypeEnvironment,
   type TypeMetadata,
 } from '../../core/ast/types';
+import { type ValidationError, type ValidationResult } from '../../core/types';
+import { createBuiltinConstantsProgram } from './fixtures';
 
 function createProgram(body: StatementNode[]): ProgramNode {
   const start = createPosition(1, 1, 0);
@@ -121,6 +126,35 @@ function summariseTypeEnvironment(environment: TypeEnvironment, labelledNodes: R
   });
 
   return { identifiers, nodes: nodeSummaries };
+}
+
+function normaliseValidationMessages(messages: ValidationError[]) {
+  return messages
+    .map((entry) => ({
+      line: entry.line,
+      column: entry.column,
+      severity: entry.severity,
+      code: entry.code ?? null,
+      message: entry.message,
+      suggestion: entry.suggestion ?? null,
+      relatedLines: entry.relatedLines ? [...entry.relatedLines] : [],
+    }))
+    .sort((a, b) =>
+      a.line - b.line ||
+      a.column - b.column ||
+      a.severity.localeCompare(b.severity) ||
+      (a.code ?? '').localeCompare(b.code ?? '') ||
+      a.message.localeCompare(b.message),
+    );
+}
+
+function summariseValidation(result: ValidationResult) {
+  return {
+    isValid: result.isValid,
+    errors: normaliseValidationMessages(result.errors),
+    warnings: normaliseValidationMessages(result.warnings),
+    info: normaliseValidationMessages(result.info),
+  };
 }
 
 describe('semantic golden coverage', () => {
@@ -623,5 +657,43 @@ describe('semantic golden coverage', () => {
         },
       }
     `);
+  });
+});
+
+describe('semantic dual-run guardrail', () => {
+  it('keeps legacy diagnostics stable when AST runs in shadow mode', () => {
+    const source = `//@version=6\n` +
+      `indicator("Builtin AST")\n` +
+      `var tfDaily = timeframe.isdaily\n` +
+      `var displaySetting = display.all\n` +
+      `var extendSetting = extend.right\n` +
+      `var formatSetting = format.price\n` +
+      `var currencySetting = currency.USD\n` +
+      `var scaleSetting = scale.left\n` +
+      `var adjustmentSetting = adjustment.none\n` +
+      `var backadjustmentSetting = backadjustment.off\n`;
+
+    const legacyValidator = new EnhancedModularValidator({
+      targetVersion: 6,
+      strictMode: true,
+      enablePerformanceAnalysis: true,
+      ast: { mode: 'disabled' },
+    });
+    const legacyResult = legacyValidator.validate(source);
+
+    const astProgram = createBuiltinConstantsProgram();
+    const astService = new FunctionAstService(() => ({
+      ast: astProgram,
+      diagnostics: createAstDiagnostics(),
+    }));
+    const astValidator = new EnhancedModularValidator({
+      targetVersion: 6,
+      strictMode: true,
+      enablePerformanceAnalysis: true,
+      ast: { mode: 'shadow', service: astService },
+    });
+    const astResult = astValidator.validate(source);
+
+    expect(summariseValidation(astResult)).toEqual(summariseValidation(legacyResult));
   });
 });

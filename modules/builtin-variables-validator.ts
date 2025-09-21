@@ -145,7 +145,7 @@ export class BuiltinVariablesValidator implements ValidationModule {
             return;
           }
 
-          const position = node.property.loc?.start ?? node.loc.start;
+          const position = node.loc.start ?? node.property.loc?.start;
           const line = position?.line ?? 1;
           const column = position?.column ?? 1;
           this.recordConstantUsage(constant, line, column);

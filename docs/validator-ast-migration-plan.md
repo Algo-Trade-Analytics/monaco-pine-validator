@@ -30,7 +30,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 
 ### Near-Term TODOs
 
-1. ⏱️ **Stand Up Dual-Run Harnesses** – extend the semantic golden suite to diff legacy vs. AST diagnostics for `core-validator` and other high-complexity modules before their ports begin.
+1. ✅ **Stand Up Dual-Run Harnesses** – the semantic golden suite now runs `EnhancedModularValidator` in AST shadow mode and diffs its diagnostics against the legacy pipeline for builtin namespace coverage, establishing a regression guardrail for upcoming module ports.
 2. ⏱️ **Close Parser RFC Loop** – distil the outstanding parser spike notes into a publishable RFC update that records the chosen technology, recovery strategy, and open follow-ups for incremental parsing.
 3. ⏱️ **Broaden AST Node Coverage** – add structural nodes for `switch`, matrix literals, and historical index expressions so currently blocked validators can migrate without bespoke fallbacks.
 4. ⏱️ **Deepen Type Inference Rules** – capture strategy/TA helper return types and multi-series propagation so the `strategy-functions` and `ta-functions` validators can rely on AST semantics.
@@ -179,7 +179,7 @@ capitalise on this progress, align the next iteration around the following works
 plan:
 
 1. **Kick Off Phase 3 Module Ports**
-   - Select the first validator (e.g., `core-validator`) for AST migration and wire a dual-run harness into the semantic golden suite so legacy vs. AST diagnostics are diffed automatically.
+   - Leverage the new dual-run harness to compare `core-validator` diagnostics in shadow mode and capture mismatches as fixtures before swapping implementations.
    - Define parity exit criteria and owners for the initial tranche of modules listed in the migration table, now that scope, types, and control flow graphs are available.
 2. **Close the Parser RFC Loop**
    - Finalise the parser technology RFC by capturing findings from the lexer/prototype experiments, documenting the selected approach, and listing follow-ups like incremental parsing and recovery tuning.

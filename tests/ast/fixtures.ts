@@ -472,3 +472,156 @@ export function createControlFlowFixture(): ProgramNode {
     ...createSpan({ start: 50, end: 160, lineStart: 3, lineEnd: 9 }),
   };
 }
+export function createBuiltinConstantsProgram(): ProgramNode {
+  const timeframeDecl = createVariableDeclaration(
+    createIdentifier('tfDaily', 4, 3),
+    4,
+    31,
+    3,
+    {
+      declarationKind: 'var',
+      initializer: createMemberExpression(
+        createIdentifier('timeframe', 14, 3),
+        createIdentifier('isdaily', 24, 3),
+        14,
+        31,
+        3,
+      ),
+    },
+  );
+
+  const displayDecl = createVariableDeclaration(
+    createIdentifier('displaySetting', 4, 4),
+    4,
+    32,
+    4,
+    {
+      declarationKind: 'var',
+      initializer: createMemberExpression(
+        createIdentifier('display', 21, 4),
+        createIdentifier('all', 29, 4),
+        21,
+        32,
+        4,
+      ),
+    },
+  );
+
+  const extendDecl = createVariableDeclaration(
+    createIdentifier('extendSetting', 4, 5),
+    4,
+    32,
+    5,
+    {
+      declarationKind: 'var',
+      initializer: createMemberExpression(
+        createIdentifier('extend', 20, 5),
+        createIdentifier('right', 27, 5),
+        20,
+        32,
+        5,
+      ),
+    },
+  );
+
+  const formatDecl = createVariableDeclaration(
+    createIdentifier('formatSetting', 4, 6),
+    4,
+    32,
+    6,
+    {
+      declarationKind: 'var',
+      initializer: createMemberExpression(
+        createIdentifier('format', 20, 6),
+        createIdentifier('price', 27, 6),
+        20,
+        32,
+        6,
+      ),
+    },
+  );
+
+  const currencyDecl = createVariableDeclaration(
+    createIdentifier('currencySetting', 4, 7),
+    4,
+    34,
+    7,
+    {
+      declarationKind: 'var',
+      initializer: createMemberExpression(
+        createIdentifier('currency', 22, 7),
+        createIdentifier('USD', 31, 7),
+        22,
+        34,
+        7,
+      ),
+    },
+  );
+
+  const scaleDecl = createVariableDeclaration(
+    createIdentifier('scaleSetting', 4, 8),
+    4,
+    29,
+    8,
+    {
+      declarationKind: 'var',
+      initializer: createMemberExpression(
+        createIdentifier('scale', 19, 8),
+        createIdentifier('left', 25, 8),
+        19,
+        29,
+        8,
+      ),
+    },
+  );
+
+  const adjustmentDecl = createVariableDeclaration(
+    createIdentifier('adjustmentSetting', 4, 9),
+    4,
+    39,
+    9,
+    {
+      declarationKind: 'var',
+      initializer: createMemberExpression(
+        createIdentifier('adjustment', 24, 9),
+        createIdentifier('none', 35, 9),
+        24,
+        39,
+        9,
+      ),
+    },
+  );
+
+  const backadjustmentDecl = createVariableDeclaration(
+    createIdentifier('backadjustmentSetting', 4, 10),
+    4,
+    46,
+    10,
+    {
+      declarationKind: 'var',
+      initializer: createMemberExpression(
+        createIdentifier('backadjustment', 28, 10),
+        createIdentifier('off', 43, 10),
+        28,
+        46,
+        10,
+      ),
+    },
+  );
+
+  return {
+    kind: 'Program',
+    directives: [],
+    body: [
+      timeframeDecl,
+      displayDecl,
+      extendDecl,
+      formatDecl,
+      currencyDecl,
+      scaleDecl,
+      adjustmentDecl,
+      backadjustmentDecl,
+    ],
+    ...createSpan({ start: 0, end: 50, lineStart: 3, lineEnd: 10 }),
+  };
+}
