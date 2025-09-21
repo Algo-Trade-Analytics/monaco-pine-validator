@@ -193,7 +193,14 @@ describe('inferTypes', () => {
       createArgument(fastSeries, 14, 19, 1),
       createArgument(slowSeries, 20, 24, 1),
     ];
-    const call = createCallExpression(createIdentifier('ta.crossover', 0, 1), args, 0, 24, 1);
+    const crossoverCallee = createMemberExpression(
+      createIdentifier('ta', 0, 1),
+      createIdentifier('crossover', 3, 1),
+      0,
+      14,
+      1,
+    );
+    const call = createCallExpression(crossoverCallee, args, 0, 24, 1);
     const statement: ExpressionStatementNode = {
       kind: 'ExpressionStatement',
       expression: call,
@@ -207,6 +214,114 @@ describe('inferTypes', () => {
     const callType = environment.nodeTypes.get(call);
     expect(callType?.kind).toBe('bool');
     expect(callType?.certainty).toBe('certain');
+  });
+
+  it('recognizes namespaced helpers and strategy functions', () => {
+    const taSmaCallee = createMemberExpression(
+      createIdentifier('ta', 0, 1),
+      createIdentifier('sma', 3, 1),
+      0,
+      6,
+      1,
+    );
+    const taSmaArgs = [
+      createArgument(createIdentifier('close', 7, 1), 7, 12, 1),
+      createArgument(createNumberLiteral(14, '14', 14, 1), 13, 16, 1),
+    ];
+    const taSmaCall = createCallExpression(taSmaCallee, taSmaArgs, 0, 16, 1);
+    const taSmaStatement: ExpressionStatementNode = {
+      kind: 'ExpressionStatement',
+      expression: taSmaCall,
+      loc: createLocation(createPosition(1, 1, 0), createPosition(1, 17, 16)),
+      range: createRange(0, 16),
+    };
+
+    const taCrossCallee = createMemberExpression(
+      createIdentifier('ta', 20, 2),
+      createIdentifier('cross', 23, 2),
+      20,
+      32,
+      2,
+    );
+    const taCrossArgs = [
+      createArgument(createIdentifier('close', 33, 2), 33, 38, 2),
+      createArgument(createIdentifier('open', 39, 2), 39, 43, 2),
+    ];
+    const taCrossCall = createCallExpression(taCrossCallee, taCrossArgs, 20, 44, 2);
+    const taCrossStatement: ExpressionStatementNode = {
+      kind: 'ExpressionStatement',
+      expression: taCrossCall,
+      loc: createLocation(createPosition(2, 1, 20), createPosition(2, 25, 44)),
+      range: createRange(20, 44),
+    };
+
+    const strategyEntryCallee = createMemberExpression(
+      createIdentifier('strategy', 0, 3),
+      createIdentifier('entry', 9, 3),
+      0,
+      14,
+      3,
+    );
+    const strategyEntryArgs = [
+      createArgument(createStringLiteral('Long', '"Long"', 15, 3), 15, 22, 3),
+      createArgument(
+        createMemberExpression(
+          createIdentifier('strategy', 24, 3),
+          createIdentifier('long', 33, 3),
+          24,
+          34,
+          3,
+        ),
+        24,
+        34,
+        3,
+      ),
+    ];
+    const strategyEntryCall = createCallExpression(strategyEntryCallee, strategyEntryArgs, 0, 35, 3);
+    const strategyEntryStatement: ExpressionStatementNode = {
+      kind: 'ExpressionStatement',
+      expression: strategyEntryCall,
+      loc: createLocation(createPosition(3, 1, 0), createPosition(3, 36, 35)),
+      range: createRange(0, 35),
+    };
+
+    const strategyPositionCallee = createMemberExpression(
+      createIdentifier('strategy', 0, 4),
+      createIdentifier('position_size', 9, 4),
+      0,
+      24,
+      4,
+    );
+    const strategyPositionCall = createCallExpression(strategyPositionCallee, [], 0, 24, 4);
+    const strategyPositionStatement: ExpressionStatementNode = {
+      kind: 'ExpressionStatement',
+      expression: strategyPositionCall,
+      loc: createLocation(createPosition(4, 1, 0), createPosition(4, 25, 24)),
+      range: createRange(0, 24),
+    };
+
+    const program = createProgram([
+      taSmaStatement,
+      taCrossStatement,
+      strategyEntryStatement,
+      strategyPositionStatement,
+    ]);
+    const environment = inferTypes(program);
+
+    const taSmaType = environment.nodeTypes.get(taSmaCall);
+    expect(taSmaType?.kind).toBe('series');
+    expect(taSmaType?.certainty).toBe('certain');
+
+    const taCrossType = environment.nodeTypes.get(taCrossCall);
+    expect(taCrossType?.kind).toBe('bool');
+    expect(taCrossType?.certainty).toBe('certain');
+
+    const entryType = environment.nodeTypes.get(strategyEntryCall);
+    expect(entryType?.kind).toBe('void');
+    expect(entryType?.certainty).toBe('certain');
+
+    const positionType = environment.nodeTypes.get(strategyPositionCall);
+    expect(positionType?.kind).toBe('series');
   });
 
   it('annotates matrix literals and historical index expressions', () => {

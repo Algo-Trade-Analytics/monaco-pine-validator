@@ -491,7 +491,7 @@ describe('semantic golden coverage', () => {
         "types": {
           "identifiers": [
             {
-              "certainty": "inferred",
+              "certainty": "certain",
               "kind": "series",
               "name": "accumulator",
               "sources": [
@@ -536,7 +536,7 @@ describe('semantic golden coverage', () => {
               ],
             },
             {
-              "certainty": "inferred",
+              "certainty": "certain",
               "kind": "series",
               "name": "localValue",
               "sources": [
@@ -580,7 +580,7 @@ describe('semantic golden coverage', () => {
               ],
             },
             "assignmentAddition": {
-              "certainty": "inferred",
+              "certainty": "certain",
               "kind": "series",
               "sources": [
                 "binary:+",
@@ -601,7 +601,7 @@ describe('semantic golden coverage', () => {
               ],
             },
             "localIdentifier": {
-              "certainty": "inferred",
+              "certainty": "certain",
               "kind": "series",
               "sources": [
                 "call:builtin:nz",
@@ -610,14 +610,14 @@ describe('semantic golden coverage', () => {
               ],
             },
             "nestedNzCall": {
-              "certainty": "inferred",
+              "certainty": "certain",
               "kind": "series",
               "sources": [
                 "call:builtin:nz",
               ],
             },
             "nzCall": {
-              "certainty": "inferred",
+              "certainty": "certain",
               "kind": "series",
               "sources": [
                 "call:builtin:nz",

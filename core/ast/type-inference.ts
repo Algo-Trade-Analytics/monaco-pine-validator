@@ -7,6 +7,7 @@ import {
   type TypeEnvironment,
   type TypeMetadata,
 } from './types';
+import { STRATEGY_ORDER_FUNCTIONS } from '../constants';
 import {
   type ArgumentNode,
   type AssignmentStatementNode,
@@ -39,6 +40,15 @@ const LOGICAL_OPERATORS = new Set(['and', 'or', '&&', '||']);
 const BOOLEAN_UNARY_OPERATORS = new Set(['not', '!']);
 const NUMERIC_UNARY_OPERATORS = new Set(['+', '-']);
 const SERIES_IDENTIFIERS = new Set(['open', 'high', 'low', 'close', 'volume']);
+const TA_BOOLEAN_RETURN_FUNCTIONS = new Set(['ta.cross', 'ta.crossover', 'ta.crossunder']);
+const TA_INTEGER_RETURN_FUNCTIONS = new Set(['ta.barssince']);
+const STRATEGY_SERIES_RETURN_FUNCTIONS = new Set([
+  'strategy.position_size',
+  'strategy.position_avg_price',
+  'strategy.openprofit',
+  'strategy.netprofit',
+  'strategy.equity',
+]);
 
 const BUILTIN_CALL_RETURN_TYPES: Record<
   string,
@@ -47,22 +57,93 @@ const BUILTIN_CALL_RETURN_TYPES: Record<
   nz: { kind: 'series' },
   sma: { kind: 'series' },
   ema: { kind: 'series' },
+  'ta.cross': { kind: 'bool', certainty: 'certain' },
   'ta.crossover': { kind: 'bool', certainty: 'certain' },
   'ta.crossunder': { kind: 'bool', certainty: 'certain' },
   'ta.valuewhen': { kind: 'series' },
+  'ta.sma': { kind: 'series' },
+  'ta.ema': { kind: 'series' },
+  'ta.rsi': { kind: 'series' },
+  'ta.macd': { kind: 'series' },
+  'ta.atr': { kind: 'series' },
+  'ta.highest': { kind: 'series' },
+  'ta.lowest': { kind: 'series' },
+  'ta.barssince': { kind: 'int' },
   'math.round': { kind: 'float' },
   'math.floor': { kind: 'float' },
   'math.ceil': { kind: 'float' },
   plot: { kind: 'void', certainty: 'certain' },
+  'strategy.entry': { kind: 'void', certainty: 'certain' },
+  'strategy.order': { kind: 'void', certainty: 'certain' },
+  'strategy.exit': { kind: 'void', certainty: 'certain' },
+  'strategy.close': { kind: 'void', certainty: 'certain' },
+  'strategy.close_all': { kind: 'void', certainty: 'certain' },
+  'strategy.cancel': { kind: 'void', certainty: 'certain' },
+  'strategy.cancel_all': { kind: 'void', certainty: 'certain' },
+  'strategy.percent_of_equity': { kind: 'float', certainty: 'certain' },
+  'strategy.position_size': { kind: 'series', certainty: 'certain' },
+  'strategy.position_avg_price': { kind: 'series', certainty: 'certain' },
+  'strategy.risk.allow_entry_in': { kind: 'void', certainty: 'certain' },
+  'strategy.risk.max_position_size': { kind: 'void', certainty: 'certain' },
+  'strategy.risk.max_drawdown': { kind: 'void', certainty: 'certain' },
+  'strategy.risk.max_intraday_loss': { kind: 'void', certainty: 'certain' },
+  'strategy.risk.max_intraday_filled_orders': { kind: 'void', certainty: 'certain' },
+  'strategy.risk.max_cons_loss_days': { kind: 'void', certainty: 'certain' },
 };
 
-function createBuiltinCallMetadata(name: string): TypeMetadata | null {
-  const override = BUILTIN_CALL_RETURN_TYPES[name];
-  if (!override) {
-    return null;
+function resolveQualifiedName(expression: ExpressionNode): string | null {
+  if (expression.kind === 'Identifier') {
+    return expression.name;
   }
 
-  return createTypeMetadata(override.kind, `call:builtin:${name}`, override.certainty ?? 'inferred');
+  if (expression.kind === 'MemberExpression') {
+    const memberExpression = expression as MemberExpressionNode;
+    if (memberExpression.computed) {
+      return null;
+    }
+
+    const objectName = resolveQualifiedName(memberExpression.object);
+    if (!objectName) {
+      return null;
+    }
+
+    return `${objectName}.${memberExpression.property.name}`;
+  }
+
+  return null;
+}
+
+function createBuiltinCallMetadata(name: string, argumentTypes: TypeMetadata[]): TypeMetadata | null {
+  const override = BUILTIN_CALL_RETURN_TYPES[name];
+  if (override) {
+    return createTypeMetadata(override.kind, `call:builtin:${name}`, override.certainty ?? 'inferred');
+  }
+
+  if (name.startsWith('ta.')) {
+    if (TA_BOOLEAN_RETURN_FUNCTIONS.has(name)) {
+      return createTypeMetadata('bool', `call:builtin:${name}`, 'certain');
+    }
+
+    if (TA_INTEGER_RETURN_FUNCTIONS.has(name)) {
+      return createTypeMetadata('int', `call:builtin:${name}`);
+    }
+
+    return createTypeMetadata('series', `call:builtin:${name}`);
+  }
+
+  if (name.startsWith('strategy.')) {
+    if (STRATEGY_ORDER_FUNCTIONS.has(name) || name.startsWith('strategy.risk.')) {
+      return createTypeMetadata('void', `call:builtin:${name}`, 'certain');
+    }
+
+    if (STRATEGY_SERIES_RETURN_FUNCTIONS.has(name)) {
+      return createTypeMetadata('series', `call:builtin:${name}`, 'certain');
+    }
+
+    return createTypeMetadata('series', `call:builtin:${name}`);
+  }
+
+  return null;
 }
 
 function combineCertainty(...metadatas: TypeMetadata[]): TypeCertainty {
@@ -136,12 +217,12 @@ function recordIdentifierUsage(
   return annotated;
 }
 
-function inferArgument(environment: TypeEnvironment, argument: ArgumentNode): void {
+function inferArgument(environment: TypeEnvironment, argument: ArgumentNode): TypeMetadata {
   if (argument.name) {
     // Named arguments reference parameter labels rather than script symbols.
     environment.nodeTypes.set(argument.name, createTypeMetadata('unknown', 'argument:name', 'certain'));
   }
-  inferExpression(environment, argument.value, `argument:value`);
+  return inferExpression(environment, argument.value, `argument:value`);
 }
 
 function determineNumericLiteralKind(literal: NumberLiteralNode): InferredTypeKind {
@@ -150,14 +231,23 @@ function determineNumericLiteralKind(literal: NumberLiteralNode): InferredTypeKi
 
 function inferCallExpression(environment: TypeEnvironment, expression: CallExpressionNode): TypeMetadata {
   inferExpression(environment, expression.callee, 'call:callee');
-  expression.args.forEach((arg) => inferArgument(environment, arg));
-  let metadata: TypeMetadata | null = null;
-  if (expression.callee.kind === 'Identifier') {
-    metadata = createBuiltinCallMetadata(expression.callee.name);
+  const argumentTypes = expression.args.map((arg) => inferArgument(environment, arg));
+  const calleeName = resolveQualifiedName(expression.callee);
+  let metadata: TypeMetadata | null = calleeName
+    ? createBuiltinCallMetadata(calleeName, argumentTypes)
+    : null;
+
+  if (metadata?.kind === 'series') {
+    const seriesArguments = argumentTypes.filter((argumentType) => argumentType.kind === 'series');
+    if (seriesArguments.length > 0) {
+      metadata = cloneTypeMetadata(metadata, { certainty: combineCertainty(...seriesArguments) });
+    }
   }
+
   if (!metadata) {
     metadata = createUnknown('call:return');
   }
+
   return annotateNode(environment, expression, metadata);
 }
 

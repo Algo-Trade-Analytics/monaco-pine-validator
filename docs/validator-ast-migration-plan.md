@@ -28,13 +28,14 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Member expression nodes model namespaced property access (e.g., timeframe.period) with traversal, scope, and type inference coverage so builtin-variable validators can rely on structured AST data.
 - The built-in variables validator now consumes AST member expressions to detect namespace constants, keeping Monaco diagnostics aligned with Pine nodes without relying on legacy line-based scanning.
 - Switch statements, matrix literals, and historical index expressions now have dedicated AST nodes with traversal, scope, type inference, and control-flow coverage, unblocking downstream modules that depend on these constructs.
+- Type inference heuristics recognise namespaced TA and strategy helpers, applying return-type overrides and boosting series certainty when fed series arguments so downstream validators can rely on richer call metadata.
 
 ### Near-Term TODOs
 
 1. ✅ **Stand Up Dual-Run Harnesses** – the semantic golden suite now runs `EnhancedModularValidator` in AST shadow mode and diffs its diagnostics against the legacy pipeline for builtin namespace coverage, establishing a regression guardrail for upcoming module ports.
 2. ⏱️ **Close Parser RFC Loop** – distil the outstanding parser spike notes into a publishable RFC update that records the chosen technology, recovery strategy, and open follow-ups for incremental parsing.
 3. ✅ **Broaden AST Node Coverage** – added structural nodes for `switch`, matrix literals, and historical index expressions so currently blocked validators can migrate without bespoke fallbacks.
-4. ⏱️ **Deepen Type Inference Rules** – capture strategy/TA helper return types and multi-series propagation so the `strategy-functions` and `ta-functions` validators can rely on AST semantics.
+4. ✅ **Deepen Type Inference Rules** – namespaced TA and strategy helpers now surface richer return metadata and series certainty so the `strategy-functions` and `ta-functions` validators can rely on AST semantics.
 5. ⏱️ **Document Monaco Integration Plan** – outline how AST diagnostics, hovers, and code lenses will be surfaced through the Monaco worker now that diagnostic helpers exist.
 
 ## 3. Target Architecture Overview
@@ -187,8 +188,8 @@ plan:
    - Extend the prototype to cover directives, variable declarations, and function bodies so upcoming semantic passes have representative node shapes.
 
 3. **Expand Semantic Coverage**
-   - Add AST nodes for `switch`, matrix literals, and historical index access while deepening type inference rules for strategy/TA helpers.
-   - Ensure the migration table’s blocked modules move to “Ready” once their required syntax and inference features land.
+   - Use the enhanced type inference heuristics to unblock the `strategy-functions` and `ta-functions` module ports, filling any remaining return overrides encountered during parity runs.
+   - Ensure the migration table’s blocked modules move to “Ready” once outstanding syntax or inference gaps surface during module migrations.
 
 4. **Plan Monaco Worker Integration**
    - Document how AST diagnostics, hovers, and code lenses will flow through the Monaco worker using the new marker helpers.

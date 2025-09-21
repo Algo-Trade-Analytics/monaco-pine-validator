@@ -96,7 +96,7 @@ export function createNullLiteral(start: number, line = 1): NullLiteralNode {
 }
 
 export function createArgument(
-  value: StringLiteralNode | NumberLiteralNode | IdentifierNode,
+  value: ExpressionNode,
   start: number,
   end: number,
   line = 1,
@@ -138,7 +138,7 @@ export function createReturn(argument: IdentifierNode | null, start: number, end
 }
 
 export function createCallExpression(
-  callee: IdentifierNode,
+  callee: ExpressionNode,
   args: ArgumentNode[],
   start: number,
   end: number,
