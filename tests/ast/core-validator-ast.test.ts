@@ -599,6 +599,82 @@ describe('CoreValidator AST integration', () => {
     expect(naWarnings[0]?.line).toBe(3);
   });
 
+  it('warns on disallowed logical operator tokens via AST binary expressions', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Ops")',
+      'plot(condA && condB)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Ops', '"Ops"', 15, 2), 10, 21, 2);
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 22, 2);
+    const leftCondition = createIdentifier('condA', 5, 3);
+    const rightCondition = createIdentifier('condB', 14, 3);
+    const logicalExpression = createBinaryExpression('&&', leftCondition, rightCondition, 5, 19, 3);
+    const plotArgument = createArgument(logicalExpression, 5, 19, 3);
+    const plotCall = createCallExpression(createIdentifier('plot', 0, 3), [plotArgument], 0, 20, 3);
+    const plotStatement = createExpressionStatement(plotCall, 0, 20, 3);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, plotStatement]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const invalidOperatorWarnings = result.warnings.filter((warning) => warning.code === 'PSO01');
+    expect(invalidOperatorWarnings).toHaveLength(1);
+    expect(invalidOperatorWarnings[0]?.line).toBe(3);
+    expect(invalidOperatorWarnings[0]?.message).toContain("'&&'");
+  });
+
+  it('warns on increment operators surfaced by AST unary expressions', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Ops")',
+      'var counter = 0',
+      'counter++',
+      'plot(counter)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleArgument = createArgument(createStringLiteral('Ops', '"Ops"', 15, 2), 10, 21, 2);
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 22, 2);
+    const counterIdentifier = createIdentifier('counter', 4, 3);
+    const counterDeclaration = createVariableDeclaration(counterIdentifier, 4, 17, 3, {
+      declarationKind: 'var',
+      initializer: createNumberLiteral(0, '0', 16, 3),
+    });
+    const incrementExpression = createUnaryExpression('++', createIdentifier('counter', 0, 4), 0, 9, 4, false);
+    const incrementStatement = createExpressionStatement(incrementExpression, 0, 9, 4);
+    const plotArgument = createArgument(createIdentifier('counter', 5, 5), 5, 12, 5);
+    const plotCall = createCallExpression(createIdentifier('plot', 0, 5), [plotArgument], 0, 13, 5);
+    const plotStatement = createExpressionStatement(plotCall, 0, 13, 5);
+
+    const program = createProgramFromSource(
+      source,
+      [directive],
+      [scriptDeclaration, counterDeclaration, incrementStatement, plotStatement],
+    );
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const invalidOperatorWarnings = result.warnings.filter((warning) => warning.code === 'PSO01');
+    expect(invalidOperatorWarnings).toHaveLength(1);
+    expect(invalidOperatorWarnings[0]?.line).toBe(4);
+    expect(invalidOperatorWarnings[0]?.message).toContain("'++'");
+  });
+
   it('reports unreachable statements after return using AST control flow', () => {
     const source = [
       '//@version=6',

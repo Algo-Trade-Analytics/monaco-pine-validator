@@ -125,6 +125,7 @@ export class CoreValidator implements ValidationModule {
   private astProcessedLinewidthZero = false;
   private astProcessedNaComparisons = false;
   private astProcessedControlFlow = false;
+  private astProcessedInvalidOperators = false;
   private astStrategyUsageErrorLines = new Set<number>();
   private inLoop = false;
   private inFunction = false;
@@ -206,6 +207,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedLinewidthZero = false;
     this.astProcessedNaComparisons = false;
     this.astProcessedControlFlow = false;
+    this.astProcessedInvalidOperators = false;
     this.astStrategyUsageErrorLines.clear();
     this.sawBrace = false;
     this.sawTabIndent = false;
@@ -242,6 +244,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedNumericConditions = true;
     this.astProcessedLinewidthZero = true;
     this.astProcessedNaComparisons = true;
+    this.astProcessedInvalidOperators = true;
 
     visit(program, {
       CallExpression: {
@@ -285,6 +288,11 @@ export class CoreValidator implements ValidationModule {
       BinaryExpression: {
         enter: ({ node }) => {
           this.processAstBinaryExpression(node as BinaryExpressionNode);
+        },
+      },
+      UnaryExpression: {
+        enter: ({ node }) => {
+          this.processAstUnaryExpression(node as UnaryExpressionNode);
         },
       },
       FunctionDeclaration: {
@@ -477,6 +485,12 @@ export class CoreValidator implements ValidationModule {
   }
 
   private processAstBinaryExpression(expression: BinaryExpressionNode): void {
+    const invalidOperatorMessage = this.getAstInvalidBinaryOperatorMessage(expression.operator);
+    if (invalidOperatorMessage) {
+      const { line, column } = expression.loc.start;
+      this.addWarning(line, column, invalidOperatorMessage, 'PSO01');
+    }
+
     if (expression.operator !== '==' && expression.operator !== '!=') {
       return;
     }
@@ -493,6 +507,46 @@ export class CoreValidator implements ValidationModule {
       'PS023',
       'Replace `x == na` with `na(x)` and `x != na` with `not na(x)`.',
     );
+  }
+
+  private processAstUnaryExpression(expression: UnaryExpressionNode): void {
+    const invalidOperatorMessage = this.getAstInvalidUnaryOperatorMessage(expression.operator);
+    if (!invalidOperatorMessage) {
+      return;
+    }
+
+    const { line, column } = expression.loc.start;
+    this.addWarning(line, column, invalidOperatorMessage, 'PSO01');
+  }
+
+  private getAstInvalidBinaryOperatorMessage(operator: string): string | null {
+    switch (operator) {
+      case '&&':
+        return "Operator '&&' is not valid in Pine Script. Use 'and' instead.";
+      case '||':
+        return "Operator '||' is not valid in Pine Script. Use 'or' instead.";
+      case '===':
+        return "Operator '===' is not valid in Pine Script.";
+      case '!==':
+        return "Operator '!==' is not valid in Pine Script.";
+      case '^':
+        return "Operator '^' is not valid in Pine Script.";
+      default:
+        return null;
+    }
+  }
+
+  private getAstInvalidUnaryOperatorMessage(operator: string): string | null {
+    switch (operator) {
+      case '++':
+        return "Operator '++' is not valid in Pine Script.";
+      case '--':
+        return "Operator '--' is not valid in Pine Script.";
+      case '~':
+        return "Operator '~' is not valid in Pine Script.";
+      default:
+        return null;
+    }
   }
 
   private processAstFunctionControlFlow(fn: FunctionDeclarationNode): void {
@@ -1098,20 +1152,22 @@ export class CoreValidator implements ValidationModule {
   }
 
   private checkBasicSyntax(line: string, lineNum: number, strippedNoStrings: string): void {
-    // Check for invalid operators
-    const invalidOps = ['===', '!==', '++', '--', '^', '~'];
-    for (const op of invalidOps) {
-      if (strippedNoStrings.includes(op)) {
-        this.addWarning(lineNum, 1, `Operator '${op}' is not valid in Pine Script.`, 'PSO01');
+    if (!this.astProcessedInvalidOperators) {
+      // Check for invalid operators
+      const invalidOps = ['===', '!==', '++', '--', '^', '~'];
+      for (const op of invalidOps) {
+        if (strippedNoStrings.includes(op)) {
+          this.addWarning(lineNum, 1, `Operator '${op}' is not valid in Pine Script.`, 'PSO01');
+        }
       }
-    }
 
-    // Check for logical operators
-    if (strippedNoStrings.includes('&&')) {
-      this.addWarning(lineNum, 1, "Operator '&&' is not valid in Pine Script. Use 'and' instead.", 'PSO01');
-    }
-    if (strippedNoStrings.includes('||')) {
-      this.addWarning(lineNum, 1, "Operator '||' is not valid in Pine Script. Use 'or' instead.", 'PSO01');
+      // Check for logical operators
+      if (strippedNoStrings.includes('&&')) {
+        this.addWarning(lineNum, 1, "Operator '&&' is not valid in Pine Script. Use 'and' instead.", 'PSO01');
+      }
+      if (strippedNoStrings.includes('||')) {
+        this.addWarning(lineNum, 1, "Operator '||' is not valid in Pine Script. Use 'or' instead.", 'PSO01');
+      }
     }
 
     // Check for assignment in conditions
