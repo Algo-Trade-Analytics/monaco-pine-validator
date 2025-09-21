@@ -172,6 +172,98 @@ describe('CoreValidator AST integration', () => {
     expect(strategyNamespaceErrors[0]?.line).toBe(3);
   });
 
+  it("warns when method declarations don't place 'this' as the first parameter", () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'method Point.distance(target, this) => target',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleValue = createStringLiteral('Example', '"Example"', 15, 2);
+    const titleArgument = createArgument(titleValue, 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+
+    const functionIdentifier = createIdentifier('Point.distance', 7, 3);
+    const targetParam = createParameter('target', 22, 3);
+    const thisParam = createParameter('this', 30, 3);
+    const returnIdentifier = createIdentifier('target', 39, 3);
+    const returnStatement = createReturn(returnIdentifier, 36, 45, 3);
+    const body = createBlock([returnStatement], 36, 45, 3);
+    const methodDeclaration = createFunctionDeclaration(
+      functionIdentifier,
+      [targetParam, thisParam],
+      body,
+      0,
+      45,
+      3,
+    );
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, methodDeclaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const misplacedThisWarnings = result.warnings.filter((warning) => warning.code === 'PSM01');
+    expect(misplacedThisWarnings).toHaveLength(1);
+    expect(misplacedThisWarnings[0]?.line).toBe(3);
+    expect(misplacedThisWarnings[0]?.column).toBe(31);
+
+    const context = validator.exposeContext();
+    expect(context.functionParams.get('Point.distance')).toEqual(['target', 'this']);
+    expect(context.methodNames.has('Point.distance')).toBe(true);
+  });
+
+  it('emits duplicate parameter diagnostics from AST function declarations', () => {
+    const source = [
+      '//@version=6',
+      'indicator(title="Example")',
+      'myFunction(value, value) => value',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleValue = createStringLiteral('Example', '"Example"', 15, 2);
+    const titleArgument = createArgument(titleValue, 10, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+
+    const functionIdentifier = createIdentifier('myFunction', 0, 3);
+    const firstParam = createParameter('value', 12, 3);
+    const duplicateParam = createParameter('value', 19, 3);
+    const returnIdentifier = createIdentifier('value', 27, 3);
+    const returnStatement = createReturn(returnIdentifier, 24, 33, 3);
+    const body = createBlock([returnStatement], 24, 33, 3);
+    const functionDeclaration = createFunctionDeclaration(
+      functionIdentifier,
+      [firstParam, duplicateParam],
+      body,
+      0,
+      33,
+      3,
+    );
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, functionDeclaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const duplicateErrors = result.errors.filter((error) => error.code === 'PSDUP01');
+    expect(duplicateErrors).toHaveLength(1);
+    expect(duplicateErrors[0]?.line).toBe(3);
+    expect(duplicateErrors[0]?.column).toBe(20);
+
+    expect(validator.exposeContext().functionParams.get('myFunction')).toEqual(['value', 'value']);
+  });
+
   it('flags strategy namespace member usage in indicators even without calls', () => {
     const source = [
       '//@version=6',

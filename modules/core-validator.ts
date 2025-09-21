@@ -34,10 +34,12 @@ import type {
   IndexExpressionNode,
   MemberExpressionNode,
   NumberLiteralNode,
+  ParameterNode,
   ProgramNode,
   ScriptDeclarationNode,
   StatementNode,
   StringLiteralNode,
+  TypeReferenceNode,
   UnaryExpressionNode,
   VersionDirectiveNode,
   WhileStatementNode,
@@ -126,6 +128,7 @@ export class CoreValidator implements ValidationModule {
   private astProcessedNaComparisons = false;
   private astProcessedControlFlow = false;
   private astProcessedInvalidOperators = false;
+  private astProcessedFunctionDeclarations = false;
   private astStrategyUsageErrorLines = new Set<number>();
   private inLoop = false;
   private inFunction = false;
@@ -208,6 +211,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedNaComparisons = false;
     this.astProcessedControlFlow = false;
     this.astProcessedInvalidOperators = false;
+    this.astProcessedFunctionDeclarations = false;
     this.astStrategyUsageErrorLines.clear();
     this.sawBrace = false;
     this.sawTabIndent = false;
@@ -297,7 +301,9 @@ export class CoreValidator implements ValidationModule {
       },
       FunctionDeclaration: {
         enter: ({ node }) => {
-          this.processAstFunctionControlFlow(node as FunctionDeclarationNode);
+          const fn = node as FunctionDeclarationNode;
+          this.processAstFunctionDeclaration(fn);
+          this.processAstFunctionControlFlow(fn);
         },
       },
     });
@@ -519,6 +525,37 @@ export class CoreValidator implements ValidationModule {
     this.addWarning(line, column, invalidOperatorMessage, 'PSO01');
   }
 
+  private processAstFunctionDeclaration(fn: FunctionDeclarationNode): void {
+    if (!fn.identifier) {
+      return;
+    }
+
+    this.astProcessedFunctionDeclarations = true;
+
+    const name = fn.identifier.name;
+    const params = fn.params.map((param) => this.formatAstParameter(param));
+    const headerLine = fn.loc.start.line;
+
+    this.functionNames.add(name);
+    this.functionParams.set(name, params);
+    this.functionHeaderLine.set(name, headerLine);
+    this.context.functionParams.set(name, params);
+
+    const methodIndex = fn.params.findIndex((param) => param.identifier.name === 'this');
+    const isMethod = methodIndex !== -1;
+    if (isMethod) {
+      this.methodNames.add(name);
+      this.context.methodNames?.add(name);
+      if (methodIndex > 0) {
+        const location = fn.params[methodIndex]!.identifier.loc.start;
+        this.addWarning(location.line, location.column, "In methods, 'this' should be the first parameter.", 'PSM01');
+      }
+    }
+
+    this.registerParameterTypes(name, params, headerLine);
+    this.checkAstDuplicateParameters(fn, name, isMethod);
+  }
+
   private getAstInvalidBinaryOperatorMessage(operator: string): string | null {
     switch (operator) {
       case '&&':
@@ -546,6 +583,47 @@ export class CoreValidator implements ValidationModule {
         return "Operator '~' is not valid in Pine Script.";
       default:
         return null;
+    }
+  }
+
+  private formatAstParameter(param: ParameterNode): string {
+    const typePart = param.typeAnnotation ? this.stringifyAstTypeReference(param.typeAnnotation) : null;
+    const identifier = param.identifier.name;
+    if (typePart) {
+      return `${typePart} ${identifier}`;
+    }
+    return identifier;
+  }
+
+  private stringifyAstTypeReference(type: TypeReferenceNode): string {
+    const base = type.name.name;
+    if (!type.generics.length) {
+      return base;
+    }
+
+    const generics = type.generics.map((generic) => this.stringifyAstTypeReference(generic));
+    return `${base}<${generics.join(', ')}>`;
+  }
+
+  private checkAstDuplicateParameters(
+    fn: FunctionDeclarationNode,
+    name: string,
+    isMethod: boolean,
+  ): void {
+    const seen = new Set<string>();
+
+    for (const param of fn.params) {
+      const paramName = param.identifier.name;
+      if (seen.has(paramName)) {
+        const { line, column } = param.identifier.loc.start;
+        const message = isMethod && paramName === 'this'
+          ? `Duplicate 'this' parameter in method '${name}'.`
+          : `Duplicate parameter '${paramName}' in function '${name}'.`;
+        this.addError(line, column, message, 'PSDUP01');
+        continue;
+      }
+
+      seen.add(paramName);
     }
   }
 
@@ -979,9 +1057,13 @@ export class CoreValidator implements ValidationModule {
   }
 
   private handleFunctionDeclarations(line: string, lineNum: number): void {
+    if (this.astProcessedFunctionDeclarations) {
+      return;
+    }
+
     const funcMatch = line.match(QUALIFIED_FN_RE);
     const methMatch = line.match(METHOD_DECL_RE);
-    
+
     if (funcMatch) {
       this.functionHeaderLine.set(funcMatch[1], lineNum);
     } else if (methMatch) {
