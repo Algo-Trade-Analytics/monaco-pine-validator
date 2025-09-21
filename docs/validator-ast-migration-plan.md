@@ -23,13 +23,14 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - `BaseValidator` now hydrates `AstValidationContext` with parser outputs, scope graphs, and symbol tables whenever AST mode is enabled.
 - Focused Vitest suites cover traversal and scope graph behaviour; pipeline tests assert that AST diagnostics and context wiring behave under success, failure, and disabled modes.
 - Literal-aware type inference now populates a `TypeEnvironment` on the validation context, tracking identifier and expression types for downstream semantic passes.
+- Golden semantic coverage snapshots assert the combined scope, symbol, and type metadata for representative scripts to guard end-to-end analysis.
 
 ### Near-Term TODOs
 
 1. ✅ **Stabilise AST Fixtures** – snapshot suites now exercise representative Pine snippets so AST structure changes surface clearly in reviews.
-2. **Expand Type Inference Coverage** – extend the skeleton with builtin call heuristics, `series` propagation rules, and richer metadata for downstream diagnostics.
+2. ✅ **Expand Type Inference Coverage** – builtin call heuristics, `series` propagation rules, and richer metadata for downstream diagnostics are captured in the current skeleton.
 3. ✅ **Wire Diagnostic Helpers** – introduce utilities that translate AST node ranges into Monaco `IMarkerData` instances for reuse across modules.
-4. **Author Golden Semantic Tests** – capture end-to-end fixtures that exercise scope + type metadata to validate the new passes.
+4. ✅ **Author Golden Semantic Tests** – Vitest golden coverage now snapshots scope, symbol, and type metadata for representative programs.
 5. **Update Migration Tracking Table** – reflect delivered infrastructure (AST context, scope graph) and link owners for upcoming module migrations.
 
 ## 3. Target Architecture Overview
@@ -95,7 +96,7 @@ Key principles:
 - ✅ Create `core/ast/` folder with lexer, parser, node definitions, traversal utilities, and error types (landed via the AST schema + traversal commits).
 - ✅ Add new `AstValidationContext` extending existing `ValidationContext` with `ast`, `scopeGraph`, `symbolTable`.
 - ✅ Add feature-flag configuration in `BaseValidator` to toggle AST mode (dual-run to compare results).
-- 🚧 Establish snapshot-based tests verifying AST output for sample Pine snippets (`tests/ast/*.test.ts`).
+- ✅ Establish snapshot-based tests verifying AST output for sample Pine snippets (`tests/ast/*.test.ts`).
 
 ### Phase 2 – Semantic Foundation Passes
 - ✅ Implement initial semantic passes operating on AST:
@@ -103,7 +104,7 @@ Key principles:
   - ✅ Type inference skeleton (basic literal + identifier typing feeding the shared `TypeEnvironment`).
   - ☐ Control flow graph builder (for loops, conditionals) – optional if complex, but plan it early.
 - ✅ Provide reusable diagnostics helpers mapping AST ranges to Monaco `IMarkerData`.
-- 🚧 Add golden tests ensuring passes populate context as expected.
+- ✅ Add golden tests ensuring passes populate context as expected.
 
 ### Phase 3 – Module Migration (Incremental)
 - Prioritise modules with high instability and heavy parsing logic (CoreValidator, FunctionDeclarations, Scope, Type).
