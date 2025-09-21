@@ -31,7 +31,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 2. ✅ **Expand Type Inference Coverage** – builtin call heuristics, `series` propagation rules, and richer metadata for downstream diagnostics are captured in the current skeleton.
 3. ✅ **Wire Diagnostic Helpers** – introduce utilities that translate AST node ranges into Monaco `IMarkerData` instances for reuse across modules.
 4. ✅ **Author Golden Semantic Tests** – Vitest golden coverage now snapshots scope, symbol, and type metadata for representative programs.
-5. **Update Migration Tracking Table** – reflect delivered infrastructure (AST context, scope graph) and link owners for upcoming module migrations.
+5. ✅ **Update Migration Tracking Table** – reflect delivered infrastructure (AST context, scope graph) and link owners for upcoming module migrations.
 
 ## 3. Target Architecture Overview
 
@@ -154,19 +154,19 @@ Suggested migration order:
 
 ## 9. Migration Tracking Table
 
-| Module | Legacy Complexity | AST Migration Status | Notes |
-| --- | --- | --- | --- |
-| core-validator | High | ☐ Not Started | Establishes statement ordering; migrate early |
-| function-declarations | High | ☐ Not Started | Dependent on AST function nodes |
-| type-validator | High | ☐ Not Started | Requires semantic pass outputs |
-| scope-validator | High | ☐ Not Started | Will leverage scope builder |
-| switch-validator | Medium | ☐ Not Started | Control flow constructs |
-| while-loop-validator | Medium | ☐ Not Started | Loop node traversal |
-| builtin-variables-validator | Medium | ☐ Not Started | Replace line scanning with identifier resolution |
-| ta-functions-validator | Medium | ☐ Not Started | Rely on call expressions |
-| strategy-functions-validator | Medium | ☐ Not Started | AST call classification |
-| history-referencing-validator | High | ☐ Not Started | Needs AST index expressions |
-| ... | ... | ... | Extend table as modules migrate |
+| Module | Legacy Complexity | AST Migration Status | Owner | Notes |
+| --- | --- | --- | --- | --- |
+| core-validator | High | 🔄 Ready for AST port | Validator Infra | AST context + diagnostics helpers landed; waiting on dual-run guardrail before switchover |
+| function-declarations | High | 🔄 Ready for AST port | Validator Infra | Function + call nodes modelled; scope builder resolves function symbols |
+| type-validator | High | 🚧 Planning | Semantic Working Group | Literal/type environment skeleton merged; expand inference before parity run |
+| scope-validator | High | 🚧 Planning | Semantic Working Group | Scope graph + symbol tables available; need module-level dual-run harness |
+| switch-validator | Medium | 🛠️ Blocked on node coverage | Language Infra | Extend AST to cover `switch` branches prior to migration |
+| while-loop-validator | Medium | 🛠️ Blocked on node coverage | Language Infra | Loop constructs present; finalise control-flow metadata before port |
+| builtin-variables-validator | Medium | 🔄 Ready for AST port | Module Owners Guild | Identifier/type metadata supports replacement of regex scanning |
+| ta-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Awaiting expanded call-site inference for strategy/TA helpers |
+| strategy-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Needs richer series/type propagation to avoid regressions |
+| history-referencing-validator | High | 🛠️ Blocked on index nodes | Module Owners Guild | Model historical reference expressions + guard via snapshots |
+| ... | ... | ... | ... | Extend table as modules migrate |
 
 ## 10. Immediate Next Steps (Post-Review)
 
