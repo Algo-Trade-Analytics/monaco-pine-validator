@@ -1,13 +1,18 @@
 import {
   type ArgumentNode,
+  type AssignmentStatementNode,
+  type BinaryExpressionNode,
   type BlockStatementNode,
+  type BooleanLiteralNode,
   type CallExpressionNode,
   type ConditionalExpressionNode,
+  type ExpressionNode,
   type ExpressionStatementNode,
   type ForStatementNode,
   type FunctionDeclarationNode,
   type IdentifierNode,
   type IfStatementNode,
+  type NullLiteralNode,
   type NumberLiteralNode,
   type ParameterNode,
   type ProgramNode,
@@ -15,6 +20,7 @@ import {
   type ScriptDeclarationNode,
   type StatementNode,
   type StringLiteralNode,
+  type UnaryExpressionNode,
   type VariableDeclarationNode,
   type WhileStatementNode,
   createLocation,
@@ -65,6 +71,22 @@ export function createNumberLiteral(value: number, raw: string, start: number, l
     value,
     raw,
     ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
+export function createBooleanLiteral(value: boolean, start: number, line = 1): BooleanLiteralNode {
+  const literal = value ? 'true' : 'false';
+  return {
+    kind: 'BooleanLiteral',
+    value,
+    ...createSpan({ start, end: start + literal.length, lineStart: line }),
+  };
+}
+
+export function createNullLiteral(start: number, line = 1): NullLiteralNode {
+  return {
+    kind: 'NullLiteral',
+    ...createSpan({ start, end: start + 2, lineStart: line }),
   };
 }
 
@@ -219,7 +241,7 @@ export function createVariableDeclaration(
   line = 1,
   options: {
     declarationKind?: VariableDeclarationNode['declarationKind'];
-    initializer?: IdentifierNode | NumberLiteralNode | null;
+    initializer?: ExpressionNode | null;
   } = {},
 ): VariableDeclarationNode {
   const { declarationKind = 'simple', initializer = null } = options;
@@ -229,6 +251,55 @@ export function createVariableDeclaration(
     identifier,
     typeAnnotation: null,
     initializer,
+    ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
+export function createAssignmentStatement(
+  left: ExpressionNode,
+  right: ExpressionNode | null,
+  start: number,
+  end: number,
+  line = 1,
+): AssignmentStatementNode {
+  return {
+    kind: 'AssignmentStatement',
+    left,
+    right,
+    ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
+export function createBinaryExpression(
+  operator: string,
+  left: ExpressionNode,
+  right: ExpressionNode,
+  start: number,
+  end: number,
+  line = 1,
+): BinaryExpressionNode {
+  return {
+    kind: 'BinaryExpression',
+    operator,
+    left,
+    right,
+    ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
+export function createUnaryExpression(
+  operator: string,
+  argument: ExpressionNode,
+  start: number,
+  end: number,
+  line = 1,
+  prefix = true,
+): UnaryExpressionNode {
+  return {
+    kind: 'UnaryExpression',
+    operator,
+    argument,
+    prefix,
     ...createSpan({ start, end, lineStart: line }),
   };
 }

@@ -7,6 +7,7 @@ import type {
   AstDiagnostics,
   ScopeGraph,
   SymbolTable,
+  TypeEnvironment,
 } from './ast/types';
 import type { ProgramNode } from './ast/nodes';
 
@@ -61,6 +62,7 @@ export interface AstValidationContext extends ValidationContext {
   astDiagnostics: AstDiagnostics;
   scopeGraph: ScopeGraph;
   symbolTable: SymbolTable;
+  typeEnvironment: TypeEnvironment;
 }
 
 export interface ValidatorConfig {

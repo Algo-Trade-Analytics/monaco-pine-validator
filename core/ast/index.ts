@@ -4,6 +4,7 @@ export * from './lexer';
 export * from './nodes';
 export * from './traversal';
 export * from './scope';
+export * from './type-inference';
 
 export * as nodes from '../../pynescript/ast/node';
 export * as helpers from '../../pynescript/ast/helper';

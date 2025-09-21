@@ -21,9 +21,11 @@ import {
   createAstDiagnostics,
   createEmptyScopeGraph,
   createEmptySymbolTable,
+  createEmptyTypeEnvironment,
 } from './ast/types';
 import { createNullAstService } from './ast/service';
 import { buildScopeGraph } from './ast/scope';
+import { inferTypes } from './ast/type-inference';
 
 type ConfigLayer = Partial<ValidatorConfig> | undefined;
 
@@ -196,6 +198,7 @@ export abstract class BaseValidator {
     context.astDiagnostics = createAstDiagnostics();
     context.scopeGraph = createEmptyScopeGraph();
     context.symbolTable = createEmptySymbolTable();
+    context.typeEnvironment = createEmptyTypeEnvironment();
     return context;
   }
 
@@ -221,6 +224,10 @@ export abstract class BaseValidator {
       astContext.symbolTable = createEmptySymbolTable();
     }
 
+    if (!astContext.typeEnvironment) {
+      astContext.typeEnvironment = createEmptyTypeEnvironment();
+    }
+
     if (!astContext.typeMap) {
       astContext.typeMap = this.typeMap;
     }
@@ -233,6 +240,7 @@ export abstract class BaseValidator {
     this.context.astDiagnostics = createAstDiagnostics();
     this.context.scopeGraph = createEmptyScopeGraph();
     this.context.symbolTable = createEmptySymbolTable();
+    this.context.typeEnvironment = createEmptyTypeEnvironment();
 
     if (!this.astConfig || this.astConfig.mode === 'disabled') {
       return;
@@ -250,6 +258,7 @@ export abstract class BaseValidator {
         const { scopeGraph, symbolTable } = buildScopeGraph(result.ast);
         this.context.scopeGraph = scopeGraph;
         this.context.symbolTable = symbolTable;
+        this.context.typeEnvironment = inferTypes(result.ast);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -257,6 +266,7 @@ export abstract class BaseValidator {
       this.context.astDiagnostics = createAstDiagnostics();
       this.context.scopeGraph = createEmptyScopeGraph();
       this.context.symbolTable = createEmptySymbolTable();
+      this.context.typeEnvironment = createEmptyTypeEnvironment();
       this.addWarning(1, 1, `AST parser error: ${message}`, AST_PARSE_ERROR_CODE);
     }
   }
@@ -309,6 +319,7 @@ export abstract class BaseValidator {
     context.cleanLines = this.stripLineCommentsKeepingStrings(code).split('\n');
     context.scopeGraph = createEmptyScopeGraph();
     context.symbolTable = createEmptySymbolTable();
+    context.typeEnvironment = createEmptyTypeEnvironment();
     context.version = this.config.targetVersion || 6;
 
     this.parseAst(code);

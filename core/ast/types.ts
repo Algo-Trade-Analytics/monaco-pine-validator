@@ -67,6 +67,23 @@ export interface ScopeGraph {
   nodes: Map<string, ScopeNode>;
 }
 
+export type TypeCertainty = 'certain' | 'inferred' | 'conflict';
+
+export type PinePrimitiveType = 'int' | 'float' | 'bool' | 'string' | 'void';
+
+export type InferredTypeKind = PinePrimitiveType | 'function' | 'series' | 'unknown';
+
+export interface TypeMetadata {
+  kind: InferredTypeKind;
+  certainty: TypeCertainty;
+  sources: string[];
+}
+
+export interface TypeEnvironment {
+  nodeTypes: WeakMap<Node, TypeMetadata>;
+  identifiers: Map<string, TypeMetadata>;
+}
+
 export interface Position {
   line: number;
   column: number;
@@ -95,6 +112,39 @@ export function createSymbolRecord(name: string, kind: SymbolKind, location?: Sy
 
 export function createSymbolLocation(node: Node | null, line: number, column: number): SymbolLocation {
   return { node, line, column };
+}
+
+export function createEmptyTypeEnvironment(): TypeEnvironment {
+  return {
+    nodeTypes: new WeakMap<Node, TypeMetadata>(),
+    identifiers: new Map<string, TypeMetadata>(),
+  };
+}
+
+export function createTypeMetadata(
+  kind: InferredTypeKind,
+  source: string,
+  certainty: TypeCertainty = 'inferred',
+): TypeMetadata {
+  return { kind, certainty, sources: [source] };
+}
+
+export function cloneTypeMetadata(
+  metadata: TypeMetadata,
+  overrides: Partial<Omit<TypeMetadata, 'sources'>> & { addSource?: string } = {},
+): TypeMetadata {
+  const sources = [...metadata.sources];
+  if (overrides.addSource && !sources.includes(overrides.addSource)) {
+    sources.push(overrides.addSource);
+  }
+
+  const { addSource: _ignored, ...rest } = overrides;
+
+  return {
+    kind: rest.kind ?? metadata.kind,
+    certainty: rest.certainty ?? metadata.certainty,
+    sources,
+  };
 }
 
 export function createAstDiagnostics(errors: SyntaxError[] = []): AstDiagnostics {

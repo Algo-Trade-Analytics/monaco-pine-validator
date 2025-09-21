@@ -22,11 +22,12 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - A typed AST surface (`core/ast/nodes.ts`) with traversal helpers and scope graph construction is merged, giving the validator a canonical syntax tree and symbol table.
 - `BaseValidator` now hydrates `AstValidationContext` with parser outputs, scope graphs, and symbol tables whenever AST mode is enabled.
 - Focused Vitest suites cover traversal and scope graph behaviour; pipeline tests assert that AST diagnostics and context wiring behave under success, failure, and disabled modes.
+- Literal-aware type inference now populates a `TypeEnvironment` on the validation context, tracking identifier and expression types for downstream semantic passes.
 
 ### Near-Term TODOs
 
 1. **Stabilise AST Fixtures** – add snapshot-based assertions for representative Pine snippets so AST structure changes surface clearly in reviews.
-2. **Prototype Type Inference Skeleton** – formalise literal and identifier typing in a dedicated pass and surface the results on the validation context.
+2. **Expand Type Inference Coverage** – extend the skeleton to propagate call-site semantics, unary `not`, and collection literals while enriching diagnostic hooks.
 3. **Wire Diagnostic Helpers** – introduce utilities that translate AST node ranges into Monaco `IMarkerData` instances for reuse across modules.
 4. **Author Golden Semantic Tests** – capture end-to-end fixtures that exercise scope + type metadata to validate the new passes.
 5. **Update Migration Tracking Table** – reflect delivered infrastructure (AST context, scope graph) and link owners for upcoming module migrations.
@@ -99,7 +100,7 @@ Key principles:
 ### Phase 2 – Semantic Foundation Passes
 - ✅ Implement initial semantic passes operating on AST:
   - ✅ Scope builder (collects declarations, resolves references).
-  - 🚧 Type inference skeleton (basic literal + identifier typing).
+  - ✅ Type inference skeleton (basic literal + identifier typing feeding the shared `TypeEnvironment`).
   - ☐ Control flow graph builder (for loops, conditionals) – optional if complex, but plan it early.
 - 🚧 Provide reusable diagnostics helpers mapping AST ranges to Monaco `IMarkerData`.
 - 🚧 Add golden tests ensuring passes populate context as expected.
