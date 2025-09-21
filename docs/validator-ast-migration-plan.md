@@ -29,6 +29,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - The built-in variables validator now consumes AST member expressions to detect namespace constants, keeping Monaco diagnostics aligned with Pine nodes without relying on legacy line-based scanning.
 - Switch statements, matrix literals, and historical index expressions now have dedicated AST nodes with traversal, scope, type inference, and control-flow coverage, unblocking downstream modules that depend on these constructs.
 - Type inference heuristics recognise namespaced TA and strategy helpers, applying return-type overrides and boosting series certainty when fed series arguments so downstream validators can rely on richer call metadata.
+- The core validator consumes AST version directives and script declarations to pre-populate script metadata, emitting Monaco-aligned diagnostics for misplaced directives, missing titles, and duplicate script declarations without re-scanning raw lines.
 
 ### Near-Term TODOs
 
@@ -37,7 +38,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 3. ✅ **Broaden AST Node Coverage** – added structural nodes for `switch`, matrix literals, and historical index expressions so currently blocked validators can migrate without bespoke fallbacks.
 4. ✅ **Deepen Type Inference Rules** – namespaced TA and strategy helpers now surface richer return metadata and series certainty so the `strategy-functions` and `ta-functions` validators can rely on AST semantics.
 5. ✅ **Document Monaco Integration Plan** – recorded the staged worker rollout strategy, testing plan, and dependencies in `docs/monaco-integration-plan.md`.
-6. ⏱️ **Kick Off Core Validator AST Port** – launch dual-run comparisons for `core-validator`, catalogue mismatches, and scope the implementation swap.
+6. 🔄 **Kick Off Core Validator AST Port** – AST directives now seed version/script metadata while new dual-run tests compare diagnostics; continue expanding coverage to remaining core validator responsibilities.
 7. ⏱️ **Prototype Monaco Worker Harness** – add a Vitest-driven worker harness that loads the AST pipeline and validates RPC wiring ahead of editor rollout.
 
 ## 3. Target Architecture Overview

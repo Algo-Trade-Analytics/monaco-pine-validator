@@ -6,12 +6,32 @@
  */
 
 import { BaseValidator } from '../core/base-validator';
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult, ScopeInfo } from '../core/types';
-import { 
+import {
+  AstValidationContext,
+  ValidationModule,
+  ValidationContext,
+  ValidatorConfig,
+  ValidationError,
+  ValidationResult,
+  ScopeInfo,
+} from '../core/types';
+import {
   VERSION_RE, SCRIPT_START_RE, QUALIFIED_FN_RE, METHOD_DECL_RE,
   VAR_DECL_RE, SIMPLE_ASSIGN_RE, TUPLE_DECL_RE, TUPLE_REASSIGN_RE,
   KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT, IDENT
 } from '../core/constants';
+import type {
+  ArgumentNode,
+  ExpressionNode,
+  ProgramNode,
+  ScriptDeclarationNode,
+  StringLiteralNode,
+  VersionDirectiveNode,
+} from '../core/ast/nodes';
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
+}
 
 export class CoreValidator implements ValidationModule {
   name = 'CoreValidator';
@@ -83,11 +103,21 @@ export class CoreValidator implements ValidationModule {
   private paren = 0;
   private bracket = 0;
   private brace = 0;
+  private astContext: AstValidationContext | null = null;
+  private astVersionDirectiveLines = new Set<number>();
+  private astScriptDeclarationLines = new Set<number>();
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
     this.config = config;
+    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
+    this.astVersionDirectiveLines.clear();
+    this.astScriptDeclarationLines.clear();
+
+    if (this.astContext?.ast) {
+      this.processAstProgram(this.astContext.ast);
+    }
 
     // Function declarations are now handled by FunctionDeclarationsValidator
     // Scan each line for core validation
@@ -112,6 +142,9 @@ export class CoreValidator implements ValidationModule {
   }
 
   private reset(): void {
+    this.astContext = null;
+    this.astVersionDirectiveLines.clear();
+    this.astScriptDeclarationLines.clear();
     this.hasVersion = false;
     this.firstVersionLine = null;
     this.scriptType = null;
@@ -142,10 +175,128 @@ export class CoreValidator implements ValidationModule {
     this.brace = 0;
   }
 
+  private processAstProgram(program: ProgramNode): void {
+    this.processVersionDirectives(program.directives);
+    this.processScriptDeclarations(program.body);
+  }
+
+  private processVersionDirectives(directives: ProgramNode['directives']): void {
+    const versionDirectives = directives.filter(
+      (directive): directive is VersionDirectiveNode => directive.kind === 'VersionDirective',
+    );
+
+    if (versionDirectives.length === 0) {
+      return;
+    }
+
+    for (const directive of versionDirectives) {
+      this.astVersionDirectiveLines.add(directive.loc.start.line);
+    }
+
+    const [primary, ...duplicates] = versionDirectives;
+    const line = primary.loc.start.line;
+    const column = primary.loc.start.column;
+
+    this.hasVersion = true;
+    this.context.hasVersion = true;
+    this.firstVersionLine = line;
+    this.context.firstVersionLine = line;
+    this.context.version = primary.version;
+
+    if (this.config.targetVersion && primary.version !== this.config.targetVersion) {
+      const severity = primary.version < this.config.targetVersion ? 'error' : 'warning';
+      this.addBySeverity(
+        severity,
+        line,
+        column,
+        `Script declares //@version=${primary.version} but targetVersion is ${this.config.targetVersion}.`,
+        'PS001',
+      );
+    }
+
+    if (line !== 1) {
+      this.addWarning(line, column, 'Version directive should be on the first line.', 'PSW01');
+    }
+
+    if (primary.version < 5) {
+      this.addWarning(line, column, `Pine version ${primary.version} is deprecated. Prefer v5 or v6.`, 'PSW02');
+    }
+
+    for (const duplicate of duplicates) {
+      this.addError(
+        duplicate.loc.start.line,
+        duplicate.loc.start.column,
+        'Multiple //@version directives. Only one allowed.',
+        'PS002',
+      );
+    }
+  }
+
+  private processScriptDeclarations(body: ProgramNode['body']): void {
+    const scriptDeclarations = body.filter(
+      (node): node is ScriptDeclarationNode => node.kind === 'ScriptDeclaration',
+    );
+
+    if (scriptDeclarations.length === 0) {
+      return;
+    }
+
+    const [primary, ...duplicates] = scriptDeclarations;
+
+    this.astScriptDeclarationLines.add(primary.loc.start.line);
+    this.scriptType = primary.scriptType;
+    this.context.scriptType = primary.scriptType;
+    this.scriptDeclParsed = true;
+
+    const hasTitle = this.scriptDeclarationHasTitle(primary);
+    const isIndicatorWithoutTitle = primary.scriptType === 'indicator' && primary.arguments.length === 0;
+
+    if (!hasTitle && !isIndicatorWithoutTitle) {
+      this.addError(
+        primary.loc.start.line,
+        primary.loc.start.column,
+        'Script declaration should include a title (positional or title=).',
+        'PS005',
+      );
+    }
+
+    for (const duplicate of duplicates) {
+      this.astScriptDeclarationLines.add(duplicate.loc.start.line);
+      if (duplicate.scriptType !== primary.scriptType) {
+        this.addError(
+          duplicate.loc.start.line,
+          duplicate.loc.start.column,
+          `Multiple script declarations not allowed (already '${primary.scriptType}').`,
+          'PS004B',
+        );
+      }
+    }
+  }
+
+  private scriptDeclarationHasTitle(script: ScriptDeclarationNode): boolean {
+    return script.arguments.some((argument, index) => {
+      if (argument.name && argument.name.name === 'title') {
+        return true;
+      }
+      if (!argument.name && index === 0 && this.isStringLiteral(argument.value)) {
+        return true;
+      }
+      return false;
+    });
+  }
+
+  private isStringLiteral(expression: ExpressionNode): expression is StringLiteralNode {
+    return expression.kind === 'StringLiteral';
+  }
+
   private scanLine(line: string, lineNum: number): void {
     const t = line.trim();
     if (t === '') return;
-    
+
+    if (this.astVersionDirectiveLines.has(lineNum) || this.astScriptDeclarationLines.has(lineNum)) {
+      return;
+    }
+
     const strippedNoStrings = this.stripStringsAndLineComment(line);
 
     // Version directive

@@ -28,6 +28,7 @@ import {
   type VariableDeclarationNode,
   type WhileStatementNode,
   type MemberExpressionNode,
+  type VersionDirectiveNode,
   createLocation,
   createPosition,
   createRange,
@@ -184,6 +185,27 @@ export function createScriptDeclaration(
     scriptType,
     identifier,
     arguments: args,
+    ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
+export function createVersionDirective(version: number, start: number, end: number, line = 1): VersionDirectiveNode {
+  return {
+    kind: 'VersionDirective',
+    version,
+    ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
+export function createExpressionStatement(
+  expression: ExpressionNode,
+  start: number,
+  end: number,
+  line = 1,
+): ExpressionStatementNode {
+  return {
+    kind: 'ExpressionStatement',
+    expression,
     ...createSpan({ start, end, lineStart: line }),
   };
 }
