@@ -101,7 +101,12 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
     if (!existing) {
       const record = createSymbolRecord(name, kind, location);
       const scopeId = currentScope()?.id;
-      record.metadata = scopeId ? { declarationScopes: [scopeId] } : undefined;
+      if (scopeId) {
+        record.metadata = {
+          declarationScopes: [scopeId],
+          declarationKinds: [kind],
+        };
+      }
       symbolTable.set(name, record);
       return record;
     }
@@ -118,8 +123,15 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         const scopes = (existing.metadata.declarationScopes as string[] | undefined) ?? [];
         scopes.push(scopeId);
         existing.metadata.declarationScopes = scopes;
+
+        const kinds = (existing.metadata.declarationKinds as SymbolKind[] | undefined) ?? [];
+        kinds.push(kind);
+        existing.metadata.declarationKinds = kinds;
       } else {
-        existing.metadata = { declarationScopes: [scopeId] };
+        existing.metadata = {
+          declarationScopes: [scopeId],
+          declarationKinds: [kind],
+        };
       }
     }
 

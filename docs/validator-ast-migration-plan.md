@@ -45,6 +45,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Function declarations validator now consumes AST function declarations to register metadata, duplicate parameter diagnostics, and static declaration errors without relying on regex scanning.
 - Core validator AST analysis now inspects tuple destructuring patterns to raise PST01/PST02/PST03 diagnostics without regex fallbacks.
 - Core validator AST analysis now warns when local declarations shadow function parameters, removing the textual scope heuristic for PSW05.
+- Scope validator now leverages AST symbol metadata to surface PSW03/PSW04 duplicate and shadowed declaration diagnostics without relying on indentation heuristics.
 
 ### Near-Term TODOs
 

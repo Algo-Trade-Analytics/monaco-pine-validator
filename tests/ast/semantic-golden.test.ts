@@ -319,6 +319,9 @@ describe('semantic golden coverage', () => {
             ],
             "kind": "variable",
             "metadata": {
+              "declarationKinds": [
+                "variable",
+              ],
               "declarationScopes": [
                 "scope-0",
               ],
@@ -357,6 +360,9 @@ describe('semantic golden coverage', () => {
             ],
             "kind": "function",
             "metadata": {
+              "declarationKinds": [
+                "function",
+              ],
               "declarationScopes": [
                 "scope-0",
               ],
@@ -392,6 +398,9 @@ describe('semantic golden coverage', () => {
             ],
             "kind": "parameter",
             "metadata": {
+              "declarationKinds": [
+                "parameter",
+              ],
               "declarationScopes": [
                 "scope-1",
               ],
@@ -409,6 +418,9 @@ describe('semantic golden coverage', () => {
             ],
             "kind": "parameter",
             "metadata": {
+              "declarationKinds": [
+                "parameter",
+              ],
               "declarationScopes": [
                 "scope-1",
               ],
@@ -426,6 +438,9 @@ describe('semantic golden coverage', () => {
             ],
             "kind": "variable",
             "metadata": {
+              "declarationKinds": [
+                "variable",
+              ],
               "declarationScopes": [
                 "scope-1",
               ],
@@ -449,6 +464,9 @@ describe('semantic golden coverage', () => {
             ],
             "kind": "namespace",
             "metadata": {
+              "declarationKinds": [
+                "namespace",
+              ],
               "declarationScopes": [
                 "scope-0",
               ],
