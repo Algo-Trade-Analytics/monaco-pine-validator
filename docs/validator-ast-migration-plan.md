@@ -33,6 +33,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Core validator AST analysis now inspects call expressions to flag `strategy.*` usage in indicators, recognise plotting/drawing activity for PS014 guardrails, and enforce library restrictions without relying on regex fallbacks.
 - Core validator AST analysis now inspects member expressions so strategy namespace usage in indicators is flagged even when no call expression is present, ensuring parity with the legacy scanner.
 - Core validator AST analysis now inspects index expressions so negative history references on series data trigger PS024 errors without the legacy line scanner.
+- A Monaco worker harness now exercises the AST-backed validator in a simulated worker environment, translating semantic output and syntax errors into Monaco-compatible markers for upcoming editor integration work.
 
 ### Near-Term TODOs
 
@@ -42,7 +43,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 4. ✅ **Deepen Type Inference Rules** – namespaced TA and strategy helpers now surface richer return metadata and series certainty so the `strategy-functions` and `ta-functions` validators can rely on AST semantics.
 5. ✅ **Document Monaco Integration Plan** – recorded the staged worker rollout strategy, testing plan, and dependencies in `docs/monaco-integration-plan.md`.
 6. 🔄 **Kick Off Core Validator AST Port** – AST directives now seed version/script metadata while call and index analysis drive strategy/plotting/library diagnostics and negative history checks; continue expanding coverage to the remaining core validator responsibilities.
-7. ⏱️ **Prototype Monaco Worker Harness** – add a Vitest-driven worker harness that loads the AST pipeline and validates RPC wiring ahead of editor rollout.
+7. ✅ **Prototype Monaco Worker Harness** – landed a Vitest-driven worker harness that loads the AST pipeline and validates RPC wiring ahead of editor rollout.
 
 ## 3. Target Architecture Overview
 
