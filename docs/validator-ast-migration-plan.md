@@ -28,7 +28,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 
 1. ✅ **Stabilise AST Fixtures** – snapshot suites now exercise representative Pine snippets so AST structure changes surface clearly in reviews.
 2. **Expand Type Inference Coverage** – extend the skeleton with builtin call heuristics, `series` propagation rules, and richer metadata for downstream diagnostics.
-3. **Wire Diagnostic Helpers** – introduce utilities that translate AST node ranges into Monaco `IMarkerData` instances for reuse across modules.
+3. ✅ **Wire Diagnostic Helpers** – introduce utilities that translate AST node ranges into Monaco `IMarkerData` instances for reuse across modules.
 4. **Author Golden Semantic Tests** – capture end-to-end fixtures that exercise scope + type metadata to validate the new passes.
 5. **Update Migration Tracking Table** – reflect delivered infrastructure (AST context, scope graph) and link owners for upcoming module migrations.
 
@@ -102,7 +102,7 @@ Key principles:
   - ✅ Scope builder (collects declarations, resolves references).
   - ✅ Type inference skeleton (basic literal + identifier typing feeding the shared `TypeEnvironment`).
   - ☐ Control flow graph builder (for loops, conditionals) – optional if complex, but plan it early.
-- 🚧 Provide reusable diagnostics helpers mapping AST ranges to Monaco `IMarkerData`.
+- ✅ Provide reusable diagnostics helpers mapping AST ranges to Monaco `IMarkerData`.
 - 🚧 Add golden tests ensuring passes populate context as expected.
 
 ### Phase 3 – Module Migration (Incremental)
