@@ -1,0 +1,161 @@
+{
+  "and": {
+    "syntax": [
+      "expr1 and expr2"
+    ]
+  },
+  "enum": {
+    "syntax": [
+      "[export ]enum <enumName>",
+      "<field_1> [= <title_1>]",
+      "<field_2> [= <title_2>]",
+      "...",
+      "<field_N> [= <title_N>]"
+    ]
+  },
+  "export": {
+    "syntax": []
+  },
+  "for": {
+    "syntax": [
+      "[variables =|:=] for counter = from_num to to_num [by step_num]",
+      "statements | continue | break",
+      "return_expression",
+      "variables (return_expression type) Optional. A declared variable or tuple to hold the values or references from the last evaluation of the return_expression after the loop terminates. The script can assign the loop's returned results to variables only if the results are not \"void\". If the loop's conditions prevent iteration, or if no iterations evaluate the return_expression, the variables' assigned values and references are na.",
+      "counter (series int/float) The counter variable. The loop increments the variable's value from the initial value (from_num) to the final value (to_num) by a fixed amount (step_num) after each iteration. The last possible iteration occurs when the variable's value reaches the to_num value.",
+      "from_num (series int/float) The value of the counter variable on the loop's first iteration.",
+      "to_num (series int/float) The final counter value for which the loop's header allows a new iteration. The loop increments the counter value by the step_num until it reaches or passes this value. If the script modifies this value during a loop iteration, the loop header uses the new value to control the allowed subsequent iterations.",
+      "step_num (series int/float) Optional. A positive value specifying the amount by which the counter value increases or decreases until it reaches or passes the to_num value. If the from_num value is greater than the initial to_num value, the loop subtracts this amount from the counter value after each iteration. Otherwise, the loop adds this amount after each iteration. The default is 1.",
+      "statements The code statements and expressions within the loop's body, i.e., the indented block of code beneath the loop header.",
+      "return_expression (any type) The last code line or block within the loop's body. The loop returns the results from this code after the final iteration. If the loop stops prematurely due to a continue or break statement, the returned values or references are those of the latest iteration that evaluated this code. To use the loop's returned results, assign them to a variable or tuple.",
+      "continue A loop-specific keyword that instructs the script to skip the remainder of the current loop iteration and continue to the next iteration.",
+      "break A loop-specific keyword that prompts the script to stop the current iteration and exit the loop entirely."
+    ]
+  },
+  "result": {
+    "syntax": []
+  },
+  "for...in": {
+    "syntax": [
+      "[var_declaration =] for array_element in array_id",
+      "statements | continue | break",
+      "return_expression",
+      "[var_declaration =] for [index, array_element] in array_id",
+      "statements | continue | break",
+      "return_expression",
+      "var_declaration - An optional variable declaration that will be assigned the value of the loop's return_expression.",
+      "index - An optional variable that tracks the current iteration's index. Indexing starts at 0. The variable is immutable in the loop's body. When used, it must be included in a tuple also containing array_element.",
+      "array_element - A variable containing each successive array element to be processed in the loop. The variable is immutable in the loop's body.",
+      "array_id - The ID of the array over which the loop is iterated.",
+      "statements | continue | break - Any number of statements, or the 'continue' or 'break' keywords, indented by 4 spaces or a tab.",
+      "return_expression - The loop's return value assigned to the variable in var_declaration, if one is present. If the loop exits because of a 'continue' or 'break' keyword, the loop's return value is that of the last variable assigned a value before the loop's exit.",
+      "continue - A keyword that can only be used in loops. It causes the next iteration of the loop to be executed.",
+      "break - A keyword that exits the loop."
+    ]
+  },
+  "if": {
+    "syntax": [
+      "var_declarationX = if condition",
+      "var_decl_then0",
+      "var_decl_then1",
+      "…",
+      "var_decl_thenN",
+      "else if [optional block]",
+      "var_decl_else0",
+      "var_decl_else1",
+      "…",
+      "var_decl_elseN",
+      "else",
+      "var_decl_else0",
+      "var_decl_else1",
+      "…",
+      "var_decl_elseN",
+      "return_expression_else",
+      "where",
+      "var_declarationX — this variable gets the value of the if statement",
+      "condition — if the condition is true, the logic from the block 'then' (var_decl_then0, var_decl_then1, etc.) is used.",
+      "return_expression_then, return_expression_else — the last expression from the block then or from the block else will return the final value of the statement. If declaration of the variable is in the end, its value will be the result."
+    ]
+  },
+  "open": {
+    "syntax": []
+  },
+  "import": {
+    "syntax": [
+      "import {username}/{libraryName}/{libraryVersion} as {alias}"
+    ]
+  },
+  "method": {
+    "syntax": [
+      "[export] method <functionName>(<paramType> <paramName> [= <defaultValue>], …) =>",
+      "<functionBlock>"
+    ]
+  },
+  "not": {
+    "syntax": [
+      "not expr1"
+    ]
+  },
+  "or": {
+    "syntax": [
+      "expr1 or expr2"
+    ]
+  },
+  "switch": {
+    "syntax": [
+      "[variable_declaration = ] switch expression",
+      "value1 => local_block",
+      "value2 => local_block",
+      "…",
+      "=> default_local_block",
+      "[variable_declaration = ] switch",
+      "condition1 => local_block",
+      "condition2 => local_block",
+      "…",
+      "=> default_local_block"
+    ]
+  },
+  "type": {
+    "syntax": [
+      "[export ]type <UDT_identifier>",
+      "[varip ]<field_type> <field_name> [= <value>]",
+      "…"
+    ]
+  },
+  "var": {
+    "syntax": [
+      "var variable_name = expression",
+      "where:",
+      "variable_name - any name of the user’s variable that’s allowed in Pine Script® (can contain capital and lowercase Latin characters, numbers, and underscores (_), but can’t start with a number).",
+      "expression - any arithmetic expression, just as with defining a regular variable. The expression will be calculated and assigned to a variable once."
+    ]
+  },
+  "varip": {
+    "syntax": [
+      "varip [<variable_type> ]<variable_name> = <expression>",
+      "[export ]type <UDT_identifier>",
+      "varip <field_type> <field_name> [= <value>]",
+      "where:",
+      "variable_type - An optional fundamental type (int, float, bool, color, string) or a user-defined type, or an array or matrix of one of those types. Special types are not compatible with this keyword.",
+      "variable_name - A valid identifier. The variable can also be an object created from a UDT.",
+      "expression - Any arithmetic expression, just as when defining a regular variable. The expression will be calculated and assigned to the variable only once, on the first bar."
+    ]
+  },
+  "while": {
+    "syntax": [
+      "variable_declaration = while condition",
+      "…",
+      "continue",
+      "…",
+      "break",
+      "…",
+      "return_expression",
+      "where:",
+      "variable_declaration - An optional variable declaration. The return expression can provide the initialization value for this variable.",
+      "condition - when true, the local block of the while statement is executed. When false, execution of the script resumes after the while statement.",
+      "continue - The continue keyword causes the loop to branch to its next iteration.",
+      "break - The break keyword causes the loop to terminate. The script's execution resumes after the while statement.",
+      "return_expression - An optional line providing the while statement's returning value."
+    ]
+  }
+}

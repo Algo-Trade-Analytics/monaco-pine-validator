@@ -1,0 +1,29 @@
+{
+  "@description": {
+    "syntax": []
+  },
+  "@enum": {
+    "syntax": []
+  },
+  "@field": {
+    "syntax": []
+  },
+  "@function": {
+    "syntax": []
+  },
+  "@param": {
+    "syntax": []
+  },
+  "@returns": {
+    "syntax": []
+  },
+  "@strategy_alert_message": {
+    "syntax": []
+  },
+  "@type": {
+    "syntax": []
+  },
+  "@variable": {
+    "syntax": []
+  }
+}
