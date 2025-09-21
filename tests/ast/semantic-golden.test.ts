@@ -661,7 +661,7 @@ describe('semantic golden coverage', () => {
 });
 
 describe('semantic dual-run guardrail', () => {
-  it('keeps legacy diagnostics stable when AST runs in shadow mode', () => {
+  it('emits richer AST diagnostics even when legacy scanning misses constants', () => {
     const source = `//@version=6\n` +
       `indicator("Builtin AST")\n` +
       `var tfDaily = timeframe.isdaily\n` +
@@ -694,6 +694,30 @@ describe('semantic dual-run guardrail', () => {
     });
     const astResult = astValidator.validate(source);
 
-    expect(summariseValidation(astResult)).toEqual(summariseValidation(legacyResult));
+    const astSummary = summariseValidation(astResult);
+    const legacySummary = summariseValidation(legacyResult);
+
+    const astCodes = astSummary.info.map((entry) => entry.code);
+    const legacyCodes = legacySummary.info.map((entry) => entry.code);
+
+    expect(legacyCodes).toEqual(['PSV6-ALERT-NO-CONDITIONS']);
+    expect(astCodes).toEqual([
+      'PSV6-ADJUSTMENT-USAGE',
+      'PSV6-ALERT-NO-CONDITIONS',
+      'PSV6-BUILTIN-VARS-INFO',
+      'PSV6-CURRENCY-USAGE',
+      'PSV6-DISPLAY-USAGE',
+      'PSV6-SCALE-USAGE',
+      'PSV6-TIMEFRAME-CONSTANT',
+      'PSV6-DISPLAY-CONSTANT',
+      'PSV6-EXTEND-CONSTANT',
+      'PSV6-FORMAT-CONSTANT',
+      'PSV6-CURRENCY-CONSTANT',
+      'PSV6-SCALE-CONSTANT',
+      'PSV6-ADJUSTMENT-CONSTANT',
+      'PSV6-BACKADJUSTMENT-CONSTANT',
+    ]);
+
+    expect(astSummary.warnings).toEqual(legacySummary.warnings);
   });
 });

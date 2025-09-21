@@ -26,7 +26,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Golden semantic coverage snapshots assert the combined scope, symbol, and type metadata for representative scripts to guard end-to-end analysis.
 - Control-flow graph construction models branch merges, loop back-edges, and return terminators while exposing the graph on the validation context for future analyses.
 - Member expression nodes model namespaced property access (e.g., timeframe.period) with traversal, scope, and type inference coverage so builtin-variable validators can rely on structured AST data.
-- The built-in variables validator now consumes AST member expressions to detect namespace constants, keeping Monaco diagnostics aligned with Pine nodes while falling back to legacy scanning only when AST data is unavailable.
+- The built-in variables validator now consumes AST member expressions to detect namespace constants, keeping Monaco diagnostics aligned with Pine nodes without relying on legacy line-based scanning.
 
 ### Near-Term TODOs
 

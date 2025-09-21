@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { EnhancedModularValidator } from '../../EnhancedModularValidator';
+import { createConstantAstService } from './ast-helpers';
 
-const createValidator = () => new EnhancedModularValidator({ targetVersion: 6, strictMode: true });
+const createValidator = () => new EnhancedModularValidator({
+  targetVersion: 6,
+  strictMode: true,
+  ast: { mode: 'primary', service: createConstantAstService() },
+});
 
 describe('Advanced drawing/styling enums and display extensions', () => {
   it('detects extra text formatting constants', () => {

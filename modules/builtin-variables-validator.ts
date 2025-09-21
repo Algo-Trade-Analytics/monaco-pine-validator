@@ -25,7 +25,6 @@ import {
   TIMEFRAME_CONSTANTS,
   CURRENCY_CONSTANTS
 } from '../core/constants-registry';
-import { findConstantsInLine } from '../core/scanner';
 import { Codes } from '../core/codes';
 import { visit } from '../core/ast/traversal';
 import type { ExpressionNode, MemberExpressionNode } from '../core/ast/nodes';
@@ -92,18 +91,9 @@ export class BuiltinVariablesValidator implements ValidationModule {
     this.adjustmentConstantUsage.clear();
     this.backadjustmentConstantUsage.clear();
 
-    const usedAst = this.tryValidateWithAst(config);
-
-    if (!usedAst) {
-      // Validate built-in variable constants using legacy scanners when AST data is unavailable
-      this.validateTimeframeConstants();
-      this.validateDisplayConstants();
-      this.validateExtendConstants();
-      this.validateFormatConstants();
-      this.validateCurrencyConstants();
-      this.validateScaleConstants();
-      this.validateAdjustmentConstants();
-      this.validateBackadjustmentConstants();
+    const astContext = this.getAstContext(config);
+    if (astContext) {
+      this.collectConstantsFromAst(astContext);
     }
 
     // Provide usage information
@@ -119,22 +109,17 @@ export class BuiltinVariablesValidator implements ValidationModule {
     };
   }
 
-  private canUseAst(context: ValidationContext, config: ValidatorConfig): context is AstValidationContext {
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
     if (!config.ast || config.ast.mode === 'disabled') {
-      return false;
+      return null;
     }
-    return 'ast' in context;
+    return 'ast' in this.context ? (this.context as AstValidationContext) : null;
   }
 
-  private tryValidateWithAst(config: ValidatorConfig): boolean {
-    if (!this.canUseAst(this.context, config)) {
-      return false;
-    }
-
-    const astContext = this.context as AstValidationContext;
+  private collectConstantsFromAst(astContext: AstValidationContext): void {
     const program = astContext.ast;
     if (!program) {
-      return false;
+      return;
     }
 
     visit(program, {
@@ -152,8 +137,6 @@ export class BuiltinVariablesValidator implements ValidationModule {
         },
       },
     });
-
-    return true;
   }
 
   private getMemberQualifiedName(member: MemberExpressionNode): string | null {
@@ -246,96 +229,6 @@ export class BuiltinVariablesValidator implements ValidationModule {
     if (BACKADJUSTMENT_CONSTANTS.has(constant)) {
       this.incrementUsage(this.backadjustmentConstantUsage, constant);
       this.addConstantInfo(Codes.BACKADJUSTMENT_CONSTANT, `Backadjustment constant '${constant}' detected`, line, column);
-    }
-  }
-
-  private validateTimeframeConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-      const hits = findConstantsInLine(cleanLine, TIMEFRAME_CONSTANTS);
-
-      for (const hit of hits) {
-        this.recordConstantUsage(hit.constant, i + 1, hit.index + 1);
-      }
-    }
-  }
-
-  private validateDisplayConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-      const hits = findConstantsInLine(cleanLine, DISPLAY_CONSTANTS);
-      for (const h of hits) {
-        this.recordConstantUsage(h.constant, i + 1, h.index + 1);
-      }
-    }
-  }
-
-  private validateExtendConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-      const hits = findConstantsInLine(cleanLine, EXTEND_CONSTANTS);
-
-      for (const hit of hits) {
-        this.recordConstantUsage(hit.constant, i + 1, hit.index + 1);
-      }
-    }
-  }
-
-  private validateFormatConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-      const hits = findConstantsInLine(cleanLine, FORMAT_CONSTANTS);
-
-      for (const hit of hits) {
-        this.recordConstantUsage(hit.constant, i + 1, hit.index + 1);
-      }
-    }
-  }
-
-  private validateCurrencyConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-      const hits = findConstantsInLine(cleanLine, CURRENCY_CONSTANTS);
-
-      for (const hit of hits) {
-        this.recordConstantUsage(hit.constant, i + 1, hit.index + 1);
-      }
-    }
-  }
-
-  private validateScaleConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-
-      for (const constant of SCALE_CONSTANTS) {
-        if (cleanLine.includes(constant)) {
-          this.recordConstantUsage(constant, i + 1, cleanLine.indexOf(constant) + 1);
-        }
-      }
-    }
-  }
-
-  private validateAdjustmentConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-
-      for (const constant of ADJUSTMENT_CONSTANTS) {
-        if (cleanLine.includes(constant)) {
-          this.recordConstantUsage(constant, i + 1, cleanLine.indexOf(constant) + 1);
-        }
-      }
-    }
-  }
-
-  private validateBackadjustmentConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-
-      for (const constant of BACKADJUSTMENT_CONSTANTS) {
-        if (cleanLine.includes(constant)) {
-          this.recordConstantUsage(constant, i + 1, cleanLine.indexOf(constant) + 1);
-        }
-      }
     }
   }
 
