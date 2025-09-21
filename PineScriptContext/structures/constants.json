@@ -1,0 +1,934 @@
+{
+  "adjustment.dividends": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "adjustment.none": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "adjustment.splits": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "alert.freq_all": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "alert.freq_once_per_bar": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "alert.freq_once_per_bar_close": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "backadjustment.inherit": {
+    "qualifier": "const",
+    "type": "backadjustment"
+  },
+  "backadjustment.off": {
+    "qualifier": "const",
+    "type": "backadjustment"
+  },
+  "backadjustment.on": {
+    "qualifier": "const",
+    "type": "backadjustment"
+  },
+  "barmerge.gaps_off": {
+    "qualifier": "const",
+    "type": "barmerge_gaps"
+  },
+  "barmerge.gaps_on": {
+    "qualifier": "const",
+    "type": "barmerge_gaps"
+  },
+  "barmerge.lookahead_off": {
+    "qualifier": "const",
+    "type": "barmerge_lookahead"
+  },
+  "barmerge.lookahead_on": {
+    "qualifier": "const",
+    "type": "barmerge_lookahead"
+  },
+  "color.aqua": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.black": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.blue": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.fuchsia": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.gray": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.green": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.lime": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.maroon": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.navy": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.olive": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.orange": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.purple": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.red": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.silver": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.teal": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.white": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "color.yellow": {
+    "qualifier": "const",
+    "type": "color"
+  },
+  "currency.AED": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.ARS": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.AUD": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.BDT": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.BHD": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.BRL": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "Bitcoin.": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.CAD": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.CHF": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.CLP": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.CNY": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.COP": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.CZK": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.DKK": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.EGP": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "Ethereum.": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "Euro.": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.GBP": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.HKD": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.HUF": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.IDR": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.ILS": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.INR": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.ISK": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.JPY": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.KES": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.KRW": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.KWD": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.LKR": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.MAD": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.MXN": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.MYR": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.NGN": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.NOK": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.NONE": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.NZD": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.PEN": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.PHP": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.PKR": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.PLN": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.QAR": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.RON": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.RSD": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.RUB": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.SAR": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.SEK": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.SGD": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.THB": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.TND": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.TRY": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.TWD": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.USD": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "Tether.": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.VES": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.VND": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "currency.ZAR": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "dayofweek.friday": {
+    "qualifier": "const",
+    "type": "int"
+  },
+  "dayofweek.monday": {
+    "qualifier": "const",
+    "type": "int"
+  },
+  "dayofweek.saturday": {
+    "qualifier": "const",
+    "type": "int"
+  },
+  "dayofweek.sunday": {
+    "qualifier": "const",
+    "type": "int"
+  },
+  "dayofweek.thursday": {
+    "qualifier": "const",
+    "type": "int"
+  },
+  "dayofweek.tuesday": {
+    "qualifier": "const",
+    "type": "int"
+  },
+  "dayofweek.wednesday": {
+    "qualifier": "const",
+    "type": "int"
+  },
+  "display.all": {
+    "qualifier": "const",
+    "type": "plot_simple_display"
+  },
+  "display.data_window": {
+    "qualifier": "const",
+    "type": "plot_display"
+  },
+  "display.none": {
+    "qualifier": "const",
+    "type": "plot_simple_display"
+  },
+  "display.pane": {
+    "qualifier": "const",
+    "type": "plot_display"
+  },
+  "display.price_scale": {
+    "qualifier": "const",
+    "type": "plot_display"
+  },
+  "display.status_line": {
+    "qualifier": "const",
+    "type": "plot_display"
+  },
+  "dividends.gross": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "dividends.net": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "earnings.actual": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "earnings.estimate": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "earnings.standardized": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "extend.both": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "extend.left": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "extend.none": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "extend.right": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "font.family_default": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "font.family_monospace": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "format.inherit": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "format.mintick": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "format.percent": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "format.price": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "format.volume": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "hline.style_dashed": {
+    "qualifier": "const",
+    "type": "hline_style"
+  },
+  "hline.style_dotted": {
+    "qualifier": "const",
+    "type": "hline_style"
+  },
+  "hline.style_solid": {
+    "qualifier": "const",
+    "type": "hline_style"
+  },
+  "label.style_arrowdown": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_arrowup": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_circle": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_cross": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_diamond": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_flag": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_label_center": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_label_down": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_label_left": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_label_lower_left": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_label_lower_right": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_label_right": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_label_up": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_label_upper_left": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_label_upper_right": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_none": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_square": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_text_outline": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_triangledown": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_triangleup": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "label.style_xcross": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "line.style_arrow_both": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "line.style_arrow_left": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "line.style_arrow_right": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "line.style_dashed": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "line.style_dotted": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "line.style_solid": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "location.abovebar": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "location.absolute": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "location.belowbar": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "location.bottom": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "location.top": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "math.e": {
+    "qualifier": "const",
+    "type": "float"
+  },
+  "math.phi": {
+    "qualifier": "const",
+    "type": "float"
+  },
+  "math.pi": {
+    "qualifier": "const",
+    "type": "float"
+  },
+  "math.rphi": {
+    "qualifier": "const",
+    "type": "float"
+  },
+  "order.ascending": {
+    "qualifier": "const",
+    "type": "sort_order"
+  },
+  "order.descending": {
+    "qualifier": "const",
+    "type": "sort_order"
+  },
+  "plot.style_area": {
+    "qualifier": "const",
+    "type": "plot_style"
+  },
+  "plot.style_areabr": {
+    "qualifier": "const",
+    "type": "plot_style"
+  },
+  "plot.style_circles": {
+    "qualifier": "const",
+    "type": "plot_style"
+  },
+  "plot.style_columns": {
+    "qualifier": "const",
+    "type": "plot_style"
+  },
+  "plot.style_cross": {
+    "qualifier": "const",
+    "type": "plot_style"
+  },
+  "plot.style_histogram": {
+    "qualifier": "const",
+    "type": "plot_style"
+  },
+  "plot.style_line": {
+    "qualifier": "const",
+    "type": "plot_style"
+  },
+  "plot.style_linebr": {
+    "qualifier": "const",
+    "type": "plot_style"
+  },
+  "plot.style_stepline": {
+    "qualifier": "const",
+    "type": "plot_style"
+  },
+  "plot.style_stepline_diamond": {
+    "qualifier": "const",
+    "type": "plot_style"
+  },
+  "plot.style_steplinebr": {
+    "qualifier": "const",
+    "type": "plot_style"
+  },
+  "position.bottom_center": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "position.bottom_left": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "position.bottom_right": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "position.middle_center": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "position.middle_left": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "position.middle_right": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "position.top_center": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "position.top_left": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "position.top_right": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "scale.left": {
+    "qualifier": "const",
+    "type": "scale_type"
+  },
+  "scale.none": {
+    "qualifier": "const",
+    "type": "scale_type"
+  },
+  "scale.right": {
+    "qualifier": "const",
+    "type": "scale_type"
+  },
+  "session.extended": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "session.regular": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "settlement_as_close.inherit": {
+    "qualifier": "const",
+    "type": "settlement"
+  },
+  "settlement_as_close.off": {
+    "qualifier": "const",
+    "type": "settlement"
+  },
+  "settlement_as_close.on": {
+    "qualifier": "const",
+    "type": "settlement"
+  },
+  "shape.arrowdown": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "shape.arrowup": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "shape.circle": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "shape.cross": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "shape.diamond": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "shape.flag": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "shape.labeldown": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "shape.labelup": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "shape.square": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "shape.triangledown": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "shape.triangleup": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "shape.xcross": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "size.auto": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "size.huge": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "size.large": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "size.normal": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "size.small": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "size.tiny": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "splits.denominator": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "splits.numerator": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.cash": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.commission.cash_per_contract": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.commission.cash_per_order": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.commission.percent": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.direction.all": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.direction.long": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.direction.short": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.fixed": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.long": {
+    "qualifier": "const",
+    "type": "strategy_direction"
+  },
+  "strategy.oca.cancel": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.oca.none": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.oca.reduce": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.percent_of_equity": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "strategy.short": {
+    "qualifier": "const",
+    "type": "strategy_direction"
+  },
+  "text.align_bottom": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "text.align_center": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "text.align_left": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "text.align_right": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "text.align_top": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "text.format_bold": {
+    "qualifier": "const",
+    "type": "text_format"
+  },
+  "text.format_italic": {
+    "qualifier": "const",
+    "type": "text_format"
+  },
+  "text.format_none": {
+    "qualifier": "const",
+    "type": "text_format"
+  },
+  "text.wrap_auto": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "text.wrap_none": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "xloc.bar_index": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "xloc.bar_time": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "yloc.abovebar": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "yloc.belowbar": {
+    "qualifier": "const",
+    "type": "string"
+  },
+  "yloc.price": {
+    "qualifier": "const",
+    "type": "string"
+  }
+}

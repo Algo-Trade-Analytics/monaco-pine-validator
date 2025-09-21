@@ -1,0 +1,66 @@
+{
+  "-": [
+    "expr1 - expr2"
+  ],
+  "-=": [
+    "expr1 -= expr2"
+  ],
+  ":=": [
+    "<var_name> := <new_value>"
+  ],
+  "!=": [
+    "expr1 != expr2"
+  ],
+  "?:": [
+    "expr1 ? expr2 : expr3"
+  ],
+  "[]": [
+    "expr1[expr2]"
+  ],
+  "*": [
+    "expr1 * expr2"
+  ],
+  "*=": [
+    "expr1 *= expr2"
+  ],
+  "/": [
+    "expr1 / expr2"
+  ],
+  "/=": [
+    "expr1 /= expr2"
+  ],
+  "%": [
+    "expr1 % expr2"
+  ],
+  "%=": [
+    "expr1 %= expr2"
+  ],
+  "+": [
+    "expr1 + expr2"
+  ],
+  "+=": [
+    "expr1 += expr2"
+  ],
+  "<": [
+    "expr1 < expr2"
+  ],
+  "<=": [
+    "expr1 <= expr2"
+  ],
+  "==": [
+    "expr1 == expr2"
+  ],
+  "=>": [
+    "<identifier>([<parameter_name>[=<default_value>]], ...) =>",
+    "<local_block>",
+    "<function_result>",
+    "A <local_block> is zero or more Pine Script® statements.",
+    "The <function_result> is a variable, an expression, or a tuple."
+  ],
+  ">": [
+    "expr1 > expr2"
+  ],
+  ">=": [
+    "expr1 >= expr2"
+  ]
+}
