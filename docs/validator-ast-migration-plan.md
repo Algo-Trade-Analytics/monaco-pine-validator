@@ -50,6 +50,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Scope validator now inspects AST declaration names to emit PS006/PS007 identifier errors without the legacy line scanner.
 - Type validator now consumes AST type annotations, ternaries, and function return statements to raise PSV6-TYPE-MISMATCH, PSV6-TERNARY-TYPE, and PSV6-FUNCTION-RETURN-TYPE diagnostics without regex fallbacks.
 - Dynamic loop validator now uses AST for-loop metadata to surface PSV6-FOR-DYNAMIC and PSV6-FOR-MODIFY warnings, leaving the regex scanner as a fallback only when structured analysis is unavailable.
+- Alert functions validator now inspects AST call expressions to validate alert frequencies, empty messages, and control-flow placement without relying on regex scanning while retaining the legacy path as a fallback.
 
 ### Near-Term TODOs
 
@@ -189,6 +190,7 @@ Suggested migration order:
 | type-validator | High | 🔄 Migrating | Semantic Working Group | AST path now surfaces key PSV6 type diagnostics; continue expanding coverage before parity run |
 | scope-validator | High | 🔄 Migrating | Semantic Working Group | AST metadata now drives PSW03/PSW04 and PSU02 diagnostics; continue porting remaining scope checks |
 | switch-validator | Medium | ✅ Migrated | Language Infra | Switch diagnostics now sourced from AST cases and discriminants; legacy regex path retained as fallback |
+| alert-functions-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal validates alert calls and frequency usage while legacy scanning remains as fallback |
 | while-loop-validator | Medium | 🛠️ Blocked on node coverage | Language Infra | Loop constructs present; finalise control-flow metadata before port |
 | builtin-variables-validator | Medium | ✅ Migrated | Module Owners Guild | Validator now reads AST member expressions for constants, having removed the legacy line-scanner path |
 | ta-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Awaiting expanded call-site inference for strategy/TA helpers |
