@@ -49,6 +49,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Scope validator now analyses AST identifier references to emit PSU02 warnings without legacy text scanning heuristics.
 - Scope validator now inspects AST declaration names to emit PS006/PS007 identifier errors without the legacy line scanner.
 - Type validator now consumes AST type annotations, ternaries, and function return statements to raise PSV6-TYPE-MISMATCH, PSV6-TERNARY-TYPE, and PSV6-FUNCTION-RETURN-TYPE diagnostics without regex fallbacks.
+- Dynamic loop validator now uses AST for-loop metadata to surface PSV6-FOR-DYNAMIC and PSV6-FOR-MODIFY warnings, leaving the regex scanner as a fallback only when structured analysis is unavailable.
 
 ### Near-Term TODOs
 
