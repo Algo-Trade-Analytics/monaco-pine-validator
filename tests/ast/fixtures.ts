@@ -486,6 +486,22 @@ export function createSwitchStatement(
   };
 }
 
+export function createProgram(
+  body: StatementNode[],
+  start: number,
+  end: number,
+  lineStart = 1,
+  lineEnd = lineStart,
+  directives: VersionDirectiveNode[] = [],
+): ProgramNode {
+  return {
+    kind: 'Program',
+    directives,
+    body,
+    ...createSpan({ start, end, lineStart, lineEnd }),
+  };
+}
+
 export function createIndicatorScriptFixture(): ProgramNode {
   const directive = {
     kind: 'VersionDirective' as const,
