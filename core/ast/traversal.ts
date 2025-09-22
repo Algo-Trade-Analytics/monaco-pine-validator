@@ -18,6 +18,8 @@ import {
   type ProgramNode,
   type ReturnStatementNode,
   type ScriptDeclarationNode,
+  type EnumDeclarationNode,
+  type EnumMemberNode,
   type TypeDeclarationNode,
   type TypeFieldNode,
   type SwitchCaseNode,
@@ -187,6 +189,20 @@ function collectChildren(path: NodePath): ChildEntry[] {
       tuple.elements.forEach((element, elementIndex) => {
         push(element, 'elements', elementIndex);
       });
+      break;
+    }
+    case 'EnumDeclaration': {
+      const enumDeclaration = node as EnumDeclarationNode;
+      push(enumDeclaration.identifier, 'identifier');
+      enumDeclaration.members.forEach((member, memberIndex) => {
+        push(member, 'members', memberIndex);
+      });
+      break;
+    }
+    case 'EnumMember': {
+      const member = node as EnumMemberNode;
+      push(member.identifier, 'identifier');
+      push(member.value, 'value');
       break;
     }
     case 'TypeDeclaration': {

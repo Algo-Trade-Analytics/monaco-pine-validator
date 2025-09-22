@@ -3,21 +3,119 @@
  * Handles array declarations, operations, performance, and best practices
  */
 
-import { ValidationModule, ValidationContext, ValidationResult, ValidatorConfig } from '../core/types';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidationResult,
+  type ValidatorConfig,
+} from '../core/types';
+import {
+  type ArgumentNode,
+  type AssignmentStatementNode,
+  type BinaryExpressionNode,
+  type CallExpressionNode,
+  type ExpressionNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type NumberLiteralNode,
+  type ProgramNode,
+  type VariableDeclarationNode,
+  type TypeReferenceNode,
+  type UnaryExpressionNode,
+} from '../core/ast/nodes';
+import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
+
+const VALID_ARRAY_ELEMENT_TYPES = new Set([
+  'int',
+  'float',
+  'bool',
+  'string',
+  'color',
+  'line',
+  'label',
+  'box',
+  'table',
+  'linefill',
+  'chart.point',
+]);
+
+const ARRAY_TYPED_CONSTRUCTORS: Record<string, string> = {
+  'array.new_bool': 'bool',
+  'array.new_box': 'box',
+  'array.new_color': 'color',
+  'array.new_float': 'float',
+  'array.new_int': 'int',
+  'array.new_label': 'label',
+  'array.new_line': 'line',
+  'array.new_linefill': 'linefill',
+  'array.new_string': 'string',
+  'array.new_table': 'table',
+};
+
+const ARRAY_METHOD_SPECS: Array<{ name: string; params?: number; description: string }> = [
+  { name: 'array.push', params: 2, description: 'array.push(id, value)' },
+  { name: 'array.pop', params: 1, description: 'array.pop(id)' },
+  { name: 'array.get', params: 2, description: 'array.get(id, index)' },
+  { name: 'array.set', params: 3, description: 'array.set(id, index, value)' },
+  { name: 'array.size', params: 1, description: 'array.size(id)' },
+  { name: 'array.clear', params: 1, description: 'array.clear(id)' },
+  { name: 'array.reverse', params: 1, description: 'array.reverse(id)' },
+  { name: 'array.sort', params: 1, description: 'array.sort(id)' },
+  { name: 'array.sort_indices', params: 1, description: 'array.sort_indices(id)' },
+  { name: 'array.copy', params: 1, description: 'array.copy(id)' },
+  { name: 'array.slice', params: 3, description: 'array.slice(id, start, end)' },
+  { name: 'array.concat', params: 2, description: 'array.concat(id, other)' },
+  { name: 'array.fill', params: 2, description: 'array.fill(id, value)' },
+  { name: 'array.from', description: 'array.from(source, ...values)' },
+  { name: 'array.from_example', description: 'array.from_example(id, example)' },
+  { name: 'array.indexof', params: 2, description: 'array.indexof(id, value)' },
+  { name: 'array.lastindexof', params: 2, description: 'array.lastindexof(id, value)' },
+  { name: 'array.binary_search', description: 'array.binary_search(id, value, comparator?)' },
+  { name: 'array.binary_search_leftmost', description: 'array.binary_search_leftmost(id, value)' },
+  { name: 'array.binary_search_rightmost', description: 'array.binary_search_rightmost(id, value)' },
+  { name: 'array.range', params: 3, description: 'array.range(id, start, end)' },
+  { name: 'array.remove', params: 2, description: 'array.remove(id, index)' },
+  { name: 'array.insert', params: 3, description: 'array.insert(id, index, value)' },
+  { name: 'array.first', params: 1, description: 'array.first(id)' },
+  { name: 'array.last', params: 1, description: 'array.last(id)' },
+  { name: 'array.max', params: 1, description: 'array.max(id)' },
+  { name: 'array.min', params: 1, description: 'array.min(id)' },
+  { name: 'array.median', params: 1, description: 'array.median(id)' },
+  { name: 'array.mode', params: 1, description: 'array.mode(id)' },
+  { name: 'array.abs', params: 1, description: 'array.abs(id)' },
+  { name: 'array.sum', params: 1, description: 'array.sum(id)' },
+  { name: 'array.avg', params: 1, description: 'array.avg(id)' },
+  { name: 'array.stdev', params: 1, description: 'array.stdev(id)' },
+  { name: 'array.variance', params: 1, description: 'array.variance(id)' },
+  { name: 'array.standardize', params: 1, description: 'array.standardize(id)' },
+  { name: 'array.covariance', params: 2, description: 'array.covariance(id, other)' },
+  { name: 'array.percentile_linear_interpolation', description: 'array.percentile_linear_interpolation(id, percentile)' },
+  { name: 'array.percentile_nearest_rank', description: 'array.percentile_nearest_rank(id, percentile)' },
+  { name: 'array.percentrank', description: 'array.percentrank(id, percentile)' },
+  { name: 'array.some', params: 2, description: 'array.some(id, predicate)' },
+  { name: 'array.every', params: 2, description: 'array.every(id, predicate)' },
+];
+
+const EXPENSIVE_ARRAY_METHODS = new Set(['array.reverse', 'array.sort', 'array.copy']);
+
 
 export class ArrayValidator implements ValidationModule {
   name = 'ArrayValidator';
-  
+
   private errors: Array<{ line: number; column: number; message: string; code: string }> = [];
   private warnings: Array<{ line: number; column: number; message: string; code: string }> = [];
   private info: Array<{ line: number; column: number; message: string; code: string }> = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private usingAst = false;
 
   // Array tracking
-  private arrayDeclarations = new Map<string, { type: string; size: number; line: number; elementType: string }>();
+  private arrayDeclarations = new Map<string, { type: string; size: number; line: number; column: number; elementType: string }>();
   private arrayAllocations = 0;
   private arrayOperations = 0;
+  private arrayUsage = new Map<string, { pushes: number[]; sets: number[]; clears: number[] }>();
 
   getDependencies(): string[] {
     return ['FunctionValidator'];
@@ -32,11 +130,20 @@ export class ArrayValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
-    this.validateArrayDeclarations();
-    this.validateArrayOperations();
-    this.validateArrayTypeConsistency();
-    this.validateArrayPerformance();
-    this.validateArrayBestPractices();
+    this.astContext = this.getAstContext(config);
+    this.usingAst = !!this.astContext?.ast;
+
+    if (this.usingAst && this.astContext?.ast) {
+      this.collectArrayDataAst(this.astContext.ast);
+      this.validateArrayPerformanceAst();
+      this.validateArrayBestPracticesAst();
+    } else {
+      this.validateArrayDeclarations();
+      this.validateArrayOperations();
+      this.validateArrayTypeConsistency();
+      this.validateArrayPerformance();
+      this.validateArrayBestPractices();
+    }
 
     return {
       isValid: this.errors.length === 0,
@@ -52,9 +159,12 @@ export class ArrayValidator implements ValidationModule {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.astContext = null;
+    this.usingAst = false;
     this.arrayDeclarations.clear();
     this.arrayAllocations = 0;
     this.arrayOperations = 0;
+    this.arrayUsage.clear();
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
@@ -68,6 +178,692 @@ export class ArrayValidator implements ValidationModule {
   private addInfo(line: number, column: number, message: string, code: string): void {
     this.info.push({ line, column, message, code });
   }
+
+  private collectArrayDataAst(program: ProgramNode): void {
+    const loopStack: NodePath[] = [];
+
+    visit(program, {
+      ForStatement: {
+        enter: (path) => {
+          loopStack.push(path);
+        },
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      WhileStatement: {
+        enter: (path) => {
+          loopStack.push(path);
+        },
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      VariableDeclaration: {
+        enter: (path) => {
+          this.registerArrayTypeAnnotation(path.node);
+        },
+      },
+      CallExpression: {
+        enter: (path) => {
+          const call = (path as NodePath<CallExpressionNode>).node;
+          const qualifiedName = this.getExpressionQualifiedName(call.callee);
+          if (!qualifiedName || !qualifiedName.startsWith('array.')) {
+            return;
+          }
+
+          if (qualifiedName.startsWith('array.new')) {
+            this.handleArrayCreationAst(qualifiedName, call, path);
+          } else {
+            this.handleArrayMethodCallAst(qualifiedName, call, path, loopStack.length > 0);
+          }
+        },
+      },
+    });
+  }
+
+  private registerArrayTypeAnnotation(declaration: VariableDeclarationNode): void {
+    const typeAnnotation = declaration.typeAnnotation;
+    if (!typeAnnotation) {
+      return;
+    }
+
+    const elementType = this.extractArrayAnnotationElement(typeAnnotation);
+    if (!elementType) {
+      return;
+    }
+
+    const identifier = declaration.identifier;
+    const name = identifier.name;
+    const line = identifier.loc.start.line;
+    const column = identifier.loc.start.column;
+
+    const existing = this.arrayDeclarations.get(name);
+    const size = existing?.size ?? 0;
+    this.arrayDeclarations.set(name, {
+      type: elementType,
+      elementType,
+      size,
+      line,
+      column,
+    });
+
+    this.context.typeMap.set(name, {
+      type: 'array',
+      isConst: declaration.declarationKind === 'const',
+      isSeries: false,
+      declaredAt: { line, column },
+      usages: [],
+      elementType,
+    });
+  }
+
+  private handleArrayCreationAst(
+    qualifiedName: string,
+    call: CallExpressionNode,
+    path: NodePath<CallExpressionNode>,
+  ): void {
+    this.arrayAllocations++;
+
+    const target = this.extractArrayAssignmentTarget(path);
+    const line = call.loc.start.line;
+    const column = call.loc.start.column;
+
+    const elementType = this.inferArrayElementTypeFromCall(qualifiedName, call);
+    if (elementType && elementType !== 'unknown') {
+      this.validateArrayType(elementType, line, column);
+    }
+
+    const size = this.extractArraySizeFromCall(qualifiedName, call);
+    if (typeof size === 'number') {
+      this.validateArraySize(size, line, column);
+    }
+
+    if (target) {
+      const info = this.arrayDeclarations.get(target.name) ?? {
+        type: elementType,
+        elementType,
+        size: typeof size === 'number' ? size : 0,
+        line: target.line,
+        column: target.column,
+      };
+
+      info.type = elementType;
+      info.elementType = elementType;
+      if (typeof size === 'number') {
+        info.size = size;
+      }
+      info.line = target.line;
+      info.column = target.column;
+
+      this.arrayDeclarations.set(target.name, info);
+
+      this.context.typeMap.set(target.name, {
+        type: 'array',
+        isConst: false,
+        isSeries: false,
+        declaredAt: { line: target.line, column: target.column },
+        usages: [],
+        elementType,
+      });
+    }
+  }
+
+  private handleArrayMethodCallAst(
+    qualifiedName: string,
+    call: CallExpressionNode,
+    _path: NodePath<CallExpressionNode>,
+    inLoop: boolean,
+  ): void {
+    this.arrayOperations++;
+
+    const line = call.loc.start.line;
+    const column = call.loc.start.column;
+    const spec = ARRAY_METHOD_SPECS.find((entry) => entry.name === qualifiedName);
+    const args = call.args;
+
+    if (spec?.params !== undefined && args.length !== spec.params) {
+      this.addError(
+        line,
+        column,
+        `Invalid parameter count for ${qualifiedName}. Expected ${spec.params}, got ${args.length}. Usage: ${spec.description}`,
+        'PSV6-ARRAY-METHOD-PARAMS',
+      );
+    }
+
+    const arrayArgument = args[0]?.value ?? null;
+    const arrayName = arrayArgument ? this.validateArrayVariableAst(arrayArgument, line, column) : null;
+
+    if (qualifiedName === 'array.get' && arrayName && args[1]) {
+      this.validateArrayIndexAst(arrayName, args[1], line, column);
+    }
+
+    if (qualifiedName === 'array.set' && arrayName) {
+      if (args[1]) {
+        this.validateArrayIndexAst(arrayName, args[1], line, column);
+      }
+      if (args[2]) {
+        this.validateArrayValueTypeAst(arrayName, args[2].value, line, column, 'set');
+      }
+    }
+
+    if (qualifiedName === 'array.push' && arrayName && args[1]) {
+      this.validateArrayValueTypeAst(arrayName, args[1].value, line, column, 'push');
+    }
+
+    if (qualifiedName === 'array.push' && arrayName) {
+      this.recordArrayUsage(arrayName, 'push', line);
+    }
+
+    if (qualifiedName === 'array.set' && arrayName) {
+      this.recordArrayUsage(arrayName, 'set', line);
+    }
+
+    if (qualifiedName === 'array.clear' && arrayName) {
+      this.recordArrayUsage(arrayName, 'clear', line);
+    }
+
+    if (inLoop && EXPENSIVE_ARRAY_METHODS.has(qualifiedName)) {
+      this.addWarning(
+        line,
+        column,
+        `Expensive array operation '${qualifiedName}' detected in loop`,
+        'PSV6-ARRAY-PERF-LOOP',
+      );
+    }
+  }
+
+  private extractArrayAssignmentTarget(path: NodePath<CallExpressionNode>): { name: string; line: number; column: number } | null {
+    const declarationPath = findAncestor(path, (ancestor): ancestor is NodePath<VariableDeclarationNode> => {
+      return ancestor.node.kind === 'VariableDeclaration';
+    });
+
+    if (declarationPath) {
+      const declaration = declarationPath.node as VariableDeclarationNode;
+      if (declaration.initializer === path.node) {
+        const identifier = declaration.identifier;
+        return {
+          name: identifier.name,
+          line: identifier.loc.start.line,
+          column: identifier.loc.start.column,
+        };
+      }
+    }
+
+    const assignmentPath = findAncestor(path, (ancestor): ancestor is NodePath<AssignmentStatementNode> => {
+      return ancestor.node.kind === 'AssignmentStatement';
+    });
+
+    if (assignmentPath) {
+      const assignment = assignmentPath.node as AssignmentStatementNode;
+      if (assignment.right === path.node && assignment.left.kind === 'Identifier') {
+        const identifier = assignment.left as IdentifierNode;
+        return {
+          name: identifier.name,
+          line: identifier.loc.start.line,
+          column: identifier.loc.start.column,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private inferArrayElementTypeFromCall(qualifiedName: string, call: CallExpressionNode): string {
+    const typedConstructor = ARRAY_TYPED_CONSTRUCTORS[qualifiedName];
+    if (typedConstructor) {
+      return typedConstructor;
+    }
+
+    const genericType = this.extractGenericElementType(call.callee);
+    if (genericType) {
+      return genericType;
+    }
+
+    if (qualifiedName === 'array.new' && call.args.length > 0) {
+      const first = call.args[0];
+      const literalType = this.resolveTypeIdentifier(first.value);
+      if (literalType) {
+        return literalType;
+      }
+    }
+
+    return 'unknown';
+  }
+
+  private extractArraySizeFromCall(qualifiedName: string, call: CallExpressionNode): number | null {
+    if (qualifiedName in ARRAY_TYPED_CONSTRUCTORS) {
+      const firstArgument = call.args[0]?.value;
+      return firstArgument ? this.extractNumericLiteral(firstArgument) ?? 0 : 0;
+    }
+
+    const genericType = this.extractGenericElementType(call.callee);
+    if (qualifiedName === 'array.new' && genericType) {
+      const sizeArgument = call.args[0]?.value;
+      return sizeArgument ? this.extractNumericLiteral(sizeArgument) ?? 0 : 0;
+    }
+
+    if (qualifiedName === 'array.new' && call.args.length >= 2) {
+      const sizeArgument = call.args[1]?.value;
+      return sizeArgument ? this.extractNumericLiteral(sizeArgument) ?? 0 : 0;
+    }
+
+    return null;
+  }
+
+  private validateArrayVariableAst(argument: ExpressionNode, line: number, column: number): string | null {
+    const name = this.getIdentifierName(argument);
+    if (!name) {
+      return null;
+    }
+
+    if (this.isArrayIdentifier(name)) {
+      return name;
+    }
+
+    if (this.isFunctionParameter(name)) {
+      return name;
+    }
+
+    this.addError(line, column, `Variable '${name}' is not declared as an array`, 'PSV6-ARRAY-NOT-ARRAY');
+    return name;
+  }
+
+  private validateArrayIndexAst(arrayName: string, argument: ArgumentNode, line: number, column: number): void {
+    const arrayInfo = this.arrayDeclarations.get(arrayName);
+    if (!arrayInfo) {
+      return;
+    }
+
+    const value = this.extractNumericLiteral(argument.value);
+    if (value === null) {
+      return;
+    }
+
+    const size = arrayInfo.size;
+    if (value >= size && size > 0) {
+      this.addWarning(
+        line,
+        column,
+        `Array index ${value} is out of bounds for array of size ${size}`,
+        'PSV6-ARRAY-INDEX-BOUNDS',
+      );
+    }
+
+    if (value < 0 && Math.abs(value) > size) {
+      this.addWarning(
+        line,
+        column,
+        `Negative array index ${value} is out of bounds for array of size ${size}`,
+        'PSV6-ARRAY-INDEX-BOUNDS',
+      );
+    }
+  }
+
+  private validateArrayValueTypeAst(
+    arrayName: string,
+    expression: ExpressionNode,
+    line: number,
+    column: number,
+    operation: 'push' | 'set',
+  ): void {
+    const arrayInfo = this.arrayDeclarations.get(arrayName);
+    if (!arrayInfo) {
+      return;
+    }
+
+    const valueType = this.inferExpressionTypeAst(expression);
+    if (!valueType || valueType === 'unknown' || arrayInfo.elementType === 'unknown') {
+      return;
+    }
+
+    if (!this.areTypesCompatible(arrayInfo.elementType, valueType)) {
+      const action = operation === 'push' ? 'push' : 'set';
+      this.addError(
+        line,
+        column,
+        `Type mismatch: cannot ${action} ${valueType} ${operation === 'push' ? 'to' : 'in'} ${arrayInfo.elementType} array '${arrayName}'`,
+        'PSV6-ARRAY-TYPE-MISMATCH',
+      );
+    }
+  }
+
+  private recordArrayUsage(name: string, kind: 'push' | 'set' | 'clear', line: number): void {
+    const usage = this.arrayUsage.get(name) ?? { pushes: [], sets: [], clears: [] };
+    if (kind === 'push') {
+      usage.pushes.push(line);
+    } else if (kind === 'set') {
+      usage.sets.push(line);
+    } else if (kind === 'clear') {
+      usage.clears.push(line);
+    }
+    this.arrayUsage.set(name, usage);
+  }
+
+  private extractGenericElementType(callee: ExpressionNode): string | null {
+    const source = this.getExpressionText(callee);
+    const match = source.match(/array\.new\s*<\s*([^>]+)\s*>/i);
+    if (match) {
+      return match[1].trim();
+    }
+    return null;
+  }
+
+  private resolveTypeIdentifier(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+
+    if (expression.kind === 'StringLiteral') {
+      const raw = this.getExpressionText(expression).replace(/^['"]|['"]$/g, '');
+      return raw;
+    }
+
+    return null;
+  }
+
+  private extractArrayAnnotationElement(type: TypeReferenceNode): string | null {
+    if (type.name.name === 'array' && type.generics.length > 0) {
+      const generic = type.generics[0];
+      return generic.name.name;
+    }
+
+    const source = this.getNodeSource(type).trim();
+    const match = source.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s*\[\s*\]\s*$/);
+    if (match) {
+      return match[1];
+    }
+
+    return null;
+  }
+
+  private isArrayIdentifier(name: string): boolean {
+    const info = this.arrayDeclarations.get(name);
+    if (info) {
+      return true;
+    }
+
+    const typeInfo = this.context.typeMap.get(name);
+    if (typeInfo?.type === 'array') {
+      return true;
+    }
+
+    return false;
+  }
+
+  private isFunctionParameter(name: string): boolean {
+    if (!this.astContext) {
+      return false;
+    }
+
+    const record = this.astContext.symbolTable.get(name);
+    if (!record) {
+      return false;
+    }
+
+    const kinds = (record.metadata?.declarationKinds as string[] | undefined) ?? [];
+    return kinds.includes('parameter');
+  }
+
+  private inferExpressionTypeAst(expression: ExpressionNode): string {
+    switch (expression.kind) {
+      case 'StringLiteral':
+        return 'string';
+      case 'BooleanLiteral':
+        return 'bool';
+      case 'NullLiteral':
+        return 'unknown';
+      case 'NumberLiteral': {
+        const number = expression as NumberLiteralNode;
+        const raw = number.raw ?? '';
+        const isFloat = raw.includes('.') || /[eE]/.test(raw);
+        return !isFloat && Number.isInteger(number.value) ? 'int' : 'float';
+      }
+      case 'Identifier': {
+        const name = (expression as IdentifierNode).name;
+        const arrayInfo = this.arrayDeclarations.get(name);
+        if (arrayInfo) {
+          return 'array';
+        }
+
+        const typeInfo = this.context.typeMap.get(name);
+        if (typeInfo) {
+          return typeInfo.elementType ?? typeInfo.type;
+        }
+
+        return 'unknown';
+      }
+      case 'MemberExpression': {
+        const text = this.getExpressionText(expression);
+        if (text.startsWith('color.') || text.startsWith('#') || text.startsWith('rgb')) {
+          return 'color';
+        }
+        return 'unknown';
+      }
+      case 'CallExpression': {
+        const call = expression as CallExpressionNode;
+        const qualified = this.getExpressionQualifiedName(call.callee);
+        if (!qualified) {
+          return 'unknown';
+        }
+
+        if (qualified === 'array.get' && call.args.length > 0) {
+          const name = this.getIdentifierName(call.args[0].value);
+          if (name) {
+            const info = this.arrayDeclarations.get(name);
+            if (info) {
+              return info.elementType;
+            }
+          }
+        }
+
+        if (qualified.startsWith('array.new')) {
+          return 'array';
+        }
+
+        if (qualified.startsWith('ta.')) {
+          return 'series';
+        }
+
+        if (qualified.startsWith('math.')) {
+          return 'float';
+        }
+
+        return 'unknown';
+      }
+      case 'BinaryExpression': {
+        const binary = expression as BinaryExpressionNode;
+        if (binary.operator === '+') {
+          const leftType = this.inferExpressionTypeAst(binary.left);
+          const rightType = this.inferExpressionTypeAst(binary.right);
+          if (leftType === 'string' || rightType === 'string') {
+            return 'string';
+          }
+          if (leftType === 'float' || rightType === 'float') {
+            return 'float';
+          }
+          return 'int';
+        }
+        return 'float';
+      }
+      default:
+        return 'unknown';
+    }
+  }
+
+  private extractNumericLiteral(expression: ExpressionNode): number | null {
+    if (expression.kind === 'NumberLiteral') {
+      return (expression as NumberLiteralNode).value;
+    }
+
+    if (expression.kind === 'UnaryExpression') {
+      const unary = expression as UnaryExpressionNode;
+      const value = this.extractNumericLiteral(unary.argument);
+      if (value === null) {
+        return null;
+      }
+
+      if (unary.operator === '-') {
+        return -value;
+      }
+
+      if (unary.operator === '+') {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  private getIdentifierName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+    return null;
+  }
+
+  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+
+      const objectName = this.getExpressionQualifiedName(member.object);
+      if (!objectName) {
+        return null;
+      }
+
+      return `${objectName}.${member.property.name}`;
+    }
+
+    return null;
+  }
+
+  private getExpressionText(expression: ExpressionNode): string {
+    switch (expression.kind) {
+      case 'Identifier':
+        return (expression as IdentifierNode).name;
+      case 'MemberExpression': {
+        const member = expression as MemberExpressionNode;
+        if (member.computed) {
+          return this.getNodeSource(member);
+        }
+        const objectText = this.getExpressionText(member.object);
+        return `${objectText}.${member.property.name}`;
+      }
+      default:
+        return this.getNodeSource(expression);
+    }
+  }
+
+  private getNodeSource(node: { loc: { start: { line: number; column: number }; end: { line: number; column: number } } }): string {
+    const lines = this.context.lines ?? [];
+    const startLineIndex = Math.max(0, node.loc.start.line - 1);
+    const endLineIndex = Math.max(0, node.loc.end.line - 1);
+
+    if (startLineIndex === endLineIndex) {
+      const line = lines[startLineIndex] ?? '';
+      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
+    }
+
+    const parts: string[] = [];
+    const firstLine = lines[startLineIndex] ?? '';
+    parts.push(firstLine.slice(node.loc.start.column - 1));
+
+    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
+      parts.push(lines[index] ?? '');
+    }
+
+    const lastLine = lines[endLineIndex] ?? '';
+    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
+    return parts.join('\n');
+  }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return 'ast' in this.context ? (this.context as AstValidationContext) : null;
+  }
+
+  private validateArrayPerformanceAst(): void {
+    if (this.arrayAllocations > 5) {
+      this.addWarning(
+        1,
+        1,
+        `Too many array allocations (${this.arrayAllocations}). Consider reusing arrays or using fewer arrays.`,
+        'PSV6-ARRAY-PERF-ALLOCATION',
+      );
+    }
+
+    for (const [name, info] of this.arrayDeclarations) {
+      if (info.size > 10000) {
+        this.addWarning(
+          info.line,
+          info.column,
+          `Large array '${name}' with size ${info.size}. Consider performance implications.`,
+          'PSV6-ARRAY-PERF-LARGE',
+        );
+      }
+    }
+  }
+
+  private validateArrayBestPracticesAst(): void {
+    this.validateArrayNaming();
+    this.validateArrayInitializationAst();
+    this.validateArrayMemoryManagementAst();
+  }
+
+  private validateArrayInitializationAst(): void {
+    for (const [name, info] of this.arrayDeclarations) {
+      const usage = this.arrayUsage.get(name);
+      if (!usage) {
+        this.addInfo(
+          info.line,
+          info.column,
+          `Array '${name}' is declared but never initialized. Consider adding initial values.`,
+          'PSV6-ARRAY-INITIALIZATION-SUGGESTION',
+        );
+        continue;
+      }
+
+      const hasInitialization = [...usage.pushes, ...usage.sets].some((line) => line >= info.line);
+      if (!hasInitialization) {
+        this.addInfo(
+          info.line,
+          info.column,
+          `Array '${name}' is declared but never initialized. Consider adding initial values.`,
+          'PSV6-ARRAY-INITIALIZATION-SUGGESTION',
+        );
+      }
+    }
+  }
+
+  private validateArrayMemoryManagementAst(): void {
+    for (const [name, info] of this.arrayDeclarations) {
+      const usage = this.arrayUsage.get(name);
+      if (!usage) {
+        continue;
+      }
+
+      const hasPush = usage.pushes.length > 0;
+      const hasClear = usage.clears.length > 0;
+      if (hasPush && !hasClear && info.size > 100) {
+        this.addInfo(
+          info.line,
+          info.column,
+          `Array '${name}' grows but is never cleared. Consider using array.clear() for memory management.`,
+          'PSV6-ARRAY-MEMORY-SUGGESTION',
+        );
+      }
+    }
+  }
+
 
   private validateArrayDeclarations(): void {
     for (let i = 0; i < this.context.cleanLines.length; i++) {
@@ -103,7 +899,7 @@ export class ArrayValidator implements ValidationModule {
       const varMatch = line.match(/^\s*(?:var|varip)?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*array\.new_/);
       if (varMatch) {
         const varName = varMatch[1];
-        this.arrayDeclarations.set(varName, { type: elemType, size, line: lineNum, elementType: elemType });
+        this.arrayDeclarations.set(varName, { type: elemType, size, line: lineNum, column: 1, elementType: elemType });
         this.context.typeMap.set(varName, {
           type: 'array',
           isConst: false,
@@ -131,7 +927,7 @@ export class ArrayValidator implements ValidationModule {
       const varMatch = line.match(/^\s*(?:var|varip)?\s*(?:array<[^>]+>|[A-Za-z_][A-Za-z0-9_]*\[\])?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*array\.new/);
       if (varMatch) {
         const varName = varMatch[1];
-        this.arrayDeclarations.set(varName, { type, size, line: lineNum, elementType: type });
+        this.arrayDeclarations.set(varName, { type, size, line: lineNum, column: 1, elementType: type });
         
         // Store in context typeMap
         this.context.typeMap.set(varName, {
@@ -155,7 +951,7 @@ export class ArrayValidator implements ValidationModule {
       const varMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*array\.new/);
       if (varMatch) {
         const varName = varMatch[1];
-        this.arrayDeclarations.set(varName, { type, size, line: lineNum, elementType: type });
+        this.arrayDeclarations.set(varName, { type, size, line: lineNum, column: 1, elementType: type });
         
         // Store in context typeMap
         this.context.typeMap.set(varName, {
@@ -194,7 +990,7 @@ export class ArrayValidator implements ValidationModule {
     const drawingArrayMatch = line.match(/^\s*(?:var|varip)?\s*(line|label|box|table)\[\]\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/);
     if (drawingArrayMatch) {
       const [, elemType, varName] = drawingArrayMatch;
-      this.arrayDeclarations.set(varName, { type: elemType, size: 0, line: lineNum, elementType: elemType });
+      this.arrayDeclarations.set(varName, { type: elemType, size: 0, line: lineNum, column: 1, elementType: elemType });
       this.context.typeMap.set(varName, {
         type: 'array',
         isConst: false,
@@ -206,22 +1002,27 @@ export class ArrayValidator implements ValidationModule {
     }
   }
 
-  private validateArrayType(type: string, lineNum: number): void {
-    const validTypes = ['int', 'float', 'bool', 'string', 'color', 'line', 'label', 'box', 'table', 'linefill', 'chart.point'];
+  private validateArrayType(type: string, lineNum: number, column = 1): void {
+    const validTypes = [...VALID_ARRAY_ELEMENT_TYPES];
     const typeInfo = this.context.typeMap.get(type);
     const isUDT = typeInfo?.type === 'udt';
 
     if (!validTypes.includes(type) && !isUDT) {
-      this.addError(lineNum, 1, `Invalid array type: ${type}. Valid types are: ${validTypes.join(', ')}`, 'PSV6-ARRAY-INVALID-TYPE');
+      this.addError(
+        lineNum,
+        column,
+        `Invalid array type: ${type}. Valid types are: ${validTypes.join(', ')}`,
+        'PSV6-ARRAY-INVALID-TYPE',
+      );
     }
   }
 
-  private validateArraySize(size: number, lineNum: number): void {
+  private validateArraySize(size: number, lineNum: number, column = 1): void {
     // Allow zero-size arrays (common initialization pattern)
     if (size < 0) {
-      this.addError(lineNum, 1, `Array size must be non-negative, got: ${size}`, 'PSV6-ARRAY-INVALID-SIZE');
+      this.addError(lineNum, column, `Array size must be non-negative, got: ${size}`, 'PSV6-ARRAY-INVALID-SIZE');
     } else if (size > 100000) {
-      this.addError(lineNum, 1, `Array size (${size}) exceeds the maximum limit of 100,000`, 'PSV6-ARRAY-SIZE-LIMIT');
+      this.addError(lineNum, column, `Array size (${size}) exceeds the maximum limit of 100,000`, 'PSV6-ARRAY-SIZE-LIMIT');
     }
   }
 

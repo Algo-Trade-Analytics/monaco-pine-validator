@@ -13,14 +13,34 @@
  * Priority 85: High priority - linefills are important v6 drawing features
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
-import { IDENT, NS_MEMBERS, BUILTIN_FUNCTIONS_V6_RULES } from '../core/constants';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+  type TypeInfo,
+} from '../core/types';
+import {
+  type ArgumentNode,
+  type AssignmentStatementNode,
+  type CallExpressionNode,
+  type ExpressionNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type ProgramNode,
+  type VariableDeclarationNode,
+} from '../core/ast/nodes';
+import { visit } from '../core/ast/traversal';
+import { NS_MEMBERS } from '../core/constants';
 
 interface LinefillFunctionCall {
   name: string;
   line: number;
   column: number;
   arguments: string[];
+  inLoop?: boolean;
 }
 
 export class LinefillValidator implements ValidationModule {
@@ -31,12 +51,14 @@ export class LinefillValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
 
   // Linefill function tracking
   private linefillFunctionCalls: LinefillFunctionCall[] = [];
   private linefillOperations = new Map<string, number>();
   private linefillCount = 0;
+  private linefillIdentifiers: Set<string> = new Set();
+  private typeMapUpdates: Map<string, TypeInfo> = new Map();
   
   // Suggestion flags to prevent duplicates
   private hasComplexOperationWarning = false;
@@ -51,28 +73,32 @@ export class LinefillValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
+    this.astContext = this.getAstContext(config);
 
-    // Process each line for linefill function calls
-    context.cleanLines.forEach((line, index) => {
-      this.processLine(line, index + 1);
-    });
+    if (this.astContext?.ast) {
+      this.collectLinefillDataFromAst(this.astContext.ast);
+    } else {
+      context.cleanLines.forEach((line, index) => {
+        this.processLine(line, index + 1);
+      });
+    }
 
     // Post-process validations
     this.validateLinefillPerformance();
     this.validateLinefillBestPractices();
 
     // Build type map for other validators
-    const typeMap = new Map();
-    for (const call of this.linefillFunctionCalls) {
-      if (call.name === 'new') {
-        typeMap.set('linefill.new', {
-          type: 'linefill',
-          isConst: false,
-          isSeries: false
-        });
-      }
+    const typeMap = new Map<string, TypeInfo>();
+    for (const [name, info] of this.typeMapUpdates) {
+      typeMap.set(name, info);
     }
+    typeMap.set('linefill.new', {
+      type: 'linefill',
+      isConst: false,
+      isSeries: false,
+      declaredAt: { line: 1, column: 1 },
+      usages: [],
+    });
 
     return {
       isValid: this.errors.length === 0,
@@ -91,12 +117,121 @@ export class LinefillValidator implements ValidationModule {
     this.linefillFunctionCalls = [];
     this.linefillOperations.clear();
     this.linefillCount = 0;
-    
+    this.linefillIdentifiers.clear();
+    this.typeMapUpdates.clear();
+    this.astContext = null;
+
     // Reset suggestion flags
     this.hasComplexOperationWarning = false;
     this.hasCacheSuggestion = false;
     this.hasCleanupSuggestion = false;
     this.hasTransparencySuggestion = false;
+  }
+
+  private collectLinefillDataFromAst(program: ProgramNode): void {
+    const loopStack: Array<'for' | 'while'> = [];
+
+    visit(program, {
+      VariableDeclaration: {
+        enter: (path) => {
+          this.registerAstLinefillDeclaration(path.node as VariableDeclarationNode);
+        },
+      },
+      AssignmentStatement: {
+        enter: (path) => {
+          this.registerAstLinefillAssignment(path.node as AssignmentStatementNode);
+        },
+      },
+      ForStatement: {
+        enter: () => loopStack.push('for'),
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      WhileStatement: {
+        enter: () => loopStack.push('while'),
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      CallExpression: {
+        enter: (path) => {
+          this.processAstCall(path.node as CallExpressionNode, loopStack.length > 0);
+        },
+      },
+    });
+  }
+
+  private processAstCall(call: CallExpressionNode, inLoop: boolean): void {
+    if (call.callee.kind !== 'MemberExpression') {
+      return;
+    }
+
+    const member = call.callee as MemberExpressionNode;
+    if (member.computed || !this.isLinefillNamespace(member.object)) {
+      return;
+    }
+
+    const functionName = member.property.name;
+    const args = call.args.map((argument) => this.getArgumentText(argument));
+    const line = member.property.loc.start.line;
+    const column = member.property.loc.start.column;
+
+    this.recordLinefillCall(functionName, args, line, column, inLoop);
+  }
+
+  private registerAstLinefillDeclaration(declaration: VariableDeclarationNode): void {
+    if (!declaration.initializer || declaration.initializer.kind !== 'CallExpression') {
+      return;
+    }
+
+    const call = declaration.initializer as CallExpressionNode;
+    if (!this.isLinefillNewCall(call)) {
+      return;
+    }
+
+    this.registerLinefillIdentifier(declaration.identifier);
+  }
+
+  private registerAstLinefillAssignment(assignment: AssignmentStatementNode): void {
+    if (!assignment.right || assignment.right.kind !== 'CallExpression') {
+      return;
+    }
+
+    const call = assignment.right as CallExpressionNode;
+    if (!this.isLinefillNewCall(call)) {
+      return;
+    }
+
+    const identifier = this.extractAssignedIdentifier(assignment.left);
+    if (!identifier) {
+      return;
+    }
+
+    this.registerLinefillIdentifier(identifier);
+  }
+
+  private registerLinefillIdentifier(identifier: IdentifierNode): void {
+    const name = identifier.name;
+    if (!name) {
+      return;
+    }
+
+    this.linefillIdentifiers.add(name);
+
+    const line = identifier.loc?.start.line ?? 1;
+    const column = identifier.loc?.start.column ?? 1;
+
+    const typeInfo: TypeInfo = {
+      type: 'linefill',
+      isConst: false,
+      isSeries: false,
+      declaredAt: { line, column },
+      usages: [],
+    };
+
+    this.typeMapUpdates.set(name, typeInfo);
+    this.context.typeMap.set(name, typeInfo);
   }
 
   private processLine(line: string, lineNum: number): void {
@@ -111,51 +246,61 @@ export class LinefillValidator implements ValidationModule {
   private validateLinefillFunctionCalls(line: string, lineNum: number): void {
     // Pattern: linefill.functionName(args...)
     const linefillFunctionPattern = new RegExp(`linefill\\.(\\w+)\\s*\\(`, 'g');
-    
+
     let match;
     while ((match = linefillFunctionPattern.exec(line)) !== null) {
       const functionName = match[1];
       const startIndex = match.index;
       const openParenIndex = match.index + match[0].length - 1;
-      
+
       // Find the matching closing parenthesis
       const argsString = this.extractBalancedParentheses(line, openParenIndex);
       if (argsString === null) continue; // Skip if we can't find balanced parentheses
-      
+
       const column = startIndex + 1;
 
       // Parse arguments
       const args = this.parseArguments(argsString);
 
-      // Store function call
-      this.linefillFunctionCalls.push({
-        name: functionName,
-        line: lineNum,
-        column,
-        arguments: args
-      });
+      const inLoop = this.isLineInLoopContext(lineNum);
 
-      // Validate specific function
-      this.validateLinefillFunction(functionName, args, lineNum, column);
-      
-      // Track operation
-      const count = this.linefillOperations.get(functionName) || 0;
-      this.linefillOperations.set(functionName, count + 1);
+      this.recordLinefillCall(functionName, args, lineNum, column, inLoop);
 
-      // Count linefill objects for performance analysis
-      if (functionName === 'new') {
-        this.linefillCount++;
-      }
-
-      // Performance analysis - check for loops
-      this.checkForLoopContext(lineNum, column);
-      
       // Check for multiple operations on same line
       const linefillCallsOnLine = (line.match(/\blinefill\.[A-Za-z_][A-Za-z0-9_]*\s*\(/g) || []).length;
       if (linefillCallsOnLine > 1 && !this.hasComplexOperationWarning) {
         this.addWarning(lineNum, 1, 'Multiple linefill operations on one line', 'PSV6-LINEFILL-PERF-COMPLEX');
         this.hasComplexOperationWarning = true;
       }
+    }
+  }
+
+  private recordLinefillCall(
+    functionName: string,
+    args: string[],
+    lineNum: number,
+    column: number,
+    inLoop: boolean,
+  ): void {
+    this.linefillFunctionCalls.push({
+      name: functionName,
+      line: lineNum,
+      column,
+      arguments: args,
+      inLoop,
+    });
+
+    this.validateLinefillFunction(functionName, args, lineNum, column);
+
+    const count = this.linefillOperations.get(functionName) || 0;
+    this.linefillOperations.set(functionName, count + 1);
+
+    if (functionName === 'new') {
+      this.linefillCount++;
+    }
+
+    if (inLoop) {
+      this.addWarning(lineNum, column, 'Linefill operation in loop', 'PSV6-LINEFILL-PERF-LOOP');
     }
   }
 
@@ -330,15 +475,15 @@ export class LinefillValidator implements ValidationModule {
     }
   }
 
-  private checkForLoopContext(lineNum: number, column: number): void {
+  private isLineInLoopContext(lineNum: number): boolean {
     // Check if we're in a loop by looking at previous lines
     for (let i = Math.max(1, lineNum - 3); i <= lineNum; i++) {
       const line = this.context.cleanLines[i - 1] || '';
       if (/\b(for|while)\b/.test(line)) {
-        this.addWarning(lineNum, column, 'Linefill operation in loop', 'PSV6-LINEFILL-PERF-LOOP');
-        break;
+        return true;
       }
     }
+    return false;
   }
 
   // Helper methods
@@ -444,12 +589,16 @@ export class LinefillValidator implements ValidationModule {
 
   private isLinefillObject(value: string): boolean {
     const trimmed = value.trim();
-    
+
     // Check if it's a linefill.new() call
     if (trimmed.includes('linefill.new(')) {
       return true;
     }
-    
+
+    if (this.linefillIdentifiers.has(trimmed)) {
+      return true;
+    }
+
     // Check if it's a variable that might be a linefill (from type map)
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
       const typeInfo = this.context.typeMap.get(trimmed);
@@ -544,4 +693,84 @@ export class LinefillValidator implements ValidationModule {
   getLinefillCount(): number {
     return this.linefillCount;
   }
+
+  private getArgumentText(argument: ArgumentNode): string {
+    const valueText = this.getExpressionText(argument.value).trim();
+    if (argument.name) {
+      return `${argument.name.name}=${valueText}`;
+    }
+    return valueText;
+  }
+
+  private getExpressionText(expression: ExpressionNode): string {
+    switch (expression.kind) {
+      case 'Identifier':
+        return (expression as IdentifierNode).name;
+      case 'MemberExpression': {
+        const member = expression as MemberExpressionNode;
+        if (member.computed) {
+          return this.getNodeSource(member);
+        }
+        const objectText = this.getExpressionText(member.object);
+        return `${objectText}.${member.property.name}`;
+      }
+      case 'CallExpression':
+        return this.getNodeSource(expression);
+      default:
+        return this.getNodeSource(expression);
+    }
+  }
+
+  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode | MemberExpressionNode): string {
+    const lines = this.context.lines ?? [];
+    if (!node.loc) {
+      return '';
+    }
+    const startLineIndex = Math.max(0, node.loc.start.line - 1);
+    const endLineIndex = Math.max(0, node.loc.end.line - 1);
+    if (startLineIndex === endLineIndex) {
+      const line = lines[startLineIndex] ?? '';
+      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
+    }
+    const parts: string[] = [];
+    const firstLine = lines[startLineIndex] ?? '';
+    parts.push(firstLine.slice(node.loc.start.column - 1));
+    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
+      parts.push(lines[index] ?? '');
+    }
+    const lastLine = lines[endLineIndex] ?? '';
+    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
+    return parts.join('\n');
+  }
+
+  private isLinefillNamespace(expression: ExpressionNode): boolean {
+    return expression.kind === 'Identifier' && (expression as IdentifierNode).name === 'linefill';
+  }
+
+  private isLinefillNewCall(call: CallExpressionNode): boolean {
+    if (call.callee.kind !== 'MemberExpression') {
+      return false;
+    }
+
+    const member = call.callee as MemberExpressionNode;
+    return !member.computed && this.isLinefillNamespace(member.object) && member.property.name === 'new';
+  }
+
+  private extractAssignedIdentifier(expression: ExpressionNode): IdentifierNode | null {
+    if (expression.kind === 'Identifier') {
+      return expression as IdentifierNode;
+    }
+    return null;
+  }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+  }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }

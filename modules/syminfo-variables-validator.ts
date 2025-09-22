@@ -11,7 +11,20 @@
  * Final Gap Closure: Comprehensive syminfo.* namespace validation
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+} from '../core/types';
+import {
+  type ExpressionNode,
+  type MemberExpressionNode,
+  type ProgramNode,
+} from '../core/ast/nodes';
+import { visit, type NodePath } from '../core/ast/traversal';
 import {
   TEXT_FORMAT_CONSTANTS_EXTENDED as TEXT_FORMAT_CONSTANTS,
   SESSION_ADVANCED_CONSTANTS,
@@ -61,6 +74,17 @@ const TEXT_WRAP_CONSTANTS = new Set([
   'text.wrap_none', 'text.wrap_auto'
 ]);
 
+const ADDITIONAL_CONSTANT_SETS = [
+  DAYOFWEEK_CONSTANTS,
+  BARMERGE_CONSTANTS,
+  SETTLEMENT_CONSTANTS,
+  XLOC_YLOC_CONSTANTS,
+  FONT_CONSTANTS,
+  TEXT_FORMAT_CONSTANTS,
+  TEXT_WRAP_CONSTANTS,
+  SESSION_ADVANCED_CONSTANTS,
+];
+
 export class SyminfoVariablesValidator implements ValidationModule {
   name = 'SyminfoVariablesValidator';
   priority = 68; // Lower priority - these are specialized variables
@@ -70,6 +94,8 @@ export class SyminfoVariablesValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private usingAst = false;
 
   // Usage tracking
   private syminfoUsage: Map<string, number> = new Map();
@@ -88,9 +114,16 @@ export class SyminfoVariablesValidator implements ValidationModule {
     this.syminfoUsage.clear();
     this.constantUsage.clear();
 
-    // Validate syminfo variables and constants
-    this.validateSyminfoVariables();
-    this.validateAdditionalConstants();
+    this.astContext = this.getAstContext(config);
+    this.usingAst = !!this.astContext?.ast;
+
+    if (this.usingAst && this.astContext?.ast) {
+      this.collectSyminfoDataAst(this.astContext.ast);
+    } else {
+      this.validateSyminfoVariables();
+      this.validateAdditionalConstants();
+    }
+
     this.analyzeUsagePatterns();
 
     return {
@@ -105,7 +138,6 @@ export class SyminfoVariablesValidator implements ValidationModule {
 
   private validateSyminfoVariables(): void {
     for (let i = 0; i < this.context.lines.length; i++) {
-      const line = this.context.lines[i];
       const cleanLine = this.context.cleanLines[i];
 
       // Check for syminfo company variables
@@ -172,18 +204,11 @@ export class SyminfoVariablesValidator implements ValidationModule {
 
   private validateAdditionalConstants(): void {
     for (let i = 0; i < this.context.lines.length; i++) {
-      const line = this.context.lines[i];
       const cleanLine = this.context.cleanLines[i];
 
       // Check all additional constant sets
       // advanced session/timezone constants imported from registry
-      const constantSets = [
-        DAYOFWEEK_CONSTANTS, BARMERGE_CONSTANTS, SETTLEMENT_CONSTANTS,
-        XLOC_YLOC_CONSTANTS, FONT_CONSTANTS, TEXT_FORMAT_CONSTANTS, TEXT_WRAP_CONSTANTS,
-        SESSION_ADVANCED_CONSTANTS
-      ];
-
-      for (const constantSet of constantSets) {
+      for (const constantSet of ADDITIONAL_CONSTANT_SETS) {
         for (const constant of Array.from(constantSet)) {
           if (cleanLine.includes(constant)) {
             this.constantUsage.set(constant, (this.constantUsage.get(constant) || 0) + 1);
@@ -239,5 +264,133 @@ export class SyminfoVariablesValidator implements ValidationModule {
         severity: 'info'
       });
     }
+  }
+
+  private collectSyminfoDataAst(program: ProgramNode): void {
+    visit(program, {
+      MemberExpression: {
+        enter: (path) => {
+          this.processAstMemberExpression(path as NodePath<MemberExpressionNode>);
+        },
+      },
+    });
+  }
+
+  private processAstMemberExpression(path: NodePath<MemberExpressionNode>): void {
+    const member = path.node;
+    if (member.computed) {
+      return;
+    }
+
+    const qualifiedName = this.getExpressionQualifiedName(member);
+    if (!qualifiedName) {
+      return;
+    }
+
+    const line = member.loc.start.line;
+    const column = member.loc.start.column;
+
+    if (this.recordSyminfoQualifiedName(qualifiedName, line, column)) {
+      return;
+    }
+
+    this.recordConstantQualifiedName(qualifiedName, line, column);
+  }
+
+  private recordSyminfoQualifiedName(name: string, line: number, column: number): boolean {
+    if (SYMINFO_COMPANY_VARS.has(name)) {
+      this.recordSyminfoUsage(
+        name,
+        line,
+        column,
+        'PSV6-SYMINFO-COMPANY',
+        `Company information variable '${name}' detected`,
+      );
+      return true;
+    }
+
+    if (SYMINFO_RECOMMENDATIONS_VARS.has(name)) {
+      this.recordSyminfoUsage(
+        name,
+        line,
+        column,
+        'PSV6-SYMINFO-RECOMMENDATIONS',
+        `Analyst recommendations variable '${name}' detected`,
+      );
+      return true;
+    }
+
+    if (SYMINFO_TARGET_PRICE_VARS.has(name)) {
+      this.recordSyminfoUsage(
+        name,
+        line,
+        column,
+        'PSV6-SYMINFO-TARGET-PRICE',
+        `Price target variable '${name}' detected`,
+      );
+      return true;
+    }
+
+    if (SYMINFO_ADDITIONAL_VARS.has(name)) {
+      this.recordSyminfoUsage(
+        name,
+        line,
+        column,
+        'PSV6-SYMINFO-ADDITIONAL',
+        `Additional symbol info variable '${name}' detected`,
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  private recordSyminfoUsage(name: string, line: number, column: number, code: string, message: string): void {
+    this.syminfoUsage.set(name, (this.syminfoUsage.get(name) || 0) + 1);
+    this.info.push({ code, message, line, column, severity: 'info' });
+  }
+
+  private recordConstantQualifiedName(name: string, line: number, column: number): void {
+    if (!ADDITIONAL_CONSTANT_SETS.some((set) => set.has(name))) {
+      return;
+    }
+
+    this.constantUsage.set(name, (this.constantUsage.get(name) || 0) + 1);
+    this.info.push({
+      code: 'PSV6-ADDITIONAL-CONSTANT',
+      message: `Additional constant '${name}' detected`,
+      line,
+      column,
+      severity: 'info',
+    });
+  }
+
+  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return expression.name;
+    }
+
+    if (expression.kind === 'MemberExpression') {
+      if (expression.computed) {
+        return null;
+      }
+
+      const objectName = this.getExpressionQualifiedName(expression.object);
+      if (!objectName) {
+        return null;
+      }
+
+      return `${objectName}.${expression.property.name}`;
+    }
+
+    return null;
+  }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+
+    return 'ast' in this.context ? (this.context as AstValidationContext) : null;
   }
 }
