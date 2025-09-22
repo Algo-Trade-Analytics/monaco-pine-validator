@@ -16,10 +16,12 @@ import {
   SymbolKind,
   SymbolRecord,
 } from '../core/types';
-import { 
+import {
   IDENT, KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT,
   QUALIFIED_FN_RE, METHOD_DECL_RE, VAR_DECL_RE, SIMPLE_ASSIGN_RE
 } from '../core/constants';
+import type { IdentifierNode, ProgramNode } from '../core/ast/nodes';
+import { visit, type NodePath } from '../core/ast/traversal';
 
 export class ScopeValidator implements ValidationModule {
   name = 'ScopeValidator';
@@ -51,6 +53,7 @@ export class ScopeValidator implements ValidationModule {
   private caseVariables = new Map<string, Set<string>>();
   private astDuplicateWarningSites = new Set<string>();
   private astShadowWarningSites = new Set<string>();
+  private astUndefinedWarningSites = new Set<string>();
 
   getDependencies(): string[] {
     return ['CoreValidator']; // Depends on core validation
@@ -108,6 +111,7 @@ export class ScopeValidator implements ValidationModule {
     this.astContext = null;
     this.astDuplicateWarningSites.clear();
     this.astShadowWarningSites.clear();
+    this.astUndefinedWarningSites.clear();
   }
 
   private validateVariableDeclarations(): void {
@@ -710,8 +714,29 @@ export class ScopeValidator implements ValidationModule {
   }
 
   private validateWithAst(context: AstValidationContext): void {
+    if (!context.ast) {
+      return;
+    }
+
+    const identifierPaths = this.collectAstIdentifierPaths(context.ast);
+
     this.emitAstDuplicateDeclarationWarnings(context);
     this.emitAstShadowingWarnings(context);
+    this.emitAstUndefinedReferenceWarnings(context, identifierPaths);
+  }
+
+  private collectAstIdentifierPaths(program: ProgramNode): Map<IdentifierNode, NodePath<IdentifierNode>> {
+    const paths = new Map<IdentifierNode, NodePath<IdentifierNode>>();
+
+    visit(program, {
+      Identifier: {
+        enter: (path) => {
+          paths.set(path.node, path as NodePath<IdentifierNode>);
+        },
+      },
+    });
+
+    return paths;
   }
 
   private emitAstDuplicateDeclarationWarnings(context: AstValidationContext): void {
@@ -824,6 +849,141 @@ export class ScopeValidator implements ValidationModule {
 
   private shouldCheckAstDeclarationKind(kind: SymbolKind): boolean {
     return kind === 'variable' || kind === 'unknown' || kind === 'type';
+  }
+
+  private emitAstUndefinedReferenceWarnings(
+    context: AstValidationContext,
+    identifierPaths: Map<IdentifierNode, NodePath<IdentifierNode>>,
+  ): void {
+    const ignoredNames = this.createAstIgnoredNameSet(context);
+
+    const declaredNames = new Set<string>();
+    for (const record of context.symbolTable.values()) {
+      if (!record.declarations.length) {
+        continue;
+      }
+
+      const metadataKinds = (record.metadata?.declarationKinds as SymbolKind[] | undefined) ?? [];
+      if (metadataKinds.length === 0) {
+        declaredNames.add(record.name);
+        continue;
+      }
+
+      if (metadataKinds.some((kind) => this.shouldCheckAstDeclarationKind(kind) || kind === 'parameter')) {
+        declaredNames.add(record.name);
+      }
+    }
+
+    for (const record of context.symbolTable.values()) {
+      if (declaredNames.has(record.name)) {
+        continue;
+      }
+
+      if (this.shouldIgnoreAstUndefinedName(record.name, ignoredNames)) {
+        continue;
+      }
+
+      for (const reference of record.references) {
+        const node = reference.node;
+        if (!node || node.kind !== 'Identifier') {
+          continue;
+        }
+
+        if (!this.shouldEmitAstUndefinedForNode(node as IdentifierNode, identifierPaths)) {
+          continue;
+        }
+
+        const siteKey = `${reference.line}:${reference.column}:${record.name}`;
+        if (this.astUndefinedWarningSites.has(siteKey)) {
+          continue;
+        }
+        this.astUndefinedWarningSites.add(siteKey);
+
+        this.addWarning(
+          reference.line,
+          reference.column,
+          `Potential undefined reference '${record.name}'.`,
+          'PSU02',
+        );
+      }
+    }
+  }
+
+  private createAstIgnoredNameSet(context: AstValidationContext): Set<string> {
+    const ignored = new Set<string>();
+
+    for (const name of KEYWORDS) ignored.add(name);
+    for (const name of PSEUDO_VARS) ignored.add(name);
+    for (const name of NAMESPACES) ignored.add(name);
+    for (const name of WILDCARD_IDENT) ignored.add(name);
+
+    context.functionNames.forEach((name) => ignored.add(name));
+    context.methodNames.forEach((name) => ignored.add(name));
+    context.usedVars.forEach((name) => ignored.add(name));
+    context.declaredVars.forEach((_line, declaredName) => ignored.add(declaredName));
+
+    for (const params of context.functionParams.values()) {
+      for (const rawParam of params) {
+        const cleaned = rawParam.trim().replace(/<[^>]*>/g, '');
+        const fragments = cleaned.split(/\s+/);
+        const identifier = fragments[fragments.length - 1];
+        if (identifier) {
+          ignored.add(identifier);
+        }
+      }
+    }
+
+    ignored.add('this');
+
+    return ignored;
+  }
+
+  private shouldIgnoreAstUndefinedName(name: string, ignoredNames: Set<string>): boolean {
+    if (!name || ignoredNames.has(name)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private shouldEmitAstUndefinedForNode(
+    node: IdentifierNode,
+    identifierPaths: Map<IdentifierNode, NodePath<IdentifierNode>>,
+  ): boolean {
+    const path = identifierPaths.get(node);
+    if (!path) {
+      return false;
+    }
+
+    const parent = path.parent;
+    if (!parent) {
+      return false;
+    }
+
+    const key = path.key;
+    switch (parent.node.kind) {
+      case 'VariableDeclaration':
+      case 'TypeDeclaration':
+      case 'TypeField':
+      case 'FunctionDeclaration':
+      case 'Parameter':
+      case 'ScriptDeclaration':
+        return key !== 'identifier';
+      case 'AssignmentStatement':
+        return key !== 'left';
+      case 'CallExpression':
+        return key !== 'callee';
+      case 'MemberExpression':
+        return key !== 'property';
+      case 'Argument':
+        return key !== 'name';
+      case 'TypeReference':
+        return false;
+      default:
+        break;
+    }
+
+    return true;
   }
 
   private isMethodParameter(varName: string, lineNum: number): boolean {
