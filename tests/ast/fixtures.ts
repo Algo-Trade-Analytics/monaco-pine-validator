@@ -24,6 +24,7 @@ import {
   type StringLiteralNode,
   type TypeDeclarationNode,
   type TypeFieldNode,
+  type TypeReferenceNode,
   type SwitchCaseNode,
   type SwitchStatementNode,
   type UnaryExpressionNode,
@@ -143,7 +144,7 @@ export function createBlock(body: StatementNode[], start: number, end: number, l
   };
 }
 
-export function createReturn(argument: IdentifierNode | null, start: number, end: number, line = 1): ReturnStatementNode {
+export function createReturn(argument: ExpressionNode | null, start: number, end: number, line = 1): ReturnStatementNode {
   return {
     kind: 'ReturnStatement',
     argument,
@@ -282,14 +283,15 @@ export function createVariableDeclaration(
   options: {
     declarationKind?: VariableDeclarationNode['declarationKind'];
     initializer?: ExpressionNode | null;
+    typeAnnotation?: TypeReferenceNode | null;
   } = {},
 ): VariableDeclarationNode {
-  const { declarationKind = 'simple', initializer = null } = options;
+  const { declarationKind = 'simple', initializer = null, typeAnnotation = null } = options;
   return {
     kind: 'VariableDeclaration',
     declarationKind,
     identifier,
-    typeAnnotation: null,
+    typeAnnotation,
     initializer,
     ...createSpan({ start, end, lineStart: line }),
   };
