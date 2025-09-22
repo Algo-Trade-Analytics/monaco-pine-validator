@@ -51,6 +51,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Type validator now consumes AST type annotations, ternaries, and function return statements to raise PSV6-TYPE-MISMATCH, PSV6-TERNARY-TYPE, and PSV6-FUNCTION-RETURN-TYPE diagnostics without regex fallbacks.
 - Dynamic loop validator now uses AST for-loop metadata to surface PSV6-FOR-DYNAMIC and PSV6-FOR-MODIFY warnings, leaving the regex scanner as a fallback only when structured analysis is unavailable.
 - Alert functions validator now inspects AST call expressions to validate alert frequencies, empty messages, and control-flow placement without relying on regex scanning while retaining the legacy path as a fallback.
+- Strategy functions validator now analyses AST call expressions to validate known members, parameter usage, loop placement, and nested strategy references without relying on regex scanning.
 
 ### Near-Term TODOs
 

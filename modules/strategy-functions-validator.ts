@@ -1,6 +1,21 @@
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+} from '../core/types';
 import { Codes } from '../core/codes';
 import { IDENT, NS_MEMBERS, BUILTIN_FUNCTIONS_V6_RULES } from '../core/constants';
+import {
+  type ArgumentNode,
+  type CallExpressionNode,
+  type ExpressionNode,
+  type MemberExpressionNode,
+  type ProgramNode,
+} from '../core/ast/nodes';
+import { visit, type NodePath } from '../core/ast/traversal';
 
 interface StrategyFunctionInfo {
   name: string;
@@ -9,6 +24,8 @@ interface StrategyFunctionInfo {
   line: number;
   column: number;
   isComplex: boolean;
+  inLoop?: boolean;
+  inConditional?: boolean;
 }
 
 export class StrategyFunctionsValidator implements ValidationModule {
@@ -20,6 +37,9 @@ export class StrategyFunctionsValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private usingAst = false;
+  private astStrategyCallLines: Set<number> = new Set();
 
   private strategyFunctionCalls: Map<string, StrategyFunctionInfo> = new Map();
   private strategyFunctionCount = 0;
@@ -34,9 +54,20 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
-    context.cleanLines.forEach((line, index) => {
-      this.processLine(line, index + 1);
-    });
+    this.astContext = this.getAstContext(config);
+    this.usingAst = !!this.astContext?.ast;
+
+    if (this.usingAst && this.astContext?.ast) {
+      this.collectStrategyDataAst(this.astContext.ast);
+      for (const line of this.astStrategyCallLines) {
+        const sourceLine = this.context.cleanLines[line - 1] ?? '';
+        this.validateStrategyComplexity(sourceLine, line);
+      }
+    } else {
+      context.cleanLines.forEach((line, index) => {
+        this.processLine(line, index + 1);
+      });
+    }
 
     try {
       this.validateStrategyPerformance();
@@ -75,6 +106,9 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.astContext = null;
+    this.usingAst = false;
+    this.astStrategyCallLines.clear();
     this.strategyFunctionCalls.clear();
     this.strategyFunctionCount = 0;
     this.complexStrategyExpressions = 0;
@@ -90,6 +124,212 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.validateStrategyParameters(line, lineNumber);
     this.validateAdvancedStrategyFunctions(line, lineNumber);
     this.validateStrategyComplexity(line, lineNumber);
+  }
+
+  private collectStrategyDataAst(program: ProgramNode): void {
+    const loopStack: Array<'for' | 'while'> = [];
+    let conditionalDepth = 0;
+
+    visit(program, {
+      ForStatement: {
+        enter: () => loopStack.push('for'),
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      WhileStatement: {
+        enter: () => loopStack.push('while'),
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      IfStatement: {
+        enter: () => {
+          conditionalDepth++;
+        },
+        exit: () => {
+          conditionalDepth = Math.max(0, conditionalDepth - 1);
+        },
+      },
+      CallExpression: {
+        enter: (path) => {
+          this.processAstStrategyCall(
+            path as NodePath<CallExpressionNode>,
+            loopStack.length > 0,
+            conditionalDepth > 0,
+          );
+        },
+      },
+    });
+  }
+
+  private processAstStrategyCall(
+    path: NodePath<CallExpressionNode>,
+    inLoop: boolean,
+    inConditional: boolean,
+  ): void {
+    const node = path.node;
+    const qualifiedName = this.getExpressionQualifiedName(node.callee);
+    if (!qualifiedName || !qualifiedName.startsWith('strategy.')) {
+      return;
+    }
+
+    const functionName = qualifiedName.slice('strategy.'.length);
+    const line = node.loc.start.line;
+    const column = node.loc.start.column;
+
+    if (!this.isKnownStrategyFunction(functionName)) {
+      this.addError(
+        line,
+        column,
+        `PSV6-STRATEGY-FUNCTION-UNKNOWN: Unknown Strategy function: ${qualifiedName}`,
+        `Strategy function '${qualifiedName}' is not recognized. Check spelling and ensure it's a valid Pine Script v6 Strategy function.`,
+      );
+      return;
+    }
+
+    this.strategyFunctionCount++;
+    const parameters = node.args.map((argument) => this.argumentToString(argument));
+    const returnType = this.getStrategyReturnType(qualifiedName);
+    const isComplex = this.isComplexStrategyFunction(qualifiedName, parameters);
+    if (isComplex) {
+      this.complexStrategyExpressions++;
+    }
+
+    this.recordStrategyCall({
+      name: qualifiedName,
+      parameters,
+      returnType,
+      line,
+      column,
+      isComplex,
+      inLoop,
+      inConditional,
+    });
+
+    this.validateStrategyParameterTypes(qualifiedName, parameters, line, column);
+    this.addBestPracticeSuggestions(qualifiedName, parameters, line, column);
+
+    if (functionName === 'percent_of_equity') {
+      this.validateAdvancedStrategyParameters(qualifiedName, parameters, line, column);
+    } else if (functionName.startsWith('risk.')) {
+      this.validateRiskManagementParameters(qualifiedName, parameters, line, column);
+    }
+
+    if (node.args.some((argument) => this.argumentContainsStrategyReference(argument.value))) {
+      this.addWarning(line, column, 'PSV6-STRATEGY-PERF-NESTED', 'Nested strategy operations detected');
+    }
+
+    this.astStrategyCallLines.add(line);
+  }
+
+  private recordStrategyCall(info: StrategyFunctionInfo): void {
+    const existing = this.strategyFunctionCalls.get(info.name);
+    if (existing) {
+      if (info.line < existing.line || (info.line === existing.line && info.column < existing.column)) {
+        existing.line = info.line;
+        existing.column = info.column;
+      }
+      existing.parameters = info.parameters;
+      existing.returnType = info.returnType;
+      existing.isComplex = existing.isComplex || info.isComplex;
+      existing.inLoop = existing.inLoop || info.inLoop;
+      existing.inConditional = existing.inConditional || info.inConditional;
+      return;
+    }
+
+    this.strategyFunctionCalls.set(info.name, { ...info });
+  }
+
+  private isKnownStrategyFunction(functionName: string): boolean {
+    if (NS_MEMBERS.strategy && NS_MEMBERS.strategy.has(functionName)) {
+      return true;
+    }
+    if (functionName === 'percent_of_equity') {
+      return true;
+    }
+    return functionName.includes('.');
+  }
+
+  private argumentToString(argument: ArgumentNode): string {
+    const valueText = this.getNodeSource(argument.value).trim();
+    if (argument.name) {
+      return `${argument.name.name}=${valueText}`;
+    }
+    return valueText;
+  }
+
+  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
+    const lines = this.context.lines ?? [];
+    if (!node.loc) {
+      return '';
+    }
+    const startLineIndex = Math.max(0, node.loc.start.line - 1);
+    const endLineIndex = Math.max(0, node.loc.end.line - 1);
+    if (startLineIndex === endLineIndex) {
+      const line = lines[startLineIndex] ?? '';
+      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
+    }
+    const parts: string[] = [];
+    const firstLine = lines[startLineIndex] ?? '';
+    parts.push(firstLine.slice(node.loc.start.column - 1));
+    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
+      parts.push(lines[index] ?? '');
+    }
+    const lastLine = lines[endLineIndex] ?? '';
+    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
+    return parts.join('\n');
+  }
+
+  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return expression.name;
+    }
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+      const objectName = this.getExpressionQualifiedName(member.object);
+      if (!objectName) {
+        return null;
+      }
+      return `${objectName}.${member.property.name}`;
+    }
+    return null;
+  }
+
+  private argumentContainsStrategyReference(expression: ExpressionNode): boolean {
+    let found = false;
+    visit(expression, {
+      MemberExpression: {
+        enter: (path) => {
+          if (found) {
+            return false;
+          }
+          const qualified = this.getExpressionQualifiedName(path.node);
+          if (qualified && qualified.startsWith('strategy.')) {
+            found = true;
+            return false;
+          }
+          return;
+        },
+      },
+      CallExpression: {
+        enter: (path) => {
+          if (found) {
+            return false;
+          }
+          const qualified = this.getExpressionQualifiedName(path.node.callee);
+          if (qualified && qualified.startsWith('strategy.')) {
+            found = true;
+            return false;
+          }
+          return;
+        },
+      },
+    });
+    return found;
   }
 
   private validateStrategyFunctionCalls(line: string, lineNumber: number): void {
@@ -467,10 +707,18 @@ export class StrategyFunctionsValidator implements ValidationModule {
     }
 
     // Strategy calls inside loops
-    const loopLines = this.computeLoopLines();
-    for (const info of this.strategyFunctionCalls.values()) {
-      if (loopLines.has(info.line)) {
-        this.addWarning(info.line, info.column, 'PSV6-STRATEGY-PERF-LOOP', 'Strategy operation in loop');
+    if (this.usingAst) {
+      for (const info of this.strategyFunctionCalls.values()) {
+        if (info.inLoop) {
+          this.addWarning(info.line, info.column, 'PSV6-STRATEGY-PERF-LOOP', 'Strategy operation in loop');
+        }
+      }
+    } else {
+      const loopLines = this.computeLoopLines();
+      for (const info of this.strategyFunctionCalls.values()) {
+        if (loopLines.has(info.line)) {
+          this.addWarning(info.line, info.column, 'PSV6-STRATEGY-PERF-LOOP', 'Strategy operation in loop');
+        }
       }
     }
   }
@@ -853,4 +1101,15 @@ export class StrategyFunctionsValidator implements ValidationModule {
     // For performance and best practice issues, generate warnings
     return false;
   }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+  }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }
