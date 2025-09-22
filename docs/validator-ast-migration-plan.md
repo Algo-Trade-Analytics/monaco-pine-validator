@@ -47,6 +47,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Core validator AST analysis now warns when local declarations shadow function parameters, removing the textual scope heuristic for PSW05.
 - Scope validator now leverages AST symbol metadata to surface PSW03/PSW04 duplicate and shadowed declaration diagnostics without relying on indentation heuristics.
 - Scope validator now analyses AST identifier references to emit PSU02 warnings without legacy text scanning heuristics.
+- Scope validator now inspects AST declaration names to emit PS006/PS007 identifier errors without the legacy line scanner.
 
 ### Near-Term TODOs
 

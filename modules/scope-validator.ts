@@ -54,6 +54,8 @@ export class ScopeValidator implements ValidationModule {
   private astDuplicateWarningSites = new Set<string>();
   private astShadowWarningSites = new Set<string>();
   private astUndefinedWarningSites = new Set<string>();
+  private astInvalidIdentifierErrorSites = new Set<string>();
+  private astKeywordErrorSites = new Set<string>();
 
   getDependencies(): string[] {
     return ['CoreValidator']; // Depends on core validation
@@ -112,6 +114,8 @@ export class ScopeValidator implements ValidationModule {
     this.astDuplicateWarningSites.clear();
     this.astShadowWarningSites.clear();
     this.astUndefinedWarningSites.clear();
+    this.astInvalidIdentifierErrorSites.clear();
+    this.astKeywordErrorSites.clear();
   }
 
   private validateVariableDeclarations(): void {
@@ -505,9 +509,16 @@ export class ScopeValidator implements ValidationModule {
   }
 
   private handleNewVariable(name: string, line: number, col: number): void {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) { 
-      this.addError(line, col, `Invalid identifier '${name}'.`, 'PS006'); 
-      return; 
+    if (this.astContext) {
+      const siteKey = `${line}:${col}:${name}`;
+      if (this.astInvalidIdentifierErrorSites.has(siteKey) || this.astKeywordErrorSites.has(siteKey)) {
+        return;
+      }
+    }
+
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      this.addError(line, col, `Invalid identifier '${name}'.`, 'PS006');
+      return;
     }
     if (KEYWORDS.has(name) || PSEUDO_VARS.has(name)) {
       this.addError(line, col, `Identifier '${name}' conflicts with a Pine keyword/builtin.`, 'PS007');
@@ -723,6 +734,7 @@ export class ScopeValidator implements ValidationModule {
     this.emitAstDuplicateDeclarationWarnings(context);
     this.emitAstShadowingWarnings(context);
     this.emitAstUndefinedReferenceWarnings(context, identifierPaths);
+    this.emitAstIdentifierDeclarationErrors(context);
   }
 
   private collectAstIdentifierPaths(program: ProgramNode): Map<IdentifierNode, NodePath<IdentifierNode>> {
@@ -783,6 +795,26 @@ export class ScopeValidator implements ValidationModule {
         }
       }
     }
+  }
+
+  private shouldCheckAstIdentifierName(kind: SymbolKind): boolean {
+    return kind === 'variable' || kind === 'unknown';
+  }
+
+  private isValidIdentifierName(name: string): boolean {
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name);
+  }
+
+  private isKeywordCompatibleIdentifier(name: string): boolean {
+    if (!name) {
+      return true;
+    }
+
+    if (KEYWORDS.has(name) || PSEUDO_VARS.has(name)) {
+      return false;
+    }
+
+    return true;
   }
 
   private emitAstShadowingWarnings(context: AstValidationContext): void {
@@ -905,6 +937,50 @@ export class ScopeValidator implements ValidationModule {
           `Potential undefined reference '${record.name}'.`,
           'PSU02',
         );
+      }
+    }
+  }
+
+  private emitAstIdentifierDeclarationErrors(context: AstValidationContext): void {
+    for (const record of context.symbolTable.values()) {
+      const entries = this.extractAstDeclarationEntries(record);
+      if (!entries.length) {
+        continue;
+      }
+
+      for (const entry of entries) {
+        if (!this.shouldCheckAstIdentifierName(entry.kind)) {
+          continue;
+        }
+
+        const siteKey = `${entry.location.line}:${entry.location.column}:${record.name}`;
+
+        if (!this.isValidIdentifierName(record.name)) {
+          if (this.astInvalidIdentifierErrorSites.has(siteKey)) {
+            continue;
+          }
+          this.astInvalidIdentifierErrorSites.add(siteKey);
+          this.addError(
+            entry.location.line,
+            entry.location.column,
+            `Invalid identifier '${record.name}'.`,
+            'PS006',
+          );
+          continue;
+        }
+
+        if (!this.isKeywordCompatibleIdentifier(record.name)) {
+          if (this.astKeywordErrorSites.has(siteKey)) {
+            continue;
+          }
+          this.astKeywordErrorSites.add(siteKey);
+          this.addError(
+            entry.location.line,
+            entry.location.column,
+            `Identifier '${record.name}' conflicts with a Pine keyword/builtin.`,
+            'PS007',
+          );
+        }
       }
     }
   }

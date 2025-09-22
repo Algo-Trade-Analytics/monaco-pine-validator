@@ -247,4 +247,72 @@ describe('ScopeValidator AST integration', () => {
     const undefinedWarnings = result.warnings.filter((warning) => warning.code === 'PSU02');
     expect(undefinedWarnings).toHaveLength(0);
   });
+
+  it('emits PS006 when declarations use invalid identifiers', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Invalid")',
+      'var 1foo = 1',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const title = createStringLiteral('Invalid', '"Invalid"', 10, 2);
+    const titleArgument = createArgument(title, 9, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+
+    const invalidIdentifier = createIdentifier('1foo', 4, 3);
+    const initializer = createNumberLiteral(1, '1', 11, 3);
+    const declaration = createVariableDeclaration(invalidIdentifier, 0, 12, 3, {
+      declarationKind: 'var',
+      initializer,
+    });
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, declaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new ScopeValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const invalidErrors = result.errors.filter((error) => error.code === 'PS006');
+    expect(invalidErrors).toHaveLength(1);
+    expect(invalidErrors[0]).toMatchObject({ line: 3, column: 5 });
+  });
+
+  it('emits PS007 when declarations conflict with keywords', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Keyword")',
+      'var color = 1',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const title = createStringLiteral('Keyword', '"Keyword"', 10, 2);
+    const titleArgument = createArgument(title, 9, 23, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
+
+    const keywordIdentifier = createIdentifier('color', 4, 3);
+    const initializer = createNumberLiteral(1, '1', 12, 3);
+    const declaration = createVariableDeclaration(keywordIdentifier, 0, 12, 3, {
+      declarationKind: 'var',
+      initializer,
+    });
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, declaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new ScopeValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const keywordErrors = result.errors.filter((error) => error.code === 'PS007');
+    expect(keywordErrors).toHaveLength(1);
+    expect(keywordErrors[0]).toMatchObject({ line: 3, column: 5 });
+  });
 });
