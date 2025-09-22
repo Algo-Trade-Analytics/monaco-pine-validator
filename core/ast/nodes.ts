@@ -24,6 +24,8 @@ export type NodeKind =
   | 'ReturnStatement'
   | 'VariableDeclaration'
   | 'AssignmentStatement'
+  | 'EnumDeclaration'
+  | 'EnumMember'
   | 'TypeDeclaration'
   | 'TypeField'
   | 'FunctionDeclaration'
@@ -61,6 +63,8 @@ export type Node =
   | ReturnStatementNode
   | VariableDeclarationNode
   | AssignmentStatementNode
+  | EnumDeclarationNode
+  | EnumMemberNode
   | TypeDeclarationNode
   | TypeFieldNode
   | FunctionDeclarationNode
@@ -97,6 +101,8 @@ export type StatementNode =
   | ReturnStatementNode
   | VariableDeclarationNode
   | AssignmentStatementNode
+  | EnumDeclarationNode
+  | EnumMemberNode
   | TypeDeclarationNode
   | FunctionDeclarationNode
   | IfStatementNode
@@ -179,6 +185,19 @@ export interface AssignmentStatementNode extends BaseNode {
 export interface TupleExpressionNode extends BaseNode {
   kind: 'TupleExpression';
   elements: (ExpressionNode | null)[];
+}
+
+export interface EnumMemberNode extends BaseNode {
+  kind: 'EnumMember';
+  identifier: IdentifierNode;
+  value: ExpressionNode | null;
+}
+
+export interface EnumDeclarationNode extends BaseNode {
+  kind: 'EnumDeclaration';
+  identifier: IdentifierNode;
+  members: EnumMemberNode[];
+  export: boolean;
 }
 
 export interface TypeDeclarationNode extends BaseNode {

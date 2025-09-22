@@ -23,6 +23,8 @@ import {
   type ScriptDeclarationNode,
   type StatementNode,
   type StringLiteralNode,
+  type EnumDeclarationNode,
+  type EnumMemberNode,
   type TypeDeclarationNode,
   type TypeFieldNode,
   type TypeReferenceNode,
@@ -442,6 +444,40 @@ export function createTypeField(
     kind: 'TypeField',
     identifier,
     typeAnnotation,
+    ...createSpan({ start, end, lineStart, lineEnd }),
+  };
+}
+
+export function createEnumMember(
+  identifier: IdentifierNode,
+  value: ExpressionNode | null,
+  start: number,
+  end: number,
+  lineStart = 1,
+  lineEnd = lineStart,
+): EnumMemberNode {
+  return {
+    kind: 'EnumMember',
+    identifier,
+    value,
+    ...createSpan({ start, end, lineStart, lineEnd }),
+  };
+}
+
+export function createEnumDeclaration(
+  identifier: IdentifierNode,
+  members: EnumMemberNode[],
+  start: number,
+  end: number,
+  lineStart = 1,
+  lineEnd = lineStart,
+  exported = false,
+): EnumDeclarationNode {
+  return {
+    kind: 'EnumDeclaration',
+    identifier,
+    members,
+    export: exported,
     ...createSpan({ start, end, lineStart, lineEnd }),
   };
 }

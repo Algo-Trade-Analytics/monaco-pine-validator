@@ -28,6 +28,8 @@ import {
   type ProgramNode,
   type ReturnStatementNode,
   type ScriptDeclarationNode,
+  type EnumDeclarationNode,
+  type EnumMemberNode,
   type TypeDeclarationNode,
   type StatementNode,
   type SwitchStatementNode,
@@ -254,6 +256,17 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         visitExpression(assignment.right);
         break;
       }
+      case 'EnumDeclaration': {
+        const enumDeclaration = statement as EnumDeclarationNode;
+        declare(enumDeclaration.identifier, 'enum');
+        enumDeclaration.members.forEach((member) => {
+          declare(member.identifier, 'variable');
+          visitExpression(member.value);
+        });
+        break;
+      }
+      case 'EnumMember':
+        break;
       case 'TypeDeclaration': {
         const typeDeclaration = statement as TypeDeclarationNode;
         declare(typeDeclaration.identifier, 'type');

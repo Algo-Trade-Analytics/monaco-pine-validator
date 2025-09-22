@@ -14,7 +14,14 @@
  * Final Implementation: Achieving True 100% Pine Script v6 Coverage
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+} from '../core/types';
 import {
   DRAW_TABLE_EXTRA_CONSTANTS,
   STRATEGY_RISK_EXTRA_CONSTANTS,
@@ -27,6 +34,8 @@ import {
   POSITION_CONSTANTS
 } from '../core/constants-registry';
 import { Codes } from '../core/codes';
+import { visit } from '../core/ast/traversal';
+import type { ExpressionNode, MemberExpressionNode, ProgramNode } from '../core/ast/nodes';
 
 const MATH_CONSTANTS = new Set([
   'math.e', 'math.pi', 'math.phi', 'math.rphi'
@@ -49,6 +58,23 @@ const ADDITIONAL_SPECIALIZED_CONSTANTS = new Set([
 
 // Extra constants imported from registry
 
+const STYLE_CONSTANT_SETS = [
+  PLOT_STYLE_CONSTANTS,
+  LINE_STYLE_CONSTANTS,
+  LABEL_STYLE_CONSTANTS,
+  HLINE_STYLE_CONSTANTS,
+] as const;
+
+const SPECIALIZED_CONSTANT_SETS = [
+  ADDITIONAL_SPECIALIZED_CONSTANTS,
+  DRAW_TABLE_EXTRA_CONSTANTS,
+  STRATEGY_RISK_EXTRA_CONSTANTS,
+] as const;
+
+const ALL_SPECIALIZED_CONSTANTS = new Set<string>(
+  SPECIALIZED_CONSTANT_SETS.flatMap((set) => Array.from(set)),
+);
+
 export class FinalConstantsValidator implements ValidationModule {
   name = 'FinalConstantsValidator';
   priority = 65; // Lower priority - these are the final edge cases
@@ -57,7 +83,6 @@ export class FinalConstantsValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
 
   // Usage tracking for all final constants
   private mathConstantUsage: Map<string, number> = new Map();
@@ -72,7 +97,6 @@ export class FinalConstantsValidator implements ValidationModule {
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.context = context;
-    this.config = config;
     this.errors = [];
     this.warnings = [];
     this.info = [];
@@ -82,12 +106,12 @@ export class FinalConstantsValidator implements ValidationModule {
     this.positionConstantUsage.clear();
     this.specializedConstantUsage.clear();
 
-    // Validate all final specialized constants
-    this.validateMathConstants();
-    this.validateStyleConstants();
-    this.validateOrderConstants();
-    this.validatePositionConstants();
-    this.validateSpecializedConstants();
+    const astContext = this.getAstContext(config);
+    if (astContext?.ast) {
+      this.collectConstantsFromAst(astContext.ast);
+    } else {
+      this.collectConstantsFromText();
+    }
 
     // Analyze usage patterns
     this.analyzeFinalConstantUsage();
@@ -102,117 +126,152 @@ export class FinalConstantsValidator implements ValidationModule {
     };
   }
 
-  private validateMathConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const line = this.context.lines[i];
-      const cleanLine = this.context.cleanLines[i];
-
-      for (const constant of Array.from(MATH_CONSTANTS)) {
-        if (cleanLine.includes(constant)) {
-          this.mathConstantUsage.set(constant, (this.mathConstantUsage.get(constant) || 0) + 1);
-          
-          this.info.push({
-            code: 'PSV6-MATH-CONSTANT',
-            message: `Mathematical constant '${constant}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(constant) + 1,
-            severity: 'info'
-          });
-        }
-      }
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
     }
+    return 'ast' in this.context ? (this.context as AstValidationContext) : null;
   }
 
-  private validateStyleConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const line = this.context.lines[i];
+  private collectConstantsFromText(): void {
+    for (let i = 0; i < this.context.cleanLines.length; i++) {
       const cleanLine = this.context.cleanLines[i];
+      const lineNumber = i + 1;
 
-      // Check all style constant sets
-      const styleConstantSets = [
-        PLOT_STYLE_CONSTANTS, LINE_STYLE_CONSTANTS, LABEL_STYLE_CONSTANTS, HLINE_STYLE_CONSTANTS
-      ];
+      for (const constant of MATH_CONSTANTS) {
+        if (cleanLine.includes(constant)) {
+          this.recordConstantUsage(constant, lineNumber, cleanLine.indexOf(constant) + 1);
+        }
+      }
 
-      for (const constantSet of styleConstantSets) {
-        for (const constant of Array.from(constantSet)) {
+      for (const constantSet of STYLE_CONSTANT_SETS) {
+        for (const constant of constantSet) {
           if (cleanLine.includes(constant)) {
-            this.styleConstantUsage.set(constant, (this.styleConstantUsage.get(constant) || 0) + 1);
-            
-          this.info.push({
-            code: Codes.STYLE_CONSTANT,
-            message: `Style constant '${constant}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(constant) + 1,
-            severity: 'info'
-          });
+            this.recordConstantUsage(constant, lineNumber, cleanLine.indexOf(constant) + 1);
           }
         }
       }
-    }
-  }
 
-  private validateOrderConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const line = this.context.lines[i];
-      const cleanLine = this.context.cleanLines[i];
-
-      for (const constant of Array.from(ORDER_CONSTANTS)) {
+      for (const constant of ORDER_CONSTANTS) {
         if (cleanLine.includes(constant)) {
-          this.orderConstantUsage.set(constant, (this.orderConstantUsage.get(constant) || 0) + 1);
-          
-          this.info.push({
-            code: Codes.ORDER_CONSTANT,
-            message: `Array sort order constant '${constant}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(constant) + 1,
-            severity: 'info'
-          });
+          this.recordConstantUsage(constant, lineNumber, cleanLine.indexOf(constant) + 1);
+        }
+      }
+
+      for (const constant of POSITION_CONSTANTS) {
+        if (cleanLine.includes(constant)) {
+          this.recordConstantUsage(constant, lineNumber, cleanLine.indexOf(constant) + 1);
+        }
+      }
+
+      for (const constant of ALL_SPECIALIZED_CONSTANTS) {
+        if (cleanLine.includes(constant)) {
+          this.recordConstantUsage(constant, lineNumber, cleanLine.indexOf(constant) + 1);
         }
       }
     }
   }
 
-  private validatePositionConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const line = this.context.lines[i];
-      const cleanLine = this.context.cleanLines[i];
+  private collectConstantsFromAst(program: ProgramNode): void {
+    visit(program, {
+      MemberExpression: {
+        enter: ({ node }) => {
+          const constant = this.getMemberQualifiedName(node as MemberExpressionNode);
+          if (!constant) {
+            return;
+          }
 
-      for (const constant of Array.from(POSITION_CONSTANTS)) {
-        if (cleanLine.includes(constant)) {
-          this.positionConstantUsage.set(constant, (this.positionConstantUsage.get(constant) || 0) + 1);
-          
-          this.info.push({
-            code: Codes.POSITION_CONSTANT,
-            message: `Table position constant '${constant}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(constant) + 1,
-            severity: 'info'
-          });
-        }
-      }
-    }
+          const position = node.property.loc?.start ?? node.loc.start;
+          const line = position.line ?? 1;
+          const column = position.column ?? 1;
+          this.recordConstantUsage(constant, line, column);
+        },
+      },
+    });
   }
 
-  private validateSpecializedConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const line = this.context.lines[i];
-      const cleanLine = this.context.cleanLines[i];
+  private getMemberQualifiedName(member: MemberExpressionNode): string | null {
+    if (member.computed) {
+      return null;
+    }
 
-      const sets = [ADDITIONAL_SPECIALIZED_CONSTANTS, DRAW_TABLE_EXTRA_CONSTANTS, STRATEGY_RISK_EXTRA_CONSTANTS];
-      for (const constant of Array.from(new Set(Array.from(sets[0]).concat(Array.from(sets[1])).concat(Array.from(sets[2]))))) {
-        if (cleanLine.includes(constant)) {
-          this.specializedConstantUsage.set(constant, (this.specializedConstantUsage.get(constant) || 0) + 1);
-          
-          this.info.push({
-            code: Codes.SPECIALIZED_CONSTANT,
-            message: `Specialized constant '${constant}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(constant) + 1,
-            severity: 'info'
-          });
-        }
+    const objectName = this.getExpressionQualifiedName(member.object);
+    if (!objectName) {
+      return null;
+    }
+
+    return `${objectName}.${member.property.name}`;
+  }
+
+  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return expression.name;
+    }
+
+    if (expression.kind === 'MemberExpression') {
+      if (expression.computed) {
+        return null;
+      }
+
+      const objectName = this.getExpressionQualifiedName(expression.object);
+      if (!objectName) {
+        return null;
+      }
+
+      return `${objectName}.${expression.property.name}`;
+    }
+
+    return null;
+  }
+
+  private incrementUsage(map: Map<string, number>, constant: string): void {
+    map.set(constant, (map.get(constant) || 0) + 1);
+  }
+
+  private addConstantInfo(code: string, message: string, line: number, column: number): void {
+    this.info.push({
+      code,
+      message,
+      line,
+      column,
+      severity: 'info'
+    });
+  }
+
+  private recordConstantUsage(constant: string, line: number, column: number): boolean {
+    if (MATH_CONSTANTS.has(constant)) {
+      this.incrementUsage(this.mathConstantUsage, constant);
+      this.addConstantInfo('PSV6-MATH-CONSTANT', `Mathematical constant '${constant}' detected`, line, column);
+      return true;
+    }
+
+    for (const constantSet of STYLE_CONSTANT_SETS) {
+      if (constantSet.has(constant)) {
+        this.incrementUsage(this.styleConstantUsage, constant);
+        this.addConstantInfo(Codes.STYLE_CONSTANT, `Style constant '${constant}' detected`, line, column);
+        return true;
       }
     }
+
+    if (ORDER_CONSTANTS.has(constant)) {
+      this.incrementUsage(this.orderConstantUsage, constant);
+      this.addConstantInfo(Codes.ORDER_CONSTANT, `Array sort order constant '${constant}' detected`, line, column);
+      return true;
+    }
+
+    if (POSITION_CONSTANTS.has(constant)) {
+      this.incrementUsage(this.positionConstantUsage, constant);
+      this.addConstantInfo(Codes.POSITION_CONSTANT, `Table position constant '${constant}' detected`, line, column);
+      return true;
+    }
+
+    if (ALL_SPECIALIZED_CONSTANTS.has(constant)) {
+      this.incrementUsage(this.specializedConstantUsage, constant);
+      this.addConstantInfo(Codes.SPECIALIZED_CONSTANT, `Specialized constant '${constant}' detected`, line, column);
+      return true;
+    }
+
+    return false;
   }
 
   private analyzeFinalConstantUsage(): void {

@@ -26,6 +26,8 @@ import {
   type NumberLiteralNode,
   type ProgramNode,
   type ReturnStatementNode,
+  type EnumDeclarationNode,
+  type EnumMemberNode,
   type TypeDeclarationNode,
   type StatementNode,
   type SwitchStatementNode,
@@ -613,6 +615,27 @@ function visitStatement(environment: TypeEnvironment, statement: StatementNode):
       break;
     case 'ScriptDeclaration':
       visitScriptDeclaration(environment, statement);
+      break;
+    case 'EnumDeclaration': {
+      const enumDeclaration = statement as EnumDeclarationNode;
+      assignIdentifier(
+        environment,
+        enumDeclaration.identifier,
+        createTypeMetadata('unknown', 'enum:declaration', 'certain'),
+        'enum:declaration',
+      );
+      enumDeclaration.members.forEach((member) => {
+        assignIdentifier(
+          environment,
+          member.identifier,
+          createTypeMetadata('unknown', 'enum:member', 'certain'),
+          'enum:member',
+        );
+        inferExpression(environment, member.value, 'enum:member');
+      });
+      break;
+    }
+    case 'EnumMember':
       break;
     case 'TypeDeclaration':
       assignIdentifier(
