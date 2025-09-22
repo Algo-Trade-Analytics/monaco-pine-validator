@@ -1,4 +1,23 @@
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult, TypeInfo } from '../core/types';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+  type TypeInfo,
+} from '../core/types';
+import {
+  type ArgumentNode,
+  type AssignmentStatementNode,
+  type CallExpressionNode,
+  type ExpressionNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type ProgramNode,
+  type VariableDeclarationNode,
+} from '../core/ast/nodes';
+import { visit } from '../core/ast/traversal';
 
 interface Call {
   fn: string;
@@ -15,6 +34,7 @@ export class PolylineFunctionsValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
+  private astContext: AstValidationContext | null = null;
 
   private calls: Call[] = [];
   private idVars: Set<string> = new Set();
@@ -28,7 +48,13 @@ export class PolylineFunctionsValidator implements ValidationModule {
     this.reset();
     this.context = context;
 
-    context.cleanLines.forEach((line, i) => this.scanLine(line, i + 1));
+    this.astContext = this.getAstContext(config);
+
+    if (this.astContext?.ast) {
+      this.collectPolylineDataFromAst(this.astContext.ast);
+    } else {
+      context.cleanLines.forEach((line, i) => this.scanLine(line, i + 1));
+    }
 
     // best practices
     this.checkBestPractices();
@@ -48,9 +74,136 @@ export class PolylineFunctionsValidator implements ValidationModule {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.astContext = null;
     this.calls = [];
     this.idVars.clear();
     this.typeMapUpdates.clear();
+  }
+
+  private collectPolylineDataFromAst(program: ProgramNode): void {
+    visit(program, {
+      VariableDeclaration: {
+        enter: (path) => {
+          this.registerAstPolylineDeclaration(path.node as VariableDeclarationNode);
+        },
+      },
+      AssignmentStatement: {
+        enter: (path) => {
+          this.registerAstPolylineAssignment(path.node as AssignmentStatementNode);
+        },
+      },
+      CallExpression: {
+        enter: (path) => {
+          this.processAstCall(path.node as CallExpressionNode);
+        },
+      },
+    });
+  }
+
+  private processAstCall(call: CallExpressionNode): void {
+    if (call.callee.kind !== 'MemberExpression') {
+      return;
+    }
+
+    const member = call.callee as MemberExpressionNode;
+    if (member.computed || !this.isPolylineMember(member)) {
+      return;
+    }
+
+    const functionName = member.property.name;
+    const args = call.args.map((argument) => this.getArgumentText(argument));
+    const line = member.property.loc.start.line;
+    const column = member.property.loc.start.column;
+
+    this.calls.push({ fn: functionName, line, column, args });
+
+    this.validateCall(functionName, args, line, column);
+  }
+
+  private registerAstPolylineDeclaration(declaration: VariableDeclarationNode): void {
+    if (!declaration.initializer || declaration.initializer.kind !== 'CallExpression') {
+      return;
+    }
+
+    const call = declaration.initializer as CallExpressionNode;
+    if (!this.isPolylineNewCall(call)) {
+      return;
+    }
+
+    this.registerPolylineIdentifier(declaration.identifier);
+  }
+
+  private registerAstPolylineAssignment(assignment: AssignmentStatementNode): void {
+    if (!assignment.right || assignment.right.kind !== 'CallExpression') {
+      return;
+    }
+
+    const call = assignment.right as CallExpressionNode;
+    if (!this.isPolylineNewCall(call)) {
+      return;
+    }
+
+    const identifier = this.extractAssignedIdentifier(assignment.left);
+    if (!identifier) {
+      return;
+    }
+
+    this.registerPolylineIdentifier(identifier);
+  }
+
+  private registerPolylineIdentifier(identifier: IdentifierNode): void {
+    const name = identifier.name;
+    if (!name) {
+      return;
+    }
+
+    this.idVars.add(name);
+
+    const line = identifier.loc?.start.line ?? 1;
+    const column = identifier.loc?.start.column ?? 1;
+
+    const typeInfo: TypeInfo = {
+      type: 'unknown',
+      isConst: false,
+      isSeries: false,
+      declaredAt: { line, column },
+      usages: [],
+    };
+
+    this.typeMapUpdates.set(name, typeInfo);
+    if (this.context.typeMap) {
+      this.context.typeMap.set(name, typeInfo);
+    }
+  }
+
+  private isPolylineMember(member: MemberExpressionNode): boolean {
+    if (member.computed) {
+      return false;
+    }
+    return this.isPolylineIdentifier(member.object);
+  }
+
+  private isPolylineIdentifier(expression: ExpressionNode): boolean {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name === 'polyline';
+    }
+    return false;
+  }
+
+  private isPolylineNewCall(call: CallExpressionNode): boolean {
+    if (call.callee.kind !== 'MemberExpression') {
+      return false;
+    }
+
+    const member = call.callee as MemberExpressionNode;
+    return !member.computed && this.isPolylineIdentifier(member.object) && member.property.name === 'new';
+  }
+
+  private extractAssignedIdentifier(expression: ExpressionNode): IdentifierNode | null {
+    if (expression.kind === 'Identifier') {
+      return expression as IdentifierNode;
+    }
+    return null;
   }
 
   private scanLine(line: string, lineNum: number) {
@@ -215,4 +368,64 @@ export class PolylineFunctionsValidator implements ValidationModule {
   private addInfo(line: number, column: number, message: string, code: string) {
     this.info.push({ line, column, message, code, severity: 'info' });
   }
+
+  private getArgumentText(argument: ArgumentNode): string {
+    const valueText = this.getExpressionText(argument.value).trim();
+    if (argument.name) {
+      return `${argument.name.name}=${valueText}`;
+    }
+    return valueText;
+  }
+
+  private getExpressionText(expression: ExpressionNode): string {
+    switch (expression.kind) {
+      case 'Identifier':
+        return (expression as IdentifierNode).name;
+      case 'CallExpression':
+        return this.getNodeSource(expression);
+      case 'MemberExpression': {
+        const member = expression as MemberExpressionNode;
+        if (member.computed) {
+          return this.getNodeSource(member);
+        }
+        const objectText = this.getExpressionText(member.object);
+        return `${objectText}.${member.property.name}`;
+      }
+      default:
+        return this.getNodeSource(expression);
+    }
+  }
+
+  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode | MemberExpressionNode): string {
+    const lines = this.context.lines ?? [];
+    if (!node.loc) {
+      return '';
+    }
+    const startLineIndex = Math.max(0, node.loc.start.line - 1);
+    const endLineIndex = Math.max(0, node.loc.end.line - 1);
+    if (startLineIndex === endLineIndex) {
+      const line = lines[startLineIndex] ?? '';
+      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
+    }
+    const parts: string[] = [];
+    const firstLine = lines[startLineIndex] ?? '';
+    parts.push(firstLine.slice(node.loc.start.column - 1));
+    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
+      parts.push(lines[index] ?? '');
+    }
+    const lastLine = lines[endLineIndex] ?? '';
+    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
+    return parts.join('\n');
+  }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+  }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }

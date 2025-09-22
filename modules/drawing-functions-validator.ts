@@ -12,8 +12,27 @@
  * Priority 2.1: HIGH PRIORITY GAPS - Drawing Functions (5% Coverage)
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+} from '../core/types';
 import { IDENT, TEXT_SIZE_CONSTANTS, TEXT_STYLE_CONSTANTS } from '../core/constants';
+import {
+  type ArgumentNode,
+  type BooleanLiteralNode,
+  type CallExpressionNode,
+  type ExpressionNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type NumberLiteralNode,
+  type ProgramNode,
+  type StringLiteralNode,
+} from '../core/ast/nodes';
+import { visit, type NodePath } from '../core/ast/traversal';
 
 interface DrawingFunctionCall {
   namespace: string;
@@ -21,6 +40,7 @@ interface DrawingFunctionCall {
   line: number;
   column: number;
   arguments: string[];
+  inLoop?: boolean;
 }
 
 export class DrawingFunctionsValidator implements ValidationModule {
@@ -32,6 +52,8 @@ export class DrawingFunctionsValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private usingAst = false;
 
   // Drawing function tracking
   private drawingFunctionCalls: DrawingFunctionCall[] = [];
@@ -46,10 +68,17 @@ export class DrawingFunctionsValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
-    // Process each line for drawing function calls
-    context.cleanLines.forEach((line, index) => {
-      this.processLine(line, index + 1);
-    });
+    this.astContext = this.getAstContext(config);
+    this.usingAst = !!this.astContext?.ast;
+
+    if (this.usingAst && this.astContext?.ast) {
+      this.collectDrawingDataAst(this.astContext.ast);
+    } else {
+      // Process each line for drawing function calls
+      context.cleanLines.forEach((line, index) => {
+        this.processLine(line, index + 1);
+      });
+    }
 
     // Post-process validations
     try {
@@ -78,6 +107,8 @@ export class DrawingFunctionsValidator implements ValidationModule {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.astContext = null;
+    this.usingAst = false;
     this.drawingFunctionCalls = [];
     this.drawingObjectCount = 0;
   }
@@ -137,6 +168,70 @@ export class DrawingFunctionsValidator implements ValidationModule {
   private processLine(line: string, lineNum: number): void {
     // Drawing function patterns
     this.validateDrawingFunctionCalls(line, lineNum);
+  }
+
+  private collectDrawingDataAst(program: ProgramNode): void {
+    const loopStack: Array<'for' | 'while'> = [];
+
+    visit(program, {
+      ForStatement: {
+        enter: () => loopStack.push('for'),
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      WhileStatement: {
+        enter: () => loopStack.push('while'),
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      CallExpression: {
+        enter: (path) => {
+          this.processAstDrawingCall(path as NodePath<CallExpressionNode>, loopStack.length > 0);
+        },
+      },
+    });
+  }
+
+  private processAstDrawingCall(path: NodePath<CallExpressionNode>, inLoop: boolean): void {
+    const call = path.node;
+    if (call.callee.kind !== 'MemberExpression') {
+      return;
+    }
+
+    const member = call.callee as MemberExpressionNode;
+    if (member.computed) {
+      return;
+    }
+
+    const namespace = this.getNamespaceName(member.object);
+    if (!namespace || !this.isDrawingNamespace(namespace)) {
+      return;
+    }
+
+    const functionName = member.property.name;
+    const args = call.args.map((argument) => this.getArgumentText(argument));
+
+    const line = member.property.loc.start.line;
+    const column = member.property.loc.start.column;
+
+    const callInfo: DrawingFunctionCall = {
+      namespace,
+      functionName,
+      line,
+      column,
+      arguments: args,
+      inLoop,
+    };
+
+    this.drawingFunctionCalls.push(callInfo);
+
+    if (functionName === 'new') {
+      this.drawingObjectCount++;
+    }
+
+    this.validateDrawingFunction(namespace, functionName, args, line, column);
   }
 
   private validateDrawingFunctionCalls(line: string, lineNum: number): void {
@@ -908,12 +1003,22 @@ export class DrawingFunctionsValidator implements ValidationModule {
     }
 
     // Check for drawing objects in loops
-    const loopContext = this.detectLoopContext();
-    for (const call of this.drawingFunctionCalls) {
-      if (call.functionName === 'new' && loopContext.has(call.line)) {
-        this.addWarning(call.line, call.column, 
-          'Creating drawing objects in loops may cause performance issues', 
-          'PSV6-DRAWING-IN-LOOP');
+    if (this.usingAst) {
+      for (const call of this.drawingFunctionCalls) {
+        if (call.functionName === 'new' && call.inLoop) {
+          this.addWarning(call.line, call.column,
+            'Creating drawing objects in loops may cause performance issues',
+            'PSV6-DRAWING-IN-LOOP');
+        }
+      }
+    } else {
+      const loopContext = this.detectLoopContext();
+      for (const call of this.drawingFunctionCalls) {
+        if (call.functionName === 'new' && loopContext.has(call.line)) {
+          this.addWarning(call.line, call.column,
+            'Creating drawing objects in loops may cause performance issues',
+            'PSV6-DRAWING-IN-LOOP');
+        }
       }
     }
 
@@ -1157,4 +1262,88 @@ export class DrawingFunctionsValidator implements ValidationModule {
   getDrawingObjectCount(): number {
     return this.drawingObjectCount;
   }
+
+  private getArgumentText(argument: ArgumentNode): string {
+    const valueText = this.getExpressionText(argument.value).trim();
+    if (argument.name) {
+      return `${argument.name.name}=${valueText}`;
+    }
+    return valueText;
+  }
+
+  private getExpressionText(expression: ExpressionNode): string {
+    switch (expression.kind) {
+      case 'StringLiteral':
+        return (expression as StringLiteralNode).raw;
+      case 'NumberLiteral':
+        return (expression as NumberLiteralNode).raw;
+      case 'BooleanLiteral': {
+        const literal = expression as BooleanLiteralNode;
+        return literal.value ? 'true' : 'false';
+      }
+      case 'Identifier':
+        return (expression as IdentifierNode).name;
+      case 'MemberExpression': {
+        const member = expression as MemberExpressionNode;
+        if (member.computed) {
+          return this.getNodeSource(member).trim();
+        }
+        const objectText = this.getExpressionText(member.object);
+        return `${objectText}.${member.property.name}`;
+      }
+      default:
+        return this.getNodeSource(expression).trim();
+    }
+  }
+
+  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode | MemberExpressionNode): string {
+    const lines = this.context.lines ?? [];
+    if (!node.loc) {
+      return '';
+    }
+    const startLineIndex = Math.max(0, node.loc.start.line - 1);
+    const endLineIndex = Math.max(0, node.loc.end.line - 1);
+    if (startLineIndex === endLineIndex) {
+      const line = lines[startLineIndex] ?? '';
+      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
+    }
+    const parts: string[] = [];
+    const firstLine = lines[startLineIndex] ?? '';
+    parts.push(firstLine.slice(node.loc.start.column - 1));
+    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
+      parts.push(lines[index] ?? '');
+    }
+    const lastLine = lines[endLineIndex] ?? '';
+    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
+    return parts.join('\n');
+  }
+
+  private getNamespaceName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+      return this.getNamespaceName(member.object);
+    }
+    return null;
+  }
+
+  private isDrawingNamespace(namespace: string): boolean {
+    return namespace === 'line' || namespace === 'label' || namespace === 'box' || namespace === 'table';
+  }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+  }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }

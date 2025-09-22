@@ -1,5 +1,24 @@
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+} from '../core/types';
 import { IDENT, NS_MEMBERS, BUILTIN_FUNCTIONS_V6_RULES } from '../core/constants';
+import {
+  type ArgumentNode,
+  type AssignmentStatementNode,
+  type BinaryExpressionNode,
+  type CallExpressionNode,
+  type ExpressionNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type ProgramNode,
+  type VariableDeclarationNode,
+} from '../core/ast/nodes';
+import { visit, findAncestor, type NodePath } from '../core/ast/traversal';
 
 interface TAFunctionInfo {
   name: string;
@@ -8,6 +27,8 @@ interface TAFunctionInfo {
   line: number;
   column: number;
   isComplex: boolean;
+  inLoop?: boolean;
+  inConditional?: boolean;
 }
 
 export class TAFunctionsValidator implements ValidationModule {
@@ -19,6 +40,12 @@ export class TAFunctionsValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private usingAst = false;
+  private astTaCallLines: Set<number> = new Set();
+  private astLineCallCounts: Map<number, number> = new Map();
+  private boolAssignmentTargets: Map<string, { callName: string }> = new Map();
+  private reportedBooleanUsages: Set<string> = new Set();
 
   private taFunctionCalls: Map<string, TAFunctionInfo> = new Map();
   private taFunctionCount = 0;
@@ -33,9 +60,22 @@ export class TAFunctionsValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
-    context.cleanLines.forEach((line, index) => {
-      this.processLine(line, index + 1);
-    });
+    this.astContext = this.getAstContext(config);
+    this.usingAst = !!this.astContext?.ast;
+
+    if (this.usingAst && this.astContext?.ast) {
+      this.collectTAFunctionDataAst(this.astContext.ast);
+      this.emitAstLineWarnings();
+      this.validateBooleanAssignmentsAst(this.astContext.ast);
+      for (const line of this.astTaCallLines) {
+        const sourceLine = this.context.cleanLines[line - 1] ?? '';
+        this.validateTAComplexity(sourceLine, line);
+      }
+    } else {
+      context.cleanLines.forEach((line, index) => {
+        this.processLine(line, index + 1);
+      });
+    }
 
     this.validateTAPerformance();
     this.validateTABestPractices();
@@ -64,6 +104,12 @@ export class TAFunctionsValidator implements ValidationModule {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.astContext = null;
+    this.usingAst = false;
+    this.astTaCallLines.clear();
+    this.astLineCallCounts.clear();
+    this.boolAssignmentTargets.clear();
+    this.reportedBooleanUsages.clear();
     this.taFunctionCalls.clear();
     this.taFunctionCount = 0;
     this.complexTAExpressions = 0;
@@ -78,6 +124,159 @@ export class TAFunctionsValidator implements ValidationModule {
     this.validateTAFunctionCalls(line, lineNumber);
     this.validateTAParameters(line, lineNumber);
     this.validateTAComplexity(line, lineNumber);
+  }
+
+  private collectTAFunctionDataAst(program: ProgramNode): void {
+    const loopStack: Array<'for' | 'while'> = [];
+
+    visit(program, {
+      ForStatement: {
+        enter: () => {
+          loopStack.push('for');
+        },
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      WhileStatement: {
+        enter: () => {
+          loopStack.push('while');
+        },
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      CallExpression: {
+        enter: (path) => {
+          this.processAstTaCall(path as NodePath<CallExpressionNode>, loopStack.length > 0);
+        },
+      },
+    });
+  }
+
+  private processAstTaCall(path: NodePath<CallExpressionNode>, inLoop: boolean): void {
+    const node = path.node;
+    const qualifiedName = this.getExpressionQualifiedName(node.callee);
+    if (!qualifiedName || !qualifiedName.startsWith('ta.')) {
+      return;
+    }
+
+    const functionName = qualifiedName.slice('ta.'.length);
+    const line = node.loc.start.line;
+    const column = node.loc.start.column;
+
+    this.astTaCallLines.add(line);
+    this.astLineCallCounts.set(line, (this.astLineCallCounts.get(line) ?? 0) + 1);
+
+    if (!this.isKnownTAFunction(functionName)) {
+      this.addError(
+        line,
+        column,
+        `PSV6-TA-FUNCTION-UNKNOWN: Unknown TA function: ${qualifiedName}`,
+        `TA function '${qualifiedName}' is not recognized. Check spelling and ensure it's a valid Pine Script v6 TA function.`,
+      );
+      return;
+    }
+
+    this.taFunctionCount++;
+    const parameters = node.args.map((argument) => this.argumentToString(argument));
+    const returnType = this.getTAReturnType(qualifiedName);
+    const isComplex = this.isComplexTAFunction(qualifiedName, parameters);
+    if (isComplex) {
+      this.complexTAExpressions++;
+    }
+
+    this.recordTAFunctionCall({
+      name: qualifiedName,
+      parameters,
+      returnType,
+      line,
+      column,
+      isComplex,
+      inLoop,
+    });
+
+    this.validateTAParameterTypes(qualifiedName, parameters, line, column);
+    this.validatePivotParameters(qualifiedName, parameters, line, column);
+    this.trackBooleanAssignment(path, returnType, qualifiedName);
+  }
+
+  private recordTAFunctionCall(info: TAFunctionInfo): void {
+    this.taFunctionCalls.set(info.name, { ...info });
+  }
+
+  private trackBooleanAssignment(
+    path: NodePath<CallExpressionNode>,
+    returnType: string,
+    functionName: string,
+  ): void {
+    if (returnType !== 'bool') {
+      return;
+    }
+
+    const assignment = findAncestor(path, (ancestor): ancestor is NodePath<AssignmentStatementNode> => {
+      return ancestor.node.kind === 'AssignmentStatement';
+    });
+    if (assignment && (assignment.node as AssignmentStatementNode).right === path.node) {
+      const left = (assignment.node as AssignmentStatementNode).left;
+      if (left.kind === 'Identifier') {
+        this.boolAssignmentTargets.set((left as IdentifierNode).name, { callName: functionName });
+      }
+    }
+
+    const declaration = findAncestor(path, (ancestor): ancestor is NodePath<VariableDeclarationNode> => {
+      return ancestor.node.kind === 'VariableDeclaration';
+    });
+    if (declaration && (declaration.node as VariableDeclarationNode).initializer === path.node) {
+      const identifier = (declaration.node as VariableDeclarationNode).identifier;
+      this.boolAssignmentTargets.set(identifier.name, { callName: functionName });
+    }
+  }
+
+  private emitAstLineWarnings(): void {
+    for (const [line, count] of this.astLineCallCounts) {
+      if (count > 1) {
+        this.addWarning(line, 1, 'PSV6-TA-PERF-NESTED', 'Multiple TA operations on one line');
+      }
+    }
+  }
+
+  private validateBooleanAssignmentsAst(program: ProgramNode): void {
+    if (!this.boolAssignmentTargets.size) {
+      return;
+    }
+
+    visit(program, {
+      BinaryExpression: {
+        enter: (path) => {
+          const node = path.node as BinaryExpressionNode;
+          if (!this.isArithmeticOperator(node.operator)) {
+            return;
+          }
+
+          for (const [identifier, info] of this.boolAssignmentTargets) {
+            if (
+              this.expressionContainsIdentifier(node.left, identifier) ||
+              this.expressionContainsIdentifier(node.right, identifier)
+            ) {
+              const key = `${identifier}:${node.loc.start.line}:${node.loc.start.column}`;
+              if (this.reportedBooleanUsages.has(key)) {
+                return false;
+              }
+              this.reportedBooleanUsages.add(key);
+              this.addError(
+                node.loc.start.line,
+                node.loc.start.column,
+                'PSV6-FUNCTION-RETURN-TYPE',
+                `Variable '${identifier}' contains boolean result from '${info.callName}' and cannot be used in arithmetic operations`,
+              );
+              return false;
+            }
+          }
+          return;
+        },
+      },
+    });
   }
 
   private validateTAFunctionCalls(line: string, lineNumber: number): void {
@@ -203,31 +402,41 @@ export class TAFunctionsValidator implements ValidationModule {
           const parameters = this.splitTopLevelArgs(paramMatch);
           this.validateTAParameterTypes(fullFunctionName, parameters, lineNumber, match.index + 1);
 
-          // Special validation for pivot functions
-          if (functionName === 'pivothigh' || functionName === 'pivotlow') {
-            // Expect: (source, left, right) with left/right positive ints
-            if (parameters.length < 3) {
-              this.addError(lineNumber, match.index + 1, 'PSV6-TA-FUNCTION-PARAM', `${fullFunctionName} requires 3 parameters (source, left, right)`);
-            } else {
-              const source = parameters[0];
-              const left = parameters[1];
-              const right = parameters[2];
-              // source should not be a string literal
-              if (/^\s*("[^"]*"|'[^']*')\s*$/.test(source)) {
-                this.addError(lineNumber, match.index + 1, 'PSV6-TA-FUNCTION-PARAM', `Parameter 'source' of '${fullFunctionName}' should be series, got string`);
-              }
-              const leftNum = parseFloat(left);
-              const rightNum = parseFloat(right);
-              if (!(Number.isFinite(leftNum) && leftNum >= 1)) {
-                this.addError(lineNumber, match.index + 1, 'PSV6-TA-FUNCTION-PARAM', `Parameter 'left' of '${fullFunctionName}' must be a positive integer`);
-              }
-              if (!(Number.isFinite(rightNum) && rightNum >= 1)) {
-                this.addError(lineNumber, match.index + 1, 'PSV6-TA-FUNCTION-PARAM', `Parameter 'right' of '${fullFunctionName}' must be a positive integer`);
-              }
-            }
-          }
+          this.validatePivotParameters(fullFunctionName, parameters, lineNumber, match.index + 1);
         }
       }
+    }
+  }
+
+  private validatePivotParameters(
+    fullFunctionName: string,
+    parameters: string[],
+    lineNumber: number,
+    column: number,
+  ): void {
+    const functionName = fullFunctionName.slice('ta.'.length);
+    if (functionName !== 'pivothigh' && functionName !== 'pivotlow') {
+      return;
+    }
+
+    if (parameters.length < 3) {
+      this.addError(lineNumber, column, 'PSV6-TA-FUNCTION-PARAM', `${fullFunctionName} requires 3 parameters (source, left, right)`);
+      return;
+    }
+
+    const [source, left, right] = parameters;
+    if (/^\s*("[^"]*"|'[^']*')\s*$/.test(source)) {
+      this.addError(lineNumber, column, 'PSV6-TA-FUNCTION-PARAM', `Parameter 'source' of '${fullFunctionName}' should be series, got string`);
+    }
+
+    const leftNum = parseFloat(left);
+    if (!(Number.isFinite(leftNum) && leftNum >= 1)) {
+      this.addError(lineNumber, column, 'PSV6-TA-FUNCTION-PARAM', `Parameter 'left' of '${fullFunctionName}' must be a positive integer`);
+    }
+
+    const rightNum = parseFloat(right);
+    if (!(Number.isFinite(rightNum) && rightNum >= 1)) {
+      this.addError(lineNumber, column, 'PSV6-TA-FUNCTION-PARAM', `Parameter 'right' of '${fullFunctionName}' must be a positive integer`);
     }
   }
 
@@ -376,6 +585,14 @@ export class TAFunctionsValidator implements ValidationModule {
     }
 
     // TA calls inside loops
+    if (this.usingAst) {
+      for (const info of this.taFunctionCalls.values()) {
+        if (info.inLoop) {
+          this.addWarning(info.line, info.column, 'PSV6-TA-PERF-LOOP', 'TA operation in loop');
+        }
+      }
+      return;
+    }
     const loopLines = this.computeLoopLines();
     for (const info of this.taFunctionCalls.values()) {
       if (loopLines.has(info.line)) {
@@ -615,6 +832,81 @@ export class TAFunctionsValidator implements ValidationModule {
     return 'unknown';
   }
 
+  private argumentToString(argument: ArgumentNode): string {
+    const valueText = this.getNodeSource(argument.value).trim();
+    if (argument.name) {
+      return `${argument.name.name}=${valueText}`;
+    }
+    return valueText;
+  }
+
+  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
+    const lines = this.context.lines ?? [];
+    if (!node.loc) {
+      return '';
+    }
+    const startLineIndex = Math.max(0, node.loc.start.line - 1);
+    const endLineIndex = Math.max(0, node.loc.end.line - 1);
+    if (startLineIndex === endLineIndex) {
+      const line = lines[startLineIndex] ?? '';
+      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
+    }
+    const parts: string[] = [];
+    const firstLine = lines[startLineIndex] ?? '';
+    parts.push(firstLine.slice(node.loc.start.column - 1));
+    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
+      parts.push(lines[index] ?? '');
+    }
+    const lastLine = lines[endLineIndex] ?? '';
+    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
+    return parts.join('\n');
+  }
+
+  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+      const objectName = this.getExpressionQualifiedName(member.object);
+      if (!objectName) {
+        return null;
+      }
+      return `${objectName}.${member.property.name}`;
+    }
+    return null;
+  }
+
+  private expressionContainsIdentifier(expression: ExpressionNode, identifier: string): boolean {
+    let found = false;
+    visit(expression, {
+      Identifier: {
+        enter: (path) => {
+          if (found) {
+            return false;
+          }
+          if (path.node.name === identifier) {
+            found = true;
+            return false;
+          }
+          return;
+        },
+      },
+    });
+    return found;
+  }
+
+  private isArithmeticOperator(operator: string): boolean {
+    return operator === '+' || operator === '-' || operator === '*' || operator === '/' || operator === '%' || operator === '^';
+  }
+
+  private isKnownTAFunction(functionName: string): boolean {
+    return !!NS_MEMBERS.ta?.has(functionName);
+  }
+
   private addError(line: number, column: number, code: string, message: string): void {
     // Only generate errors for clearly invalid cases
     if (this.isClearlyInvalid(message, code)) {
@@ -659,7 +951,7 @@ export class TAFunctionsValidator implements ValidationModule {
 
   private isClearlyInvalid(message: string, code: string): boolean {
     // Only generate errors for clearly invalid cases
-    
+
     // Parameter type errors are clearly invalid
     if (code === 'PSV6-TA-FUNCTION-PARAM' || code === 'PSV6-FUNCTION-PARAM-TYPE' || code === 'PSV6-FUNCTION-PARAM-COUNT') {
       return true;
@@ -678,4 +970,15 @@ export class TAFunctionsValidator implements ValidationModule {
     // For performance and best practice issues, generate warnings
     return false;
   }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+  }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }
