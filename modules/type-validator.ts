@@ -27,6 +27,9 @@ import type {
   ReturnStatementNode,
   TypeReferenceNode,
   ExpressionNode,
+  AssignmentStatementNode,
+  IdentifierNode,
+  TupleExpressionNode,
 } from '../core/ast/nodes';
 import type { TypeMetadata } from '../core/ast/types';
 
@@ -209,7 +212,14 @@ export class TypeValidator implements ValidationModule {
       if (inferredType) {
         const existingType = this.variableTypes.get(varName);
         if (existingType && !this.areTypesCompatible(existingType, inferredType)) {
-          this.addWarning(lineNum, 1, `Type mismatch: variable '${varName}' previously typed as '${existingType}' but assigned '${inferredType}'.`, 'PSV6-TYPE-INCONSISTENT');
+          if (!this.astContext || !this.hasAstDiagnostic('PSV6-TYPE-INCONSISTENT', `${lineNum}:${varName}`)) {
+            this.addWarning(
+              lineNum,
+              1,
+              `Type mismatch: variable '${varName}' previously typed as '${existingType}' but assigned '${inferredType}'.`,
+              'PSV6-TYPE-INCONSISTENT',
+            );
+          }
         } else if (!existingType) {
           this.variableTypes.set(varName, inferredType);
         }
@@ -470,6 +480,7 @@ export class TypeValidator implements ValidationModule {
     this.emitAstVariableTypeMismatches(context);
     this.emitAstTernaryTypeConflicts(context);
     this.emitAstFunctionReturnTypeErrors(context);
+    this.emitAstTypeConsistencyWarnings(context);
   }
 
   private emitAstVariableTypeMismatches(context: AstValidationContext): void {
@@ -605,6 +616,84 @@ export class TypeValidator implements ValidationModule {
             `Function '${fnName}' has inconsistent return types: ${Array.from(collected).join(', ')}.`,
             'PSV6-FUNCTION-RETURN-TYPE',
           );
+        },
+      },
+    });
+  }
+
+  private emitAstTypeConsistencyWarnings(context: AstValidationContext): void {
+    const program = context.ast;
+    if (!program) {
+      return;
+    }
+
+    const environment = context.typeEnvironment;
+    const recorded = new Map<string, string>();
+
+    const trackAssignment = (identifier: IdentifierNode): void => {
+      const metadata = environment.nodeTypes.get(identifier);
+      const typeLabel = this.describeTypeMetadata(metadata);
+      if (!typeLabel) {
+        return;
+      }
+
+      const normalised = this.normaliseTypeName(typeLabel);
+      if (!this.isKnownPrimitiveType(normalised)) {
+        return;
+      }
+
+      const previousType = recorded.get(identifier.name);
+      if (!previousType) {
+        recorded.set(identifier.name, normalised);
+        return;
+      }
+
+      if (this.areTypesCompatible(previousType, normalised) || this.areTypesCompatible(normalised, previousType)) {
+        recorded.set(identifier.name, normalised);
+        return;
+      }
+
+      const line = identifier.loc.start.line;
+      const column = identifier.loc.start.column;
+      const key = `${line}:${identifier.name}`;
+      this.registerAstDiagnostic('PSV6-TYPE-INCONSISTENT', key);
+      this.addWarning(
+        line,
+        column,
+        `Type mismatch: variable '${identifier.name}' previously typed as '${previousType}' but assigned '${normalised}'.`,
+        'PSV6-TYPE-INCONSISTENT',
+      );
+      recorded.set(identifier.name, normalised);
+    };
+
+    visit(program, {
+      VariableDeclaration: {
+        enter: (path) => {
+          const declaration = path.node as VariableDeclarationNode;
+          trackAssignment(declaration.identifier);
+        },
+      },
+      AssignmentStatement: {
+        enter: (path) => {
+          const assignment = path.node as AssignmentStatementNode;
+          const target = assignment.left;
+          if (!target) {
+            return;
+          }
+
+          if (target.kind === 'Identifier') {
+            trackAssignment(target as IdentifierNode);
+            return;
+          }
+
+          if (target.kind === 'TupleExpression') {
+            const tuple = target as TupleExpressionNode;
+            tuple.elements.forEach((element) => {
+              if (element && element.kind === 'Identifier') {
+                trackAssignment(element as IdentifierNode);
+              }
+            });
+          }
         },
       },
     });

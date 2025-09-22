@@ -11,8 +11,26 @@
  * Priority 1.3: CRITICAL GAPS - Input Functions (0% Coverage)
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+} from '../core/types';
 import { IDENT } from '../core/constants';
+import {
+  type ArgumentNode,
+  type AssignmentStatementNode,
+  type CallExpressionNode,
+  type ExpressionNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type ProgramNode,
+  type VariableDeclarationNode,
+} from '../core/ast/nodes';
+import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
 
 interface InputFunctionCall {
   name: string;
@@ -20,6 +38,7 @@ interface InputFunctionCall {
   column: number;
   arguments: string[];
   parameters: Map<string, string>;
+  assignedName?: string | null;
 }
 
 export class InputFunctionsValidator implements ValidationModule {
@@ -31,6 +50,7 @@ export class InputFunctionsValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
 
   // Input function tracking
   private inputFunctionCalls: InputFunctionCall[] = [];
@@ -45,10 +65,16 @@ export class InputFunctionsValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
-    // Process each line for input function calls
-    context.cleanLines.forEach((line, index) => {
-      this.processLine(line, index + 1);
-    });
+    this.astContext = this.getAstContext(config);
+
+    if (this.astContext?.ast) {
+      this.collectInputFunctionDataAst(this.astContext.ast);
+    } else {
+      // Process each line for input function calls
+      context.cleanLines.forEach((line, index) => {
+        this.processLine(line, index + 1);
+      });
+    }
 
     // Post-process validations
     this.validateInputPerformance();
@@ -67,6 +93,7 @@ export class InputFunctionsValidator implements ValidationModule {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.astContext = null;
     this.inputFunctionCalls = [];
     this.inputCount = 0;
   }
@@ -125,11 +152,54 @@ export class InputFunctionsValidator implements ValidationModule {
     this.validateInputFunctionCalls(line, lineNum);
   }
 
+  private collectInputFunctionDataAst(program: ProgramNode): void {
+    visit(program, {
+      CallExpression: {
+        enter: (path) => {
+          this.processAstInputCall(path as NodePath<CallExpressionNode>);
+        },
+      },
+    });
+  }
+
+  private processAstInputCall(path: NodePath<CallExpressionNode>): void {
+    const node = path.node;
+    const qualifiedName = this.getExpressionQualifiedName(node.callee);
+    if (!qualifiedName || !qualifiedName.startsWith('input.')) {
+      return;
+    }
+
+    const functionName = qualifiedName.slice('input.'.length);
+    const args: string[] = [];
+    const parameters = new Map<string, string>();
+
+    for (const argument of node.args) {
+      const valueText = this.getNodeSource(argument.value).trim();
+      if (argument.name) {
+        parameters.set(argument.name.name, valueText);
+      } else {
+        args.push(valueText);
+      }
+    }
+
+    const callInfo: InputFunctionCall = {
+      name: functionName,
+      line: node.loc.start.line,
+      column: node.loc.start.column,
+      arguments: args,
+      parameters,
+      assignedName: this.getAssignedIdentifier(path),
+    };
+
+    this.recordInputFunctionCall(callInfo);
+    this.validateInputFunction(functionName, args, parameters, callInfo.line, callInfo.column);
+  }
+
   private validateInputFunctionCalls(line: string, lineNum: number): void {
     // Pattern: input.functionName(args...)
     // We need to handle nested parentheses, so we'll use a different approach
     const inputPattern = /input\.(\w+)\s*\(/g;
-    
+
     let match;
     while ((match = inputPattern.exec(line)) !== null) {
       const functionName = match[1];
@@ -147,19 +217,16 @@ export class InputFunctionsValidator implements ValidationModule {
 
 
       // Store function call
-      this.inputFunctionCalls.push({
+      this.recordInputFunctionCall({
         name: functionName,
         line: lineNum,
         column,
         arguments: args,
-        parameters
+        parameters,
       });
 
       // Validate specific function
       this.validateInputFunction(functionName, args, parameters, lineNum, column);
-      
-      // Track input count
-      this.inputCount++;
     }
   }
 
@@ -259,6 +326,20 @@ export class InputFunctionsValidator implements ValidationModule {
       default:
         this.addError(lineNum, column, `Unknown input function: input.${functionName}`, 'PSV6-INPUT-UNKNOWN-FUNCTION');
     }
+  }
+
+  private recordInputFunctionCall(call: InputFunctionCall): void {
+    const line = call.line;
+    const sourceLine = this.context.cleanLines[line - 1] ?? '';
+    const assignedName = call.assignedName ?? this.extractAssignedNameFromLine(sourceLine);
+
+    this.inputFunctionCalls.push({
+      ...call,
+      assignedName,
+      arguments: [...call.arguments],
+      parameters: new Map(call.parameters),
+    });
+    this.inputCount++;
   }
 
   private validateInputInt(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
@@ -696,16 +777,17 @@ export class InputFunctionsValidator implements ValidationModule {
   private validateInputPerformance(): void {
     // Check for too many input functions
     if (this.inputCount > 15) {
-      this.addWarning(1, 1, 
-        `Too many input functions detected (${this.inputCount}). Consider grouping related inputs.`, 
+      this.addWarning(1, 1,
+        `Too many input functions detected (${this.inputCount}). Consider grouping related inputs.`,
         'PSV6-INPUT-TOO-MANY');
     }
 
     // Check for complex input expressions
     for (const call of this.inputFunctionCalls) {
-      if (this.hasComplexExpression(call.arguments[0])) {
-        this.addWarning(call.line, call.column, 
-          'Complex expression used as input default value. Consider using simpler expressions.', 
+      const defaultArg = call.parameters.get('defval') ?? call.arguments[0];
+      if (this.hasComplexExpression(defaultArg ?? '')) {
+        this.addWarning(call.line, call.column,
+          'Complex expression used as input default value. Consider using simpler expressions.',
           'PSV6-INPUT-COMPLEX-EXPRESSION');
       }
     }
@@ -714,14 +796,12 @@ export class InputFunctionsValidator implements ValidationModule {
   private validateInputBestPractices(): void {
     // Check for poor variable naming
     const poorNames = new Set(['a', 'b', 'c', 'x', 'y', 'z', 'temp', 'flag', 'val', 'value']);
-    
+
     for (const call of this.inputFunctionCalls) {
-      // Extract variable name from the line (this is a simplified approach)
-      const line = this.context.cleanLines[call.line - 1];
-      const match = line.match(/(\w+)\s*=\s*input\./);
-      if (match && poorNames.has(match[1])) {
-        this.addInfo(call.line, call.column, 
-          `Consider using a more descriptive name instead of '${match[1]}'`, 
+      const variableName = call.assignedName ?? this.extractAssignedNameFromLine(this.context.cleanLines[call.line - 1] ?? '');
+      if (variableName && poorNames.has(variableName)) {
+        this.addInfo(call.line, call.column,
+          `Consider using a more descriptive name instead of '${variableName}'`,
           'PSV6-INPUT-NAMING-SUGGESTION');
       }
     }
@@ -735,8 +815,8 @@ export class InputFunctionsValidator implements ValidationModule {
     }
 
     if (inputsWithoutTooltips > this.inputCount * 0.5) {
-      this.addInfo(1, 1, 
-        'Consider adding tooltips to input functions to improve user experience', 
+      this.addInfo(1, 1,
+        'Consider adding tooltips to input functions to improve user experience',
         'PSV6-INPUT-TOOLTIP-SUGGESTION');
     }
 
@@ -749,20 +829,97 @@ export class InputFunctionsValidator implements ValidationModule {
     }
 
     if (this.inputCount >= 4 && groups.size === 0) {
-      this.addInfo(1, 1, 
-        'Consider grouping related input functions using the group parameter', 
+      this.addInfo(1, 1,
+        'Consider grouping related input functions using the group parameter',
         'PSV6-INPUT-GROUP-SUGGESTION');
     }
 
     // Check for reasonable default values
     for (const call of this.inputFunctionCalls) {
-      const defaultValue = call.arguments[0];
+      const defaultValue = call.parameters.get('defval') ?? call.arguments[0];
       if (this.isUnreasonableDefault(defaultValue)) {
-        this.addInfo(call.line, call.column, 
-          'Consider using a more reasonable default value', 
+        this.addInfo(call.line, call.column,
+          'Consider using a more reasonable default value',
           'PSV6-INPUT-DEFAULT-SUGGESTION');
       }
     }
+  }
+
+  private getAssignedIdentifier(path: NodePath<CallExpressionNode>): string | null {
+    const assignment = findAncestor(path, (ancestor): ancestor is NodePath<AssignmentStatementNode> => {
+      return ancestor.node.kind === 'AssignmentStatement';
+    });
+    if (assignment && (assignment.node as AssignmentStatementNode).right === path.node) {
+      const left = (assignment.node as AssignmentStatementNode).left;
+      if (left.kind === 'Identifier') {
+        return (left as IdentifierNode).name;
+      }
+    }
+
+    const declaration = findAncestor(path, (ancestor): ancestor is NodePath<VariableDeclarationNode> => {
+      return ancestor.node.kind === 'VariableDeclaration';
+    });
+    if (declaration && (declaration.node as VariableDeclarationNode).initializer === path.node) {
+      return (declaration.node as VariableDeclarationNode).identifier.name;
+    }
+
+    return null;
+  }
+
+  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+      const objectName = this.getExpressionQualifiedName(member.object);
+      if (!objectName) {
+        return null;
+      }
+      return `${objectName}.${member.property.name}`;
+    }
+    return null;
+  }
+
+  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
+    const lines = this.context.lines ?? [];
+    if (!node.loc) {
+      return '';
+    }
+    const startLineIndex = Math.max(0, node.loc.start.line - 1);
+    const endLineIndex = Math.max(0, node.loc.end.line - 1);
+    if (startLineIndex === endLineIndex) {
+      const line = lines[startLineIndex] ?? '';
+      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
+    }
+    const parts: string[] = [];
+    const firstLine = lines[startLineIndex] ?? '';
+    parts.push(firstLine.slice(node.loc.start.column - 1));
+    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
+      parts.push(lines[index] ?? '');
+    }
+    const lastLine = lines[endLineIndex] ?? '';
+    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
+    return parts.join('\n');
+  }
+
+  private extractAssignedNameFromLine(line: string): string | null {
+    if (!line) {
+      return null;
+    }
+    const pattern = new RegExp(`(${IDENT.source})\\s*=\\s*input\\.`);
+    const match = line.match(pattern);
+    return match ? match[1] : null;
+  }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
   }
 
   // Helper methods
@@ -942,4 +1099,8 @@ export class InputFunctionsValidator implements ValidationModule {
   getInputCount(): number {
     return this.inputCount;
   }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }

@@ -7,6 +7,7 @@ import { createAstDiagnostics } from '../../core/ast/types';
 import type { ValidatorConfig } from '../../core/types';
 import {
   createArgument,
+  createAssignmentStatement,
   createBlock,
   createConditionalExpression,
   createFunctionDeclaration,
@@ -160,5 +161,44 @@ describe('TypeValidator AST integration', () => {
     const returnError = result.errors.find((error) => error.code === 'PSV6-FUNCTION-RETURN-TYPE');
     expect(returnError).toBeDefined();
     expect(returnError).toMatchObject({ line: 3, column: 1 });
+  });
+
+  it('emits PSV6-TYPE-INCONSISTENT when reassignments change primitive type', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Consistency")',
+      'var foo = 1',
+      'foo := "two"',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleLiteral = createStringLiteral('Consistency', '"Consistency"', 10, 2);
+    const titleArgument = createArgument(titleLiteral, 9, 32, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 33, 2);
+
+    const declarationIdentifier = createIdentifier('foo', 4, 3);
+    const initializer = createNumberLiteral(1, '1', 10, 3);
+    const declaration = createVariableDeclaration(declarationIdentifier, 0, 11, 3, {
+      declarationKind: 'var',
+      initializer,
+    });
+
+    const assignmentIdentifier = createIdentifier('foo', 0, 4);
+    const assignmentValue = createStringLiteral('two', '"two"', 7, 4);
+    const assignment = createAssignmentStatement(assignmentIdentifier, assignmentValue, 0, 12, 4);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, declaration, assignment]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new TypeValidatorHarness(service);
+    const result = validator.validate(source);
+
+    const inconsistent = result.warnings.find((warning) => warning.code === 'PSV6-TYPE-INCONSISTENT');
+    expect(inconsistent).toBeDefined();
+    expect(inconsistent).toMatchObject({ line: 4, column: 1 });
   });
 });

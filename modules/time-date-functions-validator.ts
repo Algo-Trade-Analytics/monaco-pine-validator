@@ -12,23 +12,60 @@
  * Phase 3.1: Enhancement Opportunity - Time/Date Functions
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
-import { NS_MEMBERS, BUILTIN_FUNCTIONS_V6_RULES } from '../core/constants';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+} from '../core/types';
+import {
+  type ArgumentNode,
+  type BinaryExpressionNode,
+  type CallExpressionNode,
+  type ExpressionNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type NumberLiteralNode,
+  type ProgramNode,
+  type StringLiteralNode,
+  type UnaryExpressionNode,
+} from '../core/ast/nodes';
+import { visit, type NodePath } from '../core/ast/traversal';
 
 interface TimeFunctionCall {
   functionName: string;
   line: number;
   column: number;
   arguments: string[];
+  inLoop?: boolean;
 }
 
-const TIME_DATE_FUNCTIONS = new Set([
-  'time_close', 'time_tradingday', 'timestamp', 'timenow',
-  'year', 'month', 'dayofmonth', 'dayofweek', 'hour', 'minute', 'second', 'weekofyear'
+const TIME_DATE_FUNCTIONS = new Set(['time_close', 'time_tradingday', 'timestamp', 'timenow']);
+
+const TIME_VARIABLE_NAMES = new Set([
+  'time',
+  'hour',
+  'minute',
+  'second',
+  'year',
+  'month',
+  'dayofmonth',
+  'dayofweek',
+  'weekofyear',
 ]);
 
-const SESSION_CONSTANTS = new Set([
-  'session.regular', 'session.extended'
+const VALID_SESSION_MEMBERS = new Set([
+  'session.regular',
+  'session.extended',
+  'session.isfirstbar',
+  'session.islastbar',
+  'session.isfirstbar_regular',
+  'session.islastbar_regular',
+  'session.ismarket',
+  'session.ispostmarket',
+  'session.ispremarket',
 ]);
 
 export class TimeDateFunctionsValidator implements ValidationModule {
@@ -40,6 +77,11 @@ export class TimeDateFunctionsValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private usingAst = false;
+  private hasTimezoneReference = false;
+  private timeComparisonEmissions: Set<string> = new Set();
+  private timeArithmeticEmissions: Set<string> = new Set();
 
   // Time function tracking
   private timeFunctionCalls: TimeFunctionCall[] = [];
@@ -54,10 +96,17 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
-    // Process each line for time/date function calls
-    context.cleanLines.forEach((line, index) => {
-      this.processLine(line, index + 1);
-    });
+    this.astContext = this.getAstContext(config);
+    this.usingAst = !!this.astContext?.ast;
+
+    if (this.usingAst && this.astContext?.ast) {
+      this.collectTimeDataFromAst(this.astContext.ast);
+    } else {
+      // Process each line for time/date function calls
+      context.cleanLines.forEach((line, index) => {
+        this.processLine(line, index + 1);
+      });
+    }
 
     // Perform post-validation checks
     this.validateTimePerformance();
@@ -77,8 +126,149 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.astContext = null;
+    this.usingAst = false;
+    this.hasTimezoneReference = false;
+    this.timeComparisonEmissions.clear();
+    this.timeArithmeticEmissions.clear();
     this.timeFunctionCalls = [];
     this.complexTimeExpressions = 0;
+  }
+
+  private collectTimeDataFromAst(program: ProgramNode): void {
+    const loopStack: Array<'for' | 'while'> = [];
+
+    visit(program, {
+      ForStatement: {
+        enter: () => {
+          loopStack.push('for');
+        },
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      WhileStatement: {
+        enter: () => {
+          loopStack.push('while');
+        },
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      CallExpression: {
+        enter: (path) => {
+          this.processAstCall(path as NodePath<CallExpressionNode>, loopStack.length > 0);
+        },
+      },
+      MemberExpression: {
+        enter: (path) => {
+          this.processAstMember(path as NodePath<MemberExpressionNode>);
+        },
+      },
+      BinaryExpression: {
+        enter: (path) => {
+          this.processAstBinary(path.node as BinaryExpressionNode);
+        },
+      },
+      StringLiteral: {
+        enter: (path) => {
+          this.processAstString(path.node as StringLiteralNode);
+        },
+      },
+    });
+  }
+
+  private processAstCall(path: NodePath<CallExpressionNode>, inLoop: boolean): void {
+    const node = path.node;
+    const qualifiedName = this.getExpressionQualifiedName(node.callee);
+    if (!qualifiedName || !TIME_DATE_FUNCTIONS.has(qualifiedName)) {
+      return;
+    }
+
+    const args = node.args.map((argument) => this.argumentToString(argument));
+    const line = node.loc.start.line;
+    const column = node.loc.start.column;
+
+    this.timeFunctionCalls.push({
+      functionName: qualifiedName,
+      arguments: args,
+      line,
+      column,
+      inLoop,
+    });
+
+    this.validateTimeFunction(qualifiedName, args, line, column);
+  }
+
+  private processAstMember(path: NodePath<MemberExpressionNode>): void {
+    const node = path.node;
+    if (node.computed) {
+      return;
+    }
+
+    const objectName = this.getExpressionQualifiedName(node.object);
+    if (!objectName) {
+      return;
+    }
+
+    const propertyName = node.property.name;
+    const qualifiedName = `${objectName}.${propertyName}`;
+    const line = node.loc.start.line;
+    const column = node.loc.start.column;
+
+    if (qualifiedName === 'syminfo.timezone') {
+      this.hasTimezoneReference = true;
+    }
+
+    if (objectName === 'timezone') {
+      this.addWarning(
+        line,
+        column,
+        `Identifier '${qualifiedName}' is not a valid Pine Script timezone constant. Provide an explicit string (e.g., "UTC") or use syminfo.timezone.`,
+        'PSV6-TIMEZONE-UNKNOWN',
+      );
+      return;
+    }
+
+    if (objectName === 'session' && !VALID_SESSION_MEMBERS.has(qualifiedName)) {
+      this.addWarning(
+        line,
+        column,
+        `Unknown session constant: ${qualifiedName}`,
+        'PSV6-SESSION-UNKNOWN',
+      );
+    }
+  }
+
+  private processAstBinary(node: BinaryExpressionNode): void {
+    const operator = node.operator;
+    if (operator === '==' || operator === '!=') {
+      const leftTime = this.getTimeVariableIdentifier(node.left);
+      const rightTime = this.getTimeVariableIdentifier(node.right);
+      if (leftTime && this.isNumericLiteral(node.right)) {
+        this.emitTimeComparison(node, leftTime, node.right);
+      } else if (rightTime && this.isNumericLiteral(node.left)) {
+        this.emitTimeComparison(node, rightTime, node.left);
+      }
+    }
+
+    if (operator === '+' || operator === '-') {
+      const timeIdentifier = this.getTimeVariableIdentifier(node.left) ?? this.getTimeVariableIdentifier(node.right);
+      if (timeIdentifier) {
+        this.emitTimeArithmetic(node, timeIdentifier);
+      }
+    }
+  }
+
+  private processAstString(node: StringLiteralNode): void {
+    const value = node.value ?? '';
+    if (!value) {
+      return;
+    }
+
+    if (/utc/i.test(value) || /^[A-Za-z_]+\/[A-Za-z_]+$/.test(value)) {
+      this.hasTimezoneReference = true;
+    }
   }
 
   private processLine(line: string, lineNumber: number): void {
@@ -329,16 +519,9 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     const sessionMatch = line.match(/session\.(\w+)/);
     if (sessionMatch) {
       const sessionConstant = `session.${sessionMatch[1]}`;
-      const validSessions = [
-        'session.regular', 'session.extended', 
-        'session.isfirstbar', 'session.islastbar',
-        'session.isfirstbar_regular', 'session.islastbar_regular',
-        'session.ismarket', 'session.ispostmarket', 'session.ispremarket'
-      ];
-      
-      if (!validSessions.includes(sessionConstant)) {
-        this.addWarning(lineNumber, 1, 
-          `Unknown session constant: ${sessionConstant}`, 
+      if (!VALID_SESSION_MEMBERS.has(sessionConstant)) {
+        this.addWarning(lineNumber, 1,
+          `Unknown session constant: ${sessionConstant}`,
           'PSV6-SESSION-UNKNOWN');
       }
     }
@@ -562,9 +745,11 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     }
 
     // Check for timezone awareness
-    const hasTimezone = this.context.cleanLines.some(line =>
-      line.includes('syminfo.timezone') || /['"]UTC['"]/i.test(line) || /['"][A-Za-z_]+\/[A-Za-z_]+['"]/i.test(line)
-    );
+    const hasTimezone = this.usingAst
+      ? this.hasTimezoneReference
+      : this.context.cleanLines.some(line =>
+          line.includes('syminfo.timezone') || /['"]UTC['"]/i.test(line) || /['"][A-Za-z_]+\/[A-Za-z_]+['"]/i.test(line)
+        );
     if ((hasTimeClose || hasTimeTradingday || hasTimestamp) && !hasTimezone) {
       this.addInfo(
         1,
@@ -578,6 +763,18 @@ export class TimeDateFunctionsValidator implements ValidationModule {
   private checkTimeFunctionsInLoops(): void {
     // Check if time functions are called inside loops (performance concern)
     for (const timeCall of this.timeFunctionCalls) {
+      if (this.usingAst) {
+        if (timeCall.inLoop) {
+          this.addWarning(
+            timeCall.line,
+            timeCall.column,
+            `Time function ${timeCall.functionName} inside loop may impact performance`,
+            'PSV6-TIME-PERF-LOOP'
+          );
+        }
+        continue;
+      }
+
       if (this.isInLoop(timeCall.line)) {
         this.addWarning(
           timeCall.line,
@@ -594,6 +791,66 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     for (let i = lineIndex - 1; i >= 0 && i >= lineIndex - 6; i--) {
       const ln = this.context.cleanLines[i - 1] || '';
       if (/^\s*(for|while)\b/.test(ln)) return true;
+    }
+    return false;
+  }
+
+  private emitTimeComparison(node: BinaryExpressionNode, identifier: string, compared: ExpressionNode): void {
+    const loc = node.loc?.start;
+    if (!loc) {
+      return;
+    }
+    const key = `${loc.line}:${loc.column}:compare:${identifier}`;
+    if (this.timeComparisonEmissions.has(key)) {
+      return;
+    }
+    this.timeComparisonEmissions.add(key);
+
+    const comparedText = this.getNodeSource(compared).trim() || 'value';
+    this.addWarning(
+      loc.line,
+      loc.column,
+      `Direct comparison of ${identifier} with ${comparedText} may be fragile. Consider using time ranges or functions.`,
+      'PSV6-TIME-DIRECT-COMPARE',
+    );
+  }
+
+  private emitTimeArithmetic(node: BinaryExpressionNode, identifier: string): void {
+    const loc = node.loc?.start;
+    if (!loc) {
+      return;
+    }
+    const key = `${loc.line}:${loc.column}:arith:${identifier}`;
+    if (this.timeArithmeticEmissions.has(key)) {
+      return;
+    }
+    this.timeArithmeticEmissions.add(key);
+
+    this.addInfo(
+      loc.line,
+      loc.column,
+      `Time arithmetic detected with ${identifier}. Ensure proper time unit handling.`,
+      'PSV6-TIME-ARITHMETIC-INFO',
+    );
+  }
+
+  private getTimeVariableIdentifier(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      const identifier = expression as IdentifierNode;
+      if (TIME_VARIABLE_NAMES.has(identifier.name)) {
+        return identifier.name;
+      }
+    }
+    return null;
+  }
+
+  private isNumericLiteral(expression: ExpressionNode): expression is NumberLiteralNode {
+    if (expression.kind === 'NumberLiteral') {
+      return true;
+    }
+    if (expression.kind === 'UnaryExpression') {
+      const unary = expression as UnaryExpressionNode;
+      return unary.argument?.kind === 'NumberLiteral';
     }
     return false;
   }
@@ -665,9 +922,58 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     return args;
   }
 
+  private argumentToString(argument: ArgumentNode): string {
+    const valueText = this.getNodeSource(argument.value).trim();
+    if (argument.name) {
+      return `${argument.name.name}=${valueText}`;
+    }
+    return valueText;
+  }
+
+  private getNodeSource(node: ExpressionNode | ArgumentNode): string {
+    const lines = this.context.lines ?? [];
+    if (!node.loc) {
+      return '';
+    }
+    const startLineIndex = Math.max(0, node.loc.start.line - 1);
+    const endLineIndex = Math.max(0, node.loc.end.line - 1);
+    if (startLineIndex === endLineIndex) {
+      const line = lines[startLineIndex] ?? '';
+      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
+    }
+
+    const parts: string[] = [];
+    const firstLine = lines[startLineIndex] ?? '';
+    parts.push(firstLine.slice(node.loc.start.column - 1));
+    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
+      parts.push(lines[index] ?? '');
+    }
+    const lastLine = lines[endLineIndex] ?? '';
+    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
+    return parts.join('\n');
+  }
+
+  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+      const objectName = this.getExpressionQualifiedName(member.object);
+      if (!objectName) {
+        return null;
+      }
+      return `${objectName}.${member.property.name}`;
+    }
+    return null;
+  }
+
   private isStringLiteral(value: string): boolean {
     const trimmed = value.trim();
-    return (trimmed.startsWith('"') && trimmed.endsWith('"')) || 
+    return (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
            (trimmed.startsWith("'") && trimmed.endsWith("'"));
   }
 
@@ -705,4 +1011,15 @@ export class TimeDateFunctionsValidator implements ValidationModule {
       severity: 'info'
     });
   }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+  }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }

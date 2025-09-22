@@ -6,6 +6,7 @@ import {
   type BooleanLiteralNode,
   type CallExpressionNode,
   type ConditionalExpressionNode,
+  type BreakStatementNode,
   type ExpressionNode,
   type ExpressionStatementNode,
   type ForStatementNode,
@@ -148,6 +149,13 @@ export function createReturn(argument: ExpressionNode | null, start: number, end
   return {
     kind: 'ReturnStatement',
     argument,
+    ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
+export function createBreakStatement(start: number, end: number, line = 1): BreakStatementNode {
+  return {
+    kind: 'BreakStatement',
     ...createSpan({ start, end, lineStart: line }),
   };
 }

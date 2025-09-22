@@ -3,7 +3,24 @@
  * Handles validation of text formatting functions, format strings, and performance analysis
  */
 
-import { ValidationModule, ValidationContext, ValidationError, ValidationResult, ValidatorConfig } from '../core/types';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidationError,
+  type ValidationResult,
+  type ValidatorConfig,
+} from '../core/types';
+import {
+  type ArgumentNode,
+  type CallExpressionNode,
+  type ExpressionNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type ProgramNode,
+  type StringLiteralNode,
+} from '../core/ast/nodes';
+import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
 
 export class TextFormattingValidator implements ValidationModule {
   name = 'TextFormattingValidator';
@@ -13,6 +30,15 @@ export class TextFormattingValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+
+  private formatCalls: Array<{
+    line: number;
+    column: number;
+    placeholderCount: number;
+    parameterCount: number;
+    loopLine: number | null;
+  }> = [];
 
   getDependencies(): string[] {
     return ['SyntaxValidator', 'FunctionValidator'];
@@ -22,8 +48,14 @@ export class TextFormattingValidator implements ValidationModule {
     this.reset();
     this.context = context;
     this.config = config;
+    this.astContext = this.getAstContext(config);
 
-    this.validateTextFormattingFunctions();
+    if (this.astContext?.ast) {
+      this.validateTextFormattingAst(this.astContext.ast);
+    } else {
+      this.validateTextFormattingFunctionsLegacy();
+    }
+
     this.validateTextFormattingPerformance();
 
     return {
@@ -40,6 +72,8 @@ export class TextFormattingValidator implements ValidationModule {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.astContext = null;
+    this.formatCalls = [];
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
@@ -72,7 +106,7 @@ export class TextFormattingValidator implements ValidationModule {
     });
   }
 
-  private validateTextFormattingFunctions(): void {
+  private validateTextFormattingFunctionsLegacy(): void {
     for (let i = 0; i < this.context.cleanLines.length; i++) {
       const line = this.context.cleanLines[i];
       const lineNum = i + 1;
@@ -90,29 +124,30 @@ export class TextFormattingValidator implements ValidationModule {
     }
   }
 
-  private validateFormatString(formatString: string, parameters: string, lineNum: number): void {
+  private validateFormatString(formatString: string, parameters: string | string[], lineNum: number): void {
     // Validate format string syntax first
     this.validateFormatStringSyntax(formatString, lineNum);
-    
+
     // Extract format placeholders: {0}, {1}, etc.
     const placeholderRegex = /\{(\d+)(?:,([^}]+))?\}/g;
     const placeholders: Array<{ index: number; format?: string }> = [];
     let match;
-    
+
     while ((match = placeholderRegex.exec(formatString)) !== null) {
       const index = parseInt(match[1]);
       const format = match[2];
       placeholders.push({ index, format });
     }
-    
+
     // Count parameters
-    const paramCount = this.countParameters(parameters);
-    
+    const parameterList = Array.isArray(parameters) ? parameters : this.parseParameterList(parameters);
+    const paramCount = parameterList.length;
+
     // Validate parameter count match
     this.validateParameterCount(placeholders, paramCount, lineNum);
-    
+
     // Validate format types
-    this.validateFormatTypes(placeholders, parameters, lineNum);
+    this.validateFormatTypes(placeholders, parameterList, lineNum);
   }
 
   private validateFormatStringSyntax(formatString: string, lineNum: number): void {
@@ -147,9 +182,13 @@ export class TextFormattingValidator implements ValidationModule {
     }
   }
 
-  private validateFormatTypes(placeholders: Array<{ index: number; format?: string }>, parameters: string, lineNum: number): void {
-    const paramList = this.parseParameterList(parameters);
-    
+  private validateFormatTypes(
+    placeholders: Array<{ index: number; format?: string }>,
+    parameters: string[] | string,
+    lineNum: number,
+  ): void {
+    const paramList = Array.isArray(parameters) ? parameters : this.parseParameterList(parameters);
+
     for (const placeholder of placeholders) {
       if (placeholder.format) {
         const paramIndex = placeholder.index;
@@ -259,17 +298,20 @@ export class TextFormattingValidator implements ValidationModule {
   }
 
   private validateTextFormattingPerformance(): void {
-    // Check for text formatting in loops
-    this.validateTextFormattingInLoops();
-    
-    // Check for complex text formatting
-    this.validateComplexTextFormatting();
+    if (this.astContext?.ast) {
+      this.validateTextFormattingInLoopsAst();
+      this.validateComplexTextFormattingAst();
+      return;
+    }
+
+    this.validateTextFormattingInLoopsLegacy();
+    this.validateComplexTextFormattingLegacy();
   }
 
-  private validateTextFormattingInLoops(): void {
+  private validateTextFormattingInLoopsLegacy(): void {
     let inLoop = false;
     let loopStartLine = 0;
-    
+
     for (let i = 0; i < this.context.cleanLines.length; i++) {
       const line = this.context.cleanLines[i];
       const lineNum = i + 1;
@@ -286,17 +328,17 @@ export class TextFormattingValidator implements ValidationModule {
         inLoop = false;
         continue;
       }
-      
+
       // If we're in a loop, check for text formatting
       if (inLoop && line.includes('str.format')) {
-        this.addWarning(lineNum, 1, 
-          `Text formatting in loop (line ${loopStartLine}). Consider caching formatted text outside the loop for better performance`, 
+        this.addWarning(lineNum, 1,
+          `Text formatting in loop (line ${loopStartLine}). Consider caching formatted text outside the loop for better performance`,
           'PSV6-TEXT-PERF-LOOP');
       }
     }
   }
 
-  private validateComplexTextFormatting(): void {
+  private validateComplexTextFormattingLegacy(): void {
     for (let i = 0; i < this.context.cleanLines.length; i++) {
       const line = this.context.cleanLines[i];
       const lineNum = i + 1;
@@ -312,17 +354,20 @@ export class TextFormattingValidator implements ValidationModule {
         // Check for complex formatting
         const placeholderCount = (formatString.match(/\{\d+/g) || []).length;
         const paramCount = this.countParameters(parameters);
-        
+
         if (placeholderCount >= 3 || paramCount >= 3) {
-          this.addWarning(lineNum, 1, 
-            `Complex text formatting with ${placeholderCount} placeholders and ${paramCount} parameters. Consider breaking into simpler expressions`, 
+          this.addWarning(lineNum, 1,
+            `Complex text formatting with ${placeholderCount} placeholders and ${paramCount} parameters. Consider breaking into simpler expressions`,
             'PSV6-TEXT-PERF-COMPLEX');
         }
       }
     }
   }
 
-  private countParameters(parameters: string): number {
+  private countParameters(parameters: string | string[]): number {
+    if (Array.isArray(parameters)) {
+      return parameters.length;
+    }
     return this.parseParameterList(parameters).length;
   }
 
@@ -419,10 +464,137 @@ export class TextFormattingValidator implements ValidationModule {
     // Check for time-related variables
     const timeVariables = ['time'];
     if (timeVariables.includes(parameter)) return true;
-    
+
     // Check for time functions
     if (parameter.includes('time(') || parameter.includes('timestamp(')) return true;
-    
+
     return false;
+  }
+
+  private validateTextFormattingAst(program: ProgramNode): void {
+    visit(program, {
+      CallExpression: {
+        enter: (path) => this.processAstFormatCall(path as NodePath<CallExpressionNode>),
+      },
+    });
+  }
+
+  private processAstFormatCall(path: NodePath<CallExpressionNode>): void {
+    const call = path.node;
+    const qualifiedName = this.getExpressionQualifiedName(call.callee);
+    if (qualifiedName !== 'str.format') {
+      return;
+    }
+
+    const [formatArgument, ...rest] = call.args;
+    if (!formatArgument) {
+      return;
+    }
+
+    const { line, column } = call.loc.start;
+    const parameterStrings = rest.map((argument) => this.argumentToString(argument));
+
+    let formatString: string | null = null;
+    if (formatArgument.value.kind === 'StringLiteral') {
+      formatString = (formatArgument.value as StringLiteralNode).value;
+    }
+
+    if (formatString !== null) {
+      this.validateFormatString(formatString, parameterStrings, line);
+    }
+
+    const loopAncestor = findAncestor(path, (ancestor) =>
+      ancestor.node.kind === 'ForStatement' || ancestor.node.kind === 'WhileStatement');
+
+    const placeholderCount = formatString ? (formatString.match(/\{\d+/g) || []).length : 0;
+
+    this.formatCalls.push({
+      line,
+      column,
+      placeholderCount,
+      parameterCount: parameterStrings.length,
+      loopLine: loopAncestor?.node.loc.start.line ?? null,
+    });
+  }
+
+  private validateTextFormattingInLoopsAst(): void {
+    for (const call of this.formatCalls) {
+      if (call.loopLine === null) {
+        continue;
+      }
+
+      this.addWarning(call.line, call.column,
+        `Text formatting in loop (line ${call.loopLine}). Consider caching formatted text outside the loop for better performance`,
+        'PSV6-TEXT-PERF-LOOP');
+    }
+  }
+
+  private validateComplexTextFormattingAst(): void {
+    for (const call of this.formatCalls) {
+      if (call.placeholderCount >= 3 || call.parameterCount >= 3) {
+        this.addWarning(call.line, call.column,
+          `Complex text formatting with ${call.placeholderCount} placeholders and ${call.parameterCount} parameters. Consider breaking into simpler expressions`,
+          'PSV6-TEXT-PERF-COMPLEX');
+      }
+    }
+  }
+
+  private argumentToString(argument: ArgumentNode): string {
+    const valueText = this.getNodeSource(argument.value).trim();
+    if (argument.name) {
+      return `${argument.name.name}=${valueText}`;
+    }
+    return valueText;
+  }
+
+  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
+    const lines = this.context.lines ?? [];
+    if (!node.loc) {
+      return '';
+    }
+    const startLineIndex = Math.max(0, node.loc.start.line - 1);
+    const endLineIndex = Math.max(0, node.loc.end.line - 1);
+    if (startLineIndex === endLineIndex) {
+      const line = lines[startLineIndex] ?? '';
+      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
+    }
+    const parts: string[] = [];
+    const firstLine = lines[startLineIndex] ?? '';
+    parts.push(firstLine.slice(node.loc.start.column - 1));
+    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
+      parts.push(lines[index] ?? '');
+    }
+    const lastLine = lines[endLineIndex] ?? '';
+    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
+    return parts.join('\n');
+  }
+
+  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+      const objectName = this.getExpressionQualifiedName(member.object);
+      if (!objectName) {
+        return null;
+      }
+      return `${objectName}.${member.property.name}`;
+    }
+    return null;
+  }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    if (!('ast' in this.context)) {
+      return null;
+    }
+    const astContext = this.context as AstValidationContext;
+    return astContext.ast ? astContext : null;
   }
 }
