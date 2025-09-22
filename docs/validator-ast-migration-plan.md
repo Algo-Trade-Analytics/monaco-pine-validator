@@ -36,6 +36,22 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - A Monaco worker harness now exercises the AST-backed validator in a simulated worker environment, translating semantic output and syntax errors into Monaco-compatible markers for upcoming editor integration work.
 - Core validator AST analysis now inspects conditional tests, call arguments, and binary expressions to enforce v6 boolean guardrails, linewidth minimums, and `na` comparison warnings without relying on regex fallbacks.
 - Core validator AST analysis now inspects `for` loop tests and ternary conditional expressions so v6 boolean guardrails trigger consistently across structured control flow and expressions.
+- Core validator AST analysis now detects assignments inside conditional tests and surfaces expensive loop calls, replacing the PSO02 and PSP001 regex heuristics with structured traversal.
+- Core validator AST analysis now consumes variable declarations and assignments to surface PSD01/PSD02/PS019 diagnostics without the legacy regex fallbacks.
+- Core validator AST analysis now detects `:=` and compound assignments to undeclared identifiers so PS016/PS017 diagnostics originate from structured traversal rather than text scanning.
+- Core validator AST analysis now tracks identifier usage and input placement so PSU01, PSU-PARAM, and PS027 diagnostics no longer rely on line-based token scanning.
+- Core validator AST analysis now counts per-line history references so PSP002 performance warnings no longer rely on regex heuristics.
+- Core validator AST analysis now registers type declarations and their fields so user-defined type metadata no longer depends on regex-driven scans.
+- Function declarations validator now consumes AST function declarations to register metadata, duplicate parameter diagnostics, and static declaration errors without relying on regex scanning.
+- Core validator AST analysis now inspects tuple destructuring patterns to raise PST01/PST02/PST03 diagnostics without regex fallbacks.
+- Core validator AST analysis now warns when local declarations shadow function parameters, removing the textual scope heuristic for PSW05.
+- Scope validator now leverages AST symbol metadata to surface PSW03/PSW04 duplicate and shadowed declaration diagnostics without relying on indentation heuristics.
+- Scope validator now analyses AST identifier references to emit PSU02 warnings without legacy text scanning heuristics.
+- Scope validator now inspects AST declaration names to emit PS006/PS007 identifier errors without the legacy line scanner.
+- Type validator now consumes AST type annotations, ternaries, and function return statements to raise PSV6-TYPE-MISMATCH, PSV6-TERNARY-TYPE, and PSV6-FUNCTION-RETURN-TYPE diagnostics without regex fallbacks.
+- Dynamic loop validator now uses AST for-loop metadata to surface PSV6-FOR-DYNAMIC and PSV6-FOR-MODIFY warnings, leaving the regex scanner as a fallback only when structured analysis is unavailable.
+- Alert functions validator now inspects AST call expressions to validate alert frequencies, empty messages, and control-flow placement without relying on regex scanning while retaining the legacy path as a fallback.
+- Strategy functions validator now analyses AST call expressions to validate known members, parameter usage, loop placement, and nested strategy references without relying on regex scanning.
 
 ### Near-Term TODOs
 
@@ -171,16 +187,19 @@ Suggested migration order:
 | Module | Legacy Complexity | AST Migration Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
 | core-validator | High | 🔄 Ready for AST port | Validator Infra | AST context + diagnostics helpers landed; waiting on dual-run guardrail before switchover |
-| function-declarations | High | 🔄 Ready for AST port | Validator Infra | Function + call nodes modelled; scope builder resolves function symbols |
-| type-validator | High | 🚧 Planning | Semantic Working Group | Literal/type environment skeleton merged; expand inference before parity run |
-| scope-validator | High | 🚧 Planning | Semantic Working Group | Scope graph + symbol tables available; need module-level dual-run harness |
-| switch-validator | Medium | 🛠️ Blocked on node coverage | Language Infra | Extend AST to cover `switch` branches prior to migration |
+| function-declarations | High | ✅ Migrated | Validator Infra | Function metadata, duplicate params, and static method errors sourced from AST traversal |
+| type-validator | High | 🔄 Migrating | Semantic Working Group | AST path now surfaces key PSV6 type diagnostics; continue expanding coverage before parity run |
+| scope-validator | High | 🔄 Migrating | Semantic Working Group | AST metadata now drives PSW03/PSW04 and PSU02 diagnostics; continue porting remaining scope checks |
+| switch-validator | Medium | ✅ Migrated | Language Infra | Switch diagnostics now sourced from AST cases and discriminants; legacy regex path retained as fallback |
+| alert-functions-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal validates alert calls and frequency usage while legacy scanning remains as fallback |
 | while-loop-validator | Medium | 🛠️ Blocked on node coverage | Language Infra | Loop constructs present; finalise control-flow metadata before port |
 | builtin-variables-validator | Medium | ✅ Migrated | Module Owners Guild | Validator now reads AST member expressions for constants, having removed the legacy line-scanner path |
 | ta-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Awaiting expanded call-site inference for strategy/TA helpers |
 | strategy-functions-validator | Medium | 🚧 Planning | Module Owners Guild | Needs richer series/type propagation to avoid regressions |
 | history-referencing-validator | High | ✅ Migrated | Module Owners Guild | Index expression traversal now powers negative index, loop, and varip diagnostics without regex scanning |
 | ... | ... | ... | ... | Extend table as modules migrate |
+
+- ✅ Switch validator now emits PSV6 switch diagnostics from AST traversal, keeping the regex-based scanner only as a fallback for non-AST runs.
 
 ## 10. Immediate Next Steps (Post-Review)
 

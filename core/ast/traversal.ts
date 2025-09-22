@@ -18,9 +18,12 @@ import {
   type ProgramNode,
   type ReturnStatementNode,
   type ScriptDeclarationNode,
+  type TypeDeclarationNode,
+  type TypeFieldNode,
   type SwitchCaseNode,
   type SwitchStatementNode,
   type TypeReferenceNode,
+  type TupleExpressionNode,
   type UnaryExpressionNode,
   type VariableDeclarationNode,
   type WhileStatementNode,
@@ -177,6 +180,27 @@ function collectChildren(path: NodePath): ChildEntry[] {
       const assignment = node as AssignmentStatementNode;
       push(assignment.left, 'left');
       push(assignment.right, 'right');
+      break;
+    }
+    case 'TupleExpression': {
+      const tuple = node as TupleExpressionNode;
+      tuple.elements.forEach((element, elementIndex) => {
+        push(element, 'elements', elementIndex);
+      });
+      break;
+    }
+    case 'TypeDeclaration': {
+      const typeDeclaration = node as TypeDeclarationNode;
+      push(typeDeclaration.identifier, 'identifier');
+      typeDeclaration.fields.forEach((field, fieldIndex) => {
+        push(field, 'fields', fieldIndex);
+      });
+      break;
+    }
+    case 'TypeField': {
+      const field = node as TypeFieldNode;
+      push(field.identifier, 'identifier');
+      push(field.typeAnnotation, 'typeAnnotation');
       break;
     }
     case 'FunctionDeclaration': {

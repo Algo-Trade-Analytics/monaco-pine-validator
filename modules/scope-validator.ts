@@ -5,11 +5,23 @@
  * Extracts scope management logic from EnhancedPineScriptValidator.
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult, ScopeInfo } from '../core/types';
-import { 
+import {
+  ValidationModule,
+  ValidationContext,
+  ValidatorConfig,
+  ValidationError,
+  ValidationResult,
+  ScopeInfo,
+  AstValidationContext,
+  SymbolKind,
+  SymbolRecord,
+} from '../core/types';
+import {
   IDENT, KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT,
   QUALIFIED_FN_RE, METHOD_DECL_RE, VAR_DECL_RE, SIMPLE_ASSIGN_RE
 } from '../core/constants';
+import type { IdentifierNode, ProgramNode } from '../core/ast/nodes';
+import { visit, type NodePath } from '../core/ast/traversal';
 
 export class ScopeValidator implements ValidationModule {
   name = 'ScopeValidator';
@@ -23,6 +35,7 @@ export class ScopeValidator implements ValidationModule {
   // Context and config
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
 
   // Scope tracking
   private scopeStack: ScopeInfo[] = [];
@@ -38,6 +51,11 @@ export class ScopeValidator implements ValidationModule {
   private switchStack: Array<{ indent: number; caseCounter: number; currentKey: string | null }> = [];
   private currentCaseKey: string | null = null;
   private caseVariables = new Map<string, Set<string>>();
+  private astDuplicateWarningSites = new Set<string>();
+  private astShadowWarningSites = new Set<string>();
+  private astUndefinedWarningSites = new Set<string>();
+  private astInvalidIdentifierErrorSites = new Set<string>();
+  private astKeywordErrorSites = new Set<string>();
 
   getDependencies(): string[] {
     return ['CoreValidator']; // Depends on core validation
@@ -47,11 +65,16 @@ export class ScopeValidator implements ValidationModule {
     this.reset();
     this.context = context;
     this.config = config;
+    this.astContext = this.isAstContext(context) && context.ast ? context : null;
 
     if (context.functionParams) {
       for (const [fn, params] of context.functionParams.entries()) {
         this.functionParams.set(fn, params);
       }
+    }
+
+    if (this.astContext) {
+      this.validateWithAst(this.astContext);
     }
 
     // Run scope validation checks
@@ -87,6 +110,12 @@ export class ScopeValidator implements ValidationModule {
     this.switchStack = [];
     this.currentCaseKey = null;
     this.caseVariables.clear();
+    this.astContext = null;
+    this.astDuplicateWarningSites.clear();
+    this.astShadowWarningSites.clear();
+    this.astUndefinedWarningSites.clear();
+    this.astInvalidIdentifierErrorSites.clear();
+    this.astKeywordErrorSites.clear();
   }
 
   private validateVariableDeclarations(): void {
@@ -414,7 +443,10 @@ export class ScopeValidator implements ValidationModule {
           if (name === otherName && line !== otherLine) {
             const otherIndent = this.declIndent.get(otherName);
             if (otherIndent !== undefined && otherIndent < currentIndent) {
-              this.addWarning(line, 1, `Variable '${name}' shadows an outer declaration.`, 'PSW04');
+              const siteKey = `${line}:${name}`;
+              if (!this.astShadowWarningSites.has(siteKey)) {
+                this.addWarning(line, 1, `Variable '${name}' shadows an outer declaration.`, 'PSW04');
+              }
             }
           }
         }
@@ -477,9 +509,16 @@ export class ScopeValidator implements ValidationModule {
   }
 
   private handleNewVariable(name: string, line: number, col: number): void {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) { 
-      this.addError(line, col, `Invalid identifier '${name}'.`, 'PS006'); 
-      return; 
+    if (this.astContext) {
+      const siteKey = `${line}:${col}:${name}`;
+      if (this.astInvalidIdentifierErrorSites.has(siteKey) || this.astKeywordErrorSites.has(siteKey)) {
+        return;
+      }
+    }
+
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      this.addError(line, col, `Invalid identifier '${name}'.`, 'PS006');
+      return;
     }
     if (KEYWORDS.has(name) || PSEUDO_VARS.has(name)) {
       this.addError(line, col, `Identifier '${name}' conflicts with a Pine keyword/builtin.`, 'PS007');
@@ -501,11 +540,15 @@ export class ScopeValidator implements ValidationModule {
     const prevBlockKey = this.declBlockKey.get(name);
     if (prevBlockKey !== undefined) {
       if (prevBlockKey === currentBlockKey) {
-        this.addWarning(line, col, `Identifier '${name}' already declared in this block; use ':=' to reassign.`, 'PSW03');
+        if (!this.astDuplicateWarningSites.has(siteKey)) {
+          this.addWarning(line, col, `Identifier '${name}' already declared in this block; use ':=' to reassign.`, 'PSW03');
+        }
         return;
       }
       if (prevIndent !== undefined && prevIndent < currentIndent) {
-        this.addWarning(line, col, `Identifier '${name}' shadows an outer declaration.`, 'PSW04');
+        if (!this.astShadowWarningSites.has(siteKey)) {
+          this.addWarning(line, col, `Identifier '${name}' shadows an outer declaration.`, 'PSW04');
+        }
       }
     }
 
@@ -675,6 +718,348 @@ export class ScopeValidator implements ValidationModule {
 
   private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
     this.info.push({ line, column, message, severity: 'info', code, suggestion });
+  }
+
+  private isAstContext(context: ValidationContext): context is AstValidationContext {
+    return 'ast' in context;
+  }
+
+  private validateWithAst(context: AstValidationContext): void {
+    if (!context.ast) {
+      return;
+    }
+
+    const identifierPaths = this.collectAstIdentifierPaths(context.ast);
+
+    this.emitAstDuplicateDeclarationWarnings(context);
+    this.emitAstShadowingWarnings(context);
+    this.emitAstUndefinedReferenceWarnings(context, identifierPaths);
+    this.emitAstIdentifierDeclarationErrors(context);
+  }
+
+  private collectAstIdentifierPaths(program: ProgramNode): Map<IdentifierNode, NodePath<IdentifierNode>> {
+    const paths = new Map<IdentifierNode, NodePath<IdentifierNode>>();
+
+    visit(program, {
+      Identifier: {
+        enter: (path) => {
+          paths.set(path.node, path as NodePath<IdentifierNode>);
+        },
+      },
+    });
+
+    return paths;
+  }
+
+  private emitAstDuplicateDeclarationWarnings(context: AstValidationContext): void {
+    for (const record of context.symbolTable.values()) {
+      const entries = this.extractAstDeclarationEntries(record);
+      if (!entries.length) {
+        continue;
+      }
+
+      const byScope = new Map<string, typeof entries>();
+      for (const entry of entries) {
+        if (!entry.scopeId) {
+          continue;
+        }
+        if (!byScope.has(entry.scopeId)) {
+          byScope.set(entry.scopeId, []);
+        }
+        byScope.get(entry.scopeId)!.push(entry);
+      }
+
+      for (const declarations of byScope.values()) {
+        if (declarations.length <= 1) {
+          continue;
+        }
+        const sorted = [...declarations].sort((a, b) => {
+          if (a.location.line === b.location.line) {
+            return a.location.column - b.location.column;
+          }
+          return a.location.line - b.location.line;
+        });
+        for (let i = 1; i < sorted.length; i++) {
+          const duplicate = sorted[i];
+          const siteKey = `${duplicate.location.line}:${record.name}`;
+          if (this.astDuplicateWarningSites.has(siteKey)) {
+            continue;
+          }
+          this.astDuplicateWarningSites.add(siteKey);
+          this.addWarning(
+            duplicate.location.line,
+            duplicate.location.column,
+            `Identifier '${record.name}' already declared in this block; use ':=' to reassign.`,
+            'PSW03',
+          );
+        }
+      }
+    }
+  }
+
+  private shouldCheckAstIdentifierName(kind: SymbolKind): boolean {
+    return kind === 'variable' || kind === 'unknown';
+  }
+
+  private isValidIdentifierName(name: string): boolean {
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name);
+  }
+
+  private isKeywordCompatibleIdentifier(name: string): boolean {
+    if (!name) {
+      return true;
+    }
+
+    if (KEYWORDS.has(name) || PSEUDO_VARS.has(name)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private emitAstShadowingWarnings(context: AstValidationContext): void {
+    for (const record of context.symbolTable.values()) {
+      const entries = this.extractAstDeclarationEntries(record);
+      if (entries.length <= 1) {
+        continue;
+      }
+
+      for (const entry of entries) {
+        if (!entry.scopeId) {
+          continue;
+        }
+
+        const shadowKey = `${entry.location.line}:${record.name}`;
+        if (this.astShadowWarningSites.has(shadowKey)) {
+          continue;
+        }
+
+        let parentId = context.scopeGraph.nodes.get(entry.scopeId)?.parent ?? null;
+        while (parentId) {
+          const ancestor = entries.find((candidate) => candidate.scopeId === parentId);
+          if (ancestor) {
+            this.astShadowWarningSites.add(shadowKey);
+            this.addWarning(
+              entry.location.line,
+              entry.location.column,
+              `Identifier '${record.name}' shadows an outer declaration.`,
+              'PSW04',
+            );
+            break;
+          }
+          parentId = context.scopeGraph.nodes.get(parentId)?.parent ?? null;
+        }
+      }
+    }
+  }
+
+  private extractAstDeclarationEntries(record: SymbolRecord): Array<{
+    scopeId: string | null;
+    location: { line: number; column: number };
+    kind: SymbolKind;
+  }> {
+    const metadata = record.metadata ?? {};
+    const scopes = (metadata.declarationScopes as string[] | undefined) ?? [];
+    const kinds = (metadata.declarationKinds as SymbolKind[] | undefined) ?? [];
+    const entries: Array<{ scopeId: string | null; location: { line: number; column: number }; kind: SymbolKind }> = [];
+
+    record.declarations.forEach((location, index) => {
+      const scopeId = scopes[index] ?? null;
+      const kind = kinds[index] ?? record.kind;
+      if (!this.shouldCheckAstDeclarationKind(kind)) {
+        return;
+      }
+      entries.push({
+        scopeId,
+        location: { line: location.line, column: location.column },
+        kind,
+      });
+    });
+
+    return entries;
+  }
+
+  private shouldCheckAstDeclarationKind(kind: SymbolKind): boolean {
+    return kind === 'variable' || kind === 'unknown' || kind === 'type';
+  }
+
+  private emitAstUndefinedReferenceWarnings(
+    context: AstValidationContext,
+    identifierPaths: Map<IdentifierNode, NodePath<IdentifierNode>>,
+  ): void {
+    const ignoredNames = this.createAstIgnoredNameSet(context);
+
+    const declaredNames = new Set<string>();
+    for (const record of context.symbolTable.values()) {
+      if (!record.declarations.length) {
+        continue;
+      }
+
+      const metadataKinds = (record.metadata?.declarationKinds as SymbolKind[] | undefined) ?? [];
+      if (metadataKinds.length === 0) {
+        declaredNames.add(record.name);
+        continue;
+      }
+
+      if (metadataKinds.some((kind) => this.shouldCheckAstDeclarationKind(kind) || kind === 'parameter')) {
+        declaredNames.add(record.name);
+      }
+    }
+
+    for (const record of context.symbolTable.values()) {
+      if (declaredNames.has(record.name)) {
+        continue;
+      }
+
+      if (this.shouldIgnoreAstUndefinedName(record.name, ignoredNames)) {
+        continue;
+      }
+
+      for (const reference of record.references) {
+        const node = reference.node;
+        if (!node || node.kind !== 'Identifier') {
+          continue;
+        }
+
+        if (!this.shouldEmitAstUndefinedForNode(node as IdentifierNode, identifierPaths)) {
+          continue;
+        }
+
+        const siteKey = `${reference.line}:${reference.column}:${record.name}`;
+        if (this.astUndefinedWarningSites.has(siteKey)) {
+          continue;
+        }
+        this.astUndefinedWarningSites.add(siteKey);
+
+        this.addWarning(
+          reference.line,
+          reference.column,
+          `Potential undefined reference '${record.name}'.`,
+          'PSU02',
+        );
+      }
+    }
+  }
+
+  private emitAstIdentifierDeclarationErrors(context: AstValidationContext): void {
+    for (const record of context.symbolTable.values()) {
+      const entries = this.extractAstDeclarationEntries(record);
+      if (!entries.length) {
+        continue;
+      }
+
+      for (const entry of entries) {
+        if (!this.shouldCheckAstIdentifierName(entry.kind)) {
+          continue;
+        }
+
+        const siteKey = `${entry.location.line}:${entry.location.column}:${record.name}`;
+
+        if (!this.isValidIdentifierName(record.name)) {
+          if (this.astInvalidIdentifierErrorSites.has(siteKey)) {
+            continue;
+          }
+          this.astInvalidIdentifierErrorSites.add(siteKey);
+          this.addError(
+            entry.location.line,
+            entry.location.column,
+            `Invalid identifier '${record.name}'.`,
+            'PS006',
+          );
+          continue;
+        }
+
+        if (!this.isKeywordCompatibleIdentifier(record.name)) {
+          if (this.astKeywordErrorSites.has(siteKey)) {
+            continue;
+          }
+          this.astKeywordErrorSites.add(siteKey);
+          this.addError(
+            entry.location.line,
+            entry.location.column,
+            `Identifier '${record.name}' conflicts with a Pine keyword/builtin.`,
+            'PS007',
+          );
+        }
+      }
+    }
+  }
+
+  private createAstIgnoredNameSet(context: AstValidationContext): Set<string> {
+    const ignored = new Set<string>();
+
+    for (const name of KEYWORDS) ignored.add(name);
+    for (const name of PSEUDO_VARS) ignored.add(name);
+    for (const name of NAMESPACES) ignored.add(name);
+    for (const name of WILDCARD_IDENT) ignored.add(name);
+
+    context.functionNames.forEach((name) => ignored.add(name));
+    context.methodNames.forEach((name) => ignored.add(name));
+    context.usedVars.forEach((name) => ignored.add(name));
+    context.declaredVars.forEach((_line, declaredName) => ignored.add(declaredName));
+
+    for (const params of context.functionParams.values()) {
+      for (const rawParam of params) {
+        const cleaned = rawParam.trim().replace(/<[^>]*>/g, '');
+        const fragments = cleaned.split(/\s+/);
+        const identifier = fragments[fragments.length - 1];
+        if (identifier) {
+          ignored.add(identifier);
+        }
+      }
+    }
+
+    ignored.add('this');
+
+    return ignored;
+  }
+
+  private shouldIgnoreAstUndefinedName(name: string, ignoredNames: Set<string>): boolean {
+    if (!name || ignoredNames.has(name)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private shouldEmitAstUndefinedForNode(
+    node: IdentifierNode,
+    identifierPaths: Map<IdentifierNode, NodePath<IdentifierNode>>,
+  ): boolean {
+    const path = identifierPaths.get(node);
+    if (!path) {
+      return false;
+    }
+
+    const parent = path.parent;
+    if (!parent) {
+      return false;
+    }
+
+    const key = path.key;
+    switch (parent.node.kind) {
+      case 'VariableDeclaration':
+      case 'TypeDeclaration':
+      case 'TypeField':
+      case 'FunctionDeclaration':
+      case 'Parameter':
+      case 'ScriptDeclaration':
+        return key !== 'identifier';
+      case 'AssignmentStatement':
+        return key !== 'left';
+      case 'CallExpression':
+        return key !== 'callee';
+      case 'MemberExpression':
+        return key !== 'property';
+      case 'Argument':
+        return key !== 'name';
+      case 'TypeReference':
+        return false;
+      default:
+        break;
+    }
+
+    return true;
   }
 
   private isMethodParameter(varName: string, lineNum: number): boolean {

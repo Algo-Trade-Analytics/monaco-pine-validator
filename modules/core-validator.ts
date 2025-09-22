@@ -22,21 +22,29 @@ import {
 } from '../core/constants';
 import type {
   ArgumentNode,
+  AssignmentStatementNode,
   BinaryExpressionNode,
+  BlockStatementNode,
   CallExpressionNode,
   ConditionalExpressionNode,
   ExpressionNode,
+  ForStatementNode,
+  FunctionDeclarationNode,
   IdentifierNode,
   IfStatementNode,
   IndexExpressionNode,
   MemberExpressionNode,
   NumberLiteralNode,
+  ParameterNode,
   ProgramNode,
   ScriptDeclarationNode,
+  StatementNode,
   StringLiteralNode,
+  TypeDeclarationNode,
+  TypeReferenceNode,
+  TupleExpressionNode,
   UnaryExpressionNode,
   VersionDirectiveNode,
-  ForStatementNode,
   WhileStatementNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
@@ -60,6 +68,16 @@ const PLOTTING_OR_DRAWING_CALLEES = new Set([
   'bgcolor',
   'fill',
 ]);
+
+const EXPENSIVE_LOOP_CALLEES = new Set([
+  'request.security',
+  'ta.sma',
+  'ta.ema',
+  'ta.rsi',
+  'ta.macd',
+]);
+
+type AssignmentOperator = '=' | ':=' | '+=' | '-=' | '*=' | '/=' | '%=';
 
 function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
   return 'ast' in context;
@@ -121,6 +139,17 @@ export class CoreValidator implements ValidationModule {
   private astProcessedNumericConditions = false;
   private astProcessedLinewidthZero = false;
   private astProcessedNaComparisons = false;
+  private astProcessedControlFlow = false;
+  private astProcessedInvalidOperators = false;
+  private astProcessedFunctionDeclarations = false;
+  private astProcessedAssignmentInConditions = false;
+  private astProcessedExpensiveOperations = false;
+  private astProcessedVariableStatements = false;
+  private astProcessedIdentifierUsage = false;
+  private astProcessedInputPlacement = false;
+  private astProcessedHistoryReferenceDensity = false;
+  private astProcessedTypeDeclarations = false;
+  private astProcessedTupleDestructuring = false;
   private astStrategyUsageErrorLines = new Set<number>();
   private inLoop = false;
   private inFunction = false;
@@ -137,6 +166,11 @@ export class CoreValidator implements ValidationModule {
   private used = new Set<string>();
   private paramUsage = new Map<string, Set<string>>();
   private typeFields = new Map<string, Set<string>>();
+  private astFunctionStack: Array<{ name: string | null; params: Set<string> }> = [];
+  private astHistoryReferenceCounts = new Map<number, number>();
+  private astHistoryReferenceWarnedLines = new Set<number>();
+  private astReassignmentErrorSites = new Set<string>();
+  private astCompoundAssignmentErrorSites = new Set<string>();
 
   private scopeStack: ScopeInfo[] = [];
   private indentStack: number[] = [0];
@@ -201,7 +235,22 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedNumericConditions = false;
     this.astProcessedLinewidthZero = false;
     this.astProcessedNaComparisons = false;
+    this.astProcessedControlFlow = false;
+    this.astProcessedInvalidOperators = false;
+    this.astProcessedFunctionDeclarations = false;
+    this.astProcessedAssignmentInConditions = false;
+    this.astProcessedExpensiveOperations = false;
+    this.astProcessedVariableStatements = false;
+    this.astProcessedIdentifierUsage = false;
+    this.astProcessedInputPlacement = false;
+    this.astProcessedHistoryReferenceDensity = false;
+    this.astProcessedTypeDeclarations = false;
+    this.astProcessedTupleDestructuring = false;
     this.astStrategyUsageErrorLines.clear();
+    this.astHistoryReferenceCounts.clear();
+    this.astHistoryReferenceWarnedLines.clear();
+    this.astReassignmentErrorSites.clear();
+    this.astCompoundAssignmentErrorSites.clear();
     this.sawBrace = false;
     this.sawTabIndent = false;
     this.sawSpaceIndent = false;
@@ -221,6 +270,7 @@ export class CoreValidator implements ValidationModule {
     this.paren = 0;
     this.bracket = 0;
     this.brace = 0;
+    this.astFunctionStack = [];
   }
 
   private processAstProgram(program: ProgramNode): void {
@@ -237,16 +287,42 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedNumericConditions = true;
     this.astProcessedLinewidthZero = true;
     this.astProcessedNaComparisons = true;
+    this.astProcessedInvalidOperators = true;
+    this.astProcessedAssignmentInConditions = true;
+    this.astProcessedExpensiveOperations = true;
+    this.astProcessedVariableStatements = true;
+    this.astProcessedIdentifierUsage = true;
+    this.astProcessedInputPlacement = true;
+    this.astProcessedHistoryReferenceDensity = true;
+    this.astProcessedTypeDeclarations = true;
+    this.astProcessedTupleDestructuring = true;
+
+    let loopDepth = 0;
 
     visit(program, {
+      VariableDeclaration: {
+        enter: (path) => {
+          this.processAstVariableDeclaration(path.node as VariableDeclarationNode);
+        },
+      },
+      AssignmentStatement: {
+        enter: (path) => {
+          this.processAstAssignmentStatement(path.node as AssignmentStatementNode);
+        },
+      },
       CallExpression: {
-        enter: ({ node }) => {
+        enter: (path) => {
+          const node = path.node as CallExpressionNode;
           this.processAstCallExpression(node);
+          if (loopDepth > 0) {
+            this.processAstLoopPerformanceCall(node);
+          }
+          this.processAstInputPlacement(path as NodePath<CallExpressionNode>);
         },
       },
       IndexExpression: {
-        enter: ({ node }) => {
-          this.processAstIndexExpression(node as IndexExpressionNode);
+        enter: (path) => {
+          this.processAstIndexExpression(path.node as IndexExpressionNode);
         },
       },
       MemberExpression: {
@@ -255,34 +331,230 @@ export class CoreValidator implements ValidationModule {
         },
       },
       IfStatement: {
-        enter: ({ node }) => {
-          this.processAstConditionalTest((node as IfStatementNode).test);
+        enter: (path) => {
+          const test = (path.node as IfStatementNode).test;
+          this.processAstConditionalTest(test);
+          this.processAstAssignmentInConditionalTest(test);
         },
       },
       WhileStatement: {
-        enter: ({ node }) => {
-          this.processAstConditionalTest((node as WhileStatementNode).test);
+        enter: (path) => {
+          loopDepth++;
+          const test = (path.node as WhileStatementNode).test;
+          this.processAstConditionalTest(test);
+          this.processAstAssignmentInConditionalTest(test);
+        },
+        exit: () => {
+          loopDepth = Math.max(0, loopDepth - 1);
         },
       },
       ForStatement: {
-        enter: ({ node }) => {
-          const test = (node as ForStatementNode).test;
+        enter: (path) => {
+          loopDepth++;
+          const forStatement = path.node as ForStatementNode;
+          const test = forStatement.test;
           if (test) {
             this.processAstConditionalTest(test);
+            this.processAstAssignmentInConditionalTest(test);
           }
+        },
+        exit: () => {
+          loopDepth = Math.max(0, loopDepth - 1);
         },
       },
       ConditionalExpression: {
-        enter: ({ node }) => {
-          this.processAstConditionalTest((node as ConditionalExpressionNode).test);
+        enter: (path) => {
+          this.processAstConditionalTest((path.node as ConditionalExpressionNode).test);
         },
       },
       BinaryExpression: {
-        enter: ({ node }) => {
-          this.processAstBinaryExpression(node as BinaryExpressionNode);
+        enter: (path) => {
+          this.processAstBinaryExpression(path.node as BinaryExpressionNode);
+        },
+      },
+      UnaryExpression: {
+        enter: (path) => {
+          this.processAstUnaryExpression(path.node as UnaryExpressionNode);
+        },
+      },
+      FunctionDeclaration: {
+        enter: (path) => {
+          const fn = path.node as FunctionDeclarationNode;
+          const paramNames = new Set(fn.params.map((param) => param.identifier.name));
+          this.astFunctionStack.push({ name: fn.identifier?.name ?? null, params: paramNames });
+          this.processAstFunctionDeclaration(fn);
+          this.processAstFunctionControlFlow(fn);
+        },
+        exit: () => {
+          this.astFunctionStack.pop();
+        },
+      },
+      TypeDeclaration: {
+        enter: (path) => {
+          this.processAstTypeDeclaration(path.node as TypeDeclarationNode);
+        },
+      },
+      Identifier: {
+        enter: (path) => {
+          this.processAstIdentifier(path as NodePath<IdentifierNode>);
         },
       },
     });
+  }
+
+  private processAstVariableDeclaration(declaration: VariableDeclarationNode): void {
+    const line = declaration.loc.start.line;
+    const rawLine = this.context.rawLines[line - 1] ?? '';
+    const strippedNoStrings = this.stripStringsAndLineComment(rawLine);
+
+    if (/^\s*(?:var|varip)\s+const\b/.test(strippedNoStrings)) {
+      this.addError(line, 1, 'Invalid declaration: use either var/varip or const, not both.', 'PSD01');
+    }
+
+    if (/^\s*(?:(?:var|varip|const)\s+|(?:(?:int|float|bool|string|color|line|label|box|table|array|matrix|map)\s+))[A-Za-z_][A-Za-z0-9_]*\s*:=/.test(strippedNoStrings)) {
+      this.addError(line, 1, 'Use "=" (not ":=") in declarations.', 'PSD02');
+    }
+
+    const identifier = declaration.identifier;
+    const name = identifier.name;
+    const identifierColumn = identifier.loc.start.column;
+    this.handleNewVar(name, line, identifierColumn);
+
+    const rhs = this.extractAssignmentRight(rawLine);
+    const isConst = declaration.declarationKind === 'const';
+    this.registerTypeHeuristic(name, rhs, line, identifierColumn, isConst);
+  }
+
+  private processAstAssignmentStatement(statement: AssignmentStatementNode): void {
+    const line = statement.loc.start.line;
+    const rawLine = this.context.rawLines[line - 1] ?? '';
+    const left = statement.left;
+    const operatorInfo = this.resolveAssignmentOperator(rawLine, left.loc.end.column);
+    const operator = operatorInfo?.operator ?? '=';
+    const rhs = operatorInfo?.rhs ?? '';
+
+    if (left.kind === 'TupleExpression') {
+      this.processAstTupleDestructuring(statement, left as TupleExpressionNode, operator);
+      return;
+    }
+
+    if (left.kind === 'MemberExpression') {
+      if (operator === ':=' && this.isThisMemberExpression(left as MemberExpressionNode)) {
+        return;
+      }
+      return;
+    }
+
+    if (left.kind !== 'Identifier') {
+      return;
+    }
+
+    const identifier = left as IdentifierNode;
+    const name = identifier.name;
+    const column = identifier.loc.start.column;
+    const isParameter = this.isAstFunctionParameter(name) || this.isMethodParameter(name, line);
+
+    if (this.constNames.has(name)) {
+      this.addError(line, column, `Cannot reassign const '${name}' with '${operator}'.`, 'PS019');
+      return;
+    }
+
+    if (KEYWORDS.has(name)) {
+      return;
+    }
+
+    if (operator === ':=') {
+      if (!this.declared.has(name) && !isParameter) {
+        const siteKey = `${line}:${name}`;
+        if (!this.astReassignmentErrorSites.has(siteKey)) {
+          this.astReassignmentErrorSites.add(siteKey);
+          this.addError(
+            line,
+            column,
+            `Variable '${name}' not declared before ':='. Use '=' on first assignment.`,
+            'PS016',
+          );
+        }
+        return;
+      }
+      return;
+    }
+
+    if (operator !== '=') {
+      if (!this.declared.has(name) && !isParameter) {
+        const siteKey = `${line}:${name}`;
+        if (!this.astCompoundAssignmentErrorSites.has(siteKey)) {
+          this.astCompoundAssignmentErrorSites.add(siteKey);
+          this.addError(
+            line,
+            column,
+            `Variable '${name}' not declared before '${operator}'. Use '=' for first assignment or declare it.`,
+            'PS017',
+          );
+        }
+      }
+      return;
+    }
+
+    if (!this.declared.has(name)) {
+      this.handleNewVar(name, line, column);
+    }
+
+    if (rhs) {
+      this.registerTypeHeuristic(name, rhs, line, column, false);
+    }
+  }
+
+  private processAstTupleDestructuring(
+    statement: AssignmentStatementNode,
+    tuple: TupleExpressionNode,
+    operator: AssignmentOperator,
+  ): void {
+    const tupleLine = statement.loc.start.line;
+    const tupleColumn = tuple.loc.start.column;
+
+    if (operator !== '=') {
+      this.addError(
+        tupleLine,
+        tupleColumn,
+        `Tuple destructuring must use "=" (not '${operator}').`,
+        'PST03',
+      );
+    }
+
+    let hasEmptySlot = false;
+
+    tuple.elements.forEach((element) => {
+      if (!element || element.kind === 'NullLiteral') {
+        hasEmptySlot = true;
+        return;
+      }
+
+      if (element.kind === 'Identifier') {
+        const identifier = element as IdentifierNode;
+        if (identifier.name === '_') {
+          return;
+        }
+        this.handleNewVar(identifier.name, identifier.loc.start.line, identifier.loc.start.column);
+        return;
+      }
+
+      if (element.kind === 'MemberExpression') {
+        const member = element as MemberExpressionNode;
+        this.addWarning(
+          member.loc.start.line,
+          member.loc.start.column,
+          'Dotted names in tuple destructuring are unusual and may indicate an error.',
+          'PST01',
+          'Did you mean to destructure into plain identifiers (e.g., [a, b] = foo())?',
+        );
+        return;
+      }
+    });
+
+    if (hasEmptySlot) {
+      this.addWarning(tupleLine, tupleColumn, 'Empty slot in destructuring tuple.', 'PST02');
+    }
   }
 
   private processAstCallExpression(call: CallExpressionNode): void {
@@ -351,6 +623,28 @@ export class CoreValidator implements ValidationModule {
     }
   }
 
+  private processAstTypeDeclaration(type: TypeDeclarationNode): void {
+    const name = type.identifier.name;
+    const typeLine = type.loc.start.line;
+    const typeIndent = Math.max(0, type.loc.start.column - 1);
+
+    this.declared.set(name, typeLine);
+    this.declIndent.set(name, typeIndent);
+    this.context.declaredVars.set(name, typeLine);
+
+    const fields = new Set<string>();
+    for (const field of type.fields) {
+      const fieldName = field.identifier.name;
+      fields.add(fieldName);
+      const fieldLine = field.loc.start.line;
+      const fieldIndent = Math.max(0, field.loc.start.column - 1);
+      this.declared.set(fieldName, fieldLine);
+      this.declIndent.set(fieldName, fieldIndent);
+    }
+
+    this.typeFields.set(name, fields);
+  }
+
   private resolveCalleePath(expression: ExpressionNode): string[] | null {
     if (expression.kind === 'Identifier') {
       return [(expression as IdentifierNode).name];
@@ -368,7 +662,143 @@ export class CoreValidator implements ValidationModule {
     return null;
   }
 
+  private processAstInputPlacement(path: NodePath<CallExpressionNode>): void {
+    const calleePath = this.resolveCalleePath(path.node.callee);
+    if (!calleePath || calleePath.length === 0 || calleePath[0] !== 'input') {
+      return;
+    }
+
+    if (this.isAstTopLevel(path)) {
+      return;
+    }
+
+    const { line, column } = path.node.loc.start;
+    this.addWarning(line, column, 'Inputs should be declared at top level (global scope).', 'PS027');
+  }
+
+  private isAstTopLevel(path: NodePath): boolean {
+    let current: NodePath | null = path.parent;
+    while (current) {
+      const { node } = current;
+      switch (node.kind) {
+        case 'Program':
+          return true;
+        case 'FunctionDeclaration':
+        case 'IfStatement':
+        case 'WhileStatement':
+        case 'ForStatement':
+        case 'SwitchStatement':
+          return false;
+        case 'BlockStatement':
+          if (current.parent && current.parent.node.kind !== 'Program') {
+            return false;
+          }
+          break;
+        default:
+          break;
+      }
+      current = current.parent;
+    }
+    return true;
+  }
+
+  private processAstIdentifier(path: NodePath<IdentifierNode>): void {
+    if (this.isAstIdentifierDeclaration(path)) {
+      return;
+    }
+
+    const name = path.node.name;
+    if (WILDCARD_IDENT.has(name)) {
+      this.used.add(name);
+      return;
+    }
+
+    if (KEYWORDS.has(name) || PSEUDO_VARS.has(name)) {
+      this.used.add(name);
+      return;
+    }
+
+    this.used.add(name);
+
+    const info = this.context.typeMap.get(name);
+    if (info) {
+      info.usages.push({ line: path.node.loc.start.line, column: path.node.loc.start.column });
+    }
+
+    this.recordAstParameterUsage(name);
+  }
+
+  private isAstIdentifierDeclaration(path: NodePath<IdentifierNode>): boolean {
+    const parent = path.parent;
+    if (!parent) {
+      return false;
+    }
+
+    const { node } = parent;
+    const key = path.key;
+
+    if (node.kind === 'VariableDeclaration' && key === 'identifier') {
+      return true;
+    }
+
+    if (node.kind === 'FunctionDeclaration' && key === 'identifier') {
+      return true;
+    }
+
+    if (node.kind === 'Parameter' && key === 'identifier') {
+      return true;
+    }
+
+    if (node.kind === 'ScriptDeclaration' && key === 'identifier') {
+      return true;
+    }
+
+    if (node.kind === 'Argument' && key === 'name') {
+      return true;
+    }
+
+    if (node.kind === 'TypeReference' && key === 'name') {
+      return true;
+    }
+
+    if (node.kind === 'MemberExpression' && key === 'property') {
+      const member = node as MemberExpressionNode;
+      return !member.computed;
+    }
+
+    return false;
+  }
+
+  private recordAstParameterUsage(name: string): void {
+    for (let index = this.astFunctionStack.length - 1; index >= 0; index--) {
+      const fn = this.astFunctionStack[index];
+      if (!fn.name) {
+        continue;
+      }
+      if (!fn.params.has(name)) {
+        continue;
+      }
+      if (!this.paramUsage.has(fn.name)) {
+        this.paramUsage.set(fn.name, new Set());
+      }
+      this.paramUsage.get(fn.name)!.add(name);
+      break;
+    }
+  }
+
+  private isAstFunctionParameter(name: string): boolean {
+    for (let index = this.astFunctionStack.length - 1; index >= 0; index--) {
+      const fn = this.astFunctionStack[index];
+      if (fn.params.has(name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private processAstIndexExpression(indexExpression: IndexExpressionNode): void {
+    this.recordAstHistoryReference(indexExpression);
+
     const indexValue = this.extractNumericLiteral(indexExpression.index);
     if (indexValue === null || indexValue >= 0) {
       return;
@@ -400,6 +830,36 @@ export class CoreValidator implements ValidationModule {
       'Invalid history reference: negative indexes are not allowed for series data.',
       'PS024',
       'Use positive indices like close[1] for historical data, or array.get(myArray, -1) for arrays.',
+    );
+  }
+
+  private recordAstHistoryReference(indexExpression: IndexExpressionNode): void {
+    if (!this.config.enablePerformanceAnalysis) {
+      return;
+    }
+
+    if (indexExpression.index.kind !== 'NumberLiteral') {
+      return;
+    }
+
+    const line = indexExpression.loc.start.line;
+    if (this.astHistoryReferenceWarnedLines.has(line)) {
+      return;
+    }
+
+    const nextCount = (this.astHistoryReferenceCounts.get(line) ?? 0) + 1;
+    this.astHistoryReferenceCounts.set(line, nextCount);
+
+    if (nextCount <= 5) {
+      return;
+    }
+
+    this.astHistoryReferenceWarnedLines.add(line);
+    this.addWarning(
+      line,
+      1,
+      'Many history references on one line may impact performance.',
+      'PSP002',
     );
   }
 
@@ -467,6 +927,12 @@ export class CoreValidator implements ValidationModule {
   }
 
   private processAstBinaryExpression(expression: BinaryExpressionNode): void {
+    const invalidOperatorMessage = this.getAstInvalidBinaryOperatorMessage(expression.operator);
+    if (invalidOperatorMessage) {
+      const { line, column } = expression.loc.start;
+      this.addWarning(line, column, invalidOperatorMessage, 'PSO01');
+    }
+
     if (expression.operator !== '==' && expression.operator !== '!=') {
       return;
     }
@@ -483,6 +949,310 @@ export class CoreValidator implements ValidationModule {
       'PS023',
       'Replace `x == na` with `na(x)` and `x != na` with `not na(x)`.',
     );
+  }
+
+  private processAstUnaryExpression(expression: UnaryExpressionNode): void {
+    const invalidOperatorMessage = this.getAstInvalidUnaryOperatorMessage(expression.operator);
+    if (!invalidOperatorMessage) {
+      return;
+    }
+
+    const { line, column } = expression.loc.start;
+    this.addWarning(line, column, invalidOperatorMessage, 'PSO01');
+  }
+
+  private processAstAssignmentInConditionalTest(test: ExpressionNode): void {
+    const location = this.findAssignmentInExpression(test);
+    if (!location) {
+      return;
+    }
+
+    this.addWarning(
+      location.line,
+      location.column,
+      'Assignment "=" inside condition; did you mean "=="?',
+      'PSO02',
+    );
+  }
+
+  private findAssignmentInExpression(expression: ExpressionNode): { line: number; column: number } | null {
+    let assignmentLocation: { line: number; column: number } | null = null;
+
+    visit(expression, {
+      BinaryExpression: {
+        enter: ({ node }) => {
+          if (assignmentLocation) {
+            return false;
+          }
+
+          const binary = node as BinaryExpressionNode;
+          if (binary.operator === '=') {
+            assignmentLocation = { ...binary.loc.start };
+            return false;
+          }
+
+          return undefined;
+        },
+      },
+    });
+
+    return assignmentLocation;
+  }
+
+  private processAstLoopPerformanceCall(call: CallExpressionNode): void {
+    if (!this.config.enablePerformanceAnalysis) {
+      return;
+    }
+
+    const calleePath = this.resolveCalleePath(call.callee);
+    if (!calleePath || calleePath.length === 0) {
+      return;
+    }
+
+    const fullName = calleePath.join('.');
+    if (!EXPENSIVE_LOOP_CALLEES.has(fullName)) {
+      return;
+    }
+
+    const { line, column } = call.loc.start;
+    this.addWarning(line, column, 'Expensive operation inside loop may impact performance.', 'PSP001');
+  }
+
+  private processAstFunctionDeclaration(fn: FunctionDeclarationNode): void {
+    if (!fn.identifier) {
+      return;
+    }
+
+    this.astProcessedFunctionDeclarations = true;
+
+    const name = fn.identifier.name;
+    const params = fn.params.map((param) => this.formatAstParameter(param));
+    const headerLine = fn.loc.start.line;
+
+    this.functionNames.add(name);
+    this.functionParams.set(name, params);
+    this.functionHeaderLine.set(name, headerLine);
+    this.context.functionParams.set(name, params);
+    this.paramUsage.set(name, new Set());
+
+    const methodIndex = fn.params.findIndex((param) => param.identifier.name === 'this');
+    const isMethod = methodIndex !== -1;
+    if (isMethod) {
+      this.methodNames.add(name);
+      this.context.methodNames?.add(name);
+      if (methodIndex > 0) {
+        const location = fn.params[methodIndex]!.identifier.loc.start;
+        this.addWarning(location.line, location.column, "In methods, 'this' should be the first parameter.", 'PSM01');
+      }
+    }
+
+    this.registerParameterTypes(name, params, headerLine);
+    this.checkAstDuplicateParameters(fn, name, isMethod);
+  }
+
+  private getAstInvalidBinaryOperatorMessage(operator: string): string | null {
+    switch (operator) {
+      case '&&':
+        return "Operator '&&' is not valid in Pine Script. Use 'and' instead.";
+      case '||':
+        return "Operator '||' is not valid in Pine Script. Use 'or' instead.";
+      case '===':
+        return "Operator '===' is not valid in Pine Script.";
+      case '!==':
+        return "Operator '!==' is not valid in Pine Script.";
+      case '^':
+        return "Operator '^' is not valid in Pine Script.";
+      default:
+        return null;
+    }
+  }
+
+  private getAstInvalidUnaryOperatorMessage(operator: string): string | null {
+    switch (operator) {
+      case '++':
+        return "Operator '++' is not valid in Pine Script.";
+      case '--':
+        return "Operator '--' is not valid in Pine Script.";
+      case '~':
+        return "Operator '~' is not valid in Pine Script.";
+      default:
+        return null;
+    }
+  }
+
+  private formatAstParameter(param: ParameterNode): string {
+    const typePart = param.typeAnnotation ? this.stringifyAstTypeReference(param.typeAnnotation) : null;
+    const identifier = param.identifier.name;
+    if (typePart) {
+      return `${typePart} ${identifier}`;
+    }
+    return identifier;
+  }
+
+  private stringifyAstTypeReference(type: TypeReferenceNode): string {
+    const base = type.name.name;
+    if (!type.generics.length) {
+      return base;
+    }
+
+    const generics = type.generics.map((generic) => this.stringifyAstTypeReference(generic));
+    return `${base}<${generics.join(', ')}>`;
+  }
+
+  private checkAstDuplicateParameters(
+    fn: FunctionDeclarationNode,
+    name: string,
+    isMethod: boolean,
+  ): void {
+    const seen = new Set<string>();
+
+    for (const param of fn.params) {
+      const paramName = param.identifier.name;
+      if (seen.has(paramName)) {
+        const { line, column } = param.identifier.loc.start;
+        const message = isMethod && paramName === 'this'
+          ? `Duplicate 'this' parameter in method '${name}'.`
+          : `Duplicate parameter '${paramName}' in function '${name}'.`;
+        this.addError(line, column, message, 'PSDUP01');
+        continue;
+      }
+
+      seen.add(paramName);
+    }
+  }
+
+  private processAstFunctionControlFlow(fn: FunctionDeclarationNode): void {
+    if (!this.config.enableControlFlowAnalysis) {
+      return;
+    }
+
+    this.astProcessedControlFlow = true;
+    this.processAstStatementSequence(fn.body.body);
+  }
+
+  private processAstStatementSequence(statements: StatementNode[]): number | null {
+    let returnLine: number | null = null;
+
+    for (const statement of statements) {
+      if (returnLine !== null) {
+        this.reportAstUnreachableStatement(statement, returnLine);
+        continue;
+      }
+
+      const nestedReturn = this.processAstStatementControlFlow(statement);
+      if (nestedReturn !== null) {
+        returnLine = nestedReturn;
+      }
+    }
+
+    return returnLine;
+  }
+
+  private processAstStatementControlFlow(statement: StatementNode): number | null {
+    switch (statement.kind) {
+      case 'ReturnStatement':
+        return statement.loc.start.line;
+      case 'BlockStatement':
+        return this.processAstStatementSequence((statement as BlockStatementNode).body);
+      case 'IfStatement': {
+        const consequentStatements = this.unwrapAstStatement(statement.consequent);
+        const consequentReturn = this.processAstStatementSequence(consequentStatements);
+        if (consequentReturn !== null) {
+          if (statement.alternate) {
+            this.reportAstUnreachableStatement(statement.alternate, consequentReturn);
+          }
+          return consequentReturn;
+        }
+
+        if (statement.alternate) {
+          const alternateStatements = this.unwrapAstStatement(statement.alternate);
+          const alternateReturn = this.processAstStatementSequence(alternateStatements);
+          if (alternateReturn !== null) {
+            return alternateReturn;
+          }
+        }
+
+        return null;
+      }
+      case 'WhileStatement':
+        return this.processAstStatementSequence(statement.body.body);
+      case 'ForStatement':
+        return this.processAstStatementSequence(statement.body.body);
+      case 'SwitchStatement': {
+        let returnLine: number | null = null;
+        for (const caseNode of statement.cases) {
+          if (returnLine !== null) {
+            this.reportAstUnreachableStatements(caseNode.consequent, returnLine);
+            continue;
+          }
+
+          const caseReturn = this.processAstStatementSequence(caseNode.consequent);
+          if (caseReturn !== null) {
+            returnLine = caseReturn;
+          }
+        }
+        return returnLine;
+      }
+      case 'FunctionDeclaration':
+        return this.processAstStatementSequence(statement.body.body);
+      default:
+        return null;
+    }
+  }
+
+  private unwrapAstStatement(statement: StatementNode): StatementNode[] {
+    if (statement.kind === 'BlockStatement') {
+      return (statement as BlockStatementNode).body;
+    }
+    return [statement];
+  }
+
+  private reportAstUnreachableStatements(statements: StatementNode[], returnLine: number): void {
+    for (const statement of statements) {
+      this.reportAstUnreachableStatement(statement, returnLine);
+    }
+  }
+
+  private reportAstUnreachableStatement(statement: StatementNode, returnLine: number): void {
+    if (statement.kind === 'BlockStatement') {
+      this.reportAstUnreachableStatements((statement as BlockStatementNode).body, returnLine);
+      return;
+    }
+
+    if (statement.kind === 'ReturnStatement') {
+      return;
+    }
+
+    const { line, column } = statement.loc.start;
+    this.addWarning(
+      line,
+      column,
+      `Unreachable code after return at line ${returnLine}.`,
+      'PSC001',
+    );
+
+    switch (statement.kind) {
+      case 'IfStatement':
+        this.reportAstUnreachableStatement(statement.consequent, returnLine);
+        if (statement.alternate) {
+          this.reportAstUnreachableStatement(statement.alternate, returnLine);
+        }
+        break;
+      case 'WhileStatement':
+      case 'ForStatement':
+        this.reportAstUnreachableStatement(statement.body, returnLine);
+        break;
+      case 'SwitchStatement':
+        for (const caseNode of statement.cases) {
+          this.reportAstUnreachableStatements(caseNode.consequent, returnLine);
+        }
+        break;
+      case 'FunctionDeclaration':
+        this.reportAstUnreachableStatements(statement.body.body, returnLine);
+        break;
+      default:
+        break;
+    }
   }
 
   private isIdentifierNamed(expression: ExpressionNode, name: string): boolean {
@@ -745,6 +1515,9 @@ export class CoreValidator implements ValidationModule {
   }
 
   private handleTypeDeclaration(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (this.astProcessedTypeDeclarations) {
+      return;
+    }
     const mType = /^\s*type\s+([A-Za-z_][A-Za-z0-9_]*)\b/.exec(strippedNoStrings);
     if (mType) {
       const name = mType[1];
@@ -755,10 +1528,13 @@ export class CoreValidator implements ValidationModule {
   }
 
   private handleTupleDestructuring(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (this.astProcessedTupleDestructuring) {
+      return;
+    }
     if (TUPLE_REASSIGN_RE.test(strippedNoStrings)) {
       this.addError(lineNum, 1, 'Tuple destructuring must use "=" (not ":=").', 'PST03');
     }
-    
+
     const tupleMatch = line.match(TUPLE_DECL_RE);
     if (tupleMatch) {
       const content = tupleMatch[1];
@@ -781,9 +1557,13 @@ export class CoreValidator implements ValidationModule {
   }
 
   private handleFunctionDeclarations(line: string, lineNum: number): void {
+    if (this.astProcessedFunctionDeclarations) {
+      return;
+    }
+
     const funcMatch = line.match(QUALIFIED_FN_RE);
     const methMatch = line.match(METHOD_DECL_RE);
-    
+
     if (funcMatch) {
       this.functionHeaderLine.set(funcMatch[1], lineNum);
     } else if (methMatch) {
@@ -801,6 +1581,10 @@ export class CoreValidator implements ValidationModule {
   }
 
   private handleVariableDeclarations(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (this.astProcessedVariableStatements) {
+      return;
+    }
+
     if (/^\s*[A-Za-z_][A-Za-z0-9_]*\s*=>/.test(line)) {
       return;
     }
@@ -910,6 +1694,9 @@ export class CoreValidator implements ValidationModule {
   }
 
   private detectLoops(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (this.astProcessedExpensiveOperations) {
+      return;
+    }
     // Simple loop detection for performance analysis
     if (/^\s*for\s+/.test(strippedNoStrings)) {
       this.inLoop = true;
@@ -922,54 +1709,58 @@ export class CoreValidator implements ValidationModule {
   }
 
   private detectControlFlow(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (!this.config.enableControlFlowAnalysis || this.astProcessedControlFlow) {
+      return;
+    }
+
     // Simple control flow analysis for unreachable code detection
-    if (this.config.enableControlFlowAnalysis) {
-      // Detect function start
-      if (/^\s*\w+\s*\([^)]*\)\s*=>/.test(strippedNoStrings)) {
-        this.inFunction = true;
-        this.hasReturn = false;
-        return; // Don't check for unreachable code on the function declaration line
-      }
-      
-      // Detect return statement
-      if (this.inFunction && /^\s*return\s+/.test(strippedNoStrings)) {
-        this.hasReturn = true;
-        return; // Don't check for unreachable code on the return line itself
-      }
-      
-      // Check for unreachable code after return
-      if (this.inFunction && this.hasReturn && !/^\s*return\s+/.test(strippedNoStrings) && !/^\s*$/.test(strippedNoStrings)) {
-        this.addWarning(lineNum, 1, `Unreachable code after return at line ${lineNum - 1}.`, 'PSC001');
-      }
-      
-      // Reset function state when indentation decreases (function ends)
-      const currentIndent = line.match(/^\s*/)?.[0].length || 0;
-      if (this.inFunction && currentIndent === 0 && !/^\s*$/.test(strippedNoStrings)) {
-        this.inFunction = false;
-        this.hasReturn = false;
-      }
+    // Detect function start
+    if (/^\s*\w+\s*\([^)]*\)\s*=>/.test(strippedNoStrings)) {
+      this.inFunction = true;
+      this.hasReturn = false;
+      return; // Don't check for unreachable code on the function declaration line
+    }
+
+    // Detect return statement
+    if (this.inFunction && /^\s*return\s+/.test(strippedNoStrings)) {
+      this.hasReturn = true;
+      return; // Don't check for unreachable code on the return line itself
+    }
+
+    // Check for unreachable code after return
+    if (this.inFunction && this.hasReturn && !/^\s*return\s+/.test(strippedNoStrings) && !/^\s*$/.test(strippedNoStrings)) {
+      this.addWarning(lineNum, 1, `Unreachable code after return at line ${lineNum - 1}.`, 'PSC001');
+    }
+
+    // Reset function state when indentation decreases (function ends)
+    const currentIndent = line.match(/^\s*/)?.[0].length || 0;
+    if (this.inFunction && currentIndent === 0 && !/^\s*$/.test(strippedNoStrings)) {
+      this.inFunction = false;
+      this.hasReturn = false;
     }
   }
 
   private checkBasicSyntax(line: string, lineNum: number, strippedNoStrings: string): void {
-    // Check for invalid operators
-    const invalidOps = ['===', '!==', '++', '--', '^', '~'];
-    for (const op of invalidOps) {
-      if (strippedNoStrings.includes(op)) {
-        this.addWarning(lineNum, 1, `Operator '${op}' is not valid in Pine Script.`, 'PSO01');
+    if (!this.astProcessedInvalidOperators) {
+      // Check for invalid operators
+      const invalidOps = ['===', '!==', '++', '--', '^', '~'];
+      for (const op of invalidOps) {
+        if (strippedNoStrings.includes(op)) {
+          this.addWarning(lineNum, 1, `Operator '${op}' is not valid in Pine Script.`, 'PSO01');
+        }
+      }
+
+      // Check for logical operators
+      if (strippedNoStrings.includes('&&')) {
+        this.addWarning(lineNum, 1, "Operator '&&' is not valid in Pine Script. Use 'and' instead.", 'PSO01');
+      }
+      if (strippedNoStrings.includes('||')) {
+        this.addWarning(lineNum, 1, "Operator '||' is not valid in Pine Script. Use 'or' instead.", 'PSO01');
       }
     }
 
-    // Check for logical operators
-    if (strippedNoStrings.includes('&&')) {
-      this.addWarning(lineNum, 1, "Operator '&&' is not valid in Pine Script. Use 'and' instead.", 'PSO01');
-    }
-    if (strippedNoStrings.includes('||')) {
-      this.addWarning(lineNum, 1, "Operator '||' is not valid in Pine Script. Use 'or' instead.", 'PSO01');
-    }
-
     // Check for assignment in conditions
-    if (/^\s*(if|while|for)\s*\([^)]*=\s*[^=]/.test(strippedNoStrings)) {
+    if (!this.astProcessedAssignmentInConditions && /^\s*(if|while|for)\s*\([^)]*=\s*[^=]/.test(strippedNoStrings)) {
       this.addWarning(lineNum, 1, 'Assignment "=" inside condition; did you mean "=="?', 'PSO02');
     }
 
@@ -998,7 +1789,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     // Performance: Check for many history references on one line
-    if (this.config.enablePerformanceAnalysis) {
+    if (this.config.enablePerformanceAnalysis && !this.astProcessedHistoryReferenceDensity) {
       const histRefs = strippedNoStrings.match(/\[\s*\d+\s*\]/g);
       if (histRefs && histRefs.length > 5) {
         this.addWarning(lineNum, 1, 'Many history references on one line may impact performance.', 'PSP002');
@@ -1006,7 +1797,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     // Performance: Check for expensive operations in loops
-    if (this.config.enablePerformanceAnalysis && this.inLoop) {
+    if (this.config.enablePerformanceAnalysis && !this.astProcessedExpensiveOperations && this.inLoop) {
       const expensiveOps = ['request.security', 'ta.sma', 'ta.ema', 'ta.rsi', 'ta.macd'];
       for (const op of expensiveOps) {
         if (strippedNoStrings.includes(op)) {
@@ -1486,7 +2277,9 @@ export class CoreValidator implements ValidationModule {
     const topIndent = this.indentStack[this.indentStack.length - 1];
     const prevLine = this.findPrevNonEmpty(lineNum - 1);
   
-    if (indent > 0 && /\binput\.[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(this.stripStringsAndLineComment(line))) {
+    if (!this.astProcessedInputPlacement &&
+        indent > 0 &&
+        /\binput\.[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(this.stripStringsAndLineComment(line))) {
       this.addWarning(lineNum, 1, 'Inputs should be declared at top level (global scope).', 'PS027');
     }
 
@@ -1555,28 +2348,44 @@ export class CoreValidator implements ValidationModule {
   }
 
   private handleNewVar(name: string, line: number, col: number): void {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) { 
-      this.addError(line, col, `Invalid identifier '${name}'.`, 'PS006'); 
-      return; 
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      this.addError(line, col, `Invalid identifier '${name}'.`, 'PS006');
+      return;
     }
     if (KEYWORDS.has(name) || PSEUDO_VARS.has(name)) {
       this.addError(line, col, `Identifier '${name}' conflicts with a Pine keyword/builtin.`, 'PS007');
       return;
     }
 
-    const paramsHere = this.currentScope().params;
+    const lexicalScope = this.currentScope();
+    const activeAstScope = this.astFunctionStack.length
+      ? this.astFunctionStack[this.astFunctionStack.length - 1]!
+      : null;
+    const paramsHere = activeAstScope?.params ?? lexicalScope.params;
+
     if (paramsHere.has(name) && name !== 'this') {
-        this.addWarning(line, col, `Identifier '${name}' shadows a function parameter.`, 'PSW05', 'Rename the local or the parameter to avoid confusion.');
+      this.addWarning(
+        line,
+        col,
+        `Identifier '${name}' shadows a function parameter.`,
+        'PSW05',
+        'Rename the local or the parameter to avoid confusion.',
+      );
     }
 
     const siteKey = `${line}:${name}`;
-    if (this.declaredSites.has(siteKey)) return;
+    if (this.declaredSites.has(siteKey)) {
+      return;
+    }
+
     this.declaredSites.add(siteKey);
-    
-    const currentIndent = this.indentStack[this.indentStack.length - 1];
+    lexicalScope.variables.add(name);
+
+    const sourceLine = this.context.cleanLines[line - 1] ?? '';
+    const currentIndent = this.getLineIndentation(sourceLine);
     this.declared.set(name, line);
     this.declIndent.set(name, currentIndent);
-    
+
     // Also update the shared context for other validators
     this.context.declaredVars.set(name, line);
   }
@@ -1715,7 +2524,44 @@ export class CoreValidator implements ValidationModule {
     });
   }
 
+  private extractAssignmentRight(line: string): string {
+    const index = line.indexOf('=');
+    if (index === -1) {
+      return '';
+    }
+    return line.slice(index + 1);
+  }
+
+  private resolveAssignmentOperator(
+    line: string,
+    expressionEndColumn: number,
+  ): { operator: AssignmentOperator; rhs: string } | null {
+    const sliceStart = Math.max(0, Math.min(line.length, expressionEndColumn - 1));
+    const afterLeft = line.slice(sliceStart);
+    const match = afterLeft.match(/^(\s*)(:=|\+=|-=|\*=|\/=|%=|=)/);
+    if (!match) {
+      return null;
+    }
+    const operator = match[2] as AssignmentOperator;
+    const rhs = afterLeft.slice(match[0].length);
+    return { operator, rhs };
+  }
+
+  private isThisMemberExpression(expression: MemberExpressionNode): boolean {
+    if (expression.object.kind !== 'Identifier') {
+      return false;
+    }
+    if (expression.computed) {
+      return false;
+    }
+    const identifier = expression.object as IdentifierNode;
+    return identifier.name === 'this';
+  }
+
   private scanReferences(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (this.astProcessedIdentifierUsage) {
+      return;
+    }
     // Simplified reference scanning - just mark variables as used
     const re = new RegExp(IDENT.source, 'g');
     let m: RegExpExecArray | null;

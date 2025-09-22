@@ -5,11 +5,30 @@
  * Extracts type checking logic from EnhancedPineScriptValidator and UltimateValidator.
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult, TypeInfo } from '../core/types';
-import { 
+import {
+  ValidationModule,
+  ValidationContext,
+  ValidatorConfig,
+  ValidationError,
+  ValidationResult,
+  TypeInfo,
+  AstValidationContext,
+} from '../core/types';
+import {
   IDENT, KEYWORDS, NAMESPACES, NS_MEMBERS, PSEUDO_VARS, WILDCARD_IDENT,
   QUALIFIED_FN_RE, METHOD_DECL_RE, VAR_DECL_RE, SIMPLE_ASSIGN_RE
 } from '../core/constants';
+import { visit, type NodePath } from '../core/ast/traversal';
+import type {
+  ProgramNode,
+  VariableDeclarationNode,
+  ConditionalExpressionNode,
+  FunctionDeclarationNode,
+  ReturnStatementNode,
+  TypeReferenceNode,
+  ExpressionNode,
+} from '../core/ast/nodes';
+import type { TypeMetadata } from '../core/ast/types';
 
 export class TypeValidator implements ValidationModule {
   name = 'TypeValidator';
@@ -23,6 +42,8 @@ export class TypeValidator implements ValidationModule {
   // Context and config
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private astDiagnosticSites = new Map<string, Set<string>>();
 
   // Type tracking
   private variableTypes = new Map<string, string>();
@@ -37,6 +58,11 @@ export class TypeValidator implements ValidationModule {
     this.reset();
     this.context = context;
     this.config = config;
+    this.astContext = this.isAstContext(context) && context.ast ? context : null;
+
+    if (this.astContext) {
+      this.validateWithAst(this.astContext);
+    }
 
     // Run type validation checks
     this.validateTypeDeclarations();
@@ -62,6 +88,8 @@ export class TypeValidator implements ValidationModule {
     this.variableTypes.clear();
     this.functionReturnTypes.clear();
     this.typeInferenceCache.clear();
+    this.astContext = null;
+    this.astDiagnosticSites.clear();
   }
 
   private validateTypeDeclarations(): void {
@@ -140,9 +168,11 @@ export class TypeValidator implements ValidationModule {
       const inferredType = this.inferTypeFromValue(rhs);
       
       if (inferredType && !this.areTypesCompatible(declaredType, inferredType)) {
-        this.addError(lineNum, 1, `Type mismatch: declared '${declaredType}' but assigned '${inferredType}'.`, 'PSV6-TYPE-MISMATCH');
+        if (!this.astContext || !this.hasAstDiagnostic('PSV6-TYPE-MISMATCH', `${lineNum}:${varName}`)) {
+          this.addError(lineNum, 1, `Type mismatch: declared '${declaredType}' but assigned '${inferredType}'.`, 'PSV6-TYPE-MISMATCH');
+        }
       }
-      
+
       this.variableTypes.set(varName, declaredType);
     }
   }
@@ -217,7 +247,9 @@ export class TypeValidator implements ValidationModule {
       const falseType = this.inferTypeFromValue(falseValue.trim());
       
       if (trueType && falseType && !this.areTypesCompatible(trueType, falseType)) {
-        this.addError(lineNum, 1, `Ternary operator type mismatch: '${trueType}' vs '${falseType}'.`, 'PSV6-TERNARY-TYPE');
+        if (!this.astContext || !this.hasAstDiagnostic('PSV6-TERNARY-TYPE', `${lineNum}`)) {
+          this.addError(lineNum, 1, `Ternary operator type mismatch: '${trueType}' vs '${falseType}'.`, 'PSV6-TERNARY-TYPE');
+        }
       }
     }
   }
@@ -249,7 +281,9 @@ export class TypeValidator implements ValidationModule {
         if (returnTypes.length > 1) {
           const uniqueTypes = [...new Set(returnTypes)];
           if (uniqueTypes.length > 1) {
-            this.addError(lineNum, 1, `Function '${funcName}' has inconsistent return types: ${uniqueTypes.join(', ')}.`, 'PSV6-FUNCTION-RETURN-TYPE');
+            if (!this.astContext || !this.hasAstDiagnostic('PSV6-FUNCTION-RETURN-TYPE', `${lineNum}:${funcName}`)) {
+              this.addError(lineNum, 1, `Function '${funcName}' has inconsistent return types: ${uniqueTypes.join(', ')}.`, 'PSV6-FUNCTION-RETURN-TYPE');
+            }
           }
         }
       }
@@ -403,7 +437,7 @@ export class TypeValidator implements ValidationModule {
 
   private extractReturnTypes(functionBody: string[]): string[] {
     const returnTypes: string[] = [];
-    
+
     for (const line of functionBody) {
       const stripped = this.stripStringsAndLineComment(line);
       
@@ -424,8 +458,229 @@ export class TypeValidator implements ValidationModule {
         }
       }
     }
-    
+
     return returnTypes;
+  }
+
+  private validateWithAst(context: AstValidationContext): void {
+    if (!context.ast) {
+      return;
+    }
+
+    this.emitAstVariableTypeMismatches(context);
+    this.emitAstTernaryTypeConflicts(context);
+    this.emitAstFunctionReturnTypeErrors(context);
+  }
+
+  private emitAstVariableTypeMismatches(context: AstValidationContext): void {
+    const program = context.ast;
+    const environment = context.typeEnvironment;
+    if (!program) {
+      return;
+    }
+
+    visit(program, {
+      VariableDeclaration: {
+        enter: (path) => {
+          const declaration = path.node as VariableDeclarationNode;
+          if (!declaration.typeAnnotation || !declaration.initializer) {
+            return;
+          }
+
+          const declaredType = this.resolveTypeReferenceName(declaration.typeAnnotation);
+          if (!declaredType) {
+            return;
+          }
+
+          const initializerMetadata = environment.nodeTypes.get(declaration.initializer);
+          if (!initializerMetadata || initializerMetadata.kind === 'unknown' || initializerMetadata.certainty === 'conflict') {
+            return;
+          }
+
+          const inferredType = this.describeTypeMetadata(initializerMetadata);
+          if (!inferredType) {
+            return;
+          }
+
+          const declaredBase = this.normaliseTypeName(declaredType);
+          if (!this.isKnownPrimitiveType(declaredBase)) {
+            return;
+          }
+          if (this.areTypesCompatible(declaredBase, inferredType)) {
+            return;
+          }
+
+          const line = declaration.identifier.loc.start.line;
+          const column = declaration.identifier.loc.start.column;
+          const key = `${line}:${declaration.identifier.name}`;
+          this.registerAstDiagnostic('PSV6-TYPE-MISMATCH', key);
+          this.addError(line, column, `Type mismatch: declared '${declaredType}' but assigned '${inferredType}'.`, 'PSV6-TYPE-MISMATCH');
+        },
+      },
+    });
+  }
+
+  private emitAstTernaryTypeConflicts(context: AstValidationContext): void {
+    const program = context.ast;
+    const environment = context.typeEnvironment;
+    if (!program) {
+      return;
+    }
+
+    visit(program, {
+      ConditionalExpression: {
+        enter: (path) => {
+          const expression = path.node as ConditionalExpressionNode;
+          const metadata = environment.nodeTypes.get(expression);
+          if (!metadata || metadata.certainty !== 'conflict') {
+            return;
+          }
+
+          const consequentType = this.describeTypeMetadata(environment.nodeTypes.get(expression.consequent));
+          const alternateType = this.describeTypeMetadata(environment.nodeTypes.get(expression.alternate));
+          if (!consequentType || !alternateType) {
+            return;
+          }
+
+          if (this.areTypesCompatible(consequentType, alternateType)) {
+            return;
+          }
+
+          const line = expression.loc.start.line;
+          const column = expression.loc.start.column;
+          const key = `${line}`;
+          this.registerAstDiagnostic('PSV6-TERNARY-TYPE', key);
+          this.addError(line, column, `Ternary operator type mismatch: '${consequentType}' vs '${alternateType}'.`, 'PSV6-TERNARY-TYPE');
+        },
+      },
+    });
+  }
+
+  private emitAstFunctionReturnTypeErrors(context: AstValidationContext): void {
+    const program = context.ast;
+    if (!program) {
+      return;
+    }
+
+    visit(program, {
+      FunctionDeclaration: {
+        enter: (path) => {
+          const fnNode = path.node as FunctionDeclarationNode;
+          const collected = new Set<string>();
+
+          visit(fnNode.body, {
+            FunctionDeclaration: {
+              enter: () => 'skip',
+            },
+            ReturnStatement: {
+              enter: (returnPath: NodePath<ReturnStatementNode>) => {
+                const returnNode = returnPath.node;
+                if (!returnNode.argument) {
+                  collected.add('void');
+                  return;
+                }
+
+                const metadata = context.typeEnvironment.nodeTypes.get(returnNode.argument as ExpressionNode);
+                const typeLabel = this.describeTypeMetadata(metadata);
+                if (!typeLabel) {
+                  return;
+                }
+                collected.add(typeLabel);
+              },
+            },
+          });
+
+          if (collected.size <= 1) {
+            return;
+          }
+
+          const fnName = fnNode.identifier?.name ?? 'anonymous function';
+          const line = fnNode.loc.start.line;
+          const column = fnNode.loc.start.column;
+          const key = `${line}:${fnName}`;
+          this.registerAstDiagnostic('PSV6-FUNCTION-RETURN-TYPE', key);
+          this.addError(
+            line,
+            column,
+            `Function '${fnName}' has inconsistent return types: ${Array.from(collected).join(', ')}.`,
+            'PSV6-FUNCTION-RETURN-TYPE',
+          );
+        },
+      },
+    });
+  }
+
+  private registerAstDiagnostic(code: string, key: string): void {
+    if (!this.astDiagnosticSites.has(code)) {
+      this.astDiagnosticSites.set(code, new Set());
+    }
+    this.astDiagnosticSites.get(code)!.add(key);
+  }
+
+  private hasAstDiagnostic(code: string, key: string): boolean {
+    return this.astDiagnosticSites.get(code)?.has(key) ?? false;
+  }
+
+  private isAstContext(context: ValidationContext): context is AstValidationContext {
+    return 'ast' in context;
+  }
+
+  private resolveTypeReferenceName(type: TypeReferenceNode | null): string | null {
+    if (!type) {
+      return null;
+    }
+
+    const base = type.name.name;
+    if (!type.generics.length) {
+      return base;
+    }
+
+    const generics = type.generics
+      .map((generic) => this.resolveTypeReferenceName(generic))
+      .filter((name): name is string => Boolean(name));
+
+    if (!generics.length) {
+      return base;
+    }
+
+    return `${base}<${generics.join(', ')}>`;
+  }
+
+  private describeTypeMetadata(metadata: TypeMetadata | null | undefined): string | null {
+    if (!metadata) {
+      return null;
+    }
+
+    if (metadata.kind === 'unknown') {
+      return null;
+    }
+
+    return metadata.kind;
+  }
+
+  private normaliseTypeName(name: string): string {
+    return name.split('<')[0];
+  }
+
+  private isKnownPrimitiveType(name: string): boolean {
+    const known = new Set([
+      'int',
+      'float',
+      'bool',
+      'string',
+      'series',
+      'color',
+      'line',
+      'label',
+      'box',
+      'table',
+      'array',
+      'matrix',
+      'map',
+      'void',
+      'function',
+    ]);
+    return known.has(name);
   }
 
   private addTypeHint(lineNum: number, type: string): void {

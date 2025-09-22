@@ -3,7 +3,30 @@
  * Handles validation of switch statements, case values, and default clauses
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
+import {
+  AstValidationContext,
+  ValidationModule,
+  ValidationContext,
+  ValidatorConfig,
+  ValidationError,
+  ValidationResult,
+} from '../core/types';
+import type {
+  AssignmentStatementNode,
+  ExpressionNode,
+  ExpressionStatementNode,
+  ProgramNode,
+  ReturnStatementNode,
+  SwitchCaseNode,
+  SwitchStatementNode,
+  VariableDeclarationNode,
+} from '../core/ast/nodes';
+import { visit } from '../core/ast/traversal';
+import type { TypeMetadata } from '../core/ast/types';
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
+}
 
 export class SwitchValidator implements ValidationModule {
   name = 'SwitchValidator';
@@ -14,6 +37,7 @@ export class SwitchValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
 
   getDependencies(): string[] {
     return ['SyntaxValidator', 'TypeValidator'];
@@ -23,10 +47,14 @@ export class SwitchValidator implements ValidationModule {
     this.reset();
     this.context = context;
     this.config = config;
-    
 
-    // Validate switch statements
-    this.validateSwitchStatements();
+    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
+
+    if (this.astContext?.ast) {
+      this.validateSwitchStatementsAst(this.astContext.ast);
+    } else {
+      this.validateSwitchStatementsLegacy();
+    }
 
     return {
       isValid: this.errors.length === 0,
@@ -42,6 +70,7 @@ export class SwitchValidator implements ValidationModule {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.astContext = null;
   }
 
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
@@ -56,7 +85,308 @@ export class SwitchValidator implements ValidationModule {
     this.info.push({ line, column, message, severity: 'info', code, suggestion });
   }
 
-  private validateSwitchStatements(): void {
+  private validateSwitchStatementsAst(program: ProgramNode): void {
+    visit(program, {
+      SwitchStatement: {
+        enter: (path) => {
+          const statement = path.node as SwitchStatementNode;
+          this.processAstSwitchStatement(statement);
+        },
+      },
+    });
+  }
+
+  private processAstSwitchStatement(statement: SwitchStatementNode): void {
+    this.validateSwitchExpressionAst(statement);
+
+    const seenCases = new Map<string, { line: number; column: number }>();
+    const returnTypes = new Set<string>();
+    let hasDefault = false;
+
+    for (const caseNode of statement.cases) {
+      if (caseNode.test) {
+        this.validateAstCaseValue(caseNode);
+        this.detectAstDuplicateCase(caseNode, seenCases);
+      } else {
+        hasDefault = true;
+      }
+
+      const typeLabel = this.inferAstCaseReturnType(caseNode);
+      if (typeLabel) {
+        returnTypes.add(typeLabel);
+      }
+    }
+
+    if (!hasDefault) {
+      const { line, column } = statement.loc.start;
+      this.addWarning(
+        line,
+        column,
+        'Switch statement should include a default clause.',
+        'PSV6-SWITCH-NO-DEFAULT',
+      );
+    }
+
+    if (statement.cases.length > 20) {
+      const { line, column } = statement.loc.start;
+      this.addWarning(
+        line,
+        column,
+        `Switch statement has ${statement.cases.length} cases, consider refactoring.`,
+        'PSV6-SWITCH-TOO-MANY-CASES',
+      );
+    }
+
+    if (returnTypes.size > 1) {
+      const { line, column } = statement.loc.start;
+      this.addError(
+        line,
+        column,
+        'Switch statement cases must have consistent return types.',
+        'PSV6-SWITCH-RETURN-TYPE',
+      );
+    }
+
+    const nestingDepth = this.computeSwitchNestingDepth(statement);
+    if (nestingDepth > 2) {
+      const { line, column } = statement.loc.start;
+      this.addWarning(
+        line,
+        column,
+        `Switch statement has deep nesting (${nestingDepth} levels), consider refactoring.`,
+        'PSV6-SWITCH-DEEP-NESTING',
+      );
+    }
+
+    this.validateSwitchStyleAst(statement.cases);
+  }
+
+  private validateSwitchExpressionAst(statement: SwitchStatementNode): void {
+    const expression = statement.discriminant;
+    if (!expression) {
+      const { line, column } = statement.loc.start;
+      this.addError(line, column, 'Switch statement requires an expression.', 'PSV6-SWITCH-SYNTAX');
+      return;
+    }
+
+    switch (expression.kind) {
+      case 'StringLiteral':
+      case 'Identifier':
+      case 'MemberExpression':
+      case 'CallExpression':
+        return;
+      case 'NumberLiteral': {
+        const { line, column } = expression.loc.start;
+        this.addError(
+          line,
+          column,
+          'Switch expression should be a string, not a number. Use string conversion or string literal.',
+          'PSV6-SWITCH-TYPE',
+        );
+        return;
+      }
+      case 'BooleanLiteral': {
+        const { line, column } = expression.loc.start;
+        this.addError(
+          line,
+          column,
+          'Switch expression should be a string, not a boolean. Use string conversion or string literal.',
+          'PSV6-SWITCH-TYPE',
+        );
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  private validateAstCaseValue(caseNode: SwitchCaseNode): void {
+    const test = caseNode.test;
+    if (!test) {
+      return;
+    }
+
+    const { line, column } = test.loc.start;
+    if (test.kind === 'NumberLiteral') {
+      this.addError(
+        line,
+        column,
+        'Case value should be a string, not a number. Use string literal.',
+        'PSV6-SWITCH-CASE-TYPE',
+      );
+    } else if (test.kind === 'BooleanLiteral') {
+      this.addError(
+        line,
+        column,
+        'Case value should be a string, not a boolean. Use string literal.',
+        'PSV6-SWITCH-CASE-TYPE',
+      );
+    }
+  }
+
+  private detectAstDuplicateCase(
+    caseNode: SwitchCaseNode,
+    seen: Map<string, { line: number; column: number }>,
+  ): void {
+    const test = caseNode.test;
+    if (!test) {
+      return;
+    }
+
+    const key = this.describeCaseTest(test);
+    if (!key) {
+      return;
+    }
+
+    const { line, column } = test.loc.start;
+    if (seen.has(key)) {
+      this.addError(line, column, `Duplicate case value: ${key}`, 'PSV6-SWITCH-DUPLICATE-CASE');
+      return;
+    }
+
+    seen.set(key, { line, column });
+  }
+
+  private describeCaseTest(expression: ExpressionNode): string {
+    switch (expression.kind) {
+      case 'StringLiteral':
+        return `"${expression.value}"`;
+      case 'Identifier':
+        return expression.name;
+      case 'MemberExpression':
+        return `${this.describeCaseTest(expression.object)}.${expression.property.name}`;
+      case 'NumberLiteral':
+        return String(expression.value);
+      case 'BooleanLiteral':
+        return expression.value ? 'true' : 'false';
+      case 'CallExpression':
+        return `${this.describeCaseTest(expression.callee)}(...)`;
+      case 'IndexExpression':
+        return `${this.describeCaseTest(expression.object)}[...]`;
+      default:
+        return expression.kind;
+    }
+  }
+
+  private inferAstCaseReturnType(caseNode: SwitchCaseNode): string | null {
+    if (!this.astContext) {
+      return null;
+    }
+
+    const expression = this.extractCaseExpression(caseNode);
+    if (!expression) {
+      return 'unknown';
+    }
+
+    const metadata = this.astContext.typeEnvironment.nodeTypes.get(expression);
+    const described = this.describeTypeMetadata(metadata ?? null);
+    return described ?? 'unknown';
+  }
+
+  private extractCaseExpression(caseNode: SwitchCaseNode): ExpressionNode | null {
+    if (caseNode.consequent.length === 0) {
+      return null;
+    }
+
+    const first = caseNode.consequent[0];
+    if (first.kind === 'ExpressionStatement') {
+      return (first as ExpressionStatementNode).expression;
+    }
+    if (first.kind === 'AssignmentStatement') {
+      return (first as AssignmentStatementNode).right ?? null;
+    }
+    if (first.kind === 'ReturnStatement') {
+      return ((first as ReturnStatementNode).argument as ExpressionNode) ?? null;
+    }
+    if (first.kind === 'VariableDeclaration') {
+      return (first as VariableDeclarationNode).initializer ?? null;
+    }
+
+    return null;
+  }
+
+  private describeTypeMetadata(metadata: TypeMetadata | null): string | null {
+    if (!metadata) {
+      return null;
+    }
+
+    return metadata.kind;
+  }
+
+  private computeSwitchNestingDepth(statement: SwitchStatementNode): number {
+    let maxDepth = 0;
+    const stack: number[] = [];
+
+    visit(statement, {
+      SwitchStatement: {
+        enter: () => {
+          const parentDepth = stack.length > 0 ? stack[stack.length - 1] : 0;
+          const currentDepth = parentDepth + 1;
+          stack.push(currentDepth);
+          if (currentDepth > maxDepth) {
+            maxDepth = currentDepth;
+          }
+        },
+        exit: () => {
+          stack.pop();
+        },
+      },
+    });
+
+    return maxDepth;
+  }
+
+  private validateSwitchStyleAst(cases: SwitchCaseNode[]): void {
+    if (cases.length === 0) {
+      return;
+    }
+
+    this.validateCaseFormattingAst(cases);
+
+    if (cases.some((caseNode) => !caseNode.test)) {
+      this.validateDefaultClausePlacementAst(cases);
+    }
+  }
+
+  private validateCaseFormattingAst(cases: SwitchCaseNode[]): void {
+    if (cases.length <= 1) {
+      return;
+    }
+
+    const indentations = cases.map((caseNode) => {
+      const line = caseNode.loc.start.line;
+      const sourceLine = this.context.cleanLines[line - 1] ?? '';
+      return sourceLine.length - sourceLine.trimStart().length;
+    });
+
+    const [firstIndent, ...rest] = indentations;
+    const mismatchIndex = rest.findIndex((indent) => indent !== firstIndent);
+    if (mismatchIndex === -1) {
+      return;
+    }
+
+    const caseNode = cases[mismatchIndex + 1];
+    const { line } = caseNode.loc.start;
+    this.addInfo(line, 1, 'Switch cases should have consistent indentation', 'PSV6-SWITCH-STYLE-INDENTATION');
+  }
+
+  private validateDefaultClausePlacementAst(cases: SwitchCaseNode[]): void {
+    const defaultIndex = cases.findIndex((caseNode) => !caseNode.test);
+    if (defaultIndex === -1 || defaultIndex === cases.length - 1) {
+      return;
+    }
+
+    const defaultCase = cases[defaultIndex];
+    const { line, column } = defaultCase.loc.start;
+    this.addInfo(
+      line,
+      column,
+      'Default clause should be placed at the end of switch statement',
+      'PSV6-SWITCH-STYLE-DEFAULT-PLACEMENT',
+    );
+  }
+
+  private validateSwitchStatementsLegacy(): void {
     for (let i = 0; i < this.context.cleanLines.length; i++) {
       const line = this.context.cleanLines[i];
       const lineNum = i + 1;
@@ -64,22 +394,22 @@ export class SwitchValidator implements ValidationModule {
       // Check for switch statement (standalone or in assignment)
       const switchMatch = line.match(/^\s*switch\s+(.+)$/) || line.match(/^\s*\w+\s*=\s*switch\s+(.+)$/);
       if (switchMatch) {
-        this.validateSwitchStatement(i, switchMatch[1].trim());
+        this.validateSwitchStatementLegacy(i, switchMatch[1].trim());
       }
     }
   }
 
-  private validateSwitchStatement(startLine: number, switchExpression: string): void {
+  private validateSwitchStatementLegacy(startLine: number, switchExpression: string): void {
     const lineNum = startLine + 1;
-    
+
     // Validate switch expression type
-    this.validateSwitchExpression(switchExpression, lineNum);
-    
+    this.validateSwitchExpressionLegacy(switchExpression, lineNum);
+
     // Parse switch cases and validate
-    const { cases, hasDefault, defaultLine } = this.parseSwitchCases(startLine);
-    
+    const { cases, hasDefault, defaultLine } = this.parseSwitchCasesLegacy(startLine);
+
     // Validate cases
-    this.validateSwitchCases(cases, switchExpression, lineNum);
+    this.validateSwitchCasesLegacy(cases, switchExpression, lineNum);
     
     // Check for missing default clause
     if (!hasDefault) {
@@ -87,10 +417,10 @@ export class SwitchValidator implements ValidationModule {
     }
     
     // Check for duplicate case values
-    this.validateDuplicateCases(cases, lineNum);
+    this.validateDuplicateCasesLegacy(cases, lineNum);
     
     // Check for deep nesting
-    this.validateSwitchNesting(startLine, lineNum);
+    this.validateSwitchNestingLegacy(startLine, lineNum);
     
     // Check for too many cases
     if (cases.length > 20) {
@@ -98,16 +428,16 @@ export class SwitchValidator implements ValidationModule {
     }
     
     // Check for deep nesting
-    this.validateSwitchNesting(startLine, lineNum);
-    
+    this.validateSwitchNestingLegacy(startLine, lineNum);
+
     // Update type map with switch expression type
-    this.updateSwitchTypeMap(startLine, switchExpression, cases);
-    
+    this.updateSwitchTypeMapLegacy(startLine, switchExpression, cases);
+
     // Validate switch style
-    this.validateSwitchStyle(startLine, cases, hasDefault);
+    this.validateSwitchStyleLegacy(startLine, cases, hasDefault);
   }
 
-  private validateSwitchExpression(expression: string, lineNum: number): void {
+  private validateSwitchExpressionLegacy(expression: string, lineNum: number): void {
     // Check if expression is a valid type for switch
     const trimmed = expression.trim();
     
@@ -143,7 +473,7 @@ export class SwitchValidator implements ValidationModule {
     }
   }
 
-  private parseSwitchCases(startLine: number): { cases: Array<{ value: string, line: number, returnType: string }>, hasDefault: boolean, defaultLine: number } {
+  private parseSwitchCasesLegacy(startLine: number): { cases: Array<{ value: string, line: number, returnType: string }>, hasDefault: boolean, defaultLine: number } {
     const cases: Array<{ value: string, line: number, returnType: string }> = [];
     let hasDefault = false;
     let defaultLine = 0;
@@ -174,7 +504,7 @@ export class SwitchValidator implements ValidationModule {
         // Handle multi-line return values (like nested switch statements)
         if (returnValue === '' || returnValue.endsWith('=>')) {
           // This is a multi-line return value, collect the full return value
-          returnValue = this.collectMultiLineReturnValue(i, startLine, switchIndent);
+          returnValue = this.collectMultiLineReturnValueLegacy(i, startLine, switchIndent);
         }
         
         // Check for duplicate case values
@@ -184,7 +514,7 @@ export class SwitchValidator implements ValidationModule {
         caseValues.add(caseValue);
         
         // Infer return type
-        const returnType = this.inferReturnType(returnValue);
+        const returnType = this.inferReturnTypeLegacy(returnValue);
         
         cases.push({
           value: caseValue,
@@ -209,7 +539,7 @@ export class SwitchValidator implements ValidationModule {
         caseValues.add(caseValue);
         
         // Infer return type
-        const returnType = this.inferReturnType(returnValue);
+        const returnType = this.inferReturnTypeLegacy(returnValue);
         
         cases.push({
           value: caseValue,
@@ -218,7 +548,7 @@ export class SwitchValidator implements ValidationModule {
         });
         
         // Validate case value type - should be string
-        this.validateCaseValue(caseValue, lineNum);
+        this.validateCaseValueLegacy(caseValue, lineNum);
         continue;
       }
       
@@ -234,7 +564,7 @@ export class SwitchValidator implements ValidationModule {
     return { cases, hasDefault, defaultLine };
   }
 
-  private collectMultiLineReturnValue(startLine: number, switchStartLine: number, switchIndent: number): string {
+  private collectMultiLineReturnValueLegacy(startLine: number, switchStartLine: number, switchIndent: number): string {
     let returnValue = '';
     let currentLine = startLine + 1;
     
@@ -259,7 +589,7 @@ export class SwitchValidator implements ValidationModule {
     return returnValue.trim();
   }
 
-  private validateSwitchCases(cases: Array<{ value: string, line: number, returnType: string }>, switchExpression: string, switchLine: number): void {
+  private validateSwitchCasesLegacy(cases: Array<{ value: string, line: number, returnType: string }>, switchExpression: string, switchLine: number): void {
     if (cases.length === 0) return;
     
     // Check for consistent return types
@@ -271,7 +601,7 @@ export class SwitchValidator implements ValidationModule {
     // Case values are already validated during parsing
   }
 
-  private validateCaseValue(caseValue: string, lineNum: number): void {
+  private validateCaseValueLegacy(caseValue: string, lineNum: number): void {
     // Case values should be strings
     if (caseValue.match(/^\d+$/)) {
       this.addError(lineNum, 1, 'Case value should be a string, not a number. Use string literal.', 'PSV6-SWITCH-CASE-TYPE');
@@ -282,7 +612,7 @@ export class SwitchValidator implements ValidationModule {
     }
   }
 
-  private validateDuplicateCases(cases: Array<{ value: string, line: number, returnType: string }>, switchLine: number): void {
+  private validateDuplicateCasesLegacy(cases: Array<{ value: string, line: number, returnType: string }>, switchLine: number): void {
     const seen = new Set<string>();
     
     cases.forEach(case_ => {
@@ -293,7 +623,7 @@ export class SwitchValidator implements ValidationModule {
     });
   }
 
-  private validateSwitchNesting(startLine: number, switchLine: number): void {
+  private validateSwitchNestingLegacy(startLine: number, switchLine: number): void {
     let nestingDepth = 1; // Start with 1 for the current switch
     
     // Count nested switch statements
@@ -322,7 +652,7 @@ export class SwitchValidator implements ValidationModule {
     }
   }
 
-  private inferReturnType(value: string): string {
+  private inferReturnTypeLegacy(value: string): string {
     const trimmed = value.trim();
     
     // String literal
@@ -354,7 +684,7 @@ export class SwitchValidator implements ValidationModule {
     return 'unknown';
   }
 
-  private updateSwitchTypeMap(startLine: number, switchExpression: string, cases: Array<{ value: string, line: number, returnType: string }>): void {
+  private updateSwitchTypeMapLegacy(startLine: number, switchExpression: string, cases: Array<{ value: string, line: number, returnType: string }>): void {
     // Find the variable being assigned the switch result
     const line = this.context.cleanLines[startLine];
     const assignmentMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*switch\s+(.+)$/);
@@ -395,17 +725,17 @@ export class SwitchValidator implements ValidationModule {
     }
   }
 
-  private validateSwitchStyle(startLine: number, cases: Array<{ value: string, line: number, returnType: string }>, hasDefault: boolean): void {
+  private validateSwitchStyleLegacy(startLine: number, cases: Array<{ value: string, line: number, returnType: string }>, hasDefault: boolean): void {
     // Check for consistent case formatting
-    this.validateCaseFormatting(cases);
+    this.validateCaseFormattingLegacy(cases);
     
     // Check for default clause placement
     if (hasDefault) {
-      this.validateDefaultClausePlacement(startLine);
+      this.validateDefaultClausePlacementLegacy(startLine);
     }
   }
 
-  private validateCaseFormatting(cases: Array<{ value: string, line: number, returnType: string }>): void {
+  private validateCaseFormattingLegacy(cases: Array<{ value: string, line: number, returnType: string }>): void {
     // Check for consistent indentation in case statements
     const indentations = cases.map(c => {
       const line = this.context.cleanLines[c.line - 1];
@@ -426,7 +756,7 @@ export class SwitchValidator implements ValidationModule {
     }
   }
 
-  private validateDefaultClausePlacement(startLine: number): void {
+  private validateDefaultClausePlacementLegacy(startLine: number): void {
     // Check if default clause is at the end (best practice)
     let defaultLine = 0;
     let lastCaseLine = 0;

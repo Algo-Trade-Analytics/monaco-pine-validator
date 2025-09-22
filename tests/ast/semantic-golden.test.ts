@@ -319,6 +319,9 @@ describe('semantic golden coverage', () => {
             ],
             "kind": "variable",
             "metadata": {
+              "declarationKinds": [
+                "variable",
+              ],
               "declarationScopes": [
                 "scope-0",
               ],
@@ -357,6 +360,9 @@ describe('semantic golden coverage', () => {
             ],
             "kind": "function",
             "metadata": {
+              "declarationKinds": [
+                "function",
+              ],
               "declarationScopes": [
                 "scope-0",
               ],
@@ -392,6 +398,9 @@ describe('semantic golden coverage', () => {
             ],
             "kind": "parameter",
             "metadata": {
+              "declarationKinds": [
+                "parameter",
+              ],
               "declarationScopes": [
                 "scope-1",
               ],
@@ -409,6 +418,9 @@ describe('semantic golden coverage', () => {
             ],
             "kind": "parameter",
             "metadata": {
+              "declarationKinds": [
+                "parameter",
+              ],
               "declarationScopes": [
                 "scope-1",
               ],
@@ -426,6 +438,9 @@ describe('semantic golden coverage', () => {
             ],
             "kind": "variable",
             "metadata": {
+              "declarationKinds": [
+                "variable",
+              ],
               "declarationScopes": [
                 "scope-1",
               ],
@@ -449,6 +464,9 @@ describe('semantic golden coverage', () => {
             ],
             "kind": "namespace",
             "metadata": {
+              "declarationKinds": [
+                "namespace",
+              ],
               "declarationScopes": [
                 "scope-0",
               ],
@@ -718,6 +736,49 @@ describe('semantic dual-run guardrail', () => {
       'PSV6-BACKADJUSTMENT-CONSTANT',
     ]);
 
-    expect(astSummary.warnings).toEqual(legacySummary.warnings);
+    expect(legacySummary.warnings.map((warning) => warning.code)).toEqual(['PS014']);
+    expect(astSummary.warnings).toEqual([
+      legacySummary.warnings[0],
+      expect.objectContaining({
+        code: 'PSU01',
+        line: 3,
+        message: "Variable 'tfDaily' is declared but never used.",
+      }),
+      expect.objectContaining({
+        code: 'PSU01',
+        line: 4,
+        message: "Variable 'displaySetting' is declared but never used.",
+      }),
+      expect.objectContaining({
+        code: 'PSU01',
+        line: 5,
+        message: "Variable 'extendSetting' is declared but never used.",
+      }),
+      expect.objectContaining({
+        code: 'PSU01',
+        line: 6,
+        message: "Variable 'formatSetting' is declared but never used.",
+      }),
+      expect.objectContaining({
+        code: 'PSU01',
+        line: 7,
+        message: "Variable 'currencySetting' is declared but never used.",
+      }),
+      expect.objectContaining({
+        code: 'PSU01',
+        line: 8,
+        message: "Variable 'scaleSetting' is declared but never used.",
+      }),
+      expect.objectContaining({
+        code: 'PSU01',
+        line: 9,
+        message: "Variable 'adjustmentSetting' is declared but never used.",
+      }),
+      expect.objectContaining({
+        code: 'PSU01',
+        line: 10,
+        message: "Variable 'backadjustmentSetting' is declared but never used.",
+      }),
+    ]);
   });
 });

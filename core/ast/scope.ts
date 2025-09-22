@@ -28,11 +28,13 @@ import {
   type ProgramNode,
   type ReturnStatementNode,
   type ScriptDeclarationNode,
+  type TypeDeclarationNode,
   type StatementNode,
   type SwitchStatementNode,
   type WhileStatementNode,
   type BreakStatementNode,
   type VariableDeclarationNode,
+  type TupleExpressionNode,
 } from './nodes';
 
 export interface ScopeBuildResult {
@@ -99,7 +101,12 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
     if (!existing) {
       const record = createSymbolRecord(name, kind, location);
       const scopeId = currentScope()?.id;
-      record.metadata = scopeId ? { declarationScopes: [scopeId] } : undefined;
+      if (scopeId) {
+        record.metadata = {
+          declarationScopes: [scopeId],
+          declarationKinds: [kind],
+        };
+      }
       symbolTable.set(name, record);
       return record;
     }
@@ -116,8 +123,15 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         const scopes = (existing.metadata.declarationScopes as string[] | undefined) ?? [];
         scopes.push(scopeId);
         existing.metadata.declarationScopes = scopes;
+
+        const kinds = (existing.metadata.declarationKinds as SymbolKind[] | undefined) ?? [];
+        kinds.push(kind);
+        existing.metadata.declarationKinds = kinds;
       } else {
-        existing.metadata = { declarationScopes: [scopeId] };
+        existing.metadata = {
+          declarationScopes: [scopeId],
+          declarationKinds: [kind],
+        };
       }
     }
 
@@ -207,6 +221,13 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         });
         break;
       }
+      case 'TupleExpression': {
+        const tuple = expression as TupleExpressionNode;
+        tuple.elements.forEach((element) => {
+          visitExpression(element);
+        });
+        break;
+      }
       case 'ConditionalExpression': {
         const conditional = expression as ConditionalExpressionNode;
         visitExpression(conditional.test);
@@ -231,6 +252,14 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         const assignment = statement as AssignmentStatementNode;
         visitExpression(assignment.left);
         visitExpression(assignment.right);
+        break;
+      }
+      case 'TypeDeclaration': {
+        const typeDeclaration = statement as TypeDeclarationNode;
+        declare(typeDeclaration.identifier, 'type');
+        typeDeclaration.fields.forEach((field) => {
+          declare(field.identifier, 'variable');
+        });
         break;
       }
       case 'ExpressionStatement': {

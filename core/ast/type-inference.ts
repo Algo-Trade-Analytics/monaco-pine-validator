@@ -26,11 +26,13 @@ import {
   type NumberLiteralNode,
   type ProgramNode,
   type ReturnStatementNode,
+  type TypeDeclarationNode,
   type StatementNode,
   type SwitchStatementNode,
   type UnaryExpressionNode,
   type VariableDeclarationNode,
   type WhileStatementNode,
+  type TupleExpressionNode,
 } from './nodes';
 
 const NUMERIC_BINARY_OPERATORS = new Set(['+', '-', '*', '/', '%', '^']);
@@ -444,6 +446,15 @@ function inferExpression(
       });
       return annotateNode(environment, expression, createTypeMetadata('matrix', `${reason}:matrix`, 'certain'));
     }
+    case 'TupleExpression': {
+      const tuple = expression as TupleExpressionNode;
+      tuple.elements.forEach((element, elementIndex) => {
+        if (element) {
+          inferExpression(environment, element, `${reason}:tuple[${elementIndex}]`);
+        }
+      });
+      return annotateNode(environment, expression, createUnknown(`${reason}:tuple`));
+    }
     default:
       return annotateNode(environment, expression, createUnknown(reason));
   }
@@ -537,6 +548,13 @@ function visitAssignmentStatement(
 
   if (statement.left.kind === 'Identifier') {
     assignIdentifier(environment, statement.left, rightMetadata, 'assignment:target');
+  } else if (statement.left.kind === 'TupleExpression') {
+    const tuple = statement.left as TupleExpressionNode;
+    tuple.elements.forEach((element) => {
+      if (element && element.kind === 'Identifier') {
+        assignIdentifier(environment, element, rightMetadata, 'assignment:target');
+      }
+    });
   }
 }
 
@@ -595,6 +613,14 @@ function visitStatement(environment: TypeEnvironment, statement: StatementNode):
       break;
     case 'ScriptDeclaration':
       visitScriptDeclaration(environment, statement);
+      break;
+    case 'TypeDeclaration':
+      assignIdentifier(
+        environment,
+        (statement as TypeDeclarationNode).identifier,
+        createTypeMetadata('udt', 'type:declaration', 'certain'),
+        'type:declaration',
+      );
       break;
     case 'BreakStatement':
     case 'ContinueStatement':

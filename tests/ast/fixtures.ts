@@ -22,6 +22,9 @@ import {
   type ScriptDeclarationNode,
   type StatementNode,
   type StringLiteralNode,
+  type TypeDeclarationNode,
+  type TypeFieldNode,
+  type TypeReferenceNode,
   type SwitchCaseNode,
   type SwitchStatementNode,
   type UnaryExpressionNode,
@@ -29,6 +32,7 @@ import {
   type WhileStatementNode,
   type MemberExpressionNode,
   type VersionDirectiveNode,
+  type TupleExpressionNode,
   createLocation,
   createPosition,
   createRange,
@@ -140,7 +144,7 @@ export function createBlock(body: StatementNode[], start: number, end: number, l
   };
 }
 
-export function createReturn(argument: IdentifierNode | null, start: number, end: number, line = 1): ReturnStatementNode {
+export function createReturn(argument: ExpressionNode | null, start: number, end: number, line = 1): ReturnStatementNode {
   return {
     kind: 'ReturnStatement',
     argument,
@@ -279,14 +283,15 @@ export function createVariableDeclaration(
   options: {
     declarationKind?: VariableDeclarationNode['declarationKind'];
     initializer?: ExpressionNode | null;
+    typeAnnotation?: TypeReferenceNode | null;
   } = {},
 ): VariableDeclarationNode {
-  const { declarationKind = 'simple', initializer = null } = options;
+  const { declarationKind = 'simple', initializer = null, typeAnnotation = null } = options;
   return {
     kind: 'VariableDeclaration',
     declarationKind,
     identifier,
-    typeAnnotation: null,
+    typeAnnotation,
     initializer,
     ...createSpan({ start, end, lineStart: line }),
   };
@@ -303,6 +308,19 @@ export function createAssignmentStatement(
     kind: 'AssignmentStatement',
     left,
     right,
+    ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
+export function createTupleExpression(
+  elements: (ExpressionNode | null)[],
+  start: number,
+  end: number,
+  line = 1,
+): TupleExpressionNode {
+  return {
+    kind: 'TupleExpression',
+    elements,
     ...createSpan({ start, end, lineStart: line }),
   };
 }
@@ -404,6 +422,38 @@ export function createMatrixLiteral(
   };
 }
 
+export function createTypeField(
+  identifier: IdentifierNode,
+  typeAnnotation: TypeReferenceNode | null,
+  start: number,
+  end: number,
+  lineStart = 1,
+  lineEnd = lineStart,
+): TypeFieldNode {
+  return {
+    kind: 'TypeField',
+    identifier,
+    typeAnnotation,
+    ...createSpan({ start, end, lineStart, lineEnd }),
+  };
+}
+
+export function createTypeDeclaration(
+  identifier: IdentifierNode,
+  fields: TypeFieldNode[],
+  start: number,
+  end: number,
+  lineStart = 1,
+  lineEnd = lineStart,
+): TypeDeclarationNode {
+  return {
+    kind: 'TypeDeclaration',
+    identifier,
+    fields,
+    ...createSpan({ start, end, lineStart, lineEnd }),
+  };
+}
+
 export function createSwitchCase(
   test: ExpressionNode | null,
   consequent: StatementNode[],
@@ -432,6 +482,22 @@ export function createSwitchStatement(
     kind: 'SwitchStatement',
     discriminant,
     cases,
+    ...createSpan({ start, end, lineStart, lineEnd }),
+  };
+}
+
+export function createProgram(
+  body: StatementNode[],
+  start: number,
+  end: number,
+  lineStart = 1,
+  lineEnd = lineStart,
+  directives: VersionDirectiveNode[] = [],
+): ProgramNode {
+  return {
+    kind: 'Program',
+    directives,
+    body,
     ...createSpan({ start, end, lineStart, lineEnd }),
   };
 }
@@ -905,5 +971,259 @@ export function createHistoryReferencingProgram(): ProgramNode {
     directives: [],
     body: [negativeDecl, largeDecl, whileStatement, nestedDecl, varipDecl, varipAssignment, callStatement, typedDeclaration],
     ...createSpan({ start: 0, end: 28, lineStart: 1, lineEnd: 9 }),
+  };
+}
+
+export function createDynamicLoopProgram(): ProgramNode {
+  const dynamicStartInitializer = createAssignmentStatement(
+    createIdentifier('i', 4, 1),
+    createBinaryExpression(
+      '-',
+      createIdentifier('bar_index', 12, 1),
+      createNumberLiteral(100, '100', 24, 1),
+      12,
+      27,
+      1,
+    ),
+    4,
+    27,
+    1,
+  );
+  const dynamicStartTest = createBinaryExpression(
+    '<=',
+    createIdentifier('i', 4, 1),
+    createNumberLiteral(10, '10', 22, 1),
+    4,
+    28,
+    1,
+  );
+  const dynamicStartUpdate = createBinaryExpression(
+    '+',
+    createIdentifier('i', 4, 1),
+    createNumberLiteral(1, '1', 16, 1),
+    4,
+    18,
+    1,
+  );
+  const dynamicStartBody = createBlock(
+    [createExpressionStatement(createIdentifier('plotStart', 8, 2), 8, 18, 2)],
+    8,
+    18,
+    2,
+    3,
+  );
+  const dynamicStartLoop = createForStatement(
+    dynamicStartInitializer,
+    dynamicStartTest,
+    dynamicStartUpdate,
+    dynamicStartBody,
+    0,
+    40,
+    1,
+  );
+
+  const dynamicEndInitializer = createAssignmentStatement(
+    createIdentifier('j', 4, 4),
+    createNumberLiteral(0, '0', 8, 4),
+    4,
+    12,
+    4,
+  );
+  const dynamicEndBound = createBinaryExpression(
+    '-',
+    createCallExpression(
+      createMemberExpression(
+        createIdentifier('array', 20, 4),
+        createIdentifier('size', 26, 4),
+        20,
+        30,
+        4,
+      ),
+      [createArgument(createIdentifier('signals', 32, 4), 31, 39, 4)],
+      20,
+      39,
+      4,
+    ),
+    createNumberLiteral(1, '1', 40, 4),
+    20,
+    42,
+    4,
+  );
+  const dynamicEndTest = createBinaryExpression(
+    '<',
+    createIdentifier('j', 4, 4),
+    dynamicEndBound,
+    4,
+    42,
+    4,
+  );
+  const dynamicEndUpdate = createBinaryExpression(
+    '+',
+    createIdentifier('j', 4, 4),
+    createNumberLiteral(1, '1', 8, 4),
+    4,
+    14,
+    4,
+  );
+  const dynamicEndBody = createBlock(
+    [createExpressionStatement(createIdentifier('plotEnd', 8, 5), 8, 18, 5)],
+    8,
+    18,
+    5,
+    6,
+  );
+  const dynamicEndLoop = createForStatement(
+    dynamicEndInitializer,
+    dynamicEndTest,
+    dynamicEndUpdate,
+    dynamicEndBody,
+    40,
+    80,
+    4,
+  );
+
+  const stepDeclaration = createVariableDeclaration(
+    createIdentifier('step', 0, 7),
+    0,
+    24,
+    7,
+    {
+      initializer: createCallExpression(
+        createMemberExpression(
+          createIdentifier('input', 10, 7),
+          createIdentifier('int', 16, 7),
+          10,
+          19,
+          7,
+        ),
+        [createArgument(createNumberLiteral(1, '1', 21, 7), 19, 22, 7)],
+        10,
+        22,
+        7,
+      ),
+    },
+  );
+
+  const dynamicStepInitializer = createAssignmentStatement(
+    createIdentifier('k', 4, 8),
+    createNumberLiteral(0, '0', 8, 8),
+    4,
+    12,
+    8,
+  );
+  const dynamicStepTest = createBinaryExpression(
+    '<=',
+    createIdentifier('k', 4, 8),
+    createNumberLiteral(10, '10', 16, 8),
+    4,
+    20,
+    8,
+  );
+  const dynamicStepUpdate = createBinaryExpression(
+    '+',
+    createIdentifier('k', 4, 8),
+    createIdentifier('step', 24, 8),
+    4,
+    24,
+    8,
+  );
+  const dynamicStepBody = createBlock(
+    [createExpressionStatement(createIdentifier('plotStep', 8, 9), 8, 18, 9)],
+    8,
+    18,
+    9,
+    10,
+  );
+  const dynamicStepLoop = createForStatement(
+    dynamicStepInitializer,
+    dynamicStepTest,
+    dynamicStepUpdate,
+    dynamicStepBody,
+    80,
+    120,
+    8,
+  );
+
+  return {
+    kind: 'Program',
+    directives: [],
+    body: [dynamicStartLoop, dynamicEndLoop, stepDeclaration, dynamicStepLoop],
+    ...createSpan({ start: 0, end: 160, lineStart: 1, lineEnd: 10 }),
+  };
+}
+
+export function createLoopMutationProgram(): ProgramNode {
+  const limitDeclaration = createVariableDeclaration(
+    createIdentifier('limit', 0, 1),
+    0,
+    16,
+    1,
+    {
+      initializer: createNumberLiteral(10, '10', 12, 1),
+    },
+  );
+
+  const loopInitializer = createAssignmentStatement(
+    createIdentifier('idx', 4, 2),
+    createNumberLiteral(0, '0', 8, 2),
+    4,
+    12,
+    2,
+  );
+  const loopTest = createBinaryExpression(
+    '<=',
+    createIdentifier('idx', 4, 2),
+    createIdentifier('limit', 16, 2),
+    4,
+    20,
+    2,
+  );
+  const loopUpdate = createBinaryExpression(
+    '+',
+    createIdentifier('idx', 4, 2),
+    createNumberLiteral(1, '1', 12, 2),
+    4,
+    16,
+    2,
+  );
+
+  const boundMutation = createAssignmentStatement(
+    createIdentifier('limit', 8, 3),
+    createBinaryExpression(
+      '+',
+      createIdentifier('limit', 8, 3),
+      createNumberLiteral(1, '1', 20, 3),
+      8,
+      20,
+      3,
+    ),
+    8,
+    24,
+    3,
+  );
+
+  const indexMutation = createAssignmentStatement(
+    createIdentifier('idx', 4, 4),
+    createBinaryExpression(
+      '+',
+      createIdentifier('idx', 4, 4),
+      createNumberLiteral(1, '1', 14, 4),
+      4,
+      14,
+      4,
+    ),
+    4,
+    18,
+    4,
+  );
+
+  const loopBody = createBlock([boundMutation, indexMutation], 8, 24, 3, 5);
+  const mutationLoop = createForStatement(loopInitializer, loopTest, loopUpdate, loopBody, 20, 80, 2);
+
+  return {
+    kind: 'Program',
+    directives: [],
+    body: [limitDeclaration, mutationLoop],
+    ...createSpan({ start: 0, end: 120, lineStart: 1, lineEnd: 5 }),
   };
 }
