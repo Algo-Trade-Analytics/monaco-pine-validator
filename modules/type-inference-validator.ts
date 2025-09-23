@@ -3,8 +3,38 @@
  * Handles advanced type inference, type compatibility, and type safety
  */
 
-import { ValidationModule, ValidationContext, ValidationError, ValidationResult, ValidatorConfig, TypeInfo } from '../core/types';
+import {
+  type ValidationModule,
+  type ValidationContext,
+  type ValidationError,
+  type ValidationResult,
+  type ValidatorConfig,
+  type TypeInfo,
+  type AstValidationContext,
+} from '../core/types';
 import { BUILTIN_FUNCTIONS_V6_RULES, NAMESPACES } from '../core/constants';
+import {
+  type ProgramNode,
+  type VariableDeclarationNode,
+  type AssignmentStatementNode,
+  type ExpressionNode,
+  type CallExpressionNode,
+  type IfStatementNode,
+  type BinaryExpressionNode,
+  type ArgumentNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type TypeReferenceNode,
+  type NumberLiteralNode,
+  type StringLiteralNode,
+  type BooleanLiteralNode,
+} from '../core/ast/nodes';
+import { visit } from '../core/ast/traversal';
+import type { TypeEnvironment, TypeMetadata } from '../core/ast/types';
+
+const SERIES_IDENTIFIERS = new Set(['open', 'high', 'low', 'close', 'volume']);
+const ARITHMETIC_OPERATORS = new Set(['+', '-', '*', '/', '%', '^']);
+const COMPARISON_OPERATORS = new Set(['==', '!=', '>', '<', '>=', '<=']);
 
 export class TypeInferenceValidator implements ValidationModule {
   name = 'TypeInferenceValidator';
@@ -15,6 +45,9 @@ export class TypeInferenceValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private astTypeEnvironment: TypeEnvironment | null = null;
+  private usingAst = false;
 
   getDependencies(): string[] {
     return ['SyntaxValidator', 'TypeValidator'];
@@ -24,13 +57,16 @@ export class TypeInferenceValidator implements ValidationModule {
     this.reset();
     this.context = context;
     this.config = config;
-    
 
-    this.validateTypeCompatibility();
-    this.validateTypeInference();
-    this.validateTypeSafety();
-    this.validateImplicitConversions();
-    this.validateTypeAnnotations();
+    this.astContext = this.getAstContext(config);
+    this.astTypeEnvironment = this.astContext?.typeEnvironment ?? null;
+    this.usingAst = !!this.astContext?.ast;
+
+    if (this.usingAst && this.astContext?.ast) {
+      this.validateWithAst(this.astContext.ast);
+    } else {
+      this.validateLegacy();
+    }
 
     return {
       isValid: this.errors.length === 0,
@@ -42,10 +78,450 @@ export class TypeInferenceValidator implements ValidationModule {
     };
   }
 
+  private validateLegacy(): void {
+    this.validateTypeCompatibility();
+    this.validateTypeInference();
+    this.validateTypeSafety();
+    this.validateImplicitConversions();
+    this.validateTypeAnnotations();
+  }
+
   private reset(): void {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.astContext = null;
+    this.astTypeEnvironment = null;
+    this.usingAst = false;
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // AST-backed validation
+  // ──────────────────────────────────────────────────────────────────────────
+
+  private validateWithAst(program: ProgramNode): void {
+    visit(program, {
+      VariableDeclaration: {
+        enter: (path) => this.handleVariableDeclaration(path.node),
+      },
+      AssignmentStatement: {
+        enter: (path) => this.handleAssignment(path.node),
+      },
+      IfStatement: {
+        enter: (path) => this.handleIfStatement(path.node),
+      },
+      CallExpression: {
+        enter: (path) => this.handleCallExpression(path.node),
+      },
+      BinaryExpression: {
+        enter: (path) => this.handleBinaryExpression(path.node),
+      },
+    });
+  }
+
+  private handleVariableDeclaration(node: VariableDeclarationNode): void {
+    const initializer = node.initializer;
+    if (!initializer) {
+      return;
+    }
+
+    const declaredType = node.typeAnnotation ? this.resolveTypeReference(node.typeAnnotation) : null;
+    const initializerType = this.getExpressionType(initializer);
+    const { line, column } = node.loc.start;
+
+    if (this.isNaExpression(initializer)) {
+      this.addWarning(
+        line,
+        column,
+        "Assigning 'na' directly can lead to ambiguous comparisons. Prefer using na() helpers for checks.",
+        'PSV6-TYPE-SAFETY-NA-FUNCTION',
+      );
+    }
+
+    if (!declaredType) {
+      if (!initializerType || initializerType === 'unknown') {
+        this.addWarning(
+          line,
+          column,
+          `Unable to infer type for '${node.identifier.name}'. Consider adding an explicit annotation.`,
+          'PSV6-TYPE-INFERENCE-AMBIGUOUS',
+        );
+      }
+
+      if (this.isLiteralExpression(initializer)) {
+        this.addInfo(
+          line,
+          column,
+          `Consider annotating '${node.identifier.name}' with its literal type for readability.`,
+          'PSV6-TYPE-ANNOTATION-SUGGESTION',
+        );
+      }
+
+      return;
+    }
+
+    if (!initializerType || initializerType === 'unknown') {
+      this.addWarning(
+        line,
+        column,
+        `Unable to infer type for '${node.identifier.name}' initializer.`,
+        'PSV6-TYPE-INFERENCE-AMBIGUOUS',
+      );
+      return;
+    }
+
+    if (declaredType === 'int' && initializerType === 'float') {
+      this.addWarning(
+        line,
+        column,
+        `Implicit float-to-int conversion for '${node.identifier.name}'. Cast explicitly to avoid truncation.`,
+        'PSV6-TYPE-CONVERSION-FLOAT-TO-INT',
+      );
+      return;
+    }
+
+    if (!this.areTypesCompatible(declaredType, initializerType)) {
+      this.addError(
+        line,
+        column,
+        `Type mismatch: cannot assign ${initializerType} to ${declaredType} variable '${node.identifier.name}'.`,
+        'PSV6-TYPE-ASSIGNMENT-MISMATCH',
+      );
+      this.addError(
+        line,
+        column,
+        `Type annotation '${declaredType}' does not match assigned value type '${initializerType}'.`,
+        'PSV6-TYPE-ANNOTATION-MISMATCH',
+      );
+      return;
+    }
+
+    if (this.isLiteralExpression(initializer)) {
+      this.addInfo(
+        line,
+        column,
+        `Type annotation '${declaredType}' for '${node.identifier.name}' is redundant for literal assignment.`,
+        'PSV6-TYPE-ANNOTATION-REDUNDANT',
+      );
+    }
+  }
+
+  private handleAssignment(node: AssignmentStatementNode): void {
+    if (!node.right) {
+      return;
+    }
+
+    const right = node.right;
+    const { line, column } = right.loc.start;
+
+    if (this.isNaExpression(right)) {
+      this.addWarning(
+        line,
+        column,
+        "Assigning 'na' directly can lead to ambiguous comparisons. Prefer using na() helpers for checks.",
+        'PSV6-TYPE-SAFETY-NA-FUNCTION',
+      );
+    }
+
+    const valueType = this.getExpressionType(right);
+    if (!valueType || valueType === 'unknown') {
+      this.addWarning(
+        line,
+        column,
+        'Unable to determine assignment type. The resulting value will be treated as series.',
+        'PSV6-TYPE-INFERENCE-AMBIGUOUS',
+      );
+    }
+  }
+
+  private handleIfStatement(node: IfStatementNode): void {
+    const test = node.test;
+    const testType = this.getExpressionType(test);
+
+    if (testType === 'bool') {
+      return;
+    }
+
+    const { line, column } = test.loc.start;
+    const isSeriesIdentifier = test.kind === 'Identifier' && SERIES_IDENTIFIERS.has((test as IdentifierNode).name);
+    const isNumericLiteral = test.kind === 'NumberLiteral';
+    const isStringLiteral = test.kind === 'StringLiteral';
+
+    if (isNumericLiteral || isStringLiteral || isSeriesIdentifier || testType === 'series') {
+      this.addWarning(line, column, 'Non-boolean expression used as condition.', 'PSV6-TYPE-CONDITIONAL-TYPE');
+      this.addWarning(
+        line,
+        column,
+        `Implicit boolean conversion of '${testType ?? 'unknown'}' expression.`,
+        'PSV6-TYPE-CONVERSION-IMPLICIT-BOOL',
+      );
+      return;
+    }
+
+    this.addWarning(
+      line,
+      column,
+      `Implicit boolean conversion of '${testType ?? 'unknown'}' expression.`,
+      'PSV6-TYPE-CONVERSION-IMPLICIT-BOOL',
+    );
+  }
+
+  private handleCallExpression(node: CallExpressionNode): void {
+    const calleeName = this.resolveCalleeName(node.callee);
+    if (!calleeName) {
+      return;
+    }
+
+    if (calleeName === 'str.tostring' && node.args.length > 0) {
+      const argumentType = this.getExpressionType(node.args[0].value);
+      if (argumentType === 'string') {
+        const { line, column } = node.args[0].value.loc.start;
+        this.addInfo(
+          line,
+          column,
+          'Calling str.tostring on an existing string is redundant.',
+          'PSV6-TYPE-CONVERSION-REDUNDANT-STRING',
+        );
+      }
+    }
+
+    if (calleeName === 'ta.sma') {
+      this.validateTaSmaCall(node);
+      return;
+    }
+
+    if (calleeName === 'math.max') {
+      this.validateMathMaxCall(node);
+      return;
+    }
+
+    if (calleeName === 'ta.crossover') {
+      this.validateTaCrossoverCall(node);
+    }
+  }
+
+  private handleBinaryExpression(node: BinaryExpressionNode): void {
+    if (this.isNaExpression(node.left) || this.isNaExpression(node.right)) {
+      const { line, column } = node.loc.start;
+      if (ARITHMETIC_OPERATORS.has(node.operator)) {
+        this.addWarning(
+          line,
+          column,
+          "Arithmetic with 'na' literal always yields 'na'; guard against na before performing operations.",
+          'PSV6-TYPE-SAFETY-NA-ARITHMETIC',
+        );
+      } else if (COMPARISON_OPERATORS.has(node.operator)) {
+        this.addWarning(
+          line,
+          column,
+          "Comparisons with 'na' literal are unsafe. Use na() helpers like na(value) instead.",
+          'PSV6-TYPE-SAFETY-NA-COMPARISON',
+        );
+      }
+    }
+  }
+
+  private validateTaSmaCall(node: CallExpressionNode): void {
+    if (node.args.length === 0) {
+      return;
+    }
+
+    const sourceArg = node.args[0];
+    const lengthArg = node.args[1];
+    const sourceType = this.getExpressionType(sourceArg.value);
+
+    if (sourceType && (sourceType === 'string' || sourceType === 'bool')) {
+      const { line, column } = sourceArg.value.loc.start;
+      this.addError(
+        line,
+        column,
+        `ta.sma source expects numeric series but received ${sourceType}.`,
+        'PSV6-TYPE-FUNCTION-PARAM-MISMATCH',
+      );
+    }
+
+    if (lengthArg) {
+      const lengthType = this.getExpressionType(lengthArg.value);
+      if (lengthType && lengthType !== 'int') {
+        const { line, column } = lengthArg.value.loc.start;
+        this.addError(
+          line,
+          column,
+          `ta.sma length expects int but received ${lengthType}.`,
+          'PSV6-TYPE-FUNCTION-PARAM-MISMATCH',
+        );
+      }
+    }
+  }
+
+  private validateMathMaxCall(node: CallExpressionNode): void {
+    const [firstArg, secondArg] = node.args;
+    if (!firstArg || !secondArg) {
+      return;
+    }
+
+    const firstType = this.getExpressionType(firstArg.value);
+    const secondType = this.getExpressionType(secondArg.value);
+
+    if (firstType && !this.isNumericType(firstType)) {
+      const { line, column } = firstArg.value.loc.start;
+      this.addError(
+        line,
+        column,
+        `math.max expects numeric arguments but received ${firstType}.`,
+        'PSV6-TYPE-FUNCTION-PARAM-MISMATCH',
+      );
+    }
+
+    if (secondType && !this.isNumericType(secondType)) {
+      const { line, column } = secondArg.value.loc.start;
+      this.addError(
+        line,
+        column,
+        `math.max expects numeric arguments but received ${secondType}.`,
+        'PSV6-TYPE-FUNCTION-PARAM-MISMATCH',
+      );
+    }
+  }
+
+  private validateTaCrossoverCall(node: CallExpressionNode): void {
+    if (node.args.length < 2) {
+      return;
+    }
+
+    const firstType = this.getExpressionType(node.args[0].value);
+    const secondType = this.getExpressionType(node.args[1].value);
+
+    if (firstType && (firstType === 'string' || firstType === 'bool')) {
+      const { line, column } = node.args[0].value.loc.start;
+      this.addError(
+        line,
+        column,
+        `ta.crossover arguments must be numeric series but received ${firstType}.`,
+        'PSV6-TYPE-FUNCTION-PARAM-MISMATCH',
+      );
+    }
+
+    if (secondType && (secondType === 'string' || secondType === 'bool')) {
+      const { line, column } = node.args[1].value.loc.start;
+      this.addError(
+        line,
+        column,
+        `ta.crossover arguments must be numeric series but received ${secondType}.`,
+        'PSV6-TYPE-FUNCTION-PARAM-MISMATCH',
+      );
+    }
+  }
+
+  private getExpressionType(expression: ExpressionNode): string | null {
+    if (this.astTypeEnvironment) {
+      const metadata = this.astTypeEnvironment.nodeTypes.get(expression);
+      const described = this.describeTypeMetadata(metadata);
+      if (described && described !== 'unknown') {
+        return described;
+      }
+
+      if (expression.kind === 'Identifier') {
+        const identifierMetadata = this.astTypeEnvironment.identifiers.get((expression as IdentifierNode).name);
+        const identifierType = this.describeTypeMetadata(identifierMetadata ?? null);
+        if (identifierType) {
+          return identifierType;
+        }
+      }
+    }
+
+    return this.inferLiteralType(expression);
+  }
+
+  private describeTypeMetadata(metadata: TypeMetadata | null | undefined): string | null {
+    if (!metadata) {
+      return null;
+    }
+    return metadata.kind;
+  }
+
+  private inferLiteralType(expression: ExpressionNode): string | null {
+    switch (expression.kind) {
+      case 'NumberLiteral': {
+        const literal = expression as NumberLiteralNode;
+        return Number.isInteger(literal.value) ? 'int' : 'float';
+      }
+      case 'BooleanLiteral':
+        return 'bool';
+      case 'StringLiteral':
+        return 'string';
+      default:
+        return null;
+    }
+  }
+
+  private resolveTypeReference(reference: TypeReferenceNode): string | null {
+    return reference.name.name;
+  }
+
+  private isLiteralExpression(expression: ExpressionNode): boolean {
+    return expression.kind === 'NumberLiteral' || expression.kind === 'BooleanLiteral' || expression.kind === 'StringLiteral';
+  }
+
+  private isNaExpression(expression: ExpressionNode): boolean {
+    return expression.kind === 'Identifier' && (expression as IdentifierNode).name === 'na';
+  }
+
+  private isNumericType(type: string | null): boolean {
+    return type === 'int' || type === 'float' || type === 'series';
+  }
+
+  private areTypesCompatible(expected: string, actual: string | null): boolean {
+    if (!actual) {
+      return false;
+    }
+
+    if (expected === actual) {
+      return true;
+    }
+
+    if (expected === 'float' && actual === 'int') {
+      return true;
+    }
+
+    if (expected === 'series' && this.isNumericType(actual)) {
+      return true;
+    }
+
+    if (this.isNumericType(expected) && actual === 'series') {
+      return true;
+    }
+
+    return false;
+  }
+
+  private resolveCalleeName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+
+      const objectName = this.resolveCalleeName(member.object);
+      if (!objectName) {
+        return null;
+      }
+
+      return `${objectName}.${member.property.name}`;
+    }
+
+    return null;
+  }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return isAstValidationContext(this.context) && this.context.ast ? (this.context as AstValidationContext) : null;
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
@@ -1270,7 +1746,11 @@ export class TypeInferenceValidator implements ValidationModule {
     if (current.trim()) {
       result.push(current.trim());
     }
-    
+
     return result;
   }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }

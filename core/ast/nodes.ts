@@ -20,6 +20,7 @@ export type NodeKind =
   | 'VersionDirective'
   | 'ScriptDeclaration'
   | 'BlockStatement'
+  | 'ImportDeclaration'
   | 'ExpressionStatement'
   | 'ReturnStatement'
   | 'VariableDeclaration'
@@ -59,6 +60,7 @@ export type Node =
   | VersionDirectiveNode
   | ScriptDeclarationNode
   | BlockStatementNode
+  | ImportDeclarationNode
   | ExpressionStatementNode
   | ReturnStatementNode
   | VariableDeclarationNode
@@ -97,6 +99,7 @@ export type DirectiveNode = VersionDirectiveNode;
 
 export type StatementNode =
   | BlockStatementNode
+  | ImportDeclarationNode
   | ExpressionStatementNode
   | ReturnStatementNode
   | VariableDeclarationNode
@@ -149,6 +152,12 @@ export interface ScriptDeclarationNode extends BaseNode {
   scriptType: 'indicator' | 'strategy' | 'library';
   identifier: IdentifierNode | null;
   arguments: ArgumentNode[];
+}
+
+export interface ImportDeclarationNode extends BaseNode {
+  kind: 'ImportDeclaration';
+  path: StringLiteralNode;
+  alias: IdentifierNode;
 }
 
 export interface BlockStatementNode extends BaseNode {
@@ -218,6 +227,7 @@ export interface FunctionDeclarationNode extends BaseNode {
   params: ParameterNode[];
   body: BlockStatementNode;
   export: boolean;
+  returnType: TypeReferenceNode | null;
 }
 
 export interface ParameterNode extends BaseNode {

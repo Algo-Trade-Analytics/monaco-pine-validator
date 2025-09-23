@@ -9,6 +9,7 @@ import {
   type BreakStatementNode,
   type ExpressionNode,
   type ExpressionStatementNode,
+  type ImportDeclarationNode,
   type ForStatementNode,
   type FunctionDeclarationNode,
   type IdentifierNode,
@@ -185,13 +186,16 @@ export function createFunctionDeclaration(
   end: number,
   lineStart = 1,
   lineEnd = lineStart,
+  options: { export?: boolean; returnType?: TypeReferenceNode | null } = {},
 ): FunctionDeclarationNode {
+  const { export: isExport = false, returnType = null } = options;
   return {
     kind: 'FunctionDeclaration',
     identifier,
     params,
     body,
-    export: false,
+    export: isExport,
+    returnType,
     ...createSpan({ start, end, lineStart, lineEnd }),
   };
 }
@@ -209,6 +213,21 @@ export function createScriptDeclaration(
     scriptType,
     identifier,
     arguments: args,
+    ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
+export function createImportDeclaration(
+  path: StringLiteralNode,
+  alias: IdentifierNode,
+  start: number,
+  end: number,
+  line = 1,
+): ImportDeclarationNode {
+  return {
+    kind: 'ImportDeclaration',
+    path,
+    alias,
     ...createSpan({ start, end, lineStart: line }),
   };
 }

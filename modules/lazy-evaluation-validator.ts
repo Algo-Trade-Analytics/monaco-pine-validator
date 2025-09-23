@@ -11,8 +11,32 @@
  * Priority 83: High priority - lazy evaluation can cause subtle bugs and performance issues
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
-import { IDENT, HISTORICAL_FUNCTIONS, EXPENSIVE_HISTORICAL_FUNCTIONS } from '../core/constants';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+} from '../core/types';
+import { HISTORICAL_FUNCTIONS, EXPENSIVE_HISTORICAL_FUNCTIONS } from '../core/constants';
+import {
+  type AssignmentStatementNode,
+  type CallExpressionNode,
+  type ConditionalExpressionNode,
+  type ExpressionNode,
+  type ForStatementNode,
+  type FunctionDeclarationNode,
+  type IdentifierNode,
+  type IfStatementNode,
+  type MemberExpressionNode,
+  type ProgramNode,
+  type StatementNode,
+  type SwitchCaseNode,
+  type VariableDeclarationNode,
+  type WhileStatementNode,
+} from '../core/ast/nodes';
+import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
 
 interface ConditionalHistoricalCall {
   functionName: string;
@@ -28,6 +52,24 @@ interface SeriesInconsistency {
   inconsistencyType: 'conditional_assignment' | 'mixed_sources' | 'partial_calculation';
 }
 
+interface PendingUserCall {
+  name: string;
+  line: number;
+  column: number;
+  context: Exclude<ConditionalHistoricalCall['context'], 'switch' | 'method'>;
+}
+
+interface PendingMethodCall {
+  name: string;
+  line: number;
+  column: number;
+}
+
+interface FunctionStackEntry {
+  name: string | null;
+  hasHistorical: boolean;
+}
+
 export class LazyEvaluationValidator implements ValidationModule {
   name = 'LazyEvaluationValidator';
   priority = 83; // High priority - lazy evaluation issues can cause subtle bugs
@@ -37,6 +79,9 @@ export class LazyEvaluationValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private usingAst = false;
+  private hasNestedTernaryHistoricalCall = false;
 
   // Analysis tracking
   private conditionalHistoricalCalls: ConditionalHistoricalCall[] = [];
@@ -61,26 +106,24 @@ export class LazyEvaluationValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
-    // First pass: identify user functions with historical dependencies
-    this.identifyUserFunctionsWithHistorical();
+    this.astContext = this.getAstContext(config);
+    this.usingAst = !!this.astContext?.ast;
 
-    // Second pass: analyze conditional historical usage
-    context.cleanLines.forEach((line, index) => {
-      this.processLine(line, index + 1);
-    });
+    if (this.usingAst && this.astContext?.ast) {
+      this.validateWithAst(this.astContext.ast);
+    } else {
+      this.validateLegacy();
+    }
 
-    // Post-process analysis
-    this.analyzeSeriesConsistency();
     this.analyzePerformanceImpact();
     this.provideBestPracticesSuggestions();
 
-    // Build type map for other validators
     const typeMap = new Map();
     typeMap.set('conditional_historical_functions', {
       type: 'analysis',
       isConst: false,
       isSeries: false,
-      count: this.conditionalHistoricalCount
+      count: this.conditionalHistoricalCount,
     });
 
     return {
@@ -89,7 +132,7 @@ export class LazyEvaluationValidator implements ValidationModule {
       warnings: this.warnings,
       info: this.info,
       typeMap,
-      scriptType: null
+      scriptType: null,
     };
   }
 
@@ -102,13 +145,368 @@ export class LazyEvaluationValidator implements ValidationModule {
     this.userFunctionsWithHistorical.clear();
     this.conditionalHistoricalCount = 0;
     this.emittedByLineAndFunc.clear();
-    
-    // Reset state tracking
     this.inConditionalBlock = false;
     this.inLoopBlock = false;
     this.inSwitchBlock = false;
     this.currentBlockDepth = 0;
     this.blockStack = [];
+    this.astContext = null;
+    this.usingAst = false;
+    this.hasNestedTernaryHistoricalCall = false;
+  }
+
+  private validateLegacy(): void {
+    this.identifyUserFunctionsWithHistorical();
+    this.context.cleanLines.forEach((line, index) => {
+      this.processLine(line, index + 1);
+    });
+    this.analyzeSeriesConsistencyLegacy();
+  }
+
+  private validateWithAst(program: ProgramNode): void {
+    const pendingUserCalls: PendingUserCall[] = [];
+    const pendingMethodCalls: PendingMethodCall[] = [];
+    const functionStack: FunctionStackEntry[] = [];
+    const ifStatements: IfStatementNode[] = [];
+
+    visit(program, {
+      FunctionDeclaration: {
+        enter: (path: NodePath<FunctionDeclarationNode>) => {
+          const identifier = path.node.identifier;
+          functionStack.push({ name: identifier?.name ?? null, hasHistorical: false });
+        },
+        exit: () => {
+          const entry = functionStack.pop();
+          if (entry?.name && entry.hasHistorical) {
+            this.userFunctionsWithHistorical.add(entry.name);
+          }
+        },
+      },
+      IfStatement: {
+        enter: (path: NodePath<IfStatementNode>) => {
+          ifStatements.push(path.node);
+        },
+      },
+      CallExpression: {
+        enter: (path: NodePath<CallExpressionNode>) => {
+          this.handleAstCallExpression(path, pendingUserCalls, pendingMethodCalls, functionStack);
+        },
+      },
+    });
+
+    this.emitUserFunctionWarnings(pendingUserCalls);
+    this.emitMethodWarnings(pendingMethodCalls);
+    this.analyzeSeriesConsistencyAst(ifStatements);
+  }
+
+  private handleAstCallExpression(
+    path: NodePath<CallExpressionNode>,
+    pendingUserCalls: PendingUserCall[],
+    pendingMethodCalls: PendingMethodCall[],
+    functionStack: FunctionStackEntry[],
+  ): void {
+    const call = path.node;
+    const location = this.getCallLocation(call.callee);
+    const qualifiedName = this.getExpressionQualifiedName(call.callee);
+
+    if (qualifiedName && HISTORICAL_FUNCTIONS.has(qualifiedName)) {
+      const context = this.determineCallContext(path);
+      if (context) {
+        this.addConditionalHistoricalCall(qualifiedName, location.line, location.column, context);
+        if (context === 'ternary' && this.isNestedTernary(path)) {
+          this.hasNestedTernaryHistoricalCall = true;
+        }
+      }
+      const currentFunction = functionStack[functionStack.length - 1];
+      if (currentFunction) {
+        currentFunction.hasHistorical = true;
+      }
+    }
+
+    const calleeInfo = this.getUserFunctionCallInfo(call.callee);
+    if (!calleeInfo) {
+      return;
+    }
+
+    if (calleeInfo.isMethod) {
+      pendingMethodCalls.push({ name: calleeInfo.name, line: location.line, column: location.column });
+      return;
+    }
+
+    const context = this.determineCallContext(path);
+    if (context === 'ternary' || context === 'if' || context === 'loop') {
+      pendingUserCalls.push({ name: calleeInfo.name, line: location.line, column: location.column, context });
+    }
+  }
+
+  private emitUserFunctionWarnings(calls: PendingUserCall[]): void {
+    const seen = new Set<string>();
+    for (const call of calls) {
+      if (!this.userFunctionsWithHistorical.has(call.name)) {
+        continue;
+      }
+
+      const key = `${call.name}:${call.line}:${call.column}:${call.context}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+
+      if (call.context === 'ternary') {
+        this.addWarning(
+          call.line,
+          call.column,
+          `User function ${call.name} may have historical dependencies in conditional expression`,
+          'PSV6-LAZY-EVAL-USER-FUNCTION',
+        );
+      } else {
+        this.addWarning(
+          call.line,
+          call.column,
+          `User function ${call.name} may have historical dependencies`,
+          'PSV6-LAZY-EVAL-USER-FUNCTION',
+        );
+      }
+    }
+  }
+
+  private emitMethodWarnings(calls: PendingMethodCall[]): void {
+    const seen = new Set<string>();
+    for (const call of calls) {
+      if (!this.userFunctionsWithHistorical.has(call.name)) {
+        continue;
+      }
+
+      const key = `${call.name}:${call.line}:${call.column}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+
+      this.addWarning(
+        call.line,
+        call.column,
+        `Method call may contain historical dependencies: ${call.name}`,
+        'PSV6-LAZY-EVAL-METHOD',
+      );
+    }
+  }
+
+  private determineCallContext(path: NodePath<CallExpressionNode>): ConditionalHistoricalCall['context'] | null {
+    const loopAncestor = findAncestor(
+      path,
+      (ancestor): ancestor is NodePath<ForStatementNode | WhileStatementNode> =>
+        ancestor.node.kind === 'ForStatement' || ancestor.node.kind === 'WhileStatement',
+    );
+    if (loopAncestor) {
+      return 'loop';
+    }
+
+    const switchAncestor = findAncestor(
+      path,
+      (ancestor): ancestor is NodePath<SwitchCaseNode> => ancestor.node.kind === 'SwitchCase',
+    );
+    if (switchAncestor) {
+      return 'switch';
+    }
+
+    const ternaryAncestor = findAncestor(
+      path,
+      (ancestor): ancestor is NodePath<ConditionalExpressionNode> => ancestor.node.kind === 'ConditionalExpression',
+    );
+    if (ternaryAncestor) {
+      return 'ternary';
+    }
+
+    const ifAncestor = findAncestor(
+      path,
+      (ancestor): ancestor is NodePath<IfStatementNode> => ancestor.node.kind === 'IfStatement',
+    );
+    if (ifAncestor) {
+      return 'if';
+    }
+
+    return null;
+  }
+
+  private isNestedTernary(path: NodePath<CallExpressionNode>): boolean {
+    const ternaryAncestor = findAncestor(
+      path,
+      (ancestor): ancestor is NodePath<ConditionalExpressionNode> => ancestor.node.kind === 'ConditionalExpression',
+    );
+    if (!ternaryAncestor) {
+      return false;
+    }
+    return !!findAncestor(
+      ternaryAncestor,
+      (ancestor): ancestor is NodePath<ConditionalExpressionNode> => ancestor.node.kind === 'ConditionalExpression',
+    );
+  }
+
+  private getUserFunctionCallInfo(
+    expression: ExpressionNode,
+  ): { name: string; isMethod: boolean } | null {
+    if (expression.kind === 'Identifier') {
+      return { name: (expression as IdentifierNode).name, isMethod: false };
+    }
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+      return { name: member.property.name, isMethod: true };
+    }
+    return null;
+  }
+
+  private getCallLocation(expression: ExpressionNode): { line: number; column: number } {
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      return { line: member.property.loc.start.line, column: member.property.loc.start.column };
+    }
+    return { line: expression.loc.start.line, column: expression.loc.start.column };
+  }
+
+  private analyzeSeriesConsistencyAst(ifStatements: IfStatementNode[]): void {
+    for (const statement of ifStatements) {
+      const consequentAssignments = this.collectAssignmentsFromStatement(statement.consequent);
+      const alternateAssignments = this.collectAssignmentsFromStatement(statement.alternate);
+
+      for (const [variableName, info] of consequentAssignments) {
+        const alternateInfo = alternateAssignments.get(variableName);
+        if (info.hasHistorical && alternateInfo?.hasNa) {
+          const startLine = Math.min(
+            statement.loc.start.line,
+            statement.consequent.loc.start.line,
+            statement.alternate?.loc.start.line ?? statement.loc.start.line,
+          );
+          const endLine = Math.max(
+            statement.loc.end.line,
+            statement.consequent.loc.end.line,
+            statement.alternate?.loc.end.line ?? statement.loc.end.line,
+          );
+          const line = endLine;
+          const column = statement.loc.start.column ?? 1;
+          this.seriesInconsistencies.push({
+            variableName,
+            line,
+            inconsistencyType: 'conditional_assignment',
+          });
+          this.addWarning(
+            line,
+            column,
+            'Series may have inconsistent historical data due to conditional assignment',
+            'PSV6-LAZY-EVAL-SERIES-INCONSISTENCY',
+          );
+          this.removeConditionalWarningsInRange(startLine, endLine);
+        }
+      }
+    }
+  }
+
+  private removeConditionalWarningsInRange(startLine: number, endLine: number): void {
+    this.warnings = this.warnings.filter((warning) => {
+      if (warning.code !== 'PSV6-LAZY-EVAL-CONDITIONAL') {
+        return true;
+      }
+      return warning.line < startLine || warning.line > endLine;
+    });
+  }
+
+  private collectAssignmentsFromStatement(
+    statement: StatementNode | null,
+  ): Map<string, { hasHistorical: boolean; hasNa: boolean }> {
+    const assignments = new Map<string, { hasHistorical: boolean; hasNa: boolean }>();
+    if (!statement) {
+      return assignments;
+    }
+
+    visit(statement, {
+      AssignmentStatement: {
+        enter: (path) => {
+          const node = path.node as AssignmentStatementNode;
+          if (node.left.kind !== 'Identifier' || !node.right) {
+            return;
+          }
+          const identifier = node.left as IdentifierNode;
+          const entry = assignments.get(identifier.name) ?? { hasHistorical: false, hasNa: false };
+          if (this.expressionContainsHistoricalCall(node.right)) {
+            entry.hasHistorical = true;
+          }
+          if (this.expressionContainsNa(node.right)) {
+            entry.hasNa = true;
+          }
+          assignments.set(identifier.name, entry);
+        },
+      },
+      VariableDeclaration: {
+        enter: (path) => {
+          const node = path.node as VariableDeclarationNode;
+          const identifier = node.identifier.name;
+          const entry = assignments.get(identifier) ?? { hasHistorical: false, hasNa: false };
+          if (node.initializer && this.expressionContainsHistoricalCall(node.initializer)) {
+            entry.hasHistorical = true;
+          }
+          if (node.initializer && this.expressionContainsNa(node.initializer)) {
+            entry.hasNa = true;
+          }
+          assignments.set(identifier, entry);
+        },
+      },
+    });
+
+    return assignments;
+  }
+
+  private expressionContainsHistoricalCall(expression: ExpressionNode): boolean {
+    let found = false;
+    visit(expression, {
+      CallExpression: {
+        enter: (path) => {
+          const qualifiedName = this.getExpressionQualifiedName((path.node as CallExpressionNode).callee);
+          if (qualifiedName && HISTORICAL_FUNCTIONS.has(qualifiedName)) {
+            found = true;
+            return false;
+          }
+          return undefined;
+        },
+      },
+    });
+    return found;
+  }
+
+  private expressionContainsNa(expression: ExpressionNode): boolean {
+    let found = false;
+    visit(expression, {
+      Identifier: {
+        enter: (path) => {
+          if ((path.node as IdentifierNode).name === 'na') {
+            found = true;
+            return false;
+          }
+          return undefined;
+        },
+      },
+    });
+    return found;
+  }
+
+  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+      const objectName = this.getExpressionQualifiedName(member.object);
+      if (!objectName) {
+        return member.property.name;
+      }
+      return `${objectName}.${member.property.name}`;
+    }
+    return null;
   }
 
   private identifyUserFunctionsWithHistorical(): void {
@@ -394,7 +792,7 @@ export class LazyEvaluationValidator implements ValidationModule {
     this.addWarning(lineNum, column, contextMessages[context], codes[context]);
   }
 
-  private analyzeSeriesConsistency(): void {
+  private analyzeSeriesConsistencyLegacy(): void {
     // Detect block-based inconsistency patterns: if/else assigns series variably with historical vs na
     let currentVar: string | null = null;
     let sawHistoricalInIf = false;
@@ -507,12 +905,16 @@ export class LazyEvaluationValidator implements ValidationModule {
     
     // Suggest pre-calculation for ternary expressions with historical functions
     const ternaryHistoricalCalls = this.conditionalHistoricalCalls.filter(call => call.context === 'ternary');
-    const ternaryLines = new Set(ternaryHistoricalCalls.map(c => c.line));
-    // Detect nested ternary patterns on any of these lines (multiple '?')
-    const hasNestedTernary = Array.from(ternaryLines).some(lineNum => {
-      const line = this.context.cleanLines[lineNum - 1] || '';
-      return (line.match(/\?/g) || []).length > 1;
-    });
+    let hasNestedTernary = false;
+    if (this.usingAst) {
+      hasNestedTernary = this.hasNestedTernaryHistoricalCall;
+    } else {
+      const ternaryLines = new Set(ternaryHistoricalCalls.map(c => c.line));
+      hasNestedTernary = Array.from(ternaryLines).some(lineNum => {
+        const line = this.context.cleanLines[lineNum - 1] || '';
+        return (line.match(/\?/g) || []).length > 1;
+      });
+    }
 
     // If nested ternary or multiple historical calls in ternary, prefer pattern suggestion over precalc
     if (hasNestedTernary) {
@@ -603,4 +1005,15 @@ export class LazyEvaluationValidator implements ValidationModule {
   getConditionalHistoricalCount(): number {
     return this.conditionalHistoricalCount;
   }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return isAstValidationContext(this.context) && this.context.ast ? (this.context as AstValidationContext) : null;
+  }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }

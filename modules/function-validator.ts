@@ -1,4 +1,23 @@
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+} from '../core/types';
+import {
+  type ArgumentNode,
+  type CallExpressionNode,
+  type ExpressionNode,
+  type FunctionDeclarationNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type ParameterNode,
+  type ProgramNode,
+  type TypeReferenceNode,
+} from '../core/ast/nodes';
+import { visit } from '../core/ast/traversal';
 import { IDENT, BUILTIN_FUNCTIONS_V6_RULES, KEYWORDS, NAMESPACES, NS_MEMBERS } from '../core/constants';
 
 interface FunctionInfo {
@@ -40,6 +59,8 @@ export class FunctionValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private usingAst = false;
 
   // Function tracking (extracted from EnhancedPineScriptValidator)
   private functionNames = new Set<string>();
@@ -177,10 +198,18 @@ export class FunctionValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
+    this.astContext = this.getAstContext(config);
+    this.usingAst = !!this.astContext?.ast;
+
     // Extract comprehensive function validation logic from EnhancedPineScriptValidator
     // NOTE: FunctionDeclarationsValidator also collects functions, but this module needs its own
     // collection for complete validation. Future optimization: coordinate with FunctionDeclarationsValidator
-    this.collectFunctions(context.cleanLines);
+    if (this.usingAst && this.astContext?.ast) {
+      this.collectFunctionsFromAst(this.astContext.ast);
+      this.collectStaticFunctionDeclarations(context.cleanLines);
+    } else {
+      this.collectFunctions(context.cleanLines);
+    }
 
     if (this.isDebugEnabled()) {
       console.log('[FunctionValidator] collected names', Array.from(this.functionNames));
@@ -227,6 +256,8 @@ export class FunctionValidator implements ValidationModule {
     this.paramUsage.clear();
     this.userFunctions.clear();
     this.functionCalls = [];
+    this.astContext = null;
+    this.usingAst = false;
   }
 
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
@@ -350,6 +381,187 @@ export class FunctionValidator implements ValidationModule {
     }
   }
 
+  private collectFunctionsFromAst(program: ProgramNode): void {
+    visit(program, {
+      FunctionDeclaration: {
+        enter: (path) => {
+          this.processAstFunctionDeclaration(path.node as FunctionDeclarationNode);
+        },
+      },
+    });
+  }
+
+  private processAstFunctionDeclaration(fn: FunctionDeclarationNode): void {
+    if (!fn.identifier) {
+      return;
+    }
+
+    const fullName = fn.identifier.name;
+    const params = fn.params.map((param) => this.formatAstParameter(param));
+    const paramNames = fn.params.map((param) => param.identifier.name).filter(Boolean);
+    const line = fn.loc?.start.line ?? 1;
+    const column = fn.loc?.start.column ?? 1;
+    const hasThisParam = fn.params.length > 0 && fn.params[0].identifier.name === 'this';
+    const isMethodCandidate = fullName.includes('.');
+    const isMethod = isMethodCandidate && hasThisParam;
+    const storeName = isMethod ? fullName.split('.').pop() ?? fullName : fullName;
+
+    if (isMethod) {
+      this.methodNames.add(storeName);
+      this.context.methodNames?.add(storeName);
+    }
+
+    this.storeAstFunctionSignature(storeName, params, line, column, isMethod, paramNames, { checkDuplicates: true });
+
+    if (isMethod && fullName !== storeName) {
+      this.storeAstFunctionSignature(fullName, params, line, column, isMethod, paramNames, { checkDuplicates: false });
+    }
+  }
+
+  private storeAstFunctionSignature(
+    name: string,
+    params: string[],
+    line: number,
+    column: number,
+    isMethod: boolean,
+    paramNames: string[],
+    options: { checkDuplicates?: boolean } = {},
+  ): void {
+    this.functionNames.add(name);
+    const signature = this.createSignatureMeta(params, isMethod, line);
+    this.addFunctionSignature(name, signature);
+
+    if (!this.functionHeaderLine.has(name)) {
+      this.functionHeaderLine.set(name, line);
+    }
+
+    if (!this.context.functionParams.has(name)) {
+      this.context.functionParams.set(name, params);
+    }
+
+    const info = this.createFunctionInfo(name, params, line, column, isMethod);
+    this.addUserFunction(name, info);
+
+    if (options.checkDuplicates === false) {
+      return;
+    }
+
+    const seen = new Set<string>();
+    for (const [index, paramName] of paramNames.entries()) {
+      if (!paramName) {
+        continue;
+      }
+      if (seen.has(paramName)) {
+        const message = paramName === 'this' && isMethod
+          ? `Duplicate 'this' parameter in method '${name}'.`
+          : `Duplicate parameter '${paramName}' in function '${name}'.`;
+        this.addError(line, column, message, 'PSDUP01');
+      }
+      seen.add(paramName);
+    }
+  }
+
+  private formatAstParameter(param: ParameterNode): string {
+    const typeAnnotation = param.typeAnnotation ? `${this.stringifyAstTypeReference(param.typeAnnotation)} ` : '';
+    const name = param.identifier.name;
+    const defaultValue = param.defaultValue ? ' = <default>' : '';
+    return `${typeAnnotation}${name}${defaultValue}`.trim();
+  }
+
+  private stringifyAstTypeReference(type: TypeReferenceNode): string {
+    const base = type.name.name;
+    if (!type.generics.length) {
+      return base;
+    }
+    const generics = type.generics.map((generic) => this.stringifyAstTypeReference(generic));
+    return `${base}<${generics.join(', ')}>`;
+  }
+
+  private collectStaticFunctionDeclarations(lines: string[]): void {
+    const START_STATIC = new RegExp(`^\\s*(?:export\\s+)?static\\s+(${IDENT.source})\\s+(${IDENT.source})\\s*\\(`);
+    const FULL_STATIC = new RegExp(
+      `^\\s*(?:export\\s+)?static\\s+(${IDENT.source})\\s+(${IDENT.source})\\s*\\(([\\s\\S]*?)\\)\\s*=>`,
+      'm',
+    );
+
+    let buffer = '';
+    let startIndex = -1;
+    let linesSeen = 0;
+    const MAX_HEADER_LINES = 12;
+
+    const reset = () => {
+      buffer = '';
+      startIndex = -1;
+      linesSeen = 0;
+    };
+
+    const processBuffer = () => {
+      if (startIndex < 0) {
+        return;
+      }
+      const match = buffer.match(FULL_STATIC);
+      if (!match) {
+        return;
+      }
+
+      const typeName = match[1];
+      const methodName = match[2];
+      const paramsRaw = match[3];
+      const params = paramsRaw.split(',').map((param) => param.trim()).filter(Boolean);
+      const full = `${typeName}.${methodName}`;
+      const lineNum = startIndex + 1;
+
+      if (!this.context.functionParams.has(full)) {
+        this.context.functionParams.set(full, params);
+      }
+
+      this.functionNames.add(full);
+      const signature = this.createSignatureMeta(params, false, lineNum);
+      this.addFunctionSignature(full, signature);
+      if (!this.functionHeaderLine.has(full)) {
+        this.functionHeaderLine.set(full, lineNum);
+      }
+
+      const info = this.createFunctionInfo(full, params, lineNum, 1, false);
+      this.addUserFunction(full, info);
+
+      this.addError(lineNum, 1, `'static' is not a valid type keyword in Pine Script v6.`, 'PSV6-STATIC-UNSUPPORTED');
+    };
+
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      if (startIndex < 0) {
+        const staticMatch = line.match(START_STATIC);
+        if (!staticMatch) {
+          continue;
+        }
+
+        startIndex = index;
+        buffer = `${line}\n`;
+        linesSeen = 1;
+
+        if (/=>/.test(line)) {
+          processBuffer();
+          reset();
+        }
+        continue;
+      }
+
+      buffer += `${line}\n`;
+      linesSeen++;
+
+      if (/=>/.test(line)) {
+        processBuffer();
+        reset();
+        continue;
+      }
+
+      if (linesSeen >= MAX_HEADER_LINES) {
+        reset();
+      }
+    }
+  }
+
   private processFunctionDeclaration(buf: string, lineNum: number): void {
     const staticMatch = buf.match(new RegExp(`^\s*(?:export\s+)?static\s+(${IDENT.source})\s+(${IDENT.source})\s*\(([\s\S]*?)\)\s*=>`, 'm'));
     if (staticMatch) {
@@ -419,18 +631,48 @@ export class FunctionValidator implements ValidationModule {
    * Validate function calls (extracted from UltimateValidator.validateFunctionCalls)
    */
   private validateFunctionCalls(): void {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-      const noStrings = this.stripStringsAndLineComment(line);
+    if (this.usingAst && this.astContext?.ast) {
+      this.collectFunctionCallsFromAst(this.astContext.ast);
+    } else {
+      for (let i = 0; i < this.context.cleanLines.length; i++) {
+        const line = this.context.cleanLines[i];
+        const lineNum = i + 1;
 
-      this.collectFunctionCalls(line, lineNum);
+        this.collectFunctionCalls(line, lineNum);
+      }
     }
 
     // Validate all collected function calls
     for (const call of this.functionCalls) {
       this.validateSingleFunctionCall(call);
     }
+  }
+
+  private collectFunctionCallsFromAst(program: ProgramNode): void {
+    visit(program, {
+      CallExpression: {
+        enter: (path) => {
+          const node = path.node as CallExpressionNode;
+          const qualifiedName = this.getExpressionQualifiedName(node.callee);
+          if (!qualifiedName || /^(indicator|strategy|library)$/.test(qualifiedName)) {
+            return;
+          }
+
+          const line = node.loc?.start.line ?? 1;
+          const column = node.loc?.start.column ?? 1;
+          const args = node.args.map((argument) => this.argumentToString(argument));
+          const startIndex = Math.max(0, column - 1);
+
+          this.functionCalls.push({
+            name: qualifiedName,
+            arguments: args,
+            line,
+            column,
+            startIndex,
+          });
+        },
+      },
+    });
   }
 
   private collectFunctionCalls(line: string, lineNum: number): void {
@@ -526,6 +768,54 @@ export class FunctionValidator implements ValidationModule {
     }
     
     return args;
+  }
+
+  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+      const objectName = this.getExpressionQualifiedName(member.object);
+      if (!objectName) {
+        return null;
+      }
+      return `${objectName}.${member.property.name}`;
+    }
+    return null;
+  }
+
+  private argumentToString(argument: ArgumentNode): string {
+    const valueText = this.getNodeSource(argument.value).trim();
+    if (argument.name) {
+      return `${argument.name.name}=${valueText}`;
+    }
+    return valueText;
+  }
+
+  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
+    const lines = this.context.lines ?? [];
+    if (!node.loc) {
+      return '';
+    }
+    const startLineIndex = Math.max(0, node.loc.start.line - 1);
+    const endLineIndex = Math.max(0, node.loc.end.line - 1);
+    if (startLineIndex === endLineIndex) {
+      const line = lines[startLineIndex] ?? '';
+      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
+    }
+    const parts: string[] = [];
+    const firstLine = lines[startLineIndex] ?? '';
+    parts.push(firstLine.slice(node.loc.start.column - 1));
+    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
+      parts.push(lines[index] ?? '');
+    }
+    const lastLine = lines[endLineIndex] ?? '';
+    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
+    return parts.join('\n');
   }
 
   private isArgumentCountCompatible(requiredParams: number, totalParams: number, implicitOffset: number, provided: number): boolean {
@@ -1888,8 +2178,19 @@ export class FunctionValidator implements ValidationModule {
       // For now, assume user functions return series
       return 'series';
     }
-    
+
     // Default for most functions
     return 'series';
   }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+  }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }

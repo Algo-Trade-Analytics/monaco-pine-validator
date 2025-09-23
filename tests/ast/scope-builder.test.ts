@@ -104,6 +104,7 @@ describe('buildScopeGraph', () => {
       params: [parameter],
       body: block,
       export: false,
+      returnType: null,
       loc: locFrom(30, 70),
       range: createRange(30, 70),
     };
