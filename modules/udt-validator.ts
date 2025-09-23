@@ -1,4 +1,27 @@
-import { ValidationModule, ValidationContext, ValidationError, ValidationResult, ValidatorConfig, TypeInfo } from '../core/types';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidationError,
+  type ValidationResult,
+  type ValidatorConfig,
+  type TypeInfo,
+} from '../core/types';
+import {
+  type AssignmentStatementNode,
+  type CallExpressionNode,
+  type ExpressionNode,
+  type FunctionDeclarationNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type ParameterNode,
+  type ProgramNode,
+  type TypeDeclarationNode,
+  type TypeFieldNode,
+  type TypeReferenceNode,
+  type VariableDeclarationNode,
+} from '../core/ast/nodes';
+import { visit, type NodePath } from '../core/ast/traversal';
 
 interface UDTInfo {
   name: string;
@@ -14,6 +37,22 @@ interface UDTDeclaration {
   methods: Array<{ name: string; line: number; hasThis: boolean; thisType?: string }>;
 }
 
+interface AstMethodMetadata {
+  node: FunctionDeclarationNode;
+  methodName: string;
+  udtName: string | null;
+  hasThis: boolean;
+  thisParam: ParameterNode | null;
+  thisTypeName: string | null;
+  line: number;
+  column: number;
+}
+
+type VariableTypeRecord =
+  | { kind: 'udt'; name: string }
+  | { kind: 'primitive'; name: string }
+  | { kind: 'unknown'; name: string };
+
 export class UDTValidator implements ValidationModule {
   name = 'UDTValidator';
   priority = 95; // High priority - must run before TypeInferenceValidator
@@ -23,6 +62,10 @@ export class UDTValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private usingAst = false;
+  private astMethodMetadata: AstMethodMetadata[] = [];
+  private astMethodMetadataMap: WeakMap<FunctionDeclarationNode, AstMethodMetadata> = new WeakMap();
   private udtTypes = new Map<string, UDTInfo>();
   private udtDeclarations: UDTDeclaration[] = [];
   private readonly allowedInstanceMethods = new Set([
@@ -41,12 +84,14 @@ export class UDTValidator implements ValidationModule {
       this.reset();
       this.context = context;
       this.config = config;
+      this.astContext = this.getAstContext(config);
+      this.usingAst = Boolean(this.astContext?.ast);
 
-      this.collectUDTDeclarations();
-      this.validateUDTDeclarations();
-      this.validateMethodDeclarations();
-      this.validateMethodCalls();
-      this.validateFieldAccess();
+      if (this.usingAst && this.astContext?.ast) {
+        this.validateWithAst(this.astContext.ast);
+      } else {
+        this.validateWithLegacy();
+      }
 
       return {
         isValid: this.errors.length === 0,
@@ -74,6 +119,10 @@ export class UDTValidator implements ValidationModule {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.astContext = null;
+    this.usingAst = false;
+    this.astMethodMetadata = [];
+    this.astMethodMetadataMap = new WeakMap();
     this.udtTypes.clear();
     this.udtDeclarations = [];
   }
@@ -94,6 +143,513 @@ export class UDTValidator implements ValidationModule {
       code,
       severity: 'info'
     });
+  }
+
+  private validateWithAst(program: ProgramNode): void {
+    this.collectUdtDataFromAst(program);
+    this.validateUDTDeclarations();
+    this.validateMethodDeclarationsAst();
+    this.validateMethodCallsAndFieldsAst(program);
+  }
+
+  private collectUdtDataFromAst(program: ProgramNode): void {
+    this.udtDeclarations = [];
+    this.udtTypes.clear();
+    this.astMethodMetadata = [];
+    this.astMethodMetadataMap = new WeakMap();
+
+    visit(program, {
+      TypeDeclaration: {
+        enter: (path: NodePath<TypeDeclarationNode>) => {
+          this.handleAstTypeDeclaration(path.node);
+        },
+      },
+      FunctionDeclaration: {
+        enter: (path: NodePath<FunctionDeclarationNode>) => {
+          this.handleAstFunctionDeclaration(path.node);
+        },
+      },
+    });
+  }
+
+  private handleAstTypeDeclaration(node: TypeDeclarationNode): void {
+    const udtName = node.identifier.name;
+    const fields: Array<{ name: string; type: string }> = [];
+
+    for (const field of node.fields) {
+      const fieldName = field.identifier.name;
+      const typeString = field.typeAnnotation ? this.stringifyAstTypeReference(field.typeAnnotation) : 'unknown';
+      fields.push({ name: fieldName, type: typeString });
+
+      const parsedType = this.parseFieldType(typeString);
+      const typeInfo: TypeInfo = {
+        type: parsedType.baseType,
+        isConst: false,
+        isSeries: parsedType.baseType === 'series',
+        declaredAt: { line: field.loc.start.line, column: field.loc.start.column },
+        usages: [],
+      };
+
+      if (parsedType.elementType) {
+        typeInfo.elementType = parsedType.elementType;
+      }
+      if (parsedType.udtName) {
+        typeInfo.udtName = parsedType.udtName;
+      }
+
+      this.context.typeMap.set(`${udtName}.${fieldName}`, typeInfo);
+    }
+
+    const declaration: UDTDeclaration = {
+      name: udtName,
+      line: node.loc.start.line,
+      fields: [...fields],
+      methods: [],
+    };
+    this.udtDeclarations.push(declaration);
+
+    const existing = this.udtTypes.get(udtName);
+    const methods = existing?.methods ?? [];
+    const info: UDTInfo = {
+      name: udtName,
+      fields: [...fields],
+      methods,
+      line: node.loc.start.line,
+    };
+    this.udtTypes.set(udtName, info);
+
+    this.context.typeMap.set(udtName, {
+      type: 'udt',
+      isConst: false,
+      isSeries: false,
+      declaredAt: { line: node.loc.start.line, column: node.loc.start.column },
+      usages: [],
+    });
+
+    if (this.context.usedVars) {
+      this.context.usedVars.add(udtName);
+    }
+  }
+
+  private handleAstFunctionDeclaration(node: FunctionDeclarationNode): void {
+    if (!node.identifier) {
+      return;
+    }
+
+    const fullName = node.identifier.name;
+    const firstParam = node.params[0] ?? null;
+    const hasThis = Boolean(firstParam && firstParam.identifier.name === 'this');
+    const isMethodCandidate = fullName.includes('.') || hasThis;
+
+    if (!isMethodCandidate) {
+      return;
+    }
+
+    const methodName = fullName.includes('.') ? fullName.split('.').pop() ?? fullName : fullName;
+    let udtName: string | null = null;
+
+    if (fullName.includes('.')) {
+      const [maybeType] = fullName.split('.');
+      if (maybeType) {
+        udtName = maybeType;
+      }
+    }
+
+    let thisTypeName: string | null = null;
+    if (firstParam?.typeAnnotation) {
+      const parsed = this.parseFieldType(this.stringifyAstTypeReference(firstParam.typeAnnotation));
+      if (parsed.baseType === 'udt' && parsed.udtName) {
+        thisTypeName = parsed.udtName;
+      } else if (parsed.baseType !== 'unknown') {
+        thisTypeName = parsed.baseType;
+      }
+    }
+
+    if (!udtName && thisTypeName && this.udtTypes.has(thisTypeName)) {
+      udtName = thisTypeName;
+    }
+
+    const metadata: AstMethodMetadata = {
+      node,
+      methodName,
+      udtName,
+      hasThis,
+      thisParam: firstParam ?? null,
+      thisTypeName,
+      line: node.loc.start.line,
+      column: node.loc.start.column,
+    };
+
+    this.astMethodMetadata.push(metadata);
+    this.astMethodMetadataMap.set(node, metadata);
+
+    if (udtName) {
+      const udtInfo = this.udtTypes.get(udtName) ?? {
+        name: udtName,
+        fields: [],
+        methods: [],
+        line: node.loc.start.line,
+      };
+
+      udtInfo.methods.push({ name: methodName, line: node.loc.start.line, hasThis, thisType: thisTypeName ?? undefined });
+      this.udtTypes.set(udtName, udtInfo);
+    }
+  }
+
+  private validateMethodDeclarationsAst(): void {
+    for (const metadata of this.astMethodMetadata) {
+      if (!metadata.hasThis) {
+        this.addError(
+          metadata.line,
+          metadata.column,
+          `Method '${metadata.methodName}' must have 'this' as first parameter`,
+          'PSV6-METHOD-THIS',
+        );
+        continue;
+      }
+
+      if (!metadata.thisParam?.typeAnnotation) {
+        this.addInfo(
+          metadata.line,
+          metadata.column,
+          "Consider adding type annotation to 'this' parameter",
+          'PSV6-METHOD-TYPE',
+        );
+      }
+    }
+  }
+
+  private validateMethodCallsAndFieldsAst(program: ProgramNode): void {
+    const scopeStack: Array<Map<string, VariableTypeRecord>> = [new Map()];
+
+    visit(program, {
+      FunctionDeclaration: {
+        enter: (path: NodePath<FunctionDeclarationNode>) => {
+          scopeStack.push(new Map());
+          const metadata = this.astMethodMetadataMap.get(path.node) ?? null;
+
+          if (metadata?.hasThis) {
+            const udtName = metadata.thisTypeName ?? metadata.udtName;
+            if (udtName) {
+              this.assignVariableType('this', { kind: 'udt', name: udtName }, scopeStack);
+            } else {
+              this.assignVariableType('this', { kind: 'unknown', name: 'this' }, scopeStack);
+            }
+          }
+
+          for (const param of path.node.params) {
+            if (param.identifier.name === 'this') {
+              continue;
+            }
+            const paramType = this.interpretTypeReference(param.typeAnnotation);
+            if (paramType) {
+              this.assignVariableType(param.identifier.name, paramType, scopeStack);
+            }
+          }
+        },
+        exit: () => {
+          scopeStack.pop();
+        },
+      },
+      BlockStatement: {
+        enter: () => {
+          scopeStack.push(new Map());
+        },
+        exit: () => {
+          scopeStack.pop();
+        },
+      },
+      VariableDeclaration: {
+        enter: (path: NodePath<VariableDeclarationNode>) => {
+          this.recordAstVariableDeclaration(path.node, scopeStack);
+        },
+      },
+      AssignmentStatement: {
+        enter: (path: NodePath<AssignmentStatementNode>) => {
+          this.recordAstAssignment(path.node, scopeStack);
+        },
+      },
+      CallExpression: {
+        enter: (path: NodePath<CallExpressionNode>) => {
+          this.validateAstMethodCall(path.node, scopeStack);
+        },
+      },
+      MemberExpression: {
+        enter: (path: NodePath<MemberExpressionNode>) => {
+          this.validateAstFieldAccess(path, scopeStack);
+        },
+      },
+    });
+  }
+
+  private recordAstVariableDeclaration(
+    node: VariableDeclarationNode,
+    scopeStack: Array<Map<string, VariableTypeRecord>>,
+  ): void {
+    const annotationType = this.interpretTypeReference(node.typeAnnotation);
+    if (annotationType) {
+      this.assignVariableType(node.identifier.name, annotationType, scopeStack);
+    }
+
+    if (node.initializer) {
+      const initializerType = this.inferAstExpressionVariableType(node.initializer, scopeStack);
+      if (initializerType) {
+        this.assignVariableType(node.identifier.name, initializerType, scopeStack);
+      }
+    }
+  }
+
+  private recordAstAssignment(
+    node: AssignmentStatementNode,
+    scopeStack: Array<Map<string, VariableTypeRecord>>,
+  ): void {
+    if (node.left.kind !== 'Identifier' || !node.right) {
+      return;
+    }
+
+    const identifier = node.left as IdentifierNode;
+    const inferredType = this.inferAstExpressionVariableType(node.right, scopeStack);
+    if (inferredType) {
+      this.assignVariableType(identifier.name, inferredType, scopeStack);
+    }
+  }
+
+  private validateAstMethodCall(
+    node: CallExpressionNode,
+    scopeStack: Array<Map<string, VariableTypeRecord>>,
+  ): void {
+    if (node.callee.kind !== 'MemberExpression') {
+      return;
+    }
+
+    const member = node.callee as MemberExpressionNode;
+    if (member.computed || member.object.kind !== 'Identifier') {
+      return;
+    }
+
+    const objectIdentifier = member.object as IdentifierNode;
+    const objectName = objectIdentifier.name;
+    if (objectName === 'this') {
+      return;
+    }
+
+    const methodName = member.property.name;
+    if (this.allowedInstanceMethods.has(methodName)) {
+      return;
+    }
+
+    const objectType = this.resolveVariableType(objectName, scopeStack);
+    if (!objectType || objectType.kind === 'udt' || objectType.kind === 'unknown') {
+      return;
+    }
+
+    const line = member.property.loc.start.line;
+    const column = member.property.loc.start.column;
+    this.addWarning(
+      line,
+      column,
+      `Method '${methodName}' called on primitive type variable '${objectName}'`,
+      'PSV6-METHOD-INVALID',
+    );
+  }
+
+  private validateAstFieldAccess(
+    path: NodePath<MemberExpressionNode>,
+    scopeStack: Array<Map<string, VariableTypeRecord>>,
+  ): void {
+    const node = path.node;
+    if (node.computed) {
+      return;
+    }
+
+    const parent = path.parent;
+    if (parent && parent.node.kind === 'CallExpression' && parent.key === 'callee') {
+      return;
+    }
+
+    if (node.object.kind !== 'Identifier') {
+      return;
+    }
+
+    const objectIdentifier = node.object as IdentifierNode;
+    const objectName = objectIdentifier.name;
+    const objectType = this.resolveVariableType(objectName, scopeStack);
+    if (!objectType || objectType.kind !== 'udt') {
+      return;
+    }
+
+    const udtInfo = this.udtTypes.get(objectType.name);
+    if (!udtInfo) {
+      return;
+    }
+
+    const fieldName = node.property.name;
+    const field = udtInfo.fields.find((entry) => entry.name === fieldName);
+    const line = node.property.loc.start.line;
+    const column = node.property.loc.start.column;
+
+    if (!field) {
+      this.addError(line, column, `Field '${fieldName}' does not exist in UDT '${objectType.name}'`, 'PSV6-UDT-FIELD-NOT-FOUND');
+      return;
+    }
+
+    const parsedType = this.parseFieldType(field.type);
+    const typeInfo: TypeInfo = {
+      type: parsedType.baseType,
+      isConst: false,
+      isSeries: parsedType.baseType === 'series',
+      declaredAt: { line, column },
+      usages: [],
+    };
+
+    if (parsedType.elementType) {
+      typeInfo.elementType = parsedType.elementType;
+    }
+    if (parsedType.udtName) {
+      typeInfo.udtName = parsedType.udtName;
+    }
+
+    this.context.typeMap.set(`${objectName}.${fieldName}`, typeInfo);
+  }
+
+  private assignVariableType(
+    name: string,
+    type: VariableTypeRecord,
+    scopeStack: Array<Map<string, VariableTypeRecord>>,
+  ): void {
+    if (!scopeStack.length) {
+      return;
+    }
+    scopeStack[scopeStack.length - 1].set(name, type);
+  }
+
+  private resolveVariableType(
+    name: string,
+    scopeStack: Array<Map<string, VariableTypeRecord>>,
+  ): VariableTypeRecord | null {
+    for (let index = scopeStack.length - 1; index >= 0; index--) {
+      const scope = scopeStack[index];
+      if (scope.has(name)) {
+        return scope.get(name)!;
+      }
+    }
+
+    return null;
+  }
+
+  private interpretTypeReference(type: TypeReferenceNode | null): VariableTypeRecord | null {
+    if (!type) {
+      return null;
+    }
+
+    const typeString = this.stringifyAstTypeReference(type);
+    const parsed = this.parseFieldType(typeString);
+
+    if (parsed.baseType === 'udt') {
+      const name = parsed.udtName ?? typeString;
+      return { kind: 'udt', name };
+    }
+
+    if (parsed.baseType === 'unknown') {
+      return { kind: 'unknown', name: 'unknown' };
+    }
+
+    return { kind: 'primitive', name: parsed.baseType };
+  }
+
+  private inferAstExpressionVariableType(
+    expression: ExpressionNode,
+    scopeStack: Array<Map<string, VariableTypeRecord>>,
+  ): VariableTypeRecord | null {
+    switch (expression.kind) {
+      case 'Identifier': {
+        const identifier = expression as IdentifierNode;
+        return this.resolveVariableType(identifier.name, scopeStack);
+      }
+      case 'CallExpression': {
+        const call = expression as CallExpressionNode;
+        if (call.callee.kind === 'MemberExpression') {
+          const member = call.callee as MemberExpressionNode;
+          if (!member.computed) {
+            if (member.object.kind === 'Identifier' && member.property.name === 'new') {
+              return { kind: 'udt', name: (member.object as IdentifierNode).name };
+            }
+
+            if (member.object.kind === 'Identifier') {
+              const objectType = this.resolveVariableType((member.object as IdentifierNode).name, scopeStack);
+              if (objectType?.kind === 'udt') {
+                const udtInfo = this.udtTypes.get(objectType.name);
+                const field = udtInfo?.fields.find((entry) => entry.name === member.property.name);
+                if (field) {
+                  const parsed = this.parseFieldType(field.type);
+                  if (parsed.baseType === 'udt' && parsed.udtName) {
+                    return { kind: 'udt', name: parsed.udtName };
+                  }
+                  if (parsed.baseType !== 'unknown') {
+                    return { kind: 'primitive', name: parsed.baseType };
+                  }
+                }
+              }
+            }
+          }
+        } else if (call.callee.kind === 'Identifier') {
+          const callee = call.callee as IdentifierNode;
+          if (callee.name.includes('.')) {
+            const [maybeType, property] = callee.name.split('.');
+            if (property === 'new' && maybeType) {
+              return { kind: 'udt', name: maybeType };
+            }
+          }
+        }
+        return null;
+      }
+      case 'MemberExpression': {
+        const member = expression as MemberExpressionNode;
+        if (member.computed || member.object.kind !== 'Identifier') {
+          return null;
+        }
+
+        const objectType = this.resolveVariableType((member.object as IdentifierNode).name, scopeStack);
+        if (objectType?.kind !== 'udt') {
+          return null;
+        }
+
+        const udtInfo = this.udtTypes.get(objectType.name);
+        const field = udtInfo?.fields.find((entry) => entry.name === member.property.name);
+        if (!field) {
+          return null;
+        }
+
+        const parsed = this.parseFieldType(field.type);
+        if (parsed.baseType === 'udt' && parsed.udtName) {
+          return { kind: 'udt', name: parsed.udtName };
+        }
+        if (parsed.baseType !== 'unknown') {
+          return { kind: 'primitive', name: parsed.baseType };
+        }
+        return null;
+      }
+      default:
+        return null;
+    }
+  }
+
+  private stringifyAstTypeReference(type: TypeReferenceNode): string {
+    const base = type.name.name;
+    if (!type.generics.length) {
+      return base;
+    }
+
+    const generics = type.generics.map((generic) => this.stringifyAstTypeReference(generic));
+    return `${base}<${generics.join(', ')}>`;
+  }
+
+  private validateWithLegacy(): void {
+    this.collectUDTDeclarations();
+    this.validateUDTDeclarations();
+    this.validateMethodDeclarations();
+    this.validateMethodCalls();
+    this.validateFieldAccess();
   }
 
   private collectUDTDeclarations(): void {
@@ -644,4 +1200,16 @@ export class UDTValidator implements ValidationModule {
   private getLineIndentation(line: string): number {
     return line.length - line.trimStart().length;
   }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+
+    return isAstValidationContext(this.context) && this.context.ast ? (this.context as AstValidationContext) : null;
+  }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }

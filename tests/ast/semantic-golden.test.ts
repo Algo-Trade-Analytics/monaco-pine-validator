@@ -745,9 +745,17 @@ describe('semantic dual-run guardrail', () => {
         message: "Variable 'tfDaily' is declared but never used.",
       }),
       expect.objectContaining({
+        code: 'PSV6-TYPE-INFERENCE-AMBIGUOUS',
+        line: 3,
+      }),
+      expect.objectContaining({
         code: 'PSU01',
         line: 4,
         message: "Variable 'displaySetting' is declared but never used.",
+      }),
+      expect.objectContaining({
+        code: 'PSV6-TYPE-INFERENCE-AMBIGUOUS',
+        line: 4,
       }),
       expect.objectContaining({
         code: 'PSU01',
@@ -755,9 +763,17 @@ describe('semantic dual-run guardrail', () => {
         message: "Variable 'extendSetting' is declared but never used.",
       }),
       expect.objectContaining({
+        code: 'PSV6-TYPE-INFERENCE-AMBIGUOUS',
+        line: 5,
+      }),
+      expect.objectContaining({
         code: 'PSU01',
         line: 6,
         message: "Variable 'formatSetting' is declared but never used.",
+      }),
+      expect.objectContaining({
+        code: 'PSV6-TYPE-INFERENCE-AMBIGUOUS',
+        line: 6,
       }),
       expect.objectContaining({
         code: 'PSU01',
@@ -765,9 +781,17 @@ describe('semantic dual-run guardrail', () => {
         message: "Variable 'currencySetting' is declared but never used.",
       }),
       expect.objectContaining({
+        code: 'PSV6-TYPE-INFERENCE-AMBIGUOUS',
+        line: 7,
+      }),
+      expect.objectContaining({
         code: 'PSU01',
         line: 8,
         message: "Variable 'scaleSetting' is declared but never used.",
+      }),
+      expect.objectContaining({
+        code: 'PSV6-TYPE-INFERENCE-AMBIGUOUS',
+        line: 8,
       }),
       expect.objectContaining({
         code: 'PSU01',
@@ -775,9 +799,17 @@ describe('semantic dual-run guardrail', () => {
         message: "Variable 'adjustmentSetting' is declared but never used.",
       }),
       expect.objectContaining({
+        code: 'PSV6-TYPE-INFERENCE-AMBIGUOUS',
+        line: 9,
+      }),
+      expect.objectContaining({
         code: 'PSU01',
         line: 10,
         message: "Variable 'backadjustmentSetting' is declared but never used.",
+      }),
+      expect.objectContaining({
+        code: 'PSV6-TYPE-INFERENCE-AMBIGUOUS',
+        line: 10,
       }),
     ]);
   });

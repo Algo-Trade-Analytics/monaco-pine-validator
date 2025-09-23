@@ -4,6 +4,7 @@ import {
   type AssignmentStatementNode,
   type BinaryExpressionNode,
   type BlockStatementNode,
+  type ImportDeclarationNode,
   type CallExpressionNode,
   type ConditionalExpressionNode,
   type ContinueStatementNode,
@@ -152,6 +153,12 @@ function collectChildren(path: NodePath): ChildEntry[] {
       declaration.arguments.forEach((argument, argumentIndex) => {
         push(argument, 'arguments', argumentIndex);
       });
+      break;
+    }
+    case 'ImportDeclaration': {
+      const declaration = node as ImportDeclarationNode;
+      push(declaration.path, 'path');
+      push(declaration.alias, 'alias');
       break;
     }
     case 'BlockStatement': {

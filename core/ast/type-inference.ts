@@ -645,6 +645,8 @@ function visitStatement(environment: TypeEnvironment, statement: StatementNode):
         'type:declaration',
       );
       break;
+    case 'ImportDeclaration':
+      break;
     case 'BreakStatement':
     case 'ContinueStatement':
       break;

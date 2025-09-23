@@ -257,6 +257,7 @@ describe('AST fixtures', () => {
               46,
               90,
             ],
+            "returnType": null,
           },
           {
             "expression": {

@@ -21,6 +21,7 @@ import {
   type IndexExpressionNode,
   type MatrixLiteralNode,
   type MemberExpressionNode,
+  type ImportDeclarationNode,
   type FunctionDeclarationNode,
   type IfStatementNode,
   type IdentifierNode,
@@ -273,6 +274,11 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         typeDeclaration.fields.forEach((field) => {
           declare(field.identifier, 'variable');
         });
+        break;
+      }
+      case 'ImportDeclaration': {
+        const importDeclaration = statement as ImportDeclarationNode;
+        declare(importDeclaration.alias, 'namespace');
         break;
       }
       case 'ExpressionStatement': {
