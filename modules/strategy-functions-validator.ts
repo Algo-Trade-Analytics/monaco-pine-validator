@@ -38,7 +38,6 @@ export class StrategyFunctionsValidator implements ValidationModule {
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
   private astStrategyCallLines: Set<number> = new Set();
 
   private strategyFunctionCalls: Map<string, StrategyFunctionInfo> = new Map();
@@ -54,19 +53,20 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
-    this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return this.createEmptyResult();
+    }
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectStrategyDataAst(this.astContext.ast);
-      for (const line of this.astStrategyCallLines) {
-        const sourceLine = this.context.cleanLines[line - 1] ?? '';
-        this.validateStrategyComplexity(sourceLine, line);
-      }
-    } else {
-      context.cleanLines.forEach((line, index) => {
-        this.processLine(line, index + 1);
-      });
+    this.astContext = this.getAstContext(config);
+
+    if (!this.astContext?.ast) {
+      return this.createEmptyResult();
+    }
+
+    this.collectStrategyDataAst(this.astContext.ast);
+    for (const line of this.astStrategyCallLines) {
+      const sourceLine = this.context.cleanLines[line - 1] ?? '';
+      this.validateStrategyComplexity(sourceLine, line);
     }
 
     try {
@@ -107,23 +107,21 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
     this.astStrategyCallLines.clear();
     this.strategyFunctionCalls.clear();
     this.strategyFunctionCount = 0;
     this.complexStrategyExpressions = 0;
   }
 
-  private processLine(line: string, lineNumber: number): void {
-    // Skip empty lines and comments
-    if (!line.trim() || line.trim().startsWith('//')) {
-      return;
-    }
-
-    this.validateStrategyFunctionCalls(line, lineNumber);
-    this.validateStrategyParameters(line, lineNumber);
-    this.validateAdvancedStrategyFunctions(line, lineNumber);
-    this.validateStrategyComplexity(line, lineNumber);
+  private createEmptyResult(): ValidationResult {
+    return {
+      isValid: true,
+      errors: [],
+      warnings: [],
+      info: [],
+      typeMap: new Map(),
+      scriptType: null
+    };
   }
 
   private collectStrategyDataAst(program: ProgramNode): void {
@@ -332,94 +330,6 @@ export class StrategyFunctionsValidator implements ValidationModule {
     return found;
   }
 
-  private validateStrategyFunctionCalls(line: string, lineNumber: number): void {
-    // Match Strategy function calls like strategy.entry(), strategy.close(), etc.
-    const strategyFunctionRegex = /\bstrategy\.([a-zA-Z_][a-zA-Z0-9_.]*)\s*\(/g;
-    let match;
-
-    while ((match = strategyFunctionRegex.exec(line)) !== null) {
-      const fullFunctionName = `strategy.${match[1]}`;
-      const functionName = match[1];
-      
-      // Check if it's a known Strategy function (handle nested functions like risk.xxx)
-      const isKnownFunction = NS_MEMBERS.strategy && (
-        NS_MEMBERS.strategy.has(functionName) || 
-        functionName.includes('.') || // Handle nested functions like risk.max_drawdown
-        functionName === 'percent_of_equity'
-      );
-      
-      if (isKnownFunction) {
-        this.strategyFunctionCount++;
-        
-        // Extract parameters from the function call
-        const paramMatch = this.extractFunctionParameters(line, match.index + fullFunctionName.length - 1);
-        const parameters = paramMatch ? this.splitTopLevelArgs(paramMatch) : [];
-        
-        // Determine return type based on function
-        const returnType = this.getStrategyReturnType(fullFunctionName);
-        const isComplex = this.isComplexStrategyFunction(fullFunctionName, parameters);
-        
-        if (isComplex) {
-          this.complexStrategyExpressions++;
-        }
-
-        this.strategyFunctionCalls.set(fullFunctionName, {
-          name: fullFunctionName,
-          parameters,
-          returnType,
-          line: lineNumber,
-          column: match.index + 1,
-          isComplex
-        });
-        // Fallback loop detection for tests
-        for (let i = Math.max(1, lineNumber - 3); i <= lineNumber; i++) {
-          const ln = this.context.cleanLines[i - 1] || '';
-          if (/\b(for|while)\b/.test(ln)) {
-            this.addWarning(lineNumber, match.index + 1, 'PSV6-STRATEGY-PERF-LOOP', 'Strategy operation in loop');
-            break;
-          }
-        }
-        // Nested strategy calls on same line - check for strategy properties/functions used within strategy function calls
-        const stratCallsOnLine = (line.match(/\bstrategy\.[A-Za-z_][A-Za-z0-9_]*\s*\(/g) || []).length;
-        const stratPropsOnLine = (line.match(/\bstrategy\.[A-Za-z_][A-Za-z0-9_]*/g) || []).length;
-        
-        // If we have a strategy function call and other strategy properties/functions on the same line, it's nested
-        if (stratCallsOnLine >= 1 && stratPropsOnLine > 1) {
-          this.addWarning(lineNumber, 1, 'PSV6-STRATEGY-PERF-NESTED', 'Nested strategy operations detected');
-        } else if (stratCallsOnLine > 1) {
-          this.addWarning(lineNumber, 1, 'PSV6-STRATEGY-PERF-NESTED', 'Multiple Strategy operations on one line');
-        }
-      } else {
-        this.addError(
-          lineNumber,
-          match.index + 1,
-          `PSV6-STRATEGY-FUNCTION-UNKNOWN: Unknown Strategy function: ${fullFunctionName}`,
-          `Strategy function '${fullFunctionName}' is not recognized. Check spelling and ensure it's a valid Pine Script v6 Strategy function.`
-        );
-      }
-    }
-  }
-
-  private validateStrategyParameters(line: string, lineNumber: number): void {
-    // Match Strategy function calls and validate their parameters
-    const strategyFunctionRegex = /\bstrategy\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-    let match;
-
-    while ((match = strategyFunctionRegex.exec(line)) !== null) {
-      const fullFunctionName = `strategy.${match[1]}`;
-      const functionName = match[1];
-      
-      if (NS_MEMBERS.strategy && NS_MEMBERS.strategy.has(functionName)) {
-        const paramMatch = this.extractFunctionParameters(line, match.index + fullFunctionName.length - 1);
-        if (paramMatch) {
-          const parameters = this.splitTopLevelArgs(paramMatch);
-          this.validateStrategyParameterTypes(fullFunctionName, parameters, lineNumber, match.index + 1);
-          this.addBestPracticeSuggestions(fullFunctionName, parameters, lineNumber, match.index + 1);
-        }
-      }
-    }
-  }
-
   private addBestPracticeSuggestions(functionName: string, parameters: string[], lineNumber: number, column: number): void {
     // Suggest using strategy.position_size instead of manual qty constants
     if (functionName === 'strategy.entry') {
@@ -487,34 +397,6 @@ export class StrategyFunctionsValidator implements ValidationModule {
         }
       }
     });
-  }
-
-  private validateAdvancedStrategyFunctions(line: string, lineNumber: number): void {
-    // Advanced strategy function validation
-    const advancedStrategyRegex = /\bstrategy\.(percent_of_equity|risk\.[a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-    let match;
-
-    while ((match = advancedStrategyRegex.exec(line)) !== null) {
-      const fullFunctionName = `strategy.${match[1]}`;
-      
-      // Extract parameters
-      const paramMatch = this.extractFunctionParameters(line, match.index + fullFunctionName.length - 1);
-      const parameters = this.splitTopLevelArgs(paramMatch || '');
-      this.validateAdvancedStrategyParameters(fullFunctionName, parameters, lineNumber, match.index + 1);
-    }
-
-    // Also check for nested risk functions (strategy.risk.*)
-    const riskFunctionRegex = /\bstrategy\.risk\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-    let riskMatch;
-
-    while ((riskMatch = riskFunctionRegex.exec(line)) !== null) {
-      const riskFunctionName = `strategy.risk.${riskMatch[1]}`;
-      
-      // Extract parameters
-      const paramMatch = this.extractFunctionParameters(line, riskMatch.index + riskFunctionName.length - 1);
-      const parameters = this.splitTopLevelArgs(paramMatch || '');
-      this.validateRiskManagementParameters(riskFunctionName, parameters, lineNumber, riskMatch.index + 1);
-    }
   }
 
   private validateAdvancedStrategyParameters(functionName: string, parameters: string[], lineNumber: number, column: number): void {
@@ -707,34 +589,11 @@ export class StrategyFunctionsValidator implements ValidationModule {
     }
 
     // Strategy calls inside loops
-    if (this.usingAst) {
-      for (const info of this.strategyFunctionCalls.values()) {
-        if (info.inLoop) {
-          this.addWarning(info.line, info.column, 'PSV6-STRATEGY-PERF-LOOP', 'Strategy operation in loop');
-        }
-      }
-    } else {
-      const loopLines = this.computeLoopLines();
-      for (const info of this.strategyFunctionCalls.values()) {
-        if (loopLines.has(info.line)) {
-          this.addWarning(info.line, info.column, 'PSV6-STRATEGY-PERF-LOOP', 'Strategy operation in loop');
-        }
+    for (const info of this.strategyFunctionCalls.values()) {
+      if (info.inLoop) {
+        this.addWarning(info.line, info.column, 'PSV6-STRATEGY-PERF-LOOP', 'Strategy operation in loop');
       }
     }
-  }
-
-  private computeLoopLines(): Set<number> {
-    const loopLines = new Set<number>();
-    const stack: number[] = [];
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const ln = this.context.cleanLines[i];
-      const ind = ln.length - ln.trimStart().length;
-      const t = ln.trim();
-      while (stack.length && ind <= stack[stack.length - 1] && t !== '') stack.pop();
-      if (/^\s*(for|while)\b/.test(t)) stack.push(ind);
-      if (stack.length) loopLines.add(i + 1);
-    }
-    return loopLines;
   }
 
   private validateStrategyBestPractices(): void {
@@ -863,60 +722,6 @@ export class StrategyFunctionsValidator implements ValidationModule {
     }
     
     return null;
-  }
-
-  private extractFunctionParameters(line: string, startIndex: number): string | null {
-    let parenCount = 0;
-    let start = startIndex;
-    let end = startIndex;
-    
-    // Find the opening parenthesis
-    while (start < line.length && line[start] !== '(') {
-      start++;
-    }
-    
-    if (start >= line.length) return null;
-    
-    start++; // Skip the opening parenthesis
-    end = start;
-    
-    // Find the matching closing parenthesis
-    while (end < line.length) {
-      if (line[end] === '(') {
-        parenCount++;
-      } else if (line[end] === ')') {
-        if (parenCount === 0) {
-          break;
-        }
-        parenCount--;
-      }
-      end++;
-    }
-    
-    if (end >= line.length) return null;
-    
-    return line.substring(start, end).trim();
-  }
-
-  // Split arguments by commas at top level only (ignore nested parentheses or strings)
-  private splitTopLevelArgs(argsStr: string): string[] {
-    if (!argsStr.trim()) return [];
-    const args: string[] = [];
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-    for (let i = 0; i < argsStr.length; i++) {
-      const ch = argsStr[i];
-      if (!inString && (ch === '"' || ch === '\'')) { inString = true; stringChar = ch; current += ch; continue; }
-      if (inString) { current += ch; if (ch === stringChar) { inString = false; stringChar = ''; } continue; }
-      if (ch === '(') { depth++; current += ch; continue; }
-      if (ch === ')') { depth--; current += ch; continue; }
-      if (ch === ',' && depth === 0) { args.push(current.trim()); current = ''; continue; }
-      current += ch;
-    }
-    if (current.trim()) args.push(current.trim());
-    return args;
   }
 
   private getStrategyReturnType(functionName: string): string {

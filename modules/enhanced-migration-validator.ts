@@ -114,8 +114,6 @@ export class EnhancedMigrationValidator implements ValidationModule {
   name = 'EnhancedMigrationValidator';
   priority = 75; // Run after basic syntax validation
 
-  private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
@@ -125,18 +123,24 @@ export class EnhancedMigrationValidator implements ValidationModule {
     return ['CoreValidator', 'SyntaxValidator'];
   }
 
-  validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
+  validate(context: ValidationContext, _config: ValidatorConfig): ValidationResult {
     this.reset();
-    this.context = context;
-    this.config = config;
+    void _config;
 
-    this.astContext = this.getAstContext();
+    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
 
-    if (this.astContext?.ast) {
-      this.validateWithAst(this.astContext.ast);
-    } else {
-      this.validateLegacy();
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.validateWithAst(this.astContext.ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -153,14 +157,6 @@ export class EnhancedMigrationValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-  }
-
-  private getAstContext(): AstValidationContext | null {
-    if (!this.config.ast || this.config.ast.mode === 'disabled') {
-      return null;
-    }
-
-    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
   }
 
   private validateWithAst(program: ProgramNode): void {
@@ -252,64 +248,6 @@ export class EnhancedMigrationValidator implements ValidationModule {
 
     const { line, column } = node.identifier.loc.start;
     this.addWarning(line, column, `'transp' parameter is deprecated in Pine Script v6. Use 'color.new()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace transp=50 with color.new(color.red, 50)');
-  }
-
-  private validateLegacy(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const line = this.context.lines[i];
-      const lineNum = i + 1;
-      this.validateOldSyntaxPatterns(line, lineNum);
-    }
-  }
-
-  private validateOldSyntaxPatterns(line: string, lineNum: number): void {
-    if (/\bstudy\s*\(/.test(line)) {
-      this.addWarning(lineNum, 1, `'study()' is deprecated in Pine Script v6. Use 'indicator()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace study() with indicator()');
-    }
-
-    if (/\btransp\s*=/.test(line)) {
-      this.addWarning(lineNum, 1, `'transp' parameter is deprecated in Pine Script v6. Use 'color.new()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace transp=50 with color.new(color.red, 50)');
-    }
-
-    const securityRegex = /\bsecurity\s*\(/g;
-    let securityMatch: RegExpExecArray | null;
-    while ((securityMatch = securityRegex.exec(line)) !== null) {
-      const beforeMatch = line.substring(0, securityMatch.index);
-      const lastWord = beforeMatch.match(/\b(\w+)\s*\.?\s*$/);
-
-      if (lastWord && SECURITY_ALLOWED_PREFIXES.has(lastWord[1])) {
-        continue;
-      }
-
-      this.addWarning(
-        lineNum,
-        securityMatch.index + 1,
-        `'security()' is deprecated in Pine Script v6. Use 'request.security()' instead.`,
-        'PSV6-MIG-SYNTAX',
-        'Replace security() with request.security()',
-      );
-    }
-
-    for (const func of NON_NAMESPACED_TA_FUNCTIONS) {
-      const regex = new RegExp(`\\b${func}\\s*\\(`, 'g');
-      let match: RegExpExecArray | null;
-      while ((match = regex.exec(line)) !== null) {
-        const beforeMatch = line.substring(0, match.index);
-        const lastWord = beforeMatch.match(/\b(\w+)\s*\.?\s*$/);
-
-        if (lastWord && TA_ALLOWED_PREFIXES.has(lastWord[1])) {
-          continue;
-        }
-
-        this.addWarning(
-          lineNum,
-          match.index + 1,
-          `'${func}()' should be namespaced in Pine Script v6. Use 'ta.${func}()' instead.`,
-          'PSV6-MIG-SYNTAX',
-          `Replace ${func}() with ta.${func}()`
-        );
-      }
-    }
   }
 
   private reportStudyDeprecation(callee: ExpressionNode): void {

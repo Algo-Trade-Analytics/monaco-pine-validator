@@ -8,6 +8,7 @@ import {
 } from '../core/types';
 import {
   type ArgumentNode,
+  type BinaryExpressionNode,
   type CallExpressionNode,
   type ExpressionNode,
   type FunctionDeclarationNode,
@@ -16,8 +17,9 @@ import {
   type ParameterNode,
   type ProgramNode,
   type TypeReferenceNode,
+  type UnaryExpressionNode,
 } from '../core/ast/nodes';
-import { visit } from '../core/ast/traversal';
+import { visit, type NodePath } from '../core/ast/traversal';
 import { IDENT, BUILTIN_FUNCTIONS_V6_RULES, KEYWORDS, NAMESPACES, NS_MEMBERS } from '../core/constants';
 
 interface FunctionInfo {
@@ -31,6 +33,8 @@ interface FunctionInfo {
   requiredParams: number;
   totalParams: number;
   rawParams: string[];
+  node?: FunctionDeclarationNode;
+  identifier?: IdentifierNode | null;
 }
 
 interface FunctionSignatureMeta {
@@ -48,6 +52,8 @@ interface FunctionCall {
   line: number;
   column: number;
   startIndex: number;
+  astNode?: CallExpressionNode;
+  astPath?: NodePath<CallExpressionNode>;
 }
 
 export class FunctionValidator implements ValidationModule {
@@ -100,13 +106,20 @@ export class FunctionValidator implements ValidationModule {
     }, 0);
   }
 
-  private createFunctionInfo(name: string, params: string[], line: number, column: number, isMethod: boolean): FunctionInfo {
+  private createFunctionInfo(
+    name: string,
+    params: string[],
+    line: number,
+    column: number,
+    isMethod: boolean,
+    options: { node?: FunctionDeclarationNode; identifier?: IdentifierNode | null } = {},
+  ): FunctionInfo {
     const parameterNames = params.map(p => this.extractParamName(p)).filter(Boolean);
     const totalParams = params.length;
     const requiredParams = this.computeRequiredParams(params);
     const implicitOffset = isMethod ? 1 : 0;
 
-    return {
+    const info: FunctionInfo = {
       name,
       parameters: parameterNames,
       returnType: 'unknown',
@@ -116,8 +129,11 @@ export class FunctionValidator implements ValidationModule {
       implicitOffset,
       requiredParams,
       totalParams,
-      rawParams: params
+      rawParams: params,
+      node: options.node,
+      identifier: options.identifier,
     };
+    return info;
   }
 
   private createSignatureMeta(params: string[], isMethod: boolean, line: number): FunctionSignatureMeta {
@@ -411,7 +427,11 @@ export class FunctionValidator implements ValidationModule {
       this.context.methodNames?.add(storeName);
     }
 
-    this.storeAstFunctionSignature(storeName, params, line, column, isMethod, paramNames, { checkDuplicates: true });
+    this.storeAstFunctionSignature(storeName, params, line, column, isMethod, paramNames, {
+      checkDuplicates: true,
+      node: fn,
+      identifier: fn.identifier,
+    });
 
     if (isMethod && fullName !== storeName) {
       this.storeAstFunctionSignature(fullName, params, line, column, isMethod, paramNames, { checkDuplicates: false });
@@ -425,7 +445,7 @@ export class FunctionValidator implements ValidationModule {
     column: number,
     isMethod: boolean,
     paramNames: string[],
-    options: { checkDuplicates?: boolean } = {},
+    options: { checkDuplicates?: boolean; node?: FunctionDeclarationNode; identifier?: IdentifierNode | null } = {},
   ): void {
     this.functionNames.add(name);
     const signature = this.createSignatureMeta(params, isMethod, line);
@@ -439,7 +459,10 @@ export class FunctionValidator implements ValidationModule {
       this.context.functionParams.set(name, params);
     }
 
-    const info = this.createFunctionInfo(name, params, line, column, isMethod);
+    const info = this.createFunctionInfo(name, params, line, column, isMethod, {
+      node: options.node,
+      identifier: options.identifier,
+    });
     this.addUserFunction(name, info);
 
     if (options.checkDuplicates === false) {
@@ -669,6 +692,8 @@ export class FunctionValidator implements ValidationModule {
             line,
             column,
             startIndex,
+            astNode: node,
+            astPath: path as NodePath<CallExpressionNode>,
           });
         },
       },
@@ -1227,30 +1252,41 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private validateFunctionComplexity(): void {
+    if (this.usingAst && this.astContext?.ast) {
+      this.validateFunctionComplexityAst();
+      return;
+    }
+
+    this.validateFunctionComplexityLegacy();
+  }
+
+  private validateFunctionComplexityLegacy(): void {
     for (let i = 0; i < this.context.cleanLines.length; i++) {
       const line = this.context.cleanLines[i];
       const funcMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*=>/);
-      if (funcMatch) {
-        const funcName = funcMatch[1];
-        const lineNum = i + 1;
-        
-        // Calculate function complexity
-        const complexity = this.calculateFunctionComplexity(funcName, i);
-        
-        // Warn if complexity is too high (more than 10)
-        if (complexity > 10) {
-          this.addWarning(lineNum, 1, 
-            `Function '${funcName}' has high complexity (${complexity}). Consider breaking it into smaller functions`, 
-            'PSV6-FUNCTION-STYLE-COMPLEXITY');
-        }
+      if (!funcMatch) {
+        continue;
+      }
+
+      const funcName = funcMatch[1];
+      const lineNum = i + 1;
+      const complexity = this.calculateFunctionComplexityLegacy(funcName, i);
+
+      if (complexity > 10) {
+        this.addWarning(
+          lineNum,
+          1,
+          `Function '${funcName}' has high complexity (${complexity}). Consider breaking it into smaller functions`,
+          'PSV6-FUNCTION-STYLE-COMPLEXITY',
+        );
       }
     }
   }
 
-  private calculateFunctionComplexity(funcName: string, startLine: number): number {
+  private calculateFunctionComplexityLegacy(funcName: string, startLine: number): number {
     let complexity = 1; // Base complexity
     const baseIndent = this.getLineIndentation(this.context.cleanLines[startLine]);
-    
+
     // Look for control structures in the function body
     for (let i = startLine + 1; i < this.context.cleanLines.length; i++) {
       const line = this.context.cleanLines[i];
@@ -1304,8 +1340,82 @@ export class FunctionValidator implements ValidationModule {
         complexity += 0.5;
       }
     }
-    
+
     return Math.round(complexity);
+  }
+
+  private validateFunctionComplexityAst(): void {
+    const visited = new Set<FunctionDeclarationNode>();
+
+    for (const overloads of this.userFunctions.values()) {
+      for (const func of overloads) {
+        if (!func.node || visited.has(func.node)) {
+          continue;
+        }
+
+        visited.add(func.node);
+        const complexity = this.calculateFunctionComplexityAst(func.node);
+        if (complexity <= 10) {
+          continue;
+        }
+
+        const location = func.identifier ?? func.node.identifier ?? func.node;
+        this.addWarning(
+          location.loc.start.line,
+          location.loc.start.column,
+          `Function '${func.name}' has high complexity (${complexity}). Consider breaking it into smaller functions`,
+          'PSV6-FUNCTION-STYLE-COMPLEXITY',
+        );
+      }
+    }
+  }
+
+  private calculateFunctionComplexityAst(fn: FunctionDeclarationNode): number {
+    let complexity = 1;
+
+    visit(fn.body, {
+      FunctionDeclaration: {
+        enter: () => 'skip',
+      },
+      IfStatement: {
+        enter: (path) => {
+          complexity += 1;
+          if (path.node.alternate) {
+            complexity += 1;
+          }
+        },
+      },
+      ForStatement: {
+        enter: () => {
+          complexity += 1;
+        },
+      },
+      WhileStatement: {
+        enter: () => {
+          complexity += 1;
+        },
+      },
+      SwitchStatement: {
+        enter: () => {
+          complexity += 1;
+        },
+      },
+      ConditionalExpression: {
+        enter: () => {
+          complexity += 1;
+        },
+      },
+      BinaryExpression: {
+        enter: (binaryPath) => {
+          const operator = binaryPath.node.operator;
+          if (operator === 'and' || operator === 'or') {
+            complexity += 1;
+          }
+        },
+      },
+    });
+
+    return complexity;
   }
 
   private validateFunctionStyle(func: FunctionInfo): void {
@@ -1578,21 +1688,95 @@ export class FunctionValidator implements ValidationModule {
 
   private validateReturnTypeUsage(funcName: string, call: FunctionCall): void {
     const returnType = this.getFunctionReturnType(funcName);
-    
-    // Get the line where this function call occurs
+
+    if (call.astPath && this.astContext?.ast) {
+      const handled = this.validateReturnTypeUsageAst(funcName, call, returnType);
+      if (handled) {
+        return;
+      }
+    }
+
+    this.validateReturnTypeUsageLegacy(funcName, call, returnType);
+  }
+
+  private validateReturnTypeUsageAst(funcName: string, call: FunctionCall, returnType: string): boolean {
+    const path = call.astPath;
+    if (!path) {
+      return false;
+    }
+
+    const location = call.astNode?.loc?.start ?? { line: call.line, column: call.column };
+    const parent = path.parent;
+    if (!parent) {
+      return false;
+    }
+
+    if (parent.node.kind === 'BinaryExpression') {
+      const binary = parent.node as BinaryExpressionNode;
+      const otherOperand = path.key === 'left' ? binary.right : path.key === 'right' ? binary.left : null;
+      if (!otherOperand) {
+        return false;
+      }
+      const operator = binary.operator;
+
+      if ((returnType === 'bool' || this.isBooleanFunction(funcName)) && this.isArithmeticOperator(operator, otherOperand)) {
+        this.addError(
+          location.line,
+          location.column,
+          `Boolean function '${funcName}' cannot be used in arithmetic operations`,
+          'PSV6-FUNCTION-RETURN-TYPE',
+        );
+        return true;
+      }
+
+      if (
+        returnType !== 'string'
+        && operator === '+'
+        && this.isStringExpression(otherOperand)
+      ) {
+        this.addError(
+          location.line,
+          location.column,
+          `Function '${funcName}' returns ${returnType}, cannot be used in string operations`,
+          'PSV6-FUNCTION-RETURN-TYPE',
+        );
+        return true;
+      }
+
+      return false;
+    }
+
+    if (
+      parent.node.kind === 'UnaryExpression'
+      && (returnType === 'bool' || this.isBooleanFunction(funcName))
+    ) {
+      const unary = parent.node as UnaryExpressionNode;
+      if (unary.operator === '+' || unary.operator === '-') {
+        this.addError(
+          location.line,
+          location.column,
+          `Boolean function '${funcName}' cannot be used in arithmetic operations`,
+          'PSV6-FUNCTION-RETURN-TYPE',
+        );
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private validateReturnTypeUsageLegacy(funcName: string, call: FunctionCall, returnType: string): void {
     const line = this.context.lines[call.line - 1];
     if (!line) return;
-    
-    // Find the function call in the line
+
     const funcCallStart = line.indexOf(funcName, call.startIndex);
     if (funcCallStart === -1) return;
-    
-    // Find the end of the function call
+
     let funcCallEnd = funcCallStart + funcName.length;
     let parenCount = 0;
     let inString = false;
     let stringChar = '';
-    
+
     for (let i = funcCallStart; i < line.length; i++) {
       const char = line[i];
       if (!inString && (char === '"' || char === "'")) {
@@ -1610,29 +1794,24 @@ export class FunctionValidator implements ValidationModule {
         }
       }
     }
-    
-    // Check the context around the function call
+
     const beforeCall = line.substring(0, funcCallStart).trim();
     const afterCall = line.substring(funcCallEnd).trim();
-    
-    // Check for arithmetic operations with boolean return types
+
     if ((returnType === 'bool') || this.isBooleanFunction(funcName)) {
-      // Check if it's used in arithmetic operations
       if (this.isArithmeticContext(beforeCall, afterCall)) {
-        this.addError(call.line, call.column, 
-          `Boolean function '${funcName}' cannot be used in arithmetic operations`, 
+        this.addError(call.line, call.column,
+          `Boolean function '${funcName}' cannot be used in arithmetic operations`,
           'PSV6-FUNCTION-RETURN-TYPE');
       }
     }
-    
-    // Check for string operations with non-string return types
+
     if (returnType !== 'string' && this.isStringContext(beforeCall, afterCall)) {
-      this.addError(call.line, call.column, 
-        `Function '${funcName}' returns ${returnType}, cannot be used in string operations`, 
+      this.addError(call.line, call.column,
+        `Function '${funcName}' returns ${returnType}, cannot be used in string operations`,
         'PSV6-FUNCTION-RETURN-TYPE');
     }
-    
-    // Check if this function call is assigned to a variable and that variable is used incorrectly
+
     this.checkVariableAssignmentUsage(funcName, returnType, call, line, funcCallStart, funcCallEnd);
   }
 
@@ -1663,6 +1842,48 @@ export class FunctionValidator implements ValidationModule {
           'PSV6-FUNCTION-RETURN-TYPE');
       }
     }
+  }
+
+  private isArithmeticOperator(operator: string, otherOperand: ExpressionNode): boolean {
+    const arithmeticOperators = new Set(['+', '-', '*', '/', '%', '^']);
+    if (!arithmeticOperators.has(operator)) {
+      return false;
+    }
+
+    if (operator === '+' && this.isStringExpression(otherOperand)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private isStringExpression(expression: ExpressionNode): boolean {
+    if (expression.kind === 'StringLiteral') {
+      return true;
+    }
+
+    const typeKind = this.getExpressionTypeKind(expression);
+    return typeKind === 'string';
+  }
+
+  private getExpressionTypeKind(expression: ExpressionNode): string | null {
+    if (!this.astContext) {
+      return null;
+    }
+
+    const { typeEnvironment } = this.astContext;
+    const direct = typeEnvironment.nodeTypes.get(expression);
+    if (direct) {
+      return direct.kind;
+    }
+
+    if (expression.kind === 'Identifier') {
+      const identifier = expression as IdentifierNode;
+      const fromIdentifiers = typeEnvironment.identifiers.get(identifier.name);
+      return fromIdentifiers?.kind ?? null;
+    }
+
+    return null;
   }
 
   private isVariableUsedInArithmetic(line: string, varName: string): boolean {

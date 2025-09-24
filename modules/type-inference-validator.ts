@@ -47,7 +47,6 @@ export class TypeInferenceValidator implements ValidationModule {
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
   private astTypeEnvironment: TypeEnvironment | null = null;
-  private usingAst = false;
 
   getDependencies(): string[] {
     return ['SyntaxValidator', 'TypeValidator'];
@@ -60,13 +59,19 @@ export class TypeInferenceValidator implements ValidationModule {
 
     this.astContext = this.getAstContext(config);
     this.astTypeEnvironment = this.astContext?.typeEnvironment ?? null;
-    this.usingAst = !!this.astContext?.ast;
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.validateWithAst(this.astContext.ast);
-    } else {
-      this.validateLegacy();
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null
+      };
     }
+
+    this.validateWithAst(this.astContext.ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -78,21 +83,12 @@ export class TypeInferenceValidator implements ValidationModule {
     };
   }
 
-  private validateLegacy(): void {
-    this.validateTypeCompatibility();
-    this.validateTypeInference();
-    this.validateTypeSafety();
-    this.validateImplicitConversions();
-    this.validateTypeAnnotations();
-  }
-
   private reset(): void {
     this.errors = [];
     this.warnings = [];
     this.info = [];
     this.astContext = null;
     this.astTypeEnvironment = null;
-    this.usingAst = false;
   }
 
   // ──────────────────────────────────────────────────────────────────────────

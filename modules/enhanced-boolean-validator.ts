@@ -40,13 +40,11 @@ export class EnhancedBooleanValidator implements ValidationModule {
   name = 'EnhancedBooleanValidator';
   priority = 75; // Run after basic syntax validation
 
-  private context!: ValidationContext;
   private config!: ValidatorConfig;
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   getDependencies(): string[] {
     return ['CoreValidator', 'SyntaxValidator', 'TypeInferenceValidator'];
@@ -54,17 +52,22 @@ export class EnhancedBooleanValidator implements ValidationModule {
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
-    this.context = context;
     this.config = config;
 
-    this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
+    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.validateWithAst(this.astContext.ast);
-    } else {
-      this.validateLegacy();
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.validateWithAst(this.astContext.ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -504,260 +507,6 @@ export class EnhancedBooleanValidator implements ValidationModule {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Legacy validation (fallback)
-  // ──────────────────────────────────────────────────────────────────────────
-  private validateLegacy(): void {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-
-      this.validateLegacyNumericLiteral(line, lineNum);
-      this.validateLegacyTernaryType(lineNum, line);
-      this.validateLegacyNonBooleanCondition(line, lineNum);
-
-      if (this.config.enablePerformanceAnalysis) {
-        const stripped = this.stripStringsAndLineComment(line || '');
-        if (/(\band\b|\bor\b)/.test(stripped)) {
-          this.validateLegacyBooleanShortCircuit(stripped, lineNum);
-        }
-      }
-    }
-  }
-
-  private validateLegacyNumericLiteral(line: string, lineNum: number): void {
-    const match = line.match(/\bif\s*\(\s*([^)]+)\s*\)/);
-    if (!match) {
-      return;
-    }
-    const condition = match[1].trim();
-    if (/^-?\d+(\.\d+)?$/.test(condition)) {
-      this.addError(
-        lineNum,
-        1,
-        `Numeric literal '${condition}' used in if condition. Use boolean expressions instead.`,
-        'PSV6-MIG-BOOL',
-        `Replace 'if (${condition})' with 'if (${condition} != 0)' or a proper boolean expression`,
-      );
-    }
-  }
-
-  private validateLegacyTernaryType(lineNum: number, line: string): void {
-    const match = line.match(/(\w+\s+)?(\w+)\s*=\s*([^?]+)\?\s*([^:]+)\s*:\s*(.+)/);
-    if (!match) {
-      return;
-    }
-
-    const [, typeDecl, , , trueValue, falseValue] = match;
-    let declaredType = '';
-    if (typeDecl) {
-      const typeMatch = typeDecl.trim().match(/^(color|string|int|float|bool)$/);
-      if (typeMatch) {
-        declaredType = typeMatch[1];
-      }
-    }
-
-    const trueType = this.inferLegacyValueType(trueValue.trim());
-    const falseType = this.inferLegacyValueType(falseValue.trim());
-    if (trueType === falseType || trueType === 'unknown' || falseType === 'unknown') {
-      return;
-    }
-
-    const numericCompatible =
-      (trueType === 'int' && falseType === 'float') ||
-      (trueType === 'float' && falseType === 'int');
-    if (numericCompatible) {
-      return;
-    }
-
-    const message = declaredType
-      ? `Ternary operator branches have mismatched types: '${trueValue.trim()}' (${trueType}) vs '${falseValue.trim()}' (${falseType}). Both must be compatible with declared type '${declaredType}'.`
-      : `Ternary operator branches have mismatched types: '${trueValue.trim()}' (${trueType}) vs '${falseValue.trim()}' (${falseType}). Both branches must return the same type.`;
-
-    const suggestion = declaredType
-      ? `Ensure both branches return the same type or are compatible with '${declaredType}'`
-      : 'Ensure both branches return the same type (e.g., both strings or both numbers)';
-
-    this.addError(lineNum, 1, message, 'PSV6-TERNARY-TYPE', suggestion);
-  }
-
-  private inferLegacyValueType(value: string): string {
-    if (/^-?\d+$/.test(value)) return 'int';
-    if (/^-?\d*\.\d+$/.test(value)) return 'float';
-    if (/^["'].*["']$/.test(value)) return 'string';
-    if (value === 'true' || value === 'false') return 'bool';
-    if (value.startsWith('color.')) return 'color';
-    if (value === 'na') return 'na';
-    return 'unknown';
-  }
-
-  private validateLegacyNonBooleanCondition(line: string, lineNum: number): void {
-    const match = line.match(/^\s*if\s+([^\s].*)$/);
-    if (!match) {
-      return;
-    }
-    const cond = match[1].trim();
-    if (/^(true|false)\b/.test(cond)) return;
-    if (/\bta\.(crossover|crossunder|rising|falling)\s*\(/.test(cond)) return;
-    if (/^barstate\.(isconfirmed|isfirst|islast|isrealtime|isnew|ishistory|islastconfirmedhistory)\b/.test(cond)) return;
-    if (/\bstr\.(contains|startswith|endswith)\s*\(/.test(cond)) return;
-    if (/^array\.get\s*\(/.test(cond)) return;
-    if (/^(math\.sign|math\.round)\s*\(/.test(cond)) return;
-
-    const simpleIdentifier = cond.match(/^([A-Za-z_][A-Za-z0-9_]*)(\.[A-Za-z_][A-Za-z0-9_]*)?$/);
-    if (simpleIdentifier) {
-      const baseName = simpleIdentifier[1];
-      const typeInfo = this.context?.typeMap instanceof Map ? this.context.typeMap.get(baseName) : undefined;
-      if (typeInfo && (typeInfo.type === 'bool' || typeInfo.type === 'series')) {
-        return;
-      }
-      this.addError(lineNum, 1, 'Non-boolean condition used in if', 'PSV6-FUNCTION-NAMESPACE');
-      return;
-    }
-
-    if (!/(==|!=|<=|>=|<|>|\band\b|\bor\b|\bnot\b)/.test(cond)) {
-      this.addError(lineNum, 1, 'Non-boolean condition used in if', 'PSV6-FUNCTION-NAMESPACE');
-    }
-  }
-
-  private validateLegacyBooleanShortCircuit(line: string, lineNum: number): void {
-    const chains = this.extractLegacyBooleanChains(line);
-    for (const chain of chains) {
-      if (chain.operator === 'and') {
-        this.checkLegacyAndChain(chain.clauses, lineNum);
-      } else {
-        this.checkLegacyOrChain(chain.clauses, lineNum);
-      }
-    }
-  }
-
-  private checkLegacyAndChain(clauses: string[], lineNum: number): void {
-    const metadata = clauses.map((clause) => ({
-      expensive: this.containsLegacyExpensiveCalc(clause),
-      cheap: this.isLegacyCheapCheck(clause),
-    }));
-
-    const firstExpensiveIndex = metadata.findIndex((entry) => entry.expensive);
-    if (firstExpensiveIndex >= 0) {
-      const hasLaterCheap = metadata.slice(firstExpensiveIndex + 1).some((entry) => entry.cheap);
-      if (hasLaterCheap) {
-        this.addWarning(
-          lineNum,
-          1,
-          'Expensive calculation appears before cheaper checks in AND chain. Reorder to leverage short-circuiting.',
-          'PSV6-BOOL-AND-ORDER',
-        );
-      }
-    }
-
-    const expensiveCount = metadata.filter((entry) => entry.expensive).length;
-    if (expensiveCount > 1) {
-      this.addWarning(
-        lineNum,
-        1,
-        'Multiple expensive calculations used in a single boolean chain. Consider caching or simplifying.',
-        'PSV6-BOOL-EXPENSIVE-CHAIN',
-      );
-    }
-  }
-
-  private checkLegacyOrChain(clauses: string[], lineNum: number): void {
-    if (clauses.length < 2) {
-      return;
-    }
-
-    let first = clauses[0].trim();
-    first = first.replace(/^\s*[A-Za-z_][A-Za-z0-9_]*\s*:?=\s*/, '');
-    const second = clauses[1];
-    if (this.isLegacyConstantFalse(first) && this.containsLegacyExpensiveCalc(second)) {
-      this.addWarning(
-        lineNum,
-        1,
-        'Constant false used before an expensive calculation in OR chain; move constants to the end to avoid unnecessary evaluation.',
-        'PSV6-BOOL-OR-CONSTANT',
-      );
-    }
-
-    const expensiveCount = clauses.filter((clause) => this.containsLegacyExpensiveCalc(clause)).length;
-    if (expensiveCount > 1) {
-      this.addWarning(
-        lineNum,
-        1,
-        'Multiple expensive calculations used in a single boolean chain. Consider caching or simplifying.',
-        'PSV6-BOOL-EXPENSIVE-CHAIN',
-      );
-    }
-  }
-
-  private extractLegacyBooleanChains(line: string): Array<{ operator: 'and' | 'or'; clauses: string[] }> {
-    const chains: Array<{ operator: 'and' | 'or'; clauses: string[] }> = [];
-    const expr = line.replace(/^\s*if\s+/, '');
-    const orClauses = this.simpleLegacySplit(expr, /\bor\b/);
-    if (orClauses.length > 1) {
-      chains.push({ operator: 'or', clauses: orClauses });
-    }
-    const andClauses = this.simpleLegacySplit(expr, /\band\b/);
-    if (andClauses.length > 1) {
-      chains.push({ operator: 'and', clauses: andClauses });
-    }
-    return chains;
-  }
-
-  private simpleLegacySplit(expr: string, op: RegExp): string[] {
-    return expr.split(op).map((part) => part.trim()).filter(Boolean);
-  }
-
-  private containsLegacyExpensiveCalc(clause: string): boolean {
-    for (const fn of EXPENSIVE_CALCULATION_FUNCTIONS) {
-      if (clause.includes(fn)) {
-        return true;
-      }
-    }
-    return /\brequest\.(security|security_lower_tf|economic|financial)\s*\(/.test(clause);
-  }
-
-  private isLegacyCheapCheck(clause: string): boolean {
-    if (this.isLegacyConstantTrue(clause) || this.isLegacyConstantFalse(clause)) return true;
-    if (/(==|!=|<=|>=|<|>)/.test(clause)) return true;
-    if (/\bbarstate\.(isconfirmed|isfirst|islast|isrealtime|isnew|ishistory|islastconfirmedhistory)\b/.test(clause)) return true;
-    if (/\bstrategy\.(position_size|opentrades)\b/.test(clause)) return true;
-    if (!/\w+\s*\(/.test(clause)) return true;
-    return false;
-  }
-
-  private isLegacyConstantTrue(value: string): boolean {
-    return /^\s*true\s*$/.test(value);
-  }
-
-  private isLegacyConstantFalse(value: string): boolean {
-    return /^\s*false\s*$/.test(value);
-  }
-
-  private stripStringsAndLineComment(line: string): string {
-    const noComment = line.replace(/\/\/.*$/, '');
-    let output = '';
-    let inString = false;
-    let quote = '';
-    for (let i = 0; i < noComment.length; i++) {
-      const ch = noComment[i];
-      if (!inString && (ch === '"' || ch === "'")) {
-        inString = true;
-        quote = ch;
-        output += '"';
-        continue;
-      }
-      if (inString) {
-        if (ch === quote) {
-          inString = false;
-          quote = '';
-        }
-        continue;
-      }
-      output += ch;
-    }
-    return output;
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
   // Shared helpers
   // ──────────────────────────────────────────────────────────────────────────
   private reset(): void {
@@ -765,7 +514,6 @@ export class EnhancedBooleanValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
   }
 
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
@@ -776,12 +524,6 @@ export class EnhancedBooleanValidator implements ValidationModule {
     this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
   }
 
-  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-    return isAstValidationContext(this.context) && this.context.ast ? (this.context as AstValidationContext) : null;
-  }
 }
 
 function isAstValidationContext(context: ValidationContext): context is AstValidationContext {

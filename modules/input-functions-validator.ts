@@ -67,14 +67,18 @@ export class InputFunctionsValidator implements ValidationModule {
 
     this.astContext = this.getAstContext(config);
 
-    if (this.astContext?.ast) {
-      this.collectInputFunctionDataAst(this.astContext.ast);
-    } else {
-      // Process each line for input function calls
-      context.cleanLines.forEach((line, index) => {
-        this.processLine(line, index + 1);
-      });
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.collectInputFunctionDataAst(this.astContext.ast);
 
     // Post-process validations
     this.validateInputPerformance();
@@ -147,11 +151,6 @@ export class InputFunctionsValidator implements ValidationModule {
     return false;
   }
 
-  private processLine(line: string, lineNum: number): void {
-    // Input function patterns
-    this.validateInputFunctionCalls(line, lineNum);
-  }
-
   private collectInputFunctionDataAst(program: ProgramNode): void {
     visit(program, {
       CallExpression: {
@@ -193,102 +192,6 @@ export class InputFunctionsValidator implements ValidationModule {
 
     this.recordInputFunctionCall(callInfo);
     this.validateInputFunction(functionName, args, parameters, callInfo.line, callInfo.column);
-  }
-
-  private validateInputFunctionCalls(line: string, lineNum: number): void {
-    // Pattern: input.functionName(args...)
-    // We need to handle nested parentheses, so we'll use a different approach
-    const inputPattern = /input\.(\w+)\s*\(/g;
-
-    let match;
-    while ((match = inputPattern.exec(line)) !== null) {
-      const functionName = match[1];
-      const startIndex = match.index;
-      const openParenIndex = match.index + match[0].length - 1;
-      
-      // Find the matching closing parenthesis
-      const argsString = this.extractBalancedParentheses(line, openParenIndex);
-      if (argsString === null) continue; // Skip if we can't find balanced parentheses
-      
-      const column = startIndex + 1;
-
-      // Parse arguments and parameters
-      const { args, parameters } = this.parseInputArguments(argsString);
-
-
-      // Store function call
-      this.recordInputFunctionCall({
-        name: functionName,
-        line: lineNum,
-        column,
-        arguments: args,
-        parameters,
-      });
-
-      // Validate specific function
-      this.validateInputFunction(functionName, args, parameters, lineNum, column);
-    }
-  }
-
-  private parseInputArguments(argsString: string): { args: string[], parameters: Map<string, string> } {
-    const args: string[] = [];
-    const parameters = new Map<string, string>();
-    
-    if (!argsString.trim()) return { args, parameters };
-    
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-    let isParameter = false;
-    let paramName = '';
-
-    for (let i = 0; i < argsString.length; i++) {
-      const char = argsString[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-        current += char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        stringChar = '';
-        current += char;
-      } else if (!inString && char === '(') {
-        depth++;
-        current += char;
-      } else if (!inString && char === ')') {
-        depth--;
-        current += char;
-      } else if (!inString && char === '=' && depth === 0) {
-        // Parameter assignment
-        paramName = current.trim();
-        current = '';
-        isParameter = true;
-      } else if (!inString && char === ',' && depth === 0) {
-        if (isParameter && paramName) {
-          parameters.set(paramName, current.trim());
-          isParameter = false;
-          paramName = '';
-        } else {
-          args.push(current.trim());
-        }
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    
-    // Handle last argument/parameter
-    if (current.trim()) {
-      if (isParameter && paramName) {
-        parameters.set(paramName, current.trim());
-      } else {
-        args.push(current.trim());
-      }
-    }
-    
-    return { args, parameters };
   }
 
   private validateInputFunction(functionName: string, args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
@@ -923,36 +826,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   // Helper methods
-  private extractBalancedParentheses(line: string, openParenIndex: number): string | null {
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-    
-    for (let i = openParenIndex; i < line.length; i++) {
-      const char = line[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        stringChar = '';
-      } else if (!inString) {
-        if (char === '(') {
-          depth++;
-        } else if (char === ')') {
-          depth--;
-          if (depth === 0) {
-            // Found the matching closing parenthesis
-            return line.substring(openParenIndex + 1, i);
-          }
-        }
-      }
-    }
-    
-    return null; // No matching closing parenthesis found
-  }
-
   private extractNumericValue(arg: string): number | null {
     if (!arg) return null;
     const trimmed = arg.trim();

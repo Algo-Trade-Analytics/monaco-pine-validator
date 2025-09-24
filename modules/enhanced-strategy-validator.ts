@@ -48,31 +48,32 @@ export class EnhancedStrategyValidator implements ValidationModule {
   name = 'EnhancedStrategyValidator';
   priority = 75; // Run after basic syntax validation
 
-  private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   getDependencies(): string[] {
     return ['CoreValidator', 'SyntaxValidator'];
   }
 
-  validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
+  validate(context: ValidationContext, _config: ValidatorConfig): ValidationResult {
     this.reset();
-    this.context = context;
-    this.config = config;
 
-    this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
+    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.validateWithAst(this.astContext.ast);
-    } else {
-      this.validateLegacy();
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.validateWithAst(this.astContext.ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -287,121 +288,6 @@ export class EnhancedStrategyValidator implements ValidationModule {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Legacy validation
-  // ──────────────────────────────────────────────────────────────────────────
-
-  private validateLegacy(): void {
-    const lines = this.context.cleanLines.length ? this.context.cleanLines : this.context.lines;
-
-    this.validateLegacyStrategyRealism(lines);
-    this.validateLegacyRiskManagement(lines);
-    this.validateLegacyPositionSize(lines);
-    this.validateLegacyExitStrategy(lines);
-  }
-
-  private validateLegacyStrategyRealism(lines: string[]): void {
-    let hasStrategy = false;
-    let hasCommission = false;
-
-    for (const line of lines) {
-      if (/strategy\s*\(/.test(line)) {
-        hasStrategy = true;
-        if (/commission_type|commission_value/.test(line)) {
-          hasCommission = true;
-        }
-      }
-    }
-
-    if (hasStrategy && !hasCommission) {
-      this.addWarning(
-        1,
-        1,
-        'Strategy lacks commission settings for realistic backtesting',
-        'PSV6-STRATEGY-REALISM',
-        'Add commission_type and commission_value parameters to strategy()',
-      );
-    }
-  }
-
-  private validateLegacyRiskManagement(lines: string[]): void {
-    let hasStrategy = false;
-    let hasRiskManagement = false;
-
-    for (const line of lines) {
-      if (/strategy\s*\(/.test(line)) {
-        hasStrategy = true;
-      }
-
-      if (/strategy\.exit|strategy\.close|stop_loss|take_profit|trail_stop/.test(line)) {
-        hasRiskManagement = true;
-      }
-    }
-
-    if (hasStrategy && !hasRiskManagement) {
-      this.addInfo(
-        1,
-        1,
-        'Consider adding risk management features to your strategy',
-        'PSV6-STRATEGY-RISK',
-        'Add stop loss, take profit, or trailing stop orders',
-      );
-    }
-  }
-
-  private validateLegacyPositionSize(lines: string[]): void {
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const qtyMatch = line.match(/qty\s*=\s*(\d+)/);
-      if (!qtyMatch) {
-        continue;
-      }
-
-      const qty = parseInt(qtyMatch[1], 10);
-      if (Number.isNaN(qty) || qty <= POSITION_SIZE_THRESHOLD) {
-        continue;
-      }
-
-      this.addWarning(
-        i + 1,
-        1,
-        'Excessive position size may not be realistic',
-        'PSV6-STRATEGY-POSITION-SIZE',
-        'Consider using a more realistic position size',
-      );
-    }
-  }
-
-  private validateLegacyExitStrategy(lines: string[]): void {
-    let hasStrategy = false;
-    let hasEntry = false;
-    let hasExit = false;
-
-    for (const line of lines) {
-      if (/strategy\s*\(/.test(line)) {
-        hasStrategy = true;
-      }
-
-      if (/strategy\.entry/.test(line)) {
-        hasEntry = true;
-      }
-
-      if (/strategy\.exit|strategy\.close|strategy\.cancel/.test(line)) {
-        hasExit = true;
-      }
-    }
-
-    if (hasStrategy && hasEntry && !hasExit) {
-      this.addWarning(
-        1,
-        1,
-        'Strategy has entry conditions but no exit strategy',
-        'PSV6-STRATEGY-NO-EXIT',
-        'Add strategy.exit() or strategy.close() calls',
-      );
-    }
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
   // Shared helpers
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -410,7 +296,6 @@ export class EnhancedStrategyValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
   }
 
   private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
@@ -419,15 +304,6 @@ export class EnhancedStrategyValidator implements ValidationModule {
 
   private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
     this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
-
-  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-    return isAstValidationContext(this.context) && this.context.ast
-      ? (this.context as AstValidationContext)
-      : null;
   }
 }
 

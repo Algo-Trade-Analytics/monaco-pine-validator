@@ -92,10 +92,6 @@ export class SyminfoVariablesValidator implements ValidationModule {
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
-  private context!: ValidationContext;
-  private config!: ValidatorConfig;
-  private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   // Usage tracking
   private syminfoUsage: Map<string, number> = new Map();
@@ -106,24 +102,21 @@ export class SyminfoVariablesValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    this.context = context;
-    this.config = config;
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
-    this.syminfoUsage.clear();
-    this.constantUsage.clear();
+    this.reset();
 
-    this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
-
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectSyminfoDataAst(this.astContext.ast);
-    } else {
-      this.validateSyminfoVariables();
-      this.validateAdditionalConstants();
+    const astContext = this.getAstContext(context, config);
+    if (!astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: context.scriptType
+      };
     }
 
+    this.collectSyminfoDataAst(astContext.ast);
     this.analyzeUsagePatterns();
 
     return {
@@ -132,98 +125,16 @@ export class SyminfoVariablesValidator implements ValidationModule {
       warnings: this.warnings,
       info: this.info,
       typeMap: new Map(),
-      scriptType: this.context.scriptType
+      scriptType: context.scriptType
     };
   }
 
-  private validateSyminfoVariables(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-
-      // Check for syminfo company variables
-      for (const variable of Array.from(SYMINFO_COMPANY_VARS)) {
-        if (cleanLine.includes(variable)) {
-          this.syminfoUsage.set(variable, (this.syminfoUsage.get(variable) || 0) + 1);
-          
-          this.info.push({
-            code: 'PSV6-SYMINFO-COMPANY',
-            message: `Company information variable '${variable}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(variable) + 1,
-            severity: 'info'
-          });
-        }
-      }
-
-      // Check for syminfo recommendations variables
-      for (const variable of Array.from(SYMINFO_RECOMMENDATIONS_VARS)) {
-        if (cleanLine.includes(variable)) {
-          this.syminfoUsage.set(variable, (this.syminfoUsage.get(variable) || 0) + 1);
-          
-          this.info.push({
-            code: 'PSV6-SYMINFO-RECOMMENDATIONS',
-            message: `Analyst recommendations variable '${variable}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(variable) + 1,
-            severity: 'info'
-          });
-        }
-      }
-
-      // Check for syminfo target price variables
-      for (const variable of Array.from(SYMINFO_TARGET_PRICE_VARS)) {
-        if (cleanLine.includes(variable)) {
-          this.syminfoUsage.set(variable, (this.syminfoUsage.get(variable) || 0) + 1);
-          
-          this.info.push({
-            code: 'PSV6-SYMINFO-TARGET-PRICE',
-            message: `Price target variable '${variable}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(variable) + 1,
-            severity: 'info'
-          });
-        }
-      }
-
-      // Check for additional syminfo variables
-      for (const variable of Array.from(SYMINFO_ADDITIONAL_VARS)) {
-        if (cleanLine.includes(variable)) {
-          this.syminfoUsage.set(variable, (this.syminfoUsage.get(variable) || 0) + 1);
-          
-          this.info.push({
-            code: 'PSV6-SYMINFO-ADDITIONAL',
-            message: `Additional symbol info variable '${variable}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(variable) + 1,
-            severity: 'info'
-          });
-        }
-      }
-    }
-  }
-
-  private validateAdditionalConstants(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-
-      // Check all additional constant sets
-      // advanced session/timezone constants imported from registry
-      for (const constantSet of ADDITIONAL_CONSTANT_SETS) {
-        for (const constant of Array.from(constantSet)) {
-          if (cleanLine.includes(constant)) {
-            this.constantUsage.set(constant, (this.constantUsage.get(constant) || 0) + 1);
-            
-            this.info.push({
-              code: 'PSV6-ADDITIONAL-CONSTANT',
-              message: `Additional constant '${constant}' detected`,
-              line: i + 1,
-              column: cleanLine.indexOf(constant) + 1,
-              severity: 'info'
-            });
-          }
-        }
-      }
-    }
+  private reset(): void {
+    this.errors = [];
+    this.warnings = [];
+    this.info = [];
+    this.syminfoUsage.clear();
+    this.constantUsage.clear();
   }
 
   private analyzeUsagePatterns(): void {
@@ -386,11 +297,11 @@ export class SyminfoVariablesValidator implements ValidationModule {
     return null;
   }
 
-  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+  private getAstContext(context: ValidationContext, config: ValidatorConfig): AstValidationContext | null {
     if (!config.ast || config.ast.mode === 'disabled') {
       return null;
     }
 
-    return 'ast' in this.context ? (this.context as AstValidationContext) : null;
+    return 'ast' in context ? (context as AstValidationContext) : null;
   }
 }

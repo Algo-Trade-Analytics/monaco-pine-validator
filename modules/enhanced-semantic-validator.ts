@@ -46,7 +46,6 @@ export class EnhancedSemanticValidator implements ValidationModule {
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
-  private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
 
@@ -56,17 +55,22 @@ export class EnhancedSemanticValidator implements ValidationModule {
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
-    this.context = context;
     this.config = config;
 
     this.astContext = isAstValidationContext(context) && context.ast ? context : null;
 
-    if (this.astContext?.ast) {
-      this.validateWithAst(this.astContext.ast);
-    } else {
-      this.validateTypeFlowLegacy(context.lines);
-      this.validateTypeInferenceLegacy(context.lines);
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.validateWithAst(this.astContext.ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -265,6 +269,27 @@ export class EnhancedSemanticValidator implements ValidationModule {
     return found;
   }
 
+  private shouldHaveReturnType(funcName: string): boolean {
+    const returnTypeFunctions = [
+      'calculate',
+      'compute',
+      'get',
+      'find',
+      'search',
+      'check',
+      'validate',
+      'process',
+      'transform',
+      'convert',
+      'parse',
+      'format',
+      'build',
+      'create',
+    ];
+
+    return returnTypeFunctions.some((prefix) => funcName.toLowerCase().startsWith(prefix));
+  }
+
   private interpretTypeReference(reference: TypeReferenceNode | null): TypeReferenceInfo {
     if (!reference) {
       return { qualifier: null, baseType: null };
@@ -377,174 +402,4 @@ export class EnhancedSemanticValidator implements ValidationModule {
     return null;
   }
 
-  // Legacy fallbacks ----------------------------------------------------------------
-
-  private validateTypeFlowLegacy(lines: string[]): void {
-    const seriesVariables = new Set<string>();
-    const inputVariables = new Set<string>();
-
-    for (const line of lines) {
-      const seriesMatch = line.match(/^\s*series\s+(?:int|float|bool|string|color)\s+(\w+)/);
-      if (seriesMatch) {
-        seriesVariables.add(seriesMatch[1]);
-      }
-
-      const inputMatch = line.match(/^\s*input\s+(?:int|float|bool|string|color)\s+(\w+)/);
-      if (inputMatch) {
-        inputVariables.add(inputMatch[1]);
-      }
-    }
-
-    lines.forEach((line, index) => {
-      const lineNum = index + 1;
-
-      if (this.hasSeriesToSimpleAssignment(line, seriesVariables)) {
-        this.addError(
-          lineNum,
-          1,
-          'Cannot assign series value to simple variable. Use [0] to get the current value.',
-          'PSV6-TYPE-FLOW',
-          'Use [0] to get the current value from a series',
-        );
-      }
-
-      if (this.hasInputToSeriesAssignment(line, inputVariables)) {
-        this.addError(
-          lineNum,
-          1,
-          'Input value assigned to series variable may cause issues. Consider the context.',
-          'PSV6-TYPE-FLOW',
-          'Ensure input values are used appropriately in series context',
-        );
-      }
-    });
-  }
-
-  private validateTypeInferenceLegacy(lines: string[]): void {
-    lines.forEach((line, index) => {
-      const lineNum = index + 1;
-
-      if (this.hasAmbiguousVariableDeclaration(line)) {
-        this.addInfo(
-          lineNum,
-          1,
-          'Consider adding explicit type annotation for better code clarity.',
-          'PSV6-TYPE-INFERENCE',
-          'Add explicit type annotation (e.g., int myVar = 42)',
-        );
-      }
-
-      if (this.hasFunctionWithoutReturnType(line)) {
-        this.addInfo(
-          lineNum,
-          1,
-          'Consider adding explicit return type annotation for function clarity.',
-          'PSV6-TYPE-INFERENCE',
-          'Add explicit return type annotation (e.g., int myFunction() => ...)',
-        );
-      }
-    });
-  }
-
-  /**
-   * Check if a line has series to simple assignment
-   */
-  private hasSeriesToSimpleAssignment(line: string, seriesVariables: Set<string>): boolean {
-    const seriesToSimplePattern = /^\s*simple\s+(?:int|float|bool|string|color)\s+(\w+)\s*=\s*(\w+)(?!\s*\[)/;
-    const match = line.match(seriesToSimplePattern);
-
-    if (match) {
-      const [, , rhsVar] = match;
-      const isSeries = this.isLikelySeriesVariable(rhsVar) || seriesVariables.has(rhsVar);
-      return isSeries;
-    }
-
-    return false;
-  }
-
-  /**
-   * Check if a line has input to series assignment
-   */
-  private hasInputToSeriesAssignment(line: string, inputVariables: Set<string>): boolean {
-    const seriesDeclarationPattern = /^\s*series\s+(?:int|float|bool|string|color)\s+(\w+)\s*=/;
-    const seriesMatch = line.match(seriesDeclarationPattern);
-
-    if (!seriesMatch) {
-      return false;
-    }
-
-    for (const inputVar of inputVariables) {
-      const inputVarPattern = new RegExp(`\\b${inputVar}\\b`);
-      if (inputVarPattern.test(line)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Check if a line has ambiguous variable declaration
-   */
-  private hasAmbiguousVariableDeclaration(line: string): boolean {
-    const ambiguousPattern = /^\s*(\w+)\s*=\s*(.+)$/;
-    const match = line.match(ambiguousPattern);
-
-    if (match) {
-      const [, , value] = match;
-      return this.isComplexExpressionString(value);
-    }
-
-    return false;
-  }
-
-  /**
-   * Check if a line has function without return type
-   */
-  private hasFunctionWithoutReturnType(line: string): boolean {
-    const functionPattern = /^\s*(\w+)\s*\([^)]*\)\s*=>/;
-    const match = line.match(functionPattern);
-
-    if (!match) {
-      return false;
-    }
-
-    const funcName = match[1];
-    if (this.shouldHaveReturnType(funcName)) {
-      return true;
-    }
-
-    return line.includes('?');
-  }
-
-  private isLikelySeriesVariable(varName: string): boolean {
-    const seriesVars = ['open', 'high', 'low', 'close', 'volume', 'time', 'bar_index', 'hl2', 'hlc3', 'ohlc4', 'hlcc4'];
-    return seriesVars.includes(varName);
-  }
-
-  private isComplexExpressionString(value: string): boolean {
-    const complexPatterns = [/\([^)]+\)/, /[+\-*/%]/, /ta\./, /request\./, /\?.*:/];
-    return complexPatterns.some((pattern) => pattern.test(value));
-  }
-
-  private shouldHaveReturnType(funcName: string): boolean {
-    const returnTypeFunctions = [
-      'calculate',
-      'compute',
-      'get',
-      'find',
-      'search',
-      'check',
-      'validate',
-      'process',
-      'transform',
-      'convert',
-      'parse',
-      'format',
-      'build',
-      'create',
-    ];
-
-    return returnTypeFunctions.some((prefix) => funcName.toLowerCase().startsWith(prefix));
-  }
 }

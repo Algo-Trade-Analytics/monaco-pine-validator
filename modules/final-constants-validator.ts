@@ -97,21 +97,21 @@ export class FinalConstantsValidator implements ValidationModule {
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.context = context;
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
-    this.mathConstantUsage.clear();
-    this.styleConstantUsage.clear();
-    this.orderConstantUsage.clear();
-    this.positionConstantUsage.clear();
-    this.specializedConstantUsage.clear();
+    this.reset();
 
     const astContext = this.getAstContext(config);
-    if (astContext?.ast) {
-      this.collectConstantsFromAst(astContext.ast);
-    } else {
-      this.collectConstantsFromText();
+    if (!astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: context.scriptType,
+      };
     }
+
+    this.collectConstantsFromAst(astContext.ast);
 
     // Analyze usage patterns
     this.analyzeFinalConstantUsage();
@@ -126,50 +126,22 @@ export class FinalConstantsValidator implements ValidationModule {
     };
   }
 
+  private reset(): void {
+    this.errors = [];
+    this.warnings = [];
+    this.info = [];
+    this.mathConstantUsage.clear();
+    this.styleConstantUsage.clear();
+    this.orderConstantUsage.clear();
+    this.positionConstantUsage.clear();
+    this.specializedConstantUsage.clear();
+  }
+
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
     if (!config.ast || config.ast.mode === 'disabled') {
       return null;
     }
     return 'ast' in this.context ? (this.context as AstValidationContext) : null;
-  }
-
-  private collectConstantsFromText(): void {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-      const lineNumber = i + 1;
-
-      for (const constant of MATH_CONSTANTS) {
-        if (cleanLine.includes(constant)) {
-          this.recordConstantUsage(constant, lineNumber, cleanLine.indexOf(constant) + 1);
-        }
-      }
-
-      for (const constantSet of STYLE_CONSTANT_SETS) {
-        for (const constant of constantSet) {
-          if (cleanLine.includes(constant)) {
-            this.recordConstantUsage(constant, lineNumber, cleanLine.indexOf(constant) + 1);
-          }
-        }
-      }
-
-      for (const constant of ORDER_CONSTANTS) {
-        if (cleanLine.includes(constant)) {
-          this.recordConstantUsage(constant, lineNumber, cleanLine.indexOf(constant) + 1);
-        }
-      }
-
-      for (const constant of POSITION_CONSTANTS) {
-        if (cleanLine.includes(constant)) {
-          this.recordConstantUsage(constant, lineNumber, cleanLine.indexOf(constant) + 1);
-        }
-      }
-
-      for (const constant of ALL_SPECIALIZED_CONSTANTS) {
-        if (cleanLine.includes(constant)) {
-          this.recordConstantUsage(constant, lineNumber, cleanLine.indexOf(constant) + 1);
-        }
-      }
-    }
   }
 
   private collectConstantsFromAst(program: ProgramNode): void {

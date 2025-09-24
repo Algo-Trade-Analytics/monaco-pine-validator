@@ -21,6 +21,15 @@ class FinalConstantsValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class FinalConstantsValidatorDisabledHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new FinalConstantsValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 function createConstantExpression(constant: string, line: number): ExpressionNode {
   const parts = constant.split('.');
   let expression: ExpressionNode = createIdentifier(parts[0]!, 0, line);
@@ -81,5 +90,15 @@ describe('FinalConstantsValidator (AST)', () => {
 
     const specializedUsage = result.info.find((diagnostic) => diagnostic.code === 'PSV6-SPECIALIZED-CONSTANTS-USAGE');
     expect(specializedUsage?.message).toContain('(3)');
+  });
+
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new FinalConstantsValidatorDisabledHarness();
+
+    const result = harness.validate('math.pi');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
   });
 });

@@ -31,6 +31,15 @@ class WhileLoopHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class WhileLoopDisabledHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new WhileLoopValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 const createEmptyBlock = (line: number) => createBlock([], 0, 0, line, line);
 
 describe('WhileLoopValidator (AST)', () => {
@@ -384,5 +393,22 @@ describe('WhileLoopValidator (AST)', () => {
 
     const warningCodes = result.warnings.map((warning) => warning.code);
     expect(warningCodes).toEqual(expect.arrayContaining(['PSV6-WHILE-DEEP-NESTING']));
+  });
+
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new WhileLoopDisabledHarness();
+
+    const source = [
+      '//@version=6',
+      'while true',
+      '    break',
+      'end',
+    ].join('\n');
+
+    const result = harness.validate(source);
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
   });
 });

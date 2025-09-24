@@ -51,32 +51,34 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Type validator now consumes AST type annotations, ternaries, and function return statements to raise PSV6-TYPE-MISMATCH, PSV6-TERNARY-TYPE, and PSV6-FUNCTION-RETURN-TYPE diagnostics without regex fallbacks.
 - Type validator now tracks assignment targets across declarations and reassignments so PSV6-TYPE-INCONSISTENT warnings originate from structured AST traversal rather than legacy text scans.
 - Dynamic loop validator now uses AST for-loop metadata to surface PSV6-FOR-DYNAMIC and PSV6-FOR-MODIFY warnings, leaving the regex scanner as a fallback only when structured analysis is unavailable.
-- While loop validator now consumes AST while statements to analyse conditions, performance, and control-flow best practices while retaining the legacy line scanner solely as a structural fallback.
-- Alert functions validator now inspects AST call expressions to validate alert frequencies, empty messages, and control-flow placement without relying on regex scanning while retaining the legacy path as a fallback.
-- Strategy functions validator now analyses AST call expressions to validate known members, parameter usage, loop placement, and nested strategy references without relying on regex scanning.
-- TA functions validator now inspects AST call expressions to validate parameter shapes, loop placement, and boolean-result usage while retaining the regex scanner as a fallback for non-AST runs.
+- ✅ While loop validator now consumes AST while statements to analyse conditions, performance, and control-flow best practices after retiring the legacy line-scanner fallback.
+- ✅ Alert functions validator now inspects AST call expressions to validate alert frequencies, empty messages, and control-flow placement exclusively from structured traversal after retiring the legacy regex fallback.
+- ✅ Strategy functions validator now analyses AST call expressions to validate known members, parameter usage, loop placement, and nested strategy references after retiring the legacy regex fallback path.
+- ✅ TA functions validator now inspects AST call expressions to validate parameter shapes, loop placement, and boolean-result usage after retiring the legacy regex fallback path.
 - Ticker functions validator now analyses AST call expressions to validate specialized constructors, modifier parameters, and value semantics while keeping the regex scanner as a fallback when structured analysis is unavailable.
 - Dynamic data validator now analyses AST request.* invocations to validate parameters, detect dynamic contexts, and surface performance heuristics while keeping the regex scanner as a fallback when structured analysis is unavailable.
 - Math functions validator now inspects AST call expressions to validate parameters, detect loop usage, and surface performance guidance while leaving the regex scanner as a fallback when structured analysis is unavailable.
-- String functions validator now analyses AST call expressions to validate parameters, formatting helpers, and performance heuristics while retaining the regex scanner as a fallback for non-AST runs.
+- ✅ String functions validator now analyses AST call expressions to validate parameters, formatting helpers, and performance heuristics exclusively from structured traversal after retiring the legacy regex fallback.
 - Drawing functions validator now analyses AST call expressions to validate line/label/box/table helpers, optional parameters, and performance heuristics while retaining the regex scanner as a fallback for non-AST runs.
 - Polyline functions validator now analyses AST call expressions to validate creation/deletion patterns while keeping the regex scanner as a fallback when structured analysis is unavailable.
-- Enhanced method validator now analyses AST member invocations to surface PSV6-METHOD-INVALID diagnostics while retaining the regex implementation as a fallback when structured data is unavailable.
-- Enhanced boolean validator now analyses AST if conditions to raise literal-condition, namespace, and short-circuit diagnostics while keeping the regex path as a fallback when structured analysis is unavailable.
-- Enhanced strategy validator now analyses AST strategy declarations and helper calls to drive commission, risk management, position size, and exit diagnostics while retaining the regex path as a fallback when structured analysis is unavailable.
-- Enhanced semantic validator now analyses AST declarations, assignments, and functions to surface PSV6-TYPE-FLOW and PSV6-TYPE-INFERENCE guidance while retaining the regex path as a fallback when structured analysis is unavailable.
+- ✅ Enhanced method validator now analyses AST member invocations to surface PSV6-METHOD-INVALID diagnostics after retiring the regex implementation fallback.
+- ✅ Enhanced boolean validator now analyses AST if conditions to raise literal-condition, namespace, and short-circuit diagnostics after retiring the legacy regex fallback.
+- ✅ Enhanced strategy validator now analyses AST strategy declarations and helper calls to drive commission, risk management, position size, and exit diagnostics after retiring the legacy regex fallback.
+- ✅ Enhanced textbox validator now analyses AST box text creation and setters to validate parameters, surface dynamic text guidance, and reuse performance heuristics after retiring the legacy regex fallback path.
+- ✅ Function types validator now analyses AST function bodies to surface return-type consistency, complexity, and length diagnostics after retiring the legacy regex fallback path.
+- ✅ Enhanced semantic validator now analyses AST declarations, assignments, and functions to surface PSV6-TYPE-FLOW and PSV6-TYPE-INFERENCE guidance after retiring the legacy regex fallback path.
 - Enhanced quality validator now analyses AST control flow and function bodies to compute complexity, nesting depth, and length diagnostics while keeping the regex implementation as a fallback when structured analysis is unavailable.
 - Enhanced performance validator now analyses AST loops, request.security calls, history indexes, and alert usage while keeping the regex implementation as a fallback when structured analysis is unavailable.
-- Enhanced migration validator now analyses AST call expressions and assignments to surface deprecated study, security, transp, and TA namespace guidance while keeping the regex path as a fallback when structured analysis is unavailable.
+- ✅ Enhanced migration validator now analyses AST call expressions and assignments to surface deprecated study, security, transp, and TA namespace guidance after retiring the legacy regex fallback path.
 - Enhanced resource validator now inspects AST call expressions and loop constructs to surface memory allocation and complexity diagnostics while leaving the regex implementation as a fallback when structured analysis is unavailable.
-- Enhanced library validator now analyses AST import declarations to validate paths, alias conflicts, version gaps, circular dependencies, and unused imports while retaining the regex path as a fallback when structured analysis is unavailable.
-- Type inference validator now analyses AST declarations, assignments, function calls, and conditional expressions to surface assignment, annotation, conversion, and ambiguity diagnostics while leaving the legacy scanner as a fallback when structured analysis is unavailable.
-- Input functions validator now traverses AST call expressions to validate parameter counts, defaults, and best-practice guidance while leaving the regex scanner as a fallback when structured analysis is unavailable.
-- Text formatting validator now inspects AST str.format calls to validate placeholders, parameter usage, and performance guidance while retaining the legacy regex scanner as a fallback for non-AST runs.
+- ✅ Enhanced library validator now analyses AST import declarations to validate paths, alias conflicts, version gaps, circular dependencies, and unused imports after retiring the legacy regex fallback path.
+- ✅ Type inference validator now analyses AST declarations, assignments, function calls, and conditional expressions to surface assignment, annotation, conversion, and ambiguity diagnostics after retiring the legacy scanner fallback.
+- ✅ Input functions validator now traverses AST call expressions to validate parameter counts, defaults, and best-practice guidance after retiring the legacy regex fallback path.
+- ✅ Text formatting validator now inspects AST str.format calls to validate placeholders, parameter usage, and performance guidance after retiring the legacy regex scanner fallback.
 - Time/date functions validator now inspects AST call expressions and member references to validate time_close, time_tradingday, timestamp, and timezone/session usage while retaining the regex scanner as a fallback for non-AST runs.
 - Array validator now records AST-traversed declarations and operations so PSV6 array diagnostics, performance checks, and best-practice suggestions no longer depend on regex scanning while keeping the legacy path as a fallback when AST data is unavailable.
 - Varip validator now analyses AST varip declarations, assignments, and scope to surface performance and usage diagnostics while preserving the legacy regex implementation as a fallback for non-AST runs.
-- Enum validator now analyses AST enum declarations, value usage, comparisons, function parameters, and switch cases while keeping the regex implementation as a fallback when structured analysis is unavailable.
+- Enum validator now analyses AST enum declarations, value usage, comparisons, function parameters, and switch cases exclusively through structured traversal after retiring the regex-based fallback path.
 
 ### Near-Term TODOs
 
@@ -212,39 +214,44 @@ Suggested migration order:
 | Module | Legacy Complexity | AST Migration Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
 | core-validator | High | 🔄 Ready for AST port | Validator Infra | AST context + diagnostics helpers landed; waiting on dual-run guardrail before switchover |
+| syntax-validator | High | 🔄 Migrating | Validator Infra | AST traversal now surfaces version, script, identifier, tuple, and assignment diagnostics while legacy scanning remains as a fallback |
 | function-declarations | High | ✅ Migrated | Validator Infra | Function metadata, duplicate params, and static method errors sourced from AST traversal |
 | function-validator | High | 🔄 Migrating | Module Owners Guild | AST traversal now gathers function declarations, call metadata, and parameter usage while leaving the regex scanner as a fallback |
+| function-types-validator | High | ✅ Migrated | Module Owners Guild | AST traversal now enforces return consistency, complexity, and length diagnostics after retiring the legacy regex fallback |
 | type-validator | High | 🔄 Migrating | Semantic Working Group | AST path now surfaces key PSV6 type diagnostics, including PSV6-TYPE-INCONSISTENT warnings, while continuing to expand coverage before parity run |
-| type-inference-validator | High | 🔄 Migrating | Semantic Working Group | AST traversal now surfaces assignment, annotation, conversion, and ambiguity diagnostics while retaining the regex fallback |
+| type-inference-validator | High | ✅ Migrated | Semantic Working Group | AST traversal now surfaces assignment, annotation, conversion, and ambiguity diagnostics after retiring the regex fallback |
 | scope-validator | High | 🔄 Migrating | Semantic Working Group | AST metadata now drives PSW03/PSW04 and PSU02 diagnostics; continue porting remaining scope checks |
 | udt-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal records type declarations, methods, and diagnostics while retaining the regex scanner as a fallback |
+| enum-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates enum declarations, usage, and comparisons with the legacy regex scanner retired |
 | switch-validator | Medium | ✅ Migrated | Language Infra | Switch diagnostics now sourced from AST cases and discriminants; legacy regex path retained as fallback |
-| alert-functions-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal validates alert calls and frequency usage while legacy scanning remains as fallback |
-| while-loop-validator | Medium | 🔄 Migrating | Language Infra | AST traversal now surfaces while-loop diagnostics while legacy scanning remains as fallback |
+| alert-functions-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal validates alert calls, frequency usage, and control-flow guidance after retiring the legacy regex fallback |
+| while-loop-validator | Medium | ✅ Migrated | Language Infra | AST traversal now surfaces while-loop diagnostics after retiring the legacy line-scanner fallback |
 | builtin-variables-validator | Medium | ✅ Migrated | Module Owners Guild | Validator now reads AST member expressions for constants, having removed the legacy line-scanner path |
-| final-constants-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now records specialized constants while leaving the regex scanner as a fallback |
-| ta-functions-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now validates TA calls, parameters, and loop placement while legacy regex scanning remains a fallback |
+| final-constants-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now records specialized constants after retiring the legacy regex fallback |
+| v6-features-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now surfaces switch, request, enum, varip, and history guidance while retaining the legacy fallback for non-AST runs |
+| ta-functions-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates TA calls, parameters, and loop placement after retiring the legacy regex fallback |
 | math-functions-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now validates math calls, parameters, and performance heuristics while retaining the regex scanner as a fallback |
-| string-functions-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now validates string helpers, formatting, and performance guidance while legacy regex scanning remains a fallback |
-| syminfo-variables-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now records syminfo namespace usage and advanced constants while retaining the regex scanner as a fallback |
+| string-functions-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates string helpers, formatting, and performance guidance after retiring the legacy regex fallback |
+| syminfo-variables-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now records syminfo namespace usage and advanced constants after retiring the legacy regex fallback |
 | drawing-functions-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now validates drawing helpers, optional parameters, loop placement, and performance heuristics while legacy regex scanning remains a fallback |
 | polyline-functions-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now validates polyline creation, deletion, and lifecycle heuristics while legacy regex scanning remains a fallback |
-| enhanced-method-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now flags PSV6-METHOD-INVALID diagnostics while retaining the regex scanner as a fallback |
-| enhanced-boolean-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now validates literal conditions, namespace usage, and boolean-chain heuristics while keeping the regex scanner as a fallback when AST data is unavailable |
-| enhanced-strategy-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now validates commission settings, risk guidance, position sizing, and exit coverage while retaining the regex scanner as a fallback |
-| enhanced-semantic-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now surfaces PSV6 type-flow and inference guidance while retaining the regex scanner as a fallback when structured analysis is unavailable |
-| enhanced-migration-validator | Low | 🔄 Migrating | Module Owners Guild | AST traversal now surfaces study, security, transp, and TA namespace migration guidance while retaining the regex scanner as a fallback |
-| enhanced-library-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now validates library imports, alias conflicts, version gaps, and usage guidance while retaining the regex scanner as a fallback |
+| enhanced-method-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now emits PSV6-METHOD-INVALID diagnostics with the regex scanner retired |
+| enhanced-boolean-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates literal conditions, namespace usage, and boolean-chain heuristics with the legacy regex scanner retired |
+| enhanced-strategy-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates commission settings, risk guidance, position sizing, and exit coverage after retiring the legacy regex scanner |
+| enhanced-textbox-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates textbox creation, setters, and performance heuristics after retiring the legacy regex scanner |
+| enhanced-semantic-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now surfaces PSV6 type-flow and inference guidance after retiring the legacy regex fallback |
+| enhanced-migration-validator | Low | ✅ Migrated | Module Owners Guild | AST traversal now surfaces study, security, transp, and TA namespace migration guidance after retiring the legacy regex fallback |
+| enhanced-library-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates library imports, alias conflicts, version gaps, and usage guidance after retiring the legacy regex scanner |
 | linefill-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now validates linefill constructors, updates, loop placement, and performance heuristics while retaining the regex scanner as a fallback |
 | style-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now inspects declarations, literals, and call sections to surface naming, magic number, complexity, and organization diagnostics while retaining legacy fallbacks |
-| input-functions-validator | High | 🔄 Migrating | Module Owners Guild | AST traversal now validates input calls, defaults, and best-practice guidance while retaining the regex scanner as a fallback |
-| text-formatting-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now validates str.format usage and performance guidance while legacy regex scanning remains a fallback |
+| input-functions-validator | High | ✅ Migrated | Module Owners Guild | AST traversal now validates input calls, defaults, and best-practice guidance after retiring the legacy regex fallback |
+| text-formatting-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates str.format usage and performance guidance after retiring the legacy regex scanner fallback |
 | time-date-functions-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now validates time/date helpers, timezone arguments, and session constants while retaining the regex fallback |
-| strategy-functions-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal records strategy calls, loop contexts, and nested usage while retaining the legacy scanner for non-AST runs |
+| strategy-functions-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal records strategy calls, loop contexts, and nested usage after retiring the legacy regex fallback |
 | strategy-order-limits-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now captures strategy order calls, loop context, and trimming heuristics while keeping the regex scanner as a fallback |
-| ticker-functions-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now validates ticker constructors, modifiers, and named arguments while keeping the regex scanner as a fallback |
-| performance-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now inspects memory allocations, loop structure, and expensive calls while retaining the regex fallback when AST data is unavailable |
-| lazy-evaluation-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now analyses conditional historical usage, user functions, and series consistency while keeping the regex scanner as a fallback |
+| ticker-functions-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates ticker constructors, modifiers, and named arguments after retiring the legacy regex fallback |
+| performance-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now inspects memory allocations, loop structure, and expensive calls after retiring the legacy regex fallback path |
+| lazy-evaluation-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now analyses conditional historical usage, user functions, and series consistency after retiring the legacy regex fallback path |
 | history-referencing-validator | High | ✅ Migrated | Module Owners Guild | Index expression traversal now powers negative index, loop, and varip diagnostics without regex scanning |
 | array-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now records array declarations, operations, and performance heuristics while keeping the regex scanner as a fallback |
 | matrix-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now records matrix declarations, operations, and performance heuristics while keeping the regex scanner as a fallback |
@@ -254,19 +261,27 @@ Suggested migration order:
 
 - ✅ Switch validator now emits PSV6 switch diagnostics from AST traversal, keeping the regex-based scanner only as a fallback for non-AST runs.
 - 🔄 Strategy order limits validator records strategy order metadata through AST traversal to drive loop, trimming, and parameter diagnostics while retaining the legacy scanner for non-AST runs.
+- 🔄 Strategy order limits validator now derives time-filter recognition, position-size guidance, and caching suggestions from AST metadata, falling back to line scanning only when structured analysis is unavailable.
+- 🔄 Syntax validator analyses AST directives, script declarations, naming, tuple destructuring, and assignment semantics while leaving the regex scanner as a fallback path.
 - 🔄 Drawing functions validator records drawing call metadata through AST traversal to validate parameters, loop guidance, and performance heuristics while leaving the regex scanner as a fallback when AST data is unavailable.
 - 🔄 Linefill validator records linefill call metadata through AST traversal to validate parameters, loop guidance, and performance heuristics while leaving the regex scanner as a fallback when AST data is unavailable.
+- ✅ While loop validator analyses AST conditions, loop bodies, and nesting depth after retiring the legacy line-scanner fallback.
+- ✅ Input functions validator analyses AST call expressions to validate defaults, parameters, and guidance after retiring the legacy regex fallback path.
+- 🔄 V6 features validator analyses AST switch statements, feature calls, and declarations to surface compatibility guidance while leaving the legacy line scanner as a fallback path.
 - 🔄 Array validator gathers declarations and operations via AST traversal to emit PSV6 array diagnostics and performance guidance while leaving the regex scanner as a fallback path.
-- 🔄 Final constants validator inspects AST member expressions to surface math, style, order, position, and specialized constants while retaining the legacy line scan as a fallback when AST data is unavailable.
+- ✅ Final constants validator inspects AST member expressions to surface math, style, order, position, and specialized constants after retiring the legacy line scan fallback.
+- ✅ Ticker functions validator analyses AST ticker calls, modifiers, and specialized constructors after retiring the legacy regex fallback path.
 - 🔄 Matrix validator gathers declarations and operations via AST traversal to emit PSV6 matrix diagnostics and performance guidance while leaving the regex scanner as a fallback path.
 - 🔄 Map validator gathers declarations and operations via AST traversal to emit PSV6 map diagnostics and performance guidance while leaving the regex scanner as a fallback path.
-- 🔄 Performance validator analyses AST loop depth, memory allocations, and request usage to surface optimisation guidance while keeping the regex scanner as a fallback when AST data is unavailable.
-- 🔄 Lazy evaluation validator analyses conditional historical usage, user functions, and series consistency through AST traversal while retaining the regex scanner as a fallback when AST data is unavailable.
+- ✅ Performance validator now analyses AST loop depth, memory allocations, and request usage after retiring the legacy regex fallback path.
+- ✅ Lazy evaluation validator analyses conditional historical usage, user functions, and series consistency through AST traversal after retiring the legacy regex fallback path.
 - 🔄 Function validator records function declarations, call metadata, and parameter usage through AST traversal while leaving the regex scanner as a fallback when structured analysis is unavailable.
+- 🔄 Function validator now calculates complexity warnings from AST traversal, bypassing the legacy line-scanner heuristic when structured data is available.
+- 🔄 Function validator analyses AST call contexts to surface PSV6-FUNCTION-RETURN-TYPE diagnostics without relying on line-based expression scans.
 - 🔄 Style validator analyses AST declarations, literals, and call sections to drive naming, magic number, complexity, and input placement diagnostics while preserving textual fallbacks for comment and indentation checks.
-- 🔄 Syminfo variables validator inspects AST member expressions to surface advanced syminfo usage and additional constants while leaving the regex scanner as a fallback path.
-- 🔄 Enhanced migration validator analyses AST call expressions and declarations to surface deprecated study/security usage, transp parameters, and TA namespace guidance while retaining the regex implementation as a fallback when structured analysis is unavailable.
-- 🔄 Enhanced semantic validator analyses AST declarations, assignments, and functions to surface PSV6 type-flow errors and inference guidance while retaining the regex implementation as a fallback when structured analysis is unavailable.
+- ✅ Syminfo variables validator inspects AST member expressions to surface advanced syminfo usage and additional constants after retiring the legacy regex fallback path.
+- ✅ Enhanced migration validator analyses AST call expressions and declarations to surface deprecated study/security usage, transp parameters, and TA namespace guidance after retiring the legacy regex fallback path.
+- ✅ Enhanced semantic validator analyses AST declarations, assignments, and functions to surface PSV6 type-flow errors and inference guidance after retiring the legacy regex implementation.
 - 🔄 UDT validator gathers type declarations, methods, and usage diagnostics from AST traversal while keeping the regex implementation as a fallback when structured data is unavailable.
 
 ## 10. Immediate Next Steps (Post-Review)

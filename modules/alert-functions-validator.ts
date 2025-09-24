@@ -61,9 +61,7 @@ export class AlertFunctionsValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   // Alert function tracking
   private alertFunctionCalls: AlertFunctionCall[] = [];
@@ -76,25 +74,36 @@ export class AlertFunctionsValidator implements ValidationModule {
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.context = context;
-    this.config = config;
     this.reset();
 
-    this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
-
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectAlertDataFromAst(this.astContext.ast);
-    } else {
-      this.collectAlertDataLegacy();
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
 
+    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
+
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
+    }
+
+    this.collectAlertDataFromAst(this.astContext.ast);
     this.validateAlertConditions();
     this.validateAlertUsagePatterns();
-    if (this.usingAst) {
-      this.validateAlertTimingAst();
-    } else {
-      this.validateAlertTimingLegacy();
-    }
+    this.validateAlertTimingAst();
     this.analyzeAlertPerformance();
 
     return {
@@ -103,7 +112,7 @@ export class AlertFunctionsValidator implements ValidationModule {
       warnings: this.warnings,
       info: this.info,
       typeMap: new Map(),
-      scriptType: this.context.scriptType,
+      scriptType: null,
     };
   }
 
@@ -115,145 +124,6 @@ export class AlertFunctionsValidator implements ValidationModule {
     this.alertConditions = 0;
     this.alertFrequencyUsage.clear();
     this.astContext = null;
-    this.usingAst = false;
-  }
-
-  private collectAlertDataLegacy(): void {
-    this.collectAlertFunctionsLegacy();
-    this.collectAlertFrequenciesLegacy();
-  }
-
-  private collectAlertFunctionsLegacy(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-      this.findAlertFunctionCalls(cleanLine, i + 1);
-    }
-  }
-
-  private collectAlertFrequenciesLegacy(): void {
-    for (let i = 0; i < this.context.lines.length; i++) {
-      const cleanLine = this.context.cleanLines[i];
-      for (const freq of ALERT_FREQUENCY_CONSTANTS) {
-        if (cleanLine.includes(freq)) {
-          this.alertFrequencyUsage.set(freq, (this.alertFrequencyUsage.get(freq) || 0) + 1);
-          this.info.push({
-            code: 'PSV6-ALERT-FREQ-USAGE',
-            message: `Alert frequency constant '${freq}' detected`,
-            line: i + 1,
-            column: cleanLine.indexOf(freq) + 1,
-            severity: 'info',
-          });
-        }
-      }
-    }
-  }
-
-  private findAlertFunctionCalls(line: string, lineNumber: number): void {
-    const alertRegex = /\b(alert|alertcondition)\s*\(/g;
-    let match: RegExpExecArray | null;
-
-    while ((match = alertRegex.exec(line)) !== null) {
-      const functionName = match[1];
-      const column = match.index + 1;
-      const args = this.extractFunctionArguments(line, match.index + match[0].length - 1);
-
-      const alertCall: AlertFunctionCall = {
-        functionName,
-        line: lineNumber,
-        column,
-        arguments: args,
-      };
-
-      if (functionName === 'alert') {
-        this.validateAlertFunction(alertCall);
-      } else {
-        this.validateAlertConditionFunction(alertCall);
-      }
-
-      this.alertFunctionCalls.push(alertCall);
-    }
-  }
-
-  private validateAlertFunction(alertCall: AlertFunctionCall): void {
-    const { arguments: args, line, column } = alertCall;
-
-    if (args.length >= 2) {
-      const freqArg = args[1].trim();
-      if (VALID_ALERT_FREQUENCIES.has(freqArg)) {
-        this.alertFrequencyUsage.set(freqArg, (this.alertFrequencyUsage.get(freqArg) || 0) + 1);
-        this.info.push({
-          code: 'PSV6-ALERT-FREQ-VALID',
-          message: `Alert frequency '${freqArg}' is properly configured`,
-          line,
-          column,
-          severity: 'info',
-        });
-      } else if (freqArg && freqArg.startsWith('alert.freq_')) {
-        this.errors.push({
-          code: 'PSV6-ALERT-FREQ-INVALID',
-          message:
-            `Invalid alert frequency '${freqArg}'. Use alert.freq_all, alert.freq_once_per_bar, or alert.freq_once_per_bar_close`,
-          line,
-          column,
-          severity: 'error',
-        });
-      }
-    }
-
-    if (args.length >= 1) {
-      const messageArg = args[0].trim();
-      if (!messageArg || messageArg === '""' || messageArg === "''") {
-        this.warnings.push({
-          code: 'PSV6-ALERT-EMPTY-MESSAGE',
-          message: 'Alert message is empty. Consider providing a descriptive message',
-          line,
-          column,
-          severity: 'warning',
-        });
-      }
-    }
-
-    if (args.length === 0) {
-      this.errors.push({
-        code: 'PSV6-ALERT-NO-PARAMS',
-        message: 'alert() function requires at least a message parameter',
-        line,
-        column,
-        severity: 'error',
-      });
-    }
-  }
-
-  private validateAlertConditionFunction(alertCall: AlertFunctionCall): void {
-    const { arguments: args, line, column } = alertCall;
-
-    if (args.length >= 1) {
-      const conditionArg = args[0].trim();
-      if (!conditionArg || conditionArg === 'true' || conditionArg === 'false') {
-        this.warnings.push({
-          code: 'PSV6-ALERTCONDITION-SIMPLE',
-          message: 'Alert condition is very simple. Consider using more specific conditions',
-          line,
-          column,
-          severity: 'warning',
-        });
-      }
-    }
-
-    if (args.length >= 2) {
-      const titleArg = args[1].trim();
-      if (!titleArg || titleArg === '""' || titleArg === "''") {
-        this.warnings.push({
-          code: 'PSV6-ALERTCONDITION-NO-TITLE',
-          message: 'Alert condition has no title. Consider providing a descriptive title',
-          line,
-          column,
-          severity: 'warning',
-        });
-      }
-    }
-
-    this.alertConditions++;
   }
 
   private collectAlertDataFromAst(program: ProgramNode): void {
@@ -448,32 +318,6 @@ export class AlertFunctionsValidator implements ValidationModule {
     }
   }
 
-  private validateAlertTimingLegacy(): void {
-    for (const alertCall of this.alertFunctionCalls) {
-      const line = this.context.lines[alertCall.line - 1];
-
-      if (line.trim().startsWith('if ') && line.includes('alert(')) {
-        this.info.push({
-          code: 'PSV6-ALERT-CONDITIONAL-TIMING',
-          message: 'Alert inside conditional statement. Ensure timing expectations are met',
-          line: alertCall.line,
-          column: alertCall.column,
-          severity: 'info',
-        });
-      }
-
-      if (this.isInsideLoop(alertCall.line)) {
-        this.warnings.push({
-          code: 'PSV6-ALERT-IN-LOOP',
-          message: 'Alert inside loop detected. This may cause performance issues or excessive alerts',
-          line: alertCall.line,
-          column: alertCall.column,
-          severity: 'warning',
-        });
-      }
-    }
-  }
-
   private validateAlertTimingAst(): void {
     for (const alertCall of this.alertFunctionCalls) {
       if (alertCall.inConditional) {
@@ -521,64 +365,6 @@ export class AlertFunctionsValidator implements ValidationModule {
         severity: 'warning',
       });
     }
-  }
-
-  private extractFunctionArguments(line: string, startPos: number): string[] {
-    const args: string[] = [];
-    let depth = 0;
-    let currentArg = '';
-    let inString = false;
-    let stringChar = '';
-
-    for (let i = startPos; i < line.length; i++) {
-      const char = line[i];
-
-      if (!inString) {
-        if (char === '"' || char === "'") {
-          inString = true;
-          stringChar = char;
-          currentArg += char;
-        } else if (char === '(') {
-          depth++;
-          if (depth > 1) currentArg += char;
-        } else if (char === ')') {
-          depth--;
-          if (depth === 0) {
-            if (currentArg.trim()) args.push(currentArg.trim());
-            break;
-          } else {
-            currentArg += char;
-          }
-        } else if (char === ',' && depth === 1) {
-          if (currentArg.trim()) args.push(currentArg.trim());
-          currentArg = '';
-        } else {
-          currentArg += char;
-        }
-      } else {
-        currentArg += char;
-        if (char === stringChar && line[i - 1] !== '\\') {
-          inString = false;
-        }
-      }
-    }
-
-    return args;
-  }
-
-  private isInsideLoop(lineNumber: number): boolean {
-    const contextLines = 5;
-    const startLine = Math.max(0, lineNumber - contextLines - 1);
-    const endLine = Math.min(this.context.lines.length, lineNumber + contextLines);
-
-    for (let i = startLine; i < endLine; i++) {
-      const line = this.context.lines[i].trim();
-      if (line.startsWith('for ') || line.startsWith('while ') || line.includes(' for ') || line.includes(' while ')) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   private findAstFrequencyArgument(args: ArgumentNode[]): ArgumentNode | null {
@@ -660,12 +446,6 @@ export class AlertFunctionsValidator implements ValidationModule {
     }
   }
 
-  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
-  }
 }
 
 function isAstValidationContext(context: ValidationContext): context is AstValidationContext {

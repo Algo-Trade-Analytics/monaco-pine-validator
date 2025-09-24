@@ -77,10 +77,8 @@ export class LazyEvaluationValidator implements ValidationModule {
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
-  private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
   private hasNestedTernaryHistoricalCall = false;
 
   // Analysis tracking
@@ -91,11 +89,6 @@ export class LazyEvaluationValidator implements ValidationModule {
   private emittedByLineAndFunc = new Set<string>();
 
   // State tracking for complex analysis
-  private inConditionalBlock = false;
-  private inLoopBlock = false;
-  private inSwitchBlock = false;
-  private currentBlockDepth = 0;
-  private blockStack: string[] = [];
 
   getDependencies(): string[] {
     return ['TypeValidator', 'FunctionValidator', 'ScopeValidator'];
@@ -103,18 +96,33 @@ export class LazyEvaluationValidator implements ValidationModule {
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
-    this.context = context;
     this.config = config;
 
-    this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
-
-    if (this.usingAst && this.astContext?.ast) {
-      this.validateWithAst(this.astContext.ast);
-    } else {
-      this.validateLegacy();
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
 
+    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
+
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
+    }
+
+    this.validateWithAst(this.astContext.ast);
     this.analyzePerformanceImpact();
     this.provideBestPracticesSuggestions();
 
@@ -145,22 +153,8 @@ export class LazyEvaluationValidator implements ValidationModule {
     this.userFunctionsWithHistorical.clear();
     this.conditionalHistoricalCount = 0;
     this.emittedByLineAndFunc.clear();
-    this.inConditionalBlock = false;
-    this.inLoopBlock = false;
-    this.inSwitchBlock = false;
-    this.currentBlockDepth = 0;
-    this.blockStack = [];
     this.astContext = null;
-    this.usingAst = false;
     this.hasNestedTernaryHistoricalCall = false;
-  }
-
-  private validateLegacy(): void {
-    this.identifyUserFunctionsWithHistorical();
-    this.context.cleanLines.forEach((line, index) => {
-      this.processLine(line, index + 1);
-    });
-    this.analyzeSeriesConsistencyLegacy();
   }
 
   private validateWithAst(program: ProgramNode): void {
@@ -367,6 +361,50 @@ export class LazyEvaluationValidator implements ValidationModule {
     return { line: expression.loc.start.line, column: expression.loc.start.column };
   }
 
+  private addConditionalHistoricalCall(
+    functionName: string,
+    lineNum: number,
+    column: number,
+    context: ConditionalHistoricalCall['context'],
+  ): void {
+    const isExpensive = EXPENSIVE_HISTORICAL_FUNCTIONS.has(functionName);
+    const dedupKey = `${lineNum}|${functionName}|${context}`;
+    if (this.emittedByLineAndFunc.has(dedupKey)) {
+      return;
+    }
+    this.emittedByLineAndFunc.add(dedupKey);
+
+    this.conditionalHistoricalCalls.push({
+      functionName,
+      line: lineNum,
+      column,
+      context,
+      isExpensive,
+    });
+
+    if (context === 'if' || context === 'ternary') {
+      this.conditionalHistoricalCount++;
+    }
+
+    const contextMessages: Record<ConditionalHistoricalCall['context'], string> = {
+      ternary: `Historical function ${functionName} in conditional expression may cause series inconsistency`,
+      if: `Historical function ${functionName} in conditional block may cause incomplete series data`,
+      switch: `Historical function ${functionName} in switch statement may cause inconsistent calculations`,
+      loop: `Historical function ${functionName} in loop may cause performance issues and series inconsistency`,
+      method: `Historical function ${functionName} in method call may cause lazy evaluation issues`,
+    };
+
+    const codes: Record<ConditionalHistoricalCall['context'], string> = {
+      ternary: 'PSV6-LAZY-EVAL-HISTORICAL',
+      if: 'PSV6-LAZY-EVAL-CONDITIONAL',
+      switch: 'PSV6-LAZY-EVAL-SWITCH',
+      loop: 'PSV6-LAZY-EVAL-LOOP',
+      method: 'PSV6-LAZY-EVAL-METHOD',
+    };
+
+    this.addWarning(lineNum, column, contextMessages[context], codes[context]);
+  }
+
   private analyzeSeriesConsistencyAst(ifStatements: IfStatementNode[]): void {
     for (const statement of ifStatements) {
       const consequentAssignments = this.collectAssignmentsFromStatement(statement.consequent);
@@ -509,371 +547,6 @@ export class LazyEvaluationValidator implements ValidationModule {
     return null;
   }
 
-  private identifyUserFunctionsWithHistorical(): void {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      
-      // Look for function definitions
-      const functionMatch = line.match(/^\s*(\w+)\s*\([^)]*\)\s*=>/);
-      if (functionMatch) {
-        const functionName = functionMatch[1];
-        
-        // Check if function body contains historical functions
-        let functionBody = line;
-        let j = i + 1;
-        
-        // Collect multi-line function body
-        while (j < this.context.cleanLines.length && this.isPartOfFunction(this.context.cleanLines[j])) {
-          functionBody += ' ' + this.context.cleanLines[j];
-          j++;
-        }
-        
-        // Check if function body contains historical functions
-        for (const historicalFunc of Array.from(HISTORICAL_FUNCTIONS)) {
-          if (functionBody.includes(historicalFunc)) {
-            this.userFunctionsWithHistorical.add(functionName);
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  private isPartOfFunction(line: string): boolean {
-    const trimmed = line.trim();
-    return trimmed !== '' && 
-           !trimmed.startsWith('//') && 
-           !trimmed.match(/^\w+\s*\([^)]*\)\s*=>/) && // Not another function
-           !trimmed.match(/^(if|for|while|switch)\b/); // Not a control structure
-  }
-
-  private processLine(line: string, lineNum: number): void {
-    // Skip empty lines and comments
-    if (!line.trim() || line.trim().startsWith('//')) {
-      return;
-    }
-
-    // Track block context
-    this.updateBlockContext(line, lineNum);
-
-    // Analyze different types of conditional historical usage
-    this.analyzeConditionalExpressions(line, lineNum);
-    this.analyzeConditionalBlocks(line, lineNum);
-    this.analyzeSwitchStatements(line, lineNum);
-    this.analyzeLoopStatements(line, lineNum);
-    this.analyzeMethodCalls(line, lineNum);
-  }
-
-  private updateBlockContext(line: string, lineNum: number): void {
-    const trimmed = line.trim();
-    const currentIndent = line.length - line.trimStart().length;
-    
-    // Track if/else blocks
-    if (trimmed.match(/^if\b/)) {
-      this.inConditionalBlock = true;
-      this.blockStack.push('if');
-      this.currentBlockDepth = currentIndent;
-    } else if (trimmed.match(/^else\b/)) {
-      this.inConditionalBlock = true;
-    }
-    
-    // Track for/while loops
-    if (trimmed.match(/^(for|while)\b/)) {
-      this.inLoopBlock = true;
-      this.blockStack.push('loop');
-      this.currentBlockDepth = currentIndent;
-    }
-    
-    // Track switch statements
-    if (trimmed.match(/^switch\b/)) {
-      this.inSwitchBlock = true;
-      this.blockStack.push('switch');
-      this.currentBlockDepth = currentIndent;
-    }
-    
-    // Track block endings - when indentation returns to block level or less
-    if (this.blockStack.length > 0 && currentIndent <= this.currentBlockDepth && trimmed !== '' && !trimmed.match(/^(else|=>)/)) {
-      // Check if we're ending blocks
-      if (currentIndent < this.currentBlockDepth) {
-        this.inConditionalBlock = false;
-        this.inLoopBlock = false;
-        this.inSwitchBlock = false;
-        this.currentBlockDepth = 0;
-        this.blockStack = [];
-      }
-    }
-  }
-
-  private analyzeConditionalExpressions(line: string, lineNum: number): void {
-    // Only analyze ternary operators if not in other block contexts
-    if (!this.inConditionalBlock && !this.inLoopBlock && !this.inSwitchBlock) {
-      // Analyze ternary operators
-      const ternaryPattern = /(.+)\s*\?\s*(.+)\s*:\s*(.+)/;
-      const ternaryMatch = line.match(ternaryPattern);
-      
-      if (ternaryMatch) {
-        const [, condition, trueExpr, falseExpr] = ternaryMatch;
-        
-        // Check both branches for historical functions
-        this.checkExpressionForHistoricalFunctions(trueExpr, lineNum, 'ternary');
-        this.checkExpressionForHistoricalFunctions(falseExpr, lineNum, 'ternary');
-
-        // Also flag user-defined functions with historical dependencies in ternary branches
-        for (const fn of Array.from(this.userFunctionsWithHistorical)) {
-          const pat = new RegExp(`\\b${fn}\\s*\\(`);
-          const methodRe = new RegExp(`\\b\\w+\\s*\\.\\s*${fn}\\s*\\(`);
-          const isMethodCall = methodRe.test(trueExpr) || methodRe.test(falseExpr);
-          if (!isMethodCall && (pat.test(trueExpr) || pat.test(falseExpr))) {
-            const idx = trueExpr.search(pat);
-            const baseCol = idx >= 0 ? idx + 1 : (falseExpr.search(pat) + 1) || 1;
-            this.addWarning(
-              lineNum,
-              baseCol,
-              `User function ${fn} may have historical dependencies in conditional expression`,
-              'PSV6-LAZY-EVAL-USER-FUNCTION'
-            );
-          }
-        }
-
-        // Handle nested ternaries: explicitly scan both branches for any TA/request calls
-        const combined = `${trueExpr} ${falseExpr}`;
-        const callMatches = combined.match(/\b(?:ta|request)\.[A-Za-z_][A-Za-z0-9_]*\s*\(/g) || [];
-        const uniqueFns = new Set<string>();
-        for (const m of callMatches) {
-          const fn = m.replace(/\s*\(.*/, '').trim(); // e.g., ta.sma(
-          uniqueFns.add(fn);
-        }
-        for (const fn of uniqueFns) {
-          const col = Math.max(1, line.indexOf(fn) + 1);
-          this.addConditionalHistoricalCall(fn, lineNum, col, 'ternary');
-        }
-
-        // Fallback: if we still have < 2 warnings for this line, scan the whole line for TA/request calls
-        const currentHistWarnings = this.warnings.filter(w => w.line === lineNum && w.code === 'PSV6-LAZY-EVAL-HISTORICAL');
-        if (currentHistWarnings.length < 2 && /\?/.test(line) && /:/.test(line)) {
-          const allMatches = line.match(/\b(?:ta|request)\.[A-Za-z_][A-Za-z0-9_]*\s*\(/g) || [];
-          const allFns = new Set(allMatches.map(m => m.replace(/\s*\(.*/, '').trim()));
-          for (const fn of allFns) {
-            const key = `${lineNum}|${fn}|ternary`;
-            if (!this.emittedByLineAndFunc.has(key)) {
-              const col = Math.max(1, line.indexOf(fn) + 1);
-              this.addConditionalHistoricalCall(fn, lineNum, col, 'ternary');
-            }
-          }
-        }
-      }
-    }
-  }
-
-  private analyzeConditionalBlocks(line: string, lineNum: number): void {
-    // Prefer loop-context warnings over generic conditional ones to avoid duplicates
-    if (this.inConditionalBlock && !this.inLoopBlock) {
-      this.checkLineForHistoricalFunctions(line, lineNum, 'if');
-    }
-  }
-
-  private analyzeSwitchStatements(line: string, lineNum: number): void {
-    const trimmed = line.trim();
-    
-    // Check for switch case arrows only when inside an active switch block
-    if (this.inSwitchBlock && trimmed.includes('=>')) {
-      const casePattern = /=>\s*(.+)$/;
-      const caseMatch = trimmed.match(casePattern);
-      
-      if (caseMatch) {
-        this.checkExpressionForHistoricalFunctions(caseMatch[1], lineNum, 'switch');
-      }
-    }
-    
-    // Also check for switch expressions in assignment
-    const switchAssignPattern = /=\s*switch\b/;
-    if (switchAssignPattern.test(trimmed)) {
-      this.inSwitchBlock = true;
-    }
-  }
-
-  private analyzeLoopStatements(line: string, lineNum: number): void {
-    if (this.inLoopBlock) {
-      this.checkLineForHistoricalFunctions(line, lineNum, 'loop');
-    }
-  }
-
-  private analyzeMethodCalls(line: string, lineNum: number): void {
-    // Check for method calls that might have historical dependencies
-    const methodPattern = /(\w+)\.(\w+)\s*\(/g;
-    let match;
-    
-    while ((match = methodPattern.exec(line)) !== null) {
-      const objectName = match[1];
-      const methodName = match[2];
-      
-      // Check if this is a call to a user function with historical dependencies
-      if (this.userFunctionsWithHistorical.has(methodName)) {
-        this.addWarning(
-          lineNum,
-          match.index + 1,
-          `Method call may contain historical dependencies: ${methodName}`,
-          'PSV6-LAZY-EVAL-METHOD'
-        );
-      }
-    }
-  }
-
-  private checkLineForHistoricalFunctions(line: string, lineNum: number, context: ConditionalHistoricalCall['context']): void {
-    for (const historicalFunc of Array.from(HISTORICAL_FUNCTIONS)) {
-      if (line.includes(historicalFunc)) {
-        const column = line.indexOf(historicalFunc) + 1;
-        this.addConditionalHistoricalCall(historicalFunc, lineNum, column, context);
-      }
-    }
-    
-    // Check for user functions with historical dependencies
-    for (const userFunc of Array.from(this.userFunctionsWithHistorical)) {
-      const pattern = new RegExp(`\\b${userFunc}\\s*\\(`);
-      if (pattern.test(line)) {
-        const match = line.match(pattern);
-        if (match) {
-          this.addWarning(
-            lineNum,
-            match.index! + 1,
-            `User function ${userFunc} may have historical dependencies`,
-            'PSV6-LAZY-EVAL-USER-FUNCTION'
-          );
-        }
-      }
-    }
-  }
-
-  private checkExpressionForHistoricalFunctions(expression: string, lineNum: number, context: ConditionalHistoricalCall['context']): void {
-    for (const historicalFunc of Array.from(HISTORICAL_FUNCTIONS)) {
-      if (expression.includes(historicalFunc)) {
-        const column = expression.indexOf(historicalFunc) + 1;
-        this.addConditionalHistoricalCall(historicalFunc, lineNum, column, context);
-      }
-    }
-  }
-
-  private addConditionalHistoricalCall(functionName: string, lineNum: number, column: number, context: ConditionalHistoricalCall['context']): void {
-    const isExpensive = EXPENSIVE_HISTORICAL_FUNCTIONS.has(functionName);
-    const dedupKey = `${lineNum}|${functionName}|${context}`;
-    if (this.emittedByLineAndFunc.has(dedupKey)) return;
-    this.emittedByLineAndFunc.add(dedupKey);
-    
-    this.conditionalHistoricalCalls.push({
-      functionName,
-      line: lineNum,
-      column,
-      context,
-      isExpensive
-    });
-    
-    // Only count if/ternary contexts for multi-conditional summary
-    if (context === 'if' || context === 'ternary') {
-      this.conditionalHistoricalCount++;
-    }
-    
-    // Generate appropriate warning based on context
-    const contextMessages = {
-      ternary: `Historical function ${functionName} in conditional expression may cause series inconsistency`,
-      if: `Historical function ${functionName} in conditional block may cause incomplete series data`,
-      switch: `Historical function ${functionName} in switch statement may cause inconsistent calculations`,
-      loop: `Historical function ${functionName} in loop may cause performance issues and series inconsistency`,
-      method: `Historical function ${functionName} in method call may cause lazy evaluation issues`
-    };
-    
-    const codes = {
-      ternary: 'PSV6-LAZY-EVAL-HISTORICAL',
-      if: 'PSV6-LAZY-EVAL-CONDITIONAL',
-      switch: 'PSV6-LAZY-EVAL-SWITCH',
-      loop: 'PSV6-LAZY-EVAL-LOOP',
-      method: 'PSV6-LAZY-EVAL-METHOD'
-    };
-    
-    this.addWarning(lineNum, column, contextMessages[context], codes[context]);
-  }
-
-  private analyzeSeriesConsistencyLegacy(): void {
-    // Detect block-based inconsistency patterns: if/else assigns series variably with historical vs na
-    let currentVar: string | null = null;
-    let sawHistoricalInIf = false;
-    let sawNaInElse = false;
-    let inIf = false;
-    let inElse = false;
-    let ifStartLine = -1;
-    let elseStartLine = -1;
-
-    const lines = this.context.cleanLines;
-    let ifIndent = -1;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const trimmed = line.trim();
-      const indent = line.length - line.trimStart().length;
-
-      if (/^if\b/.test(trimmed)) {
-        // Reset tracking for a new conditional block
-        currentVar = null;
-        sawHistoricalInIf = false;
-        sawNaInElse = false;
-        inIf = true;
-        inElse = false;
-        ifIndent = indent;
-        ifStartLine = i + 1;
-        continue;
-      }
-      if (/^else\b/.test(trimmed)) {
-        inIf = false;
-        inElse = true;
-        // keep same ifIndent
-        elseStartLine = i + 1;
-        continue;
-      }
-      // Block ends if we see 'end' or dedent to ifIndent or less on a non-empty, non-else line
-      if (/^end\b/.test(trimmed) || (ifIndent >= 0 && indent <= ifIndent && trimmed !== '' && !/^else\b/.test(trimmed))) {
-        // Close of block: emit inconsistency if pattern observed
-        if (currentVar && sawHistoricalInIf && sawNaInElse) {
-          this.seriesInconsistencies.push({ variableName: currentVar, line: i + 1, inconsistencyType: 'conditional_assignment' });
-          this.addWarning(i + 1, 1, `Series may have inconsistent historical data due to conditional assignment`, 'PSV6-LAZY-EVAL-SERIES-INCONSISTENCY');
-
-          // Remove generic conditional warnings within this block to avoid duplicates
-          const start = ifStartLine > 0 ? ifStartLine : (elseStartLine > 0 ? elseStartLine : i + 1);
-          const end = i + 1;
-          this.warnings = this.warnings.filter(w => !(w.code === 'PSV6-LAZY-EVAL-CONDITIONAL' && w.line >= start && w.line <= end));
-        }
-        currentVar = null;
-        sawHistoricalInIf = false;
-        sawNaInElse = false;
-        inIf = false;
-        inElse = false;
-        ifIndent = -1;
-        ifStartLine = -1;
-        elseStartLine = -1;
-        continue;
-      }
-
-      // Track assignments inside if/else branches
-      const assignMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:?=\s*(.+)$/);
-      if (assignMatch) {
-        const varName = assignMatch[1];
-        const rhs = assignMatch[2];
-        if (currentVar === null) currentVar = varName;
-        if (varName === currentVar) {
-          const hasHistorical = Array.from(HISTORICAL_FUNCTIONS).some(func => rhs.includes(func));
-          if (inIf && hasHistorical) sawHistoricalInIf = true;
-          if (inElse && /\bna\b/.test(rhs)) sawNaInElse = true;
-        }
-      }
-    }
-
-    // EOF: handle trailing open conditional
-    if (currentVar && sawHistoricalInIf && sawNaInElse) {
-      const endLine = lines.length;
-      this.seriesInconsistencies.push({ variableName: currentVar, line: endLine, inconsistencyType: 'conditional_assignment' });
-      this.addWarning(endLine, 1, `Series may have inconsistent historical data due to conditional assignment`, 'PSV6-LAZY-EVAL-SERIES-INCONSISTENCY');
-      const start = ifStartLine > 0 ? ifStartLine : (elseStartLine > 0 ? elseStartLine : endLine);
-      this.warnings = this.warnings.filter(w => !(w.code === 'PSV6-LAZY-EVAL-CONDITIONAL' && w.line >= start && w.line <= endLine));
-    }
-  }
-
   private analyzePerformanceImpact(): void {
     if (!this.config.enablePerformanceAnalysis) return;
     
@@ -905,16 +578,7 @@ export class LazyEvaluationValidator implements ValidationModule {
     
     // Suggest pre-calculation for ternary expressions with historical functions
     const ternaryHistoricalCalls = this.conditionalHistoricalCalls.filter(call => call.context === 'ternary');
-    let hasNestedTernary = false;
-    if (this.usingAst) {
-      hasNestedTernary = this.hasNestedTernaryHistoricalCall;
-    } else {
-      const ternaryLines = new Set(ternaryHistoricalCalls.map(c => c.line));
-      hasNestedTernary = Array.from(ternaryLines).some(lineNum => {
-        const line = this.context.cleanLines[lineNum - 1] || '';
-        return (line.match(/\?/g) || []).length > 1;
-      });
-    }
+    const hasNestedTernary = this.hasNestedTernaryHistoricalCall;
 
     // If nested ternary or multiple historical calls in ternary, prefer pattern suggestion over precalc
     if (hasNestedTernary) {
@@ -1006,12 +670,6 @@ export class LazyEvaluationValidator implements ValidationModule {
     return this.conditionalHistoricalCount;
   }
 
-  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-    return isAstValidationContext(this.context) && this.context.ast ? (this.context as AstValidationContext) : null;
-  }
 }
 
 function isAstValidationContext(context: ValidationContext): context is AstValidationContext {

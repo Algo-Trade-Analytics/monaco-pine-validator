@@ -1,574 +1,696 @@
 /**
- * Pine Script v6 specific features validation module
- * Handles switch statements, varip, UDTs, dynamic requests, text formatting, enums, etc.
+ * Pine Script v6 features validator
+ *
+ * Historically this module offered lightweight heuristics for the new
+ * language features introduced in Pine Script v6 by scanning raw source
+ * lines.  Most responsibilities have since migrated to dedicated
+ * validators that operate on the shared AST and semantic context.  The
+ * remaining logic focuses on compatibility guidance that is still unique
+ * to this module while keeping the legacy scanner available as a fallback
+ * when AST analysis is not available.
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
-import { KEYWORDS, NAMESPACES, NS_MEMBERS } from '../core/constants';
+import {
+  type ValidationModule,
+  type ValidationContext,
+  type ValidationResult,
+  type ValidatorConfig,
+  type AstValidationContext,
+} from '../core/types';
+import {
+  type ProgramNode,
+  type SwitchStatementNode,
+  type SwitchCaseNode,
+  type ExpressionNode,
+  type VariableDeclarationNode,
+  type TypeDeclarationNode,
+  type EnumDeclarationNode,
+  type CallExpressionNode,
+  type ArgumentNode,
+  type MemberExpressionNode,
+  type IdentifierNode,
+  type IndexExpressionNode,
+} from '../core/ast/nodes';
+import { visit } from '../core/ast/traversal';
+import { KEYWORDS, NAMESPACES } from '../core/constants';
+import type { TypeEnvironment, TypeMetadata } from '../core/ast/types';
+
+interface DiagnosticEntry {
+  readonly line: number;
+  readonly column: number;
+  readonly message: string;
+  readonly code: string;
+}
+
+function isAstContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
+}
+
+const TEXT_FORMAT_FUNCTIONS = new Set(['format_bold', 'format_italic', 'format_color', 'format_size']);
+const REQUEST_INFO_FUNCTIONS = new Set(['dividends', 'earnings', 'splits']);
 
 export class V6FeaturesValidator implements ValidationModule {
   name = 'V6FeaturesValidator';
+
+  private errors: DiagnosticEntry[] = [];
+  private warnings: DiagnosticEntry[] = [];
+  private info: DiagnosticEntry[] = [];
+  private context!: ValidationContext;
+  private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private astTypeEnvironment: TypeEnvironment | null = null;
 
   getDependencies(): string[] {
     return ['SyntaxValidator'];
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    const errors: ValidationError[] = [];
+    this.reset();
+    this.context = context;
+    this.config = config;
 
-    // Only run v6-specific validation if target version is 6
     if (config.targetVersion !== 6) {
-      return {
-        isValid: errors.length === 0,
-        errors: errors,
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null
-      };
+      return this.buildResult();
     }
 
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-      const lineNum = i + 1;
-      const noStrings = this.stripStringsAndLineComment(line);
-
-      // Switch statement validation
-      this.validateSwitchStatement(line, lineNum, context, errors);
-
-      // varip validation
-      this.validateVaripDeclaration(line, lineNum, context, errors);
-
-      // UDT validation
-      this.validateUDTDeclaration(line, lineNum, context, errors);
-
-      // Dynamic request validation
-      this.validateDynamicRequests(line, lineNum, context, errors);
-
-      // Text formatting validation
-      this.validateTextFormatting(line, lineNum, context, errors);
-
-      // Enum validation
-      this.validateEnumDeclaration(line, lineNum, context, errors);
-
-      // Enhanced while loop validation
-      this.validateWhileLoop(line, lineNum, context, errors);
-
-      // Enhanced history referencing
-      this.validateHistoryReferencing(line, lineNum, context, errors);
+    if (isAstContext(context) && context.ast) {
+      this.astContext = context;
+      this.astTypeEnvironment = context.typeEnvironment;
+      this.validateWithAst(context.ast);
+    } else {
+      this.validateLegacy();
     }
+
+    return this.buildResult();
+  }
+
+  private reset(): void {
+    this.errors = [];
+    this.warnings = [];
+    this.info = [];
+    this.astContext = null;
+    this.astTypeEnvironment = null;
+  }
+
+  private buildResult(): ValidationResult {
+    const toValidationError = (entry: DiagnosticEntry, severity: 'error' | 'warning' | 'info') => ({
+      ...entry,
+      severity,
+    });
 
     return {
-      isValid: errors.length === 0,
-      errors: errors,
-      warnings: [],
-      info: [],
-      typeMap: new Map(),
-      scriptType: null
+      isValid: this.errors.length === 0,
+      errors: this.errors.map((entry) => toValidationError(entry, 'error')),
+      warnings: this.warnings.map((entry) => toValidationError(entry, 'warning')),
+      info: this.info.map((entry) => toValidationError(entry, 'info')),
+      typeMap: this.context.typeMap,
+      scriptType: this.context.scriptType,
     };
   }
 
-  private validateSwitchStatement(line: string, lineNum: number, context: ValidationContext, errors: ValidationError[]): void {
-    const switchMatch = line.match(/^\s*switch\s+(.+)$/);
-    if (switchMatch) {
-      const expression = switchMatch[1].trim();
-      
-      // Validate switch expression
-      if (!expression) {
-        errors.push({
-          line: lineNum,
-          column: 1,
-          message: 'Switch statement requires an expression.',
-          severity: 'error',
-          code: 'PSV6-SWITCH-EXPR'
-        });
-        return;
+  private addError(line: number, column: number, message: string, code: string): void {
+    this.errors.push({ line, column, message, code });
+  }
+
+  private addWarning(line: number, column: number, message: string, code: string): void {
+    this.warnings.push({ line, column, message, code });
+  }
+
+  private addInfo(line: number, column: number, message: string, code: string): void {
+    this.info.push({ line, column, message, code });
+  }
+
+  private validateWithAst(program: ProgramNode | null): void {
+    if (!program) {
+      this.validateLegacy();
+      return;
+    }
+
+    visit(program, {
+      SwitchStatement: {
+        enter: (path) => this.processSwitchStatement(path.node as SwitchStatementNode),
+      },
+      VariableDeclaration: {
+        enter: (path) => this.processVariableDeclaration(path.node as VariableDeclarationNode),
+      },
+      TypeDeclaration: {
+        enter: (path) => this.processTypeDeclaration(path.node as TypeDeclarationNode),
+      },
+      EnumDeclaration: {
+        enter: (path) => this.processEnumDeclaration(path.node as EnumDeclarationNode),
+      },
+      CallExpression: {
+        enter: (path) => this.processCallExpression(path.node as CallExpressionNode),
+      },
+      IndexExpression: {
+        enter: (path) => this.processIndexExpression(path.node as IndexExpressionNode),
+      },
+    });
+  }
+
+  private processSwitchStatement(node: SwitchStatementNode): void {
+    const { line, column } = node.loc.start;
+    const switchType = this.getExpressionType(node.discriminant);
+
+    if (node.cases.length === 0) {
+      this.addWarning(line, column, 'Switch statement requires at least one case clause.', 'PSV6-SWITCH-NO-CASES');
+    }
+
+    let defaultEncountered = false;
+    for (const switchCase of node.cases) {
+      const { line: caseLine, column: caseColumn } = switchCase.loc.start;
+
+      if (switchCase.test === null) {
+        if (!switchCase.consequent.length) {
+          this.addError(caseLine, caseColumn, 'Default clause requires a result expression.', 'PSV6-SWITCH-DEFAULT-RESULT');
+        }
+
+        if (defaultEncountered) {
+          this.addError(caseLine, caseColumn, 'Switch statement can only have one default clause.', 'PSV6-SWITCH-MULTIPLE-DEFAULT');
+        }
+
+        defaultEncountered = true;
+        continue;
       }
 
-      // Look for case and default clauses in subsequent lines
-      this.validateSwitchCases(lineNum, context, errors, expression);
+      if (!switchCase.consequent.length) {
+        this.addError(caseLine, caseColumn, 'Case clause requires a result expression.', 'PSV6-SWITCH-CASE-RESULT');
+      }
+
+      const caseType = this.getExpressionType(switchCase.test);
+      if (switchType && caseType && switchType !== caseType) {
+        this.addWarning(
+          caseLine,
+          caseColumn,
+          `Case value type '${caseType}' may not be compatible with switch expression type '${switchType}'.`,
+          'PSV6-SWITCH-TYPE-MISMATCH',
+        );
+      }
+    }
+
+    if (!defaultEncountered) {
+      this.addInfo(line, column, 'Consider adding a default clause to handle unexpected values.', 'PSV6-SWITCH-NO-DEFAULT');
     }
   }
 
-  private validateSwitchCases(switchLine: number, context: ValidationContext, errors: ValidationError[], switchExpression: string): void {
+  private processVariableDeclaration(node: VariableDeclarationNode): void {
+    if (node.declarationKind === 'varip' && this.context.scriptType === 'library') {
+      const { line, column } = node.identifier.loc.start;
+      this.addError(line, column, 'varip variables are not allowed in libraries.', 'PSV6-VARIP-LIBRARY');
+    }
+  }
+
+  private processTypeDeclaration(node: TypeDeclarationNode): void {
+    const typeName = node.identifier.name;
+    if (KEYWORDS.has(typeName) || NAMESPACES.has(typeName)) {
+      const { line, column } = node.identifier.loc.start;
+      this.addError(line, column, `Type name '${typeName}' conflicts with a built-in keyword or type.`, 'PSV6-UDT-CONFLICT');
+    }
+  }
+
+  private processEnumDeclaration(node: EnumDeclarationNode): void {
+    const enumName = node.identifier.name;
+    if (KEYWORDS.has(enumName) || NAMESPACES.has(enumName)) {
+      const { line, column } = node.identifier.loc.start;
+      this.addError(line, column, `Enum name '${enumName}' conflicts with a built-in keyword or type.`, 'PSV6-ENUM-CONFLICT');
+    }
+  }
+
+  private processCallExpression(node: CallExpressionNode): void {
+    const path = this.getMemberPath(node.callee);
+    if (!path || path.length === 0) {
+      return;
+    }
+
+    const namespace = path[0];
+    const member = path[1] ?? null;
+    const { line, column } = node.loc.start;
+
+    if (namespace === 'request' && member === 'security') {
+      if (this.hasDynamicSeriesArgument(node.args)) {
+        this.addInfo(
+          line,
+          column,
+          'Dynamic data requests with series string arguments are supported in v6.',
+          'PSV6-DYNAMIC-REQUEST',
+        );
+      }
+    } else if (namespace === 'request' && member && REQUEST_INFO_FUNCTIONS.has(member)) {
+      this.addInfo(line, column, `request.${member} is available in Pine Script v6.`, 'PSV6-REQUEST-FUNCTION');
+    }
+
+    if (namespace === 'text' && member && TEXT_FORMAT_FUNCTIONS.has(member)) {
+      const functionName = `text.${member}`;
+      this.addInfo(line, column, `${functionName} is available in Pine Script v6 for text formatting.`, 'PSV6-TEXT-FORMAT');
+
+      if ((member === 'format_bold' || member === 'format_italic') && !this.firstArgumentIsString(node.args)) {
+        this.addWarning(line, column, `${functionName} requires a string argument.`, 'PSV6-TEXT-FORMAT-STRING');
+      }
+
+      if (member === 'format_color' && !this.hasColorArgument(node.args)) {
+        this.addWarning(line, column, `${functionName} requires a color argument.`, 'PSV6-TEXT-FORMAT-COLOR');
+      }
+    }
+  }
+
+  private processIndexExpression(node: IndexExpressionNode): void {
+    if (node.index.kind === 'NumberLiteral' && node.index.value === 0) {
+      const { line, column } = node.index.loc.start;
+      this.addInfo(
+        line,
+        column,
+        'History reference [0] is equivalent to the current value.',
+        'PSV6-HISTORY-ZERO',
+      );
+    }
+  }
+
+  private hasDynamicSeriesArgument(args: ArgumentNode[]): boolean {
+    return args.some((arg) => {
+      const path = this.getMemberPath(arg.value);
+      if (!path || path.length < 2) {
+        return false;
+      }
+
+      return (
+        (path[0] === 'timeframe' && path[1] === 'period') ||
+        (path[0] === 'syminfo' && path[1] === 'tickerid')
+      );
+    });
+  }
+
+  private firstArgumentIsString(args: ArgumentNode[]): boolean {
+    if (args.length === 0) {
+      return false;
+    }
+
+    return this.isStringExpression(args[0].value);
+  }
+
+  private hasColorArgument(args: ArgumentNode[]): boolean {
+    if (args.length < 2) {
+      return false;
+    }
+
+    return this.isColorExpression(args[1].value);
+  }
+
+  private getMemberPath(expression: ExpressionNode): string[] | null {
+    if (expression.kind === 'Identifier') {
+      return [(expression as IdentifierNode).name];
+    }
+
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+
+      const objectPath = this.getMemberPath(member.object);
+      if (!objectPath) {
+        return null;
+      }
+
+      return [...objectPath, member.property.name];
+    }
+
+    return null;
+  }
+
+  private isStringExpression(expression: ExpressionNode): boolean {
+    const type = this.getExpressionType(expression);
+    if (type === 'string') {
+      return true;
+    }
+
+    return expression.kind === 'StringLiteral';
+  }
+
+  private isColorExpression(expression: ExpressionNode): boolean {
+    const type = this.getExpressionType(expression);
+    if (type === 'color') {
+      return true;
+    }
+
+    if (expression.kind === 'MemberExpression') {
+      const path = this.getMemberPath(expression);
+      return !!path && path[0] === 'color';
+    }
+
+    if (expression.kind === 'CallExpression') {
+      const path = this.getMemberPath((expression as CallExpressionNode).callee);
+      return !!path && path[0] === 'color';
+    }
+
+    return false;
+  }
+
+  private getExpressionType(expression: ExpressionNode): string | null {
+    if (this.astTypeEnvironment) {
+      const metadata = this.astTypeEnvironment.nodeTypes.get(expression);
+      const described = this.describeTypeMetadata(metadata);
+      if (described && described !== 'unknown') {
+        return described;
+      }
+
+      if (expression.kind === 'Identifier') {
+        const identifier = expression as IdentifierNode;
+        const identifierMetadata = this.astTypeEnvironment.identifiers.get(identifier.name);
+        const identifierType = this.describeTypeMetadata(identifierMetadata);
+        if (identifierType && identifierType !== 'unknown') {
+          return identifierType;
+        }
+      }
+    }
+
+    return this.inferLiteralType(expression);
+  }
+
+  private describeTypeMetadata(metadata: TypeMetadata | null | undefined): string | null {
+    return metadata ? metadata.kind : null;
+  }
+
+  private inferLiteralType(expression: ExpressionNode): string | null {
+    switch (expression.kind) {
+      case 'NumberLiteral':
+        return Number.isInteger((expression as any).value) ? 'int' : 'float';
+      case 'BooleanLiteral':
+        return 'bool';
+      case 'StringLiteral':
+        return 'string';
+      default:
+        return null;
+    }
+  }
+
+  // Legacy fallback implementation -------------------------------------------------------------
+
+  private validateLegacy(): void {
+    for (let i = 0; i < this.context.cleanLines.length; i++) {
+      const line = this.context.cleanLines[i];
+      const lineNum = i + 1;
+      const noStrings = this.stripStringsAndLineComment(line);
+
+      this.validateSwitchStatementLegacy(line, lineNum);
+      this.validateVaripDeclarationLegacy(line, lineNum);
+      this.validateUDTDeclarationLegacy(line, lineNum);
+      this.validateDynamicRequestsLegacy(line, lineNum, noStrings);
+      this.validateTextFormattingLegacy(line, lineNum, noStrings);
+      this.validateEnumDeclarationLegacy(line, lineNum);
+      this.validateWhileLoopLegacy(line, lineNum);
+      this.validateHistoryReferencingLegacy(noStrings, lineNum);
+    }
+  }
+
+  private validateSwitchStatementLegacy(line: string, lineNum: number): void {
+    const switchMatch = line.match(/^\s*switch\s+(.+)$/);
+    if (switchMatch) {
+      const expression = switchMatch[1].trim();
+
+      if (!expression) {
+        this.addError(lineNum, 1, 'Switch statement requires an expression.', 'PSV6-SWITCH-EXPR');
+        return;
+      }
+
+      this.validateSwitchCasesLegacy(lineNum, expression);
+    }
+  }
+
+  private validateSwitchCasesLegacy(switchLine: number, switchExpression: string): void {
     let foundDefault = false;
     let caseCount = 0;
-    const switchIndent = this.getLineIndentation(context.cleanLines[switchLine - 1]);
+    const switchIndent = this.getLineIndentation(this.context.cleanLines[switchLine - 1]);
 
-    for (let i = switchLine; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
+    for (let i = switchLine; i < this.context.cleanLines.length; i++) {
+      const line = this.context.cleanLines[i];
       const lineIndent = this.getLineIndentation(line);
-      
-      // Stop if we've unindented back to switch level or beyond
+
       if (i > switchLine && lineIndent <= switchIndent && line.trim() !== '') {
         break;
       }
 
-      // Skip empty lines
-      if (line.trim() === '') continue;
+      if (line.trim() === '') {
+        continue;
+      }
 
-      // Check for case clause
       const caseMatch = line.match(/^\s*([^=]+)\s*=>\s*(.+)$/);
       if (caseMatch) {
         caseCount++;
         const caseValue = caseMatch[1].trim();
         const caseResult = caseMatch[2].trim();
 
-        // Validate case value type compatibility with switch expression
-        this.validateCaseTypeCompatibility(caseValue, switchExpression, i + 1, errors);
+        this.validateCaseTypeCompatibilityLegacy(caseValue, switchExpression, i + 1);
 
-        // Validate case result
         if (!caseResult) {
-          errors.push({
-            line: i + 1,
-            column: 1,
-            message: 'Case clause requires a result expression.',
-            severity: 'error',
-            code: 'PSV6-SWITCH-CASE-RESULT'
-          });
+          this.addError(i + 1, 1, 'Case clause requires a result expression.', 'PSV6-SWITCH-CASE-RESULT');
         }
         continue;
       }
 
-      // Check for default clause
       const defaultMatch = line.match(/^\s*=>\s*(.+)$/);
       if (defaultMatch) {
         if (foundDefault) {
-          errors.push({
-            line: i + 1,
-            column: 1,
-            message: 'Switch statement can only have one default clause.',
-            severity: 'error',
-            code: 'PSV6-SWITCH-MULTIPLE-DEFAULT'
-          });
+          this.addError(i + 1, 1, 'Switch statement can only have one default clause.', 'PSV6-SWITCH-MULTIPLE-DEFAULT');
         }
         foundDefault = true;
         const defaultResult = defaultMatch[1].trim();
-        
+
         if (!defaultResult) {
-          errors.push({
-            line: i + 1,
-            column: 1,
-            message: 'Default clause requires a result expression.',
-            severity: 'error',
-            code: 'PSV6-SWITCH-DEFAULT-RESULT'
-          });
+          this.addError(i + 1, 1, 'Default clause requires a result expression.', 'PSV6-SWITCH-DEFAULT-RESULT');
         }
         continue;
       }
 
-      // If we reach here and it's not empty, it's invalid switch syntax
       if (line.trim() !== '') {
-        errors.push({
-          line: i + 1,
-          column: 1,
-          message: 'Invalid syntax in switch statement. Expected case or default clause.',
-          severity: 'error',
-          code: 'PSV6-SWITCH-INVALID-SYNTAX'
-        });
+        this.addError(i + 1, 1, 'Invalid syntax in switch statement. Expected case or default clause.', 'PSV6-SWITCH-INVALID-SYNTAX');
       }
     }
 
-    // Validate switch structure
     if (caseCount === 0) {
-      errors.push({
-        line: switchLine,
-        column: 1,
-        message: 'Switch statement requires at least one case clause.',
-        severity: 'warning',
-        code: 'PSV6-SWITCH-NO-CASES'
-      });
+      this.addWarning(switchLine, 1, 'Switch statement requires at least one case clause.', 'PSV6-SWITCH-NO-CASES');
     }
 
     if (!foundDefault) {
-      errors.push({
-        line: switchLine,
-        column: 1,
-        message: 'Consider adding a default clause to handle unexpected values.',
-        severity: 'info',
-        code: 'PSV6-SWITCH-NO-DEFAULT'
-      });
+      this.addInfo(switchLine, 1, 'Consider adding a default clause to handle unexpected values.', 'PSV6-SWITCH-NO-DEFAULT');
     }
   }
 
-  private validateCaseTypeCompatibility(caseValue: string, switchExpression: string, lineNum: number, errors: ValidationError[]): void {
-    // Basic type compatibility check
-    const caseType = this.inferType(caseValue);
-    const switchType = this.inferType(switchExpression);
+  private validateCaseTypeCompatibilityLegacy(caseValue: string, switchExpression: string, lineNum: number): void {
+    const caseType = this.inferTypeLegacy(caseValue);
+    const switchType = this.inferTypeLegacy(switchExpression);
 
     if (caseType !== switchType && caseType !== 'unknown' && switchType !== 'unknown') {
-      errors.push({
-        line: lineNum,
-        column: 1,
-        message: `Case value type '${caseType}' may not be compatible with switch expression type '${switchType}'.`,
-        severity: 'warning',
-        code: 'PSV6-SWITCH-TYPE-MISMATCH'
-      });
+      this.addWarning(lineNum, 1, `Case value type '${caseType}' may not be compatible with switch expression type '${switchType}'.`, 'PSV6-SWITCH-TYPE-MISMATCH');
     }
   }
 
-  private validateVaripDeclaration(line: string, lineNum: number, context: ValidationContext, errors: ValidationError[]): void {
+  private validateVaripDeclarationLegacy(line: string, lineNum: number): void {
     const varipMatch = line.match(/^\s*varip\s+(.+)$/);
     if (varipMatch) {
       const declaration = varipMatch[1].trim();
-      
-      // Validate varip syntax
+
       if (!declaration.includes('=')) {
-        errors.push({
-          line: lineNum,
-          column: 1,
-          message: 'varip declaration requires an initial value assignment.',
-          severity: 'error',
-          code: 'PSV6-VARIP-NO-INIT'
-        });
+        this.addError(lineNum, 1, 'varip declaration requires an initial value assignment.', 'PSV6-VARIP-NO-INIT');
         return;
       }
 
-      // Check for varip in different script types
-      if (context.scriptType === 'library') {
-        errors.push({
-          line: lineNum,
-          column: 1,
-          message: 'varip variables are not allowed in libraries.',
-          severity: 'error',
-          code: 'PSV6-VARIP-LIBRARY'
-        });
+      if (this.context.scriptType === 'library') {
+        this.addError(lineNum, 1, 'varip variables are not allowed in libraries.', 'PSV6-VARIP-LIBRARY');
       }
 
-      // Warn about performance implications
-      errors.push({
-        line: lineNum,
-        column: 1,
-        message: 'varip variables maintain state within bars and may impact performance.',
-        severity: 'info',
-        code: 'PSV6-VARIP-PERFORMANCE',
-        suggestion: 'Consider using var instead if intrabar persistence is not required.'
-      });
+      this.addInfo(lineNum, 1, 'varip variables maintain state within bars and may impact performance.', 'PSV6-VARIP-PERFORMANCE');
 
-      // Check for proper usage patterns
-      this.validateVaripUsagePatterns(lineNum, context, errors);
+      this.validateVaripUsagePatternsLegacy(lineNum);
     }
   }
 
-  private validateVaripUsagePatterns(varipLine: number, context: ValidationContext, errors: ValidationError[]): void {
-    // Look for varip usage in subsequent lines to provide context-aware suggestions
-    const varipIndent = this.getLineIndentation(context.cleanLines[varipLine - 1]);
-    
-    for (let i = varipLine; i < Math.min(varipLine + 10, context.cleanLines.length); i++) {
-      const line = context.cleanLines[i];
+  private validateVaripUsagePatternsLegacy(varipLine: number): void {
+    const varipIndent = this.getLineIndentation(this.context.cleanLines[varipLine - 1]);
+
+    for (let i = varipLine; i < Math.min(varipLine + 10, this.context.cleanLines.length); i++) {
+      const line = this.context.cleanLines[i];
       const lineIndent = this.getLineIndentation(line);
-      
-      if (lineIndent <= varipIndent && line.trim() !== '') break;
-      
-      // Check for barstate.isconfirmed usage with varip
+
+      if (lineIndent <= varipIndent && line.trim() !== '') {
+        break;
+      }
+
       if (line.includes('barstate.isconfirmed')) {
-        errors.push({
-          line: i + 1,
-          column: 1,
-          message: 'Consider using barstate.isconfirmed to reset varip variables on confirmed bars.',
-          severity: 'info',
-          code: 'PSV6-VARIP-CONFIRMED',
-          suggestion: 'if barstate.isconfirmed\n    varip_var := initial_value'
-        });
+        this.addInfo(
+          i + 1,
+          1,
+          'Consider using barstate.isconfirmed to reset varip variables on confirmed bars.',
+          'PSV6-VARIP-CONFIRMED',
+        );
         break;
       }
     }
   }
 
-  private validateUDTDeclaration(line: string, lineNum: number, context: ValidationContext, errors: ValidationError[]): void {
+  private validateUDTDeclarationLegacy(line: string, lineNum: number): void {
     const udtMatch = line.match(/^\s*type\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/);
     if (udtMatch) {
       const typeName = udtMatch[1];
-      
-      // Check for conflicts with built-in types
+
       if (KEYWORDS.has(typeName) || NAMESPACES.has(typeName)) {
-        errors.push({
-          line: lineNum,
-          column: line.indexOf(typeName) + 1,
-          message: `Type name '${typeName}' conflicts with a built-in keyword or type.`,
-          severity: 'error',
-          code: 'PSV6-UDT-CONFLICT'
-        });
+        this.addError(lineNum, line.indexOf(typeName) + 1, `Type name '${typeName}' conflicts with a built-in keyword or type.`, 'PSV6-UDT-CONFLICT');
       }
 
-      // Validate UDT fields in subsequent lines
-      this.validateUDTFields(lineNum, context, errors, typeName);
+      this.validateUDTFieldsLegacy(lineNum, typeName);
     }
   }
 
-  private validateUDTFields(udtLine: number, context: ValidationContext, errors: ValidationError[], typeName: string): void {
-    const udtIndent = this.getLineIndentation(context.cleanLines[udtLine - 1]);
+  private validateUDTFieldsLegacy(udtLine: number, typeName: string): void {
+    const udtIndent = this.getLineIndentation(this.context.cleanLines[udtLine - 1]);
     const fields: string[] = [];
 
-    for (let i = udtLine; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
+    for (let i = udtLine; i < this.context.cleanLines.length; i++) {
+      const line = this.context.cleanLines[i];
       const lineIndent = this.getLineIndentation(line);
-      
-      // Stop if we've unindented back to UDT level or beyond
+
       if (i > udtLine && lineIndent <= udtIndent && line.trim() !== '') {
         break;
       }
 
-      // Parse field declarations
       const fieldMatch = line.match(/^\s+(int|float|bool|string|color)\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/);
       if (fieldMatch) {
         const fieldType = fieldMatch[1];
         const fieldName = fieldMatch[2];
-        
-        // Check for duplicate field names
+
         if (fields.includes(fieldName)) {
-          errors.push({
-            line: i + 1,
-            column: line.indexOf(fieldName) + 1,
-            message: `Duplicate field name '${fieldName}' in type '${typeName}'.`,
-            severity: 'error',
-            code: 'PSV6-UDT-DUPLICATE-FIELD'
-          });
+          this.addError(i + 1, line.indexOf(fieldName) + 1, `Duplicate field name '${fieldName}' in type '${typeName}'.`, 'PSV6-UDT-DUPLICATE-FIELD');
         } else {
           fields.push(fieldName);
         }
 
-        // Validate field type
         if (!['int', 'float', 'bool', 'string', 'color'].includes(fieldType)) {
-          errors.push({
-            line: i + 1,
-            column: line.indexOf(fieldType) + 1,
-            message: `Invalid field type '${fieldType}' in UDT. Only basic types are allowed.`,
-            severity: 'error',
-            code: 'PSV6-UDT-INVALID-TYPE'
-          });
+          this.addError(i + 1, line.indexOf(fieldType) + 1, `Invalid field type '${fieldType}' in UDT. Only basic types are allowed.`, 'PSV6-UDT-INVALID-TYPE');
         }
       }
     }
 
-    // Validate UDT has at least one field
     if (fields.length === 0) {
-      errors.push({
-        line: udtLine,
-        column: 1,
-        message: `Type '${typeName}' should have at least one field.`,
-        severity: 'warning',
-        code: 'PSV6-UDT-NO-FIELDS'
-      });
+      this.addWarning(udtLine, 1, `Type '${typeName}' should have at least one field.`, 'PSV6-UDT-NO-FIELDS');
     }
   }
 
-  private validateDynamicRequests(line: string, lineNum: number, context: ValidationContext, errors: ValidationError[]): void {
-    // Check for request.security with series string arguments
-    const requestMatch = line.match(/request\.security\s*\(([^)]+)\)/);
+  private validateDynamicRequestsLegacy(line: string, lineNum: number, noStrings: string): void {
+    const requestMatch = noStrings.match(/request\.security\s*\(([^)]+)\)/);
     if (requestMatch) {
       const args = requestMatch[1];
-      
-      // Check for series string arguments
+
       if (args.includes('timeframe.period') || args.includes('syminfo.tickerid')) {
-        errors.push({
-          line: lineNum,
-          column: 1,
-          message: 'Dynamic data requests with series string arguments are supported in v6.',
-          severity: 'info',
-          code: 'PSV6-DYNAMIC-REQUEST',
-          suggestion: 'Ensure proper error handling for invalid timeframes or symbols.'
-        });
+        this.addInfo(lineNum, 1, 'Dynamic data requests with series string arguments are supported in v6.', 'PSV6-DYNAMIC-REQUEST');
       }
 
-      // Validate request parameters
-      this.validateRequestParameters(args, lineNum, errors);
+      this.validateRequestParametersLegacy(args, lineNum);
     }
 
-    // Check for other request functions
-    const otherRequests = ['request.dividends', 'request.earnings', 'request.splits'];
-    for (const reqFunc of otherRequests) {
-      if (line.includes(reqFunc)) {
-        errors.push({
-          line: lineNum,
-          column: 1,
-          message: `${reqFunc} is available in Pine Script v6.`,
-          severity: 'info',
-          code: 'PSV6-REQUEST-FUNCTION'
-        });
+    for (const func of REQUEST_INFO_FUNCTIONS) {
+      if (noStrings.includes(`request.${func}`)) {
+        this.addInfo(lineNum, 1, `request.${func} is available in Pine Script v6.`, 'PSV6-REQUEST-FUNCTION');
       }
     }
   }
 
-  private validateRequestParameters(args: string, lineNum: number, errors: ValidationError[]): void {
-    // Basic parameter validation for request.security
-    const params = args.split(',').map(p => p.trim());
-    
+  private validateRequestParametersLegacy(args: string, lineNum: number): void {
+    const params = args.split(',').map((p) => p.trim());
+
     if (params.length < 3) {
-      errors.push({
-        line: lineNum,
-        column: 1,
-        message: 'request.security requires at least 3 parameters: symbol, timeframe, expression.',
-        severity: 'error',
-        code: 'PSV6-REQUEST-PARAMS'
-      });
+      this.addError(lineNum, 1, 'request.security requires at least 3 parameters: symbol, timeframe, expression.', 'PSV6-REQUEST-PARAMS');
     }
   }
 
-  private validateTextFormatting(line: string, lineNum: number, context: ValidationContext, errors: ValidationError[]): void {
-    // Check for text formatting functions
-    const textFormatFunctions = [
-      'text.format_bold',
-      'text.format_italic', 
-      'text.format_color',
-      'text.format_size'
-    ];
+  private validateTextFormattingLegacy(line: string, lineNum: number, noStrings: string): void {
+    for (const func of TEXT_FORMAT_FUNCTIONS) {
+      if (noStrings.includes(`text.${func}`)) {
+        const functionName = `text.${func}`;
+        this.addInfo(lineNum, 1, `${functionName} is available in Pine Script v6 for text formatting.`, 'PSV6-TEXT-FORMAT');
 
-    for (const func of textFormatFunctions) {
-      if (line.includes(func)) {
-        errors.push({
-          line: lineNum,
-          column: 1,
-          message: `${func} is available in Pine Script v6 for text formatting.`,
-          severity: 'info',
-          code: 'PSV6-TEXT-FORMAT'
-        });
+        if ((func === 'format_bold' || func === 'format_italic') && !line.includes('"') && !line.includes("'")) {
+          this.addWarning(lineNum, 1, `${functionName} requires a string argument.`, 'PSV6-TEXT-FORMAT-STRING');
+        }
 
-        // Validate function usage
-        this.validateTextFormatFunction(line, lineNum, func, errors);
+        if (func === 'format_color' && !line.includes('color.')) {
+          this.addWarning(lineNum, 1, `${functionName} requires a color argument.`, 'PSV6-TEXT-FORMAT-COLOR');
+        }
       }
     }
   }
 
-  private validateTextFormatFunction(line: string, lineNum: number, func: string, errors: ValidationError[]): void {
-    // Basic validation for text formatting functions
-    if (func === 'text.format_bold' || func === 'text.format_italic') {
-      if (!line.includes('"') && !line.includes("'")) {
-        errors.push({
-          line: lineNum,
-          column: 1,
-          message: `${func} requires a string argument.`,
-          severity: 'warning',
-          code: 'PSV6-TEXT-FORMAT-STRING'
-        });
-      }
-    }
-
-    if (func === 'text.format_color') {
-      if (!line.includes('color.')) {
-        errors.push({
-          line: lineNum,
-          column: 1,
-          message: `${func} requires a color argument.`,
-          severity: 'warning',
-          code: 'PSV6-TEXT-FORMAT-COLOR'
-        });
-      }
-    }
-  }
-
-  private validateEnumDeclaration(line: string, lineNum: number, context: ValidationContext, errors: ValidationError[]): void {
+  private validateEnumDeclarationLegacy(line: string, lineNum: number): void {
     const enumMatch = line.match(/^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/);
     if (enumMatch) {
       const enumName = enumMatch[1];
-      
-      // Check for conflicts
+
       if (KEYWORDS.has(enumName) || NAMESPACES.has(enumName)) {
-        errors.push({
-          line: lineNum,
-          column: line.indexOf(enumName) + 1,
-          message: `Enum name '${enumName}' conflicts with a built-in keyword or type.`,
-          severity: 'error',
-          code: 'PSV6-ENUM-CONFLICT'
-        });
+        this.addError(lineNum, line.indexOf(enumName) + 1, `Enum name '${enumName}' conflicts with a built-in keyword or type.`, 'PSV6-ENUM-CONFLICT');
       }
 
-      // Validate enum values in subsequent lines
-      this.validateEnumValues(lineNum, context, errors, enumName);
+      this.validateEnumValuesLegacy(lineNum, enumName);
     }
   }
 
-  private validateEnumValues(enumLine: number, context: ValidationContext, errors: ValidationError[], enumName: string): void {
-    const enumIndent = this.getLineIndentation(context.cleanLines[enumLine - 1]);
+  private validateEnumValuesLegacy(enumLine: number, enumName: string): void {
+    const enumIndent = this.getLineIndentation(this.context.cleanLines[enumLine - 1]);
     const values: string[] = [];
 
-    for (let i = enumLine; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
+    for (let i = enumLine; i < this.context.cleanLines.length; i++) {
+      const line = this.context.cleanLines[i];
       const lineIndent = this.getLineIndentation(line);
-      
-      // Stop if we've unindented back to enum level or beyond
+
       if (i > enumLine && lineIndent <= enumIndent && line.trim() !== '') {
         break;
       }
 
-      // Parse enum values
       const valueMatch = line.match(/^\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/);
       if (valueMatch) {
         const value = valueMatch[1];
-        
-        // Check for duplicate values
+
         if (values.includes(value)) {
-          errors.push({
-            line: i + 1,
-            column: line.indexOf(value) + 1,
-            message: `Duplicate enum value '${value}' in enum '${enumName}'.`,
-            severity: 'error',
-            code: 'PSV6-ENUM-DUPLICATE-VALUE'
-          });
+          this.addError(i + 1, line.indexOf(value) + 1, `Duplicate enum value '${value}' in enum '${enumName}'.`, 'PSV6-ENUM-DUPLICATE-VALUE');
         } else {
           values.push(value);
         }
       }
     }
 
-    // Validate enum has at least one value
     if (values.length === 0) {
-      errors.push({
-        line: enumLine,
-        column: 1,
-        message: `Enum '${enumName}' should have at least one value.`,
-        severity: 'warning',
-        code: 'PSV6-ENUM-NO-VALUES'
-      });
+      this.addWarning(enumLine, 1, `Enum '${enumName}' should have at least one value.`, 'PSV6-ENUM-NO-VALUES');
     }
   }
 
-  private validateWhileLoop(line: string, lineNum: number, context: ValidationContext, errors: ValidationError[]): void {
+  private validateWhileLoopLegacy(line: string, lineNum: number): void {
     const whileMatch = line.match(/^\s*while\s+(.+)$/);
     if (whileMatch) {
       const condition = whileMatch[1].trim();
-      
-      // Validate while condition
+
       if (!condition) {
-        errors.push({
-          line: lineNum,
-          column: 1,
-          message: 'While loop requires a condition.',
-          severity: 'error',
-          code: 'PSV6-WHILE-CONDITION'
-        });
+        this.addError(lineNum, 1, 'While loop requires a condition.', 'PSV6-WHILE-CONDITION');
         return;
       }
 
-      // Check for boolean condition
-      const conditionType = this.inferType(condition);
+      const conditionType = this.inferTypeLegacy(condition);
       if (conditionType !== 'bool' && conditionType !== 'unknown') {
-        errors.push({
-          line: lineNum,
-          column: 1,
-          message: 'While loop condition should be boolean.',
-          severity: 'warning',
-          code: 'PSV6-WHILE-BOOL-CONDITION'
-        });
+        this.addWarning(lineNum, 1, 'While loop condition should be boolean.', 'PSV6-WHILE-BOOL-CONDITION');
       }
 
-      // Check for potential infinite loops
-      this.validateWhileLoopSafety(lineNum, context, errors, condition);
+      this.validateWhileLoopSafetyLegacy(lineNum, condition);
     }
   }
 
-  private validateWhileLoopSafety(whileLine: number, context: ValidationContext, errors: ValidationError[], condition: string): void {
-    // Look for loop variable modification in the loop body
-    const whileIndent = this.getLineIndentation(context.cleanLines[whileLine - 1]);
+  private validateWhileLoopSafetyLegacy(whileLine: number, _condition: string): void {
+    const whileIndent = this.getLineIndentation(this.context.cleanLines[whileLine - 1]);
     let foundModification = false;
 
-    for (let i = whileLine; i < Math.min(whileLine + 20, context.cleanLines.length); i++) {
-      const line = context.cleanLines[i];
+    for (let i = whileLine; i < Math.min(whileLine + 20, this.context.cleanLines.length); i++) {
+      const line = this.context.cleanLines[i];
       const lineIndent = this.getLineIndentation(line);
-      
-      if (lineIndent <= whileIndent && line.trim() !== '') break;
-      
-      // Check for variable modifications
+
+      if (lineIndent <= whileIndent && line.trim() !== '') {
+        break;
+      }
+
       if (line.includes(':=') || line.includes('+=') || line.includes('-=')) {
         foundModification = true;
         break;
@@ -576,61 +698,45 @@ export class V6FeaturesValidator implements ValidationModule {
     }
 
     if (!foundModification) {
-      errors.push({
-        line: whileLine,
-        column: 1,
-        message: 'While loop may be infinite if loop variable is not modified.',
-        severity: 'warning',
-        code: 'PSV6-WHILE-INFINITE',
-        suggestion: 'Ensure the loop condition variable is modified within the loop body.'
-      });
+      this.addWarning(whileLine, 1, 'While loop may be infinite if loop variable is not modified.', 'PSV6-WHILE-INFINITE');
     }
   }
 
-  private validateHistoryReferencing(line: string, lineNum: number, context: ValidationContext, errors: ValidationError[]): void {
-    // Enhanced history referencing validation
-    const historyRefs = line.match(/\[(\d+)\]/g);
-    if (historyRefs) {
-      for (const ref of historyRefs) {
-        const index = parseInt(ref.slice(1, -1));
-        
-        // Warn about large history references
-        if (index > 100) {
-          errors.push({
-            line: lineNum,
-            column: line.indexOf(ref) + 1,
-            message: `Large history reference [${index}] may impact performance.`,
-            severity: 'warning',
-            code: 'PSV6-HISTORY-LARGE',
-            suggestion: 'Consider using a smaller lookback period or caching the result.'
-          });
-        }
+  private validateHistoryReferencingLegacy(noStrings: string, lineNum: number): void {
+    const historyRefs = noStrings.match(/\[(\d+)\]/g);
+    if (!historyRefs) {
+      return;
+    }
 
-        // Warn about zero index
-        if (index === 0) {
-          errors.push({
-            line: lineNum,
-            column: line.indexOf(ref) + 1,
-            message: 'History reference [0] is equivalent to the current value.',
-            severity: 'info',
-            code: 'PSV6-HISTORY-ZERO',
-            suggestion: 'Consider using the variable directly without [0].'
-          });
-        }
+    for (const ref of historyRefs) {
+      const index = parseInt(ref.slice(1, -1), 10);
+
+      if (index > 100) {
+        this.addWarning(lineNum, this.context.cleanLines[lineNum - 1].indexOf(ref) + 1, `Large history reference [${index}] may impact performance.`, 'PSV6-HISTORY-LARGE');
+      }
+
+      if (index === 0) {
+        this.addInfo(lineNum, this.context.cleanLines[lineNum - 1].indexOf(ref) + 1, 'History reference [0] is equivalent to the current value.', 'PSV6-HISTORY-ZERO');
       }
     }
   }
 
-  private inferType(expression: string): string {
+  private inferTypeLegacy(expression: string): string {
     const trimmed = expression.trim();
-    
-    if (/^(true|false)\b/.test(trimmed)) return 'bool';
-    if (/^"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/.test(trimmed)) return 'string';
+
+    if (/^(true|false)\b/.test(trimmed)) {
+      return 'bool';
+    }
+    if (/^"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/.test(trimmed)) {
+      return 'string';
+    }
     if (/^[+\-]?\d[\d_]*(?:\.\d[\d_]*)?(?:e[+\-]?\d+)?\b/i.test(trimmed)) {
       return trimmed.includes('.') || /e[+\-]/i.test(trimmed) ? 'float' : 'int';
     }
-    if (/\bcolor\.(?:\w+)\b|\bcolor\.new\s*\(/.test(trimmed)) return 'color';
-    
+    if (/\bcolor\.(?:\w+)\b|\bcolor\.new\s*\(/.test(trimmed)) {
+      return 'color';
+    }
+
     return 'unknown';
   }
 
@@ -643,6 +749,6 @@ export class V6FeaturesValidator implements ValidationModule {
   }
 
   private stripStrings(line: string): string {
-    return line.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, (m) => ' '.repeat(m.length));
+    return line.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, (match) => ' '.repeat(match.length));
   }
 }

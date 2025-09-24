@@ -33,10 +33,7 @@ export class PerformanceValidator implements ValidationModule {
   name = 'PerformanceValidator';
 
   private errors: ValidationError[] = [];
-  private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   private loopStack: LoopInfo[] = [];
   private controlDepth = 1;
@@ -59,8 +56,6 @@ export class PerformanceValidator implements ValidationModule {
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
-    this.context = context;
-    this.config = config;
 
     if (!config.enablePerformanceAnalysis) {
       return {
@@ -73,15 +68,21 @@ export class PerformanceValidator implements ValidationModule {
       };
     }
 
-    this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
+    this.astContext = this.getAstContext(context, config);
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectPerformanceDataAst(this.astContext.ast);
-      this.finalizeAstDiagnostics();
-    } else {
-      this.runLegacyAnalysis(context);
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.collectPerformanceDataAst(this.astContext.ast);
+    this.finalizeAstDiagnostics();
 
     return {
       isValid: this.errors.length === 0,
@@ -91,13 +92,6 @@ export class PerformanceValidator implements ValidationModule {
       typeMap: new Map(),
       scriptType: null,
     };
-  }
-
-  private runLegacyAnalysis(context: ValidationContext): void {
-    this.analyzeMemoryUsage(context, this.errors);
-    this.analyzeComputationalComplexity(context, this.errors);
-    this.analyzeExpensiveOperations(context, this.errors);
-    this.analyzeResourceUsage(context, this.errors);
   }
 
   private collectPerformanceDataAst(program: ProgramNode): void {
@@ -461,7 +455,6 @@ export class PerformanceValidator implements ValidationModule {
   private reset(): void {
     this.errors = [];
     this.astContext = null;
-    this.usingAst = false;
     this.loopStack = [];
     this.controlDepth = 1;
     this.maxNestingDepth = 1;
@@ -475,338 +468,14 @@ export class PerformanceValidator implements ValidationModule {
     this.duplicateExpensiveWarnings = new Set();
   }
 
-  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+  private getAstContext(
+    context: ValidationContext,
+    config: ValidatorConfig,
+  ): AstValidationContext | null {
     if (!config.ast || config.ast.mode === 'disabled') {
       return null;
     }
-    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
-  }
-
-  private analyzeMemoryUsage(context: ValidationContext, errors: ValidationError[]): void {
-    let arrayCount = 0;
-    let matrixCount = 0;
-    let mapCount = 0;
-
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-      const lineNum = i + 1;
-
-      if (line.includes('array.new')) {
-        arrayCount++;
-
-        const sizeMatch = line.match(/array\.new.*?(\d+)/);
-        if (sizeMatch) {
-          const size = parseInt(sizeMatch[1]);
-          if (size > 10000) {
-            errors.push({
-              line: lineNum,
-              column: 1,
-              message: `Large array allocation (${size} elements) may impact memory usage.`,
-              severity: 'warning',
-              code: 'PSV6-MEMORY-LARGE-ARRAY',
-              suggestion: 'Consider using a smaller size or dynamic allocation if possible.',
-            });
-          }
-        }
-      }
-
-      if (line.includes('matrix.new')) {
-        matrixCount++;
-
-        const sizeMatch = line.match(/matrix\.new.*?(\d+).*?(\d+)/);
-        if (sizeMatch) {
-          const rows = parseInt(sizeMatch[1]);
-          const cols = parseInt(sizeMatch[2]);
-          const total = rows * cols;
-          if (total > 1000) {
-            errors.push({
-              line: lineNum,
-              column: 1,
-              message: `Large matrix allocation (${rows}x${cols} = ${total} elements) may impact memory usage.`,
-              severity: 'warning',
-              code: 'PSV6-MEMORY-LARGE-MATRIX',
-              suggestion: 'Consider using a smaller matrix or alternative data structure.',
-            });
-          }
-        }
-      }
-
-      if (line.includes('map.new')) {
-        mapCount++;
-      }
-    }
-
-    if (arrayCount > 10) {
-      errors.push({
-        line: 1,
-        column: 1,
-        message: `High number of array allocations (${arrayCount}). Consider consolidating or reusing arrays.`,
-        severity: 'warning',
-        code: 'PSV6-MEMORY-EXCESSIVE-ARRAYS',
-        suggestion: 'Consider using fewer arrays or reusing existing ones to reduce memory usage.',
-      });
-    }
-
-    if (matrixCount > 5) {
-      errors.push({
-        line: 1,
-        column: 1,
-        message: `High number of matrix allocations (${matrixCount}). Consider consolidating matrices.`,
-        severity: 'warning',
-        code: 'PSV6-MEMORY-EXCESSIVE-MATRICES',
-        suggestion: 'Consider using fewer matrices or alternative data structures.',
-      });
-    }
-
-    if (mapCount > 5) {
-      errors.push({
-        line: 1,
-        column: 1,
-        message: `High number of map allocations (${mapCount}). Consider consolidating maps.`,
-        severity: 'warning',
-        code: 'PSV6-MEMORY-EXCESSIVE-MAPS',
-        suggestion: 'Consider using fewer maps or alternative data structures.',
-      });
-    }
-  }
-
-  private analyzeComputationalComplexity(context: ValidationContext, errors: ValidationError[]): void {
-    let maxNestingDepth = 0;
-    let currentNestingDepth = 0;
-    const nestingStack: number[] = [];
-
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-      const lineNum = i + 1;
-      const indent = this.getLineIndentation(line);
-
-      if (indent > nestingStack[nestingStack.length - 1] || nestingStack.length === 0) {
-        nestingStack.push(indent);
-        currentNestingDepth = nestingStack.length;
-        maxNestingDepth = Math.max(maxNestingDepth, currentNestingDepth);
-      } else {
-        while (nestingStack.length > 0 && indent <= nestingStack[nestingStack.length - 1]) {
-          nestingStack.pop();
-        }
-        currentNestingDepth = nestingStack.length;
-      }
-
-      if (this.isLoopLine(line)) {
-        this.analyzeNestedLoops(i, context, errors);
-      }
-
-      this.analyzeExpensiveOperationsInContext(line, lineNum, currentNestingDepth, errors);
-    }
-
-    if (maxNestingDepth > 6) {
-      errors.push({
-        line: 1,
-        column: 1,
-        message: `High nesting depth (${maxNestingDepth} levels) may impact readability and performance.`,
-        severity: 'warning',
-        code: 'PSV6-PERF-HIGH-NESTING',
-        suggestion: 'Consider refactoring to reduce nesting depth by extracting functions or using early returns.',
-      });
-    }
-  }
-
-  private analyzeNestedLoops(loopLineIndex: number, context: ValidationContext, errors: ValidationError[]): void {
-    const line = context.cleanLines[loopLineIndex];
-    const lineNum = loopLineIndex + 1;
-    const loopIndent = this.getLineIndentation(line);
-    let nestedLoopCount = 0;
-
-    for (let i = loopLineIndex + 1; i < Math.min(loopLineIndex + 20, context.cleanLines.length); i++) {
-      const nextLine = context.cleanLines[i];
-      const nextIndent = this.getLineIndentation(nextLine);
-
-      if (nextIndent <= loopIndent && nextLine.trim() !== '') {
-        break;
-      }
-
-      if (this.isLoopLine(nextLine) && nextIndent > loopIndent) {
-        nestedLoopCount++;
-      }
-    }
-
-    if (nestedLoopCount > 0) {
-      errors.push({
-        line: lineNum,
-        column: 1,
-        message: `Nested loops detected (${nestedLoopCount + 1} levels) may impact performance.`,
-        severity: 'warning',
-        code: 'PSV6-PERF-NESTED-LOOPS',
-        suggestion: 'Consider optimizing the algorithm or reducing the number of nested iterations.',
-      });
-    }
-  }
-
-  private analyzeExpensiveOperations(context: ValidationContext, errors: ValidationError[]): void {
-    const expensiveFunctions = [
-      'ta.highest',
-      'ta.lowest',
-      'ta.pivothigh',
-      'ta.pivotlow',
-      'ta.correlation',
-      'ta.linreg',
-      'ta.percentile_linear_interpolation',
-      'ta.percentile_nearest_rank',
-      'ta.percentrank',
-      'request.security',
-      'request.dividends',
-      'request.earnings',
-    ];
-
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-      const lineNum = i + 1;
-
-      for (const func of expensiveFunctions) {
-        if (line.includes(func)) {
-          if (this.isInLoop(context, i)) {
-            const severity = this.isVeryExpensiveFunction(func) ? 'error' : 'warning';
-            errors.push({
-              line: lineNum,
-              column: 1,
-              message: `Expensive function '${func}' detected in loop may impact performance.`,
-              severity,
-              code: 'PSV6-PERF-EXPENSIVE-IN-LOOP',
-              suggestion: 'Move expensive calculations outside the loop or cache their results.',
-            });
-          }
-
-          const functionCount = (line.match(new RegExp(func.replace('.', '\\.'), 'g')) || []).length;
-          if (functionCount > 1) {
-            errors.push({
-              line: lineNum,
-              column: 1,
-              message: `Multiple calls to expensive function '${func}' on the same line.`,
-              severity: 'warning',
-              code: 'PSV6-PERF-MULTIPLE-EXPENSIVE',
-              suggestion: 'Consider caching the result or splitting into multiple lines.',
-            });
-          }
-        }
-      }
-    }
-  }
-
-  private analyzeExpensiveOperationsInContext(
-    line: string,
-    lineNum: number,
-    nestingDepth: number,
-    errors: ValidationError[],
-  ): void {
-    const expensiveOps = ['ta.', 'request.', 'math.'];
-
-    for (const op of expensiveOps) {
-      if (line.includes(op) && nestingDepth > 4) {
-        errors.push({
-          line: lineNum,
-          column: 1,
-          message: `Expensive operation in deeply nested context (depth: ${nestingDepth}).`,
-          severity: 'info',
-          code: 'PSV6-PERF-DEEP-NESTING',
-          suggestion: 'Consider moving expensive operations to a higher scope or extracting to a function.',
-        });
-        break;
-      }
-    }
-  }
-
-  private analyzeResourceUsage(context: ValidationContext, errors: ValidationError[]): void {
-    let requestCount = 0;
-    let plotCount = 0;
-    let alertCount = 0;
-
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-      const lineNum = i + 1;
-
-      if (line.includes('request.')) {
-        requestCount++;
-      }
-
-      if (line.includes('plot') && !line.includes('plot(')) {
-        plotCount++;
-      }
-
-      if (line.includes('alert') || line.includes('alertcondition')) {
-        alertCount++;
-      }
-    }
-
-    if (requestCount > 5) {
-      errors.push({
-        line: 1,
-        column: 1,
-        message: `High number of request calls (${requestCount}) may impact performance.`,
-        severity: 'warning',
-        code: 'PSV6-PERF-EXCESSIVE-REQUESTS',
-        suggestion: 'Consider consolidating requests or using request.security with multiple expressions.',
-      });
-    }
-
-    if (plotCount > 10) {
-      errors.push({
-        line: 1,
-        column: 1,
-        message: `High number of plot calls (${plotCount}) may impact rendering performance.`,
-        severity: 'warning',
-        code: 'PSV6-PERF-EXCESSIVE-PLOTS',
-        suggestion: 'Consider reducing the number of plots or using conditional plotting.',
-      });
-    }
-
-    if (alertCount > 20) {
-      errors.push({
-        line: 1,
-        column: 1,
-        message: `High number of alert calls (${alertCount}) may impact performance.`,
-        severity: 'warning',
-        code: 'PSV6-PERF-EXCESSIVE-ALERTS',
-        suggestion: 'Consider consolidating alerts or using alertcondition instead of multiple alert calls.',
-      });
-    }
-
-    if (alertCount >= 2) {
-      errors.push({
-        line: 1,
-        column: 1,
-        message: `Multiple alert conditions detected (${alertCount}). Consider consolidating or documenting alert logic.`,
-        severity: 'error',
-        code: 'PSV6-PERF-ALERT-CONSOLIDATE',
-        suggestion: 'Reduce duplicate alerts or combine conditions when possible.',
-      });
-    }
-  }
-
-  private isLoopLine(line: string): boolean {
-    return /^\s*(for|while)\b/.test(line);
-  }
-
-  private isInLoop(context: ValidationContext, lineIndex: number): boolean {
-    const line = context.cleanLines[lineIndex];
-    const lineIndent = this.getLineIndentation(line);
-
-    for (let i = lineIndex - 1; i >= 0; i--) {
-      const prevLine = context.cleanLines[i];
-      const prevIndent = this.getLineIndentation(prevLine);
-
-      if (prevIndent < lineIndent && prevLine.trim() !== '') {
-        break;
-      }
-
-      if (this.isLoopLine(prevLine) && prevIndent < lineIndent) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  private getLineIndentation(line: string): number {
-    return line.length - line.trimStart().length;
+    return isAstValidationContext(context) && context.ast ? context : null;
   }
 }
 

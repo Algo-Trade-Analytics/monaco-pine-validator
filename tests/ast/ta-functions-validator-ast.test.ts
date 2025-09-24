@@ -27,6 +27,15 @@ class TAValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class TAValidatorDisabledHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new TAFunctionsValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('TAFunctionsValidator (AST)', () => {
   it('reports unknown ta members', () => {
     const taIdentifier = createIdentifier('ta', 0, 1);
@@ -126,5 +135,15 @@ describe('TAFunctionsValidator (AST)', () => {
     const warningCodes = result.warnings.map((warning) => warning.code);
 
     expect(warningCodes).toContain('PSV6-FUNCTION-RETURN-TYPE');
+  });
+
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new TAValidatorDisabledHarness();
+
+    const result = harness.validate('ta.sma(close, 14)');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
   });
 });
