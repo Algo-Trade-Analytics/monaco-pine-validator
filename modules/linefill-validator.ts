@@ -74,14 +74,19 @@ export class LinefillValidator implements ValidationModule {
     this.reset();
     this.context = context;
     this.astContext = this.getAstContext(config);
-
-    if (this.astContext?.ast) {
-      this.collectLinefillDataFromAst(this.astContext.ast);
-    } else {
-      context.cleanLines.forEach((line, index) => {
-        this.processLine(line, index + 1);
-      });
+    const ast = this.astContext?.ast;
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: context.scriptType,
+      };
     }
+
+    this.collectLinefillDataFromAst(ast);
 
     // Post-process validations
     this.validateLinefillPerformance();
@@ -234,47 +239,6 @@ export class LinefillValidator implements ValidationModule {
     this.context.typeMap.set(name, typeInfo);
   }
 
-  private processLine(line: string, lineNum: number): void {
-    // Skip empty lines and comments
-    if (!line.trim() || line.trim().startsWith('//')) {
-      return;
-    }
-
-    this.validateLinefillFunctionCalls(line, lineNum);
-  }
-
-  private validateLinefillFunctionCalls(line: string, lineNum: number): void {
-    // Pattern: linefill.functionName(args...)
-    const linefillFunctionPattern = new RegExp(`linefill\\.(\\w+)\\s*\\(`, 'g');
-
-    let match;
-    while ((match = linefillFunctionPattern.exec(line)) !== null) {
-      const functionName = match[1];
-      const startIndex = match.index;
-      const openParenIndex = match.index + match[0].length - 1;
-
-      // Find the matching closing parenthesis
-      const argsString = this.extractBalancedParentheses(line, openParenIndex);
-      if (argsString === null) continue; // Skip if we can't find balanced parentheses
-
-      const column = startIndex + 1;
-
-      // Parse arguments
-      const args = this.parseArguments(argsString);
-
-      const inLoop = this.isLineInLoopContext(lineNum);
-
-      this.recordLinefillCall(functionName, args, lineNum, column, inLoop);
-
-      // Check for multiple operations on same line
-      const linefillCallsOnLine = (line.match(/\blinefill\.[A-Za-z_][A-Za-z0-9_]*\s*\(/g) || []).length;
-      if (linefillCallsOnLine > 1 && !this.hasComplexOperationWarning) {
-        this.addWarning(lineNum, 1, 'Multiple linefill operations on one line', 'PSV6-LINEFILL-PERF-COMPLEX');
-        this.hasComplexOperationWarning = true;
-      }
-    }
-  }
-
   private recordLinefillCall(
     functionName: string,
     args: string[],
@@ -301,6 +265,14 @@ export class LinefillValidator implements ValidationModule {
 
     if (inLoop) {
       this.addWarning(lineNum, column, 'Linefill operation in loop', 'PSV6-LINEFILL-PERF-LOOP');
+    }
+
+    if (!this.hasComplexOperationWarning) {
+      const callsOnLine = this.linefillFunctionCalls.filter((call) => call.line === lineNum);
+      if (callsOnLine.length > 1) {
+        this.addWarning(lineNum, column, 'Multiple linefill operations on one line', 'PSV6-LINEFILL-PERF-COMPLEX');
+        this.hasComplexOperationWarning = true;
+      }
     }
   }
 
@@ -473,89 +445,6 @@ export class LinefillValidator implements ValidationModule {
       );
       this.hasCleanupSuggestion = true;
     }
-  }
-
-  private isLineInLoopContext(lineNum: number): boolean {
-    // Check if we're in a loop by looking at previous lines
-    for (let i = Math.max(1, lineNum - 3); i <= lineNum; i++) {
-      const line = this.context.cleanLines[i - 1] || '';
-      if (/\b(for|while)\b/.test(line)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // Helper methods
-  private extractBalancedParentheses(line: string, openParenIndex: number): string | null {
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-    
-    for (let i = openParenIndex; i < line.length; i++) {
-      const char = line[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        stringChar = '';
-      } else if (!inString) {
-        if (char === '(') {
-          depth++;
-        } else if (char === ')') {
-          depth--;
-          if (depth === 0) {
-            // Found the matching closing parenthesis
-            return line.substring(openParenIndex + 1, i);
-          }
-        }
-      }
-    }
-    
-    return null; // No matching closing parenthesis found
-  }
-
-  private parseArguments(argsString: string): string[] {
-    if (!argsString.trim()) return [];
-    
-    const args: string[] = [];
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-
-    for (let i = 0; i < argsString.length; i++) {
-      const char = argsString[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-        current += char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        stringChar = '';
-        current += char;
-      } else if (!inString && char === '(') {
-        depth++;
-        current += char;
-      } else if (!inString && char === ')') {
-        depth--;
-        current += char;
-      } else if (!inString && char === ',' && depth === 0) {
-        args.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    
-    if (current.trim()) {
-      args.push(current.trim());
-    }
-    
-    return args;
   }
 
   private isLineObject(value: string): boolean {

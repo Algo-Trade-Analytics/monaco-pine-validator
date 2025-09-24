@@ -39,6 +39,15 @@ class V6FeaturesHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class V6FeaturesDisabledHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new V6FeaturesValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('V6FeaturesValidator (AST)', () => {
   it('warns about missing switch defaults and empty cases', () => {
     const discriminant = createNumberLiteral(1, '1', 7, 1);
@@ -261,5 +270,15 @@ describe('V6FeaturesValidator (AST)', () => {
     const infoCodes = result.info.map((item) => item.code);
 
     expect(infoCodes).toContain('PSV6-HISTORY-ZERO');
+  });
+
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new V6FeaturesDisabledHarness();
+
+    const result = harness.validate('switch 1\n    => 1');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
   });
 });

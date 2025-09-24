@@ -76,9 +76,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
   private hasTimezoneReference = false;
   private timeComparisonEmissions: Set<string> = new Set();
   private timeArithmeticEmissions: Set<string> = new Set();
@@ -94,19 +92,21 @@ export class TimeDateFunctionsValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
-
     this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
+    const ast = this.astContext?.ast;
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectTimeDataFromAst(this.astContext.ast);
-    } else {
-      // Process each line for time/date function calls
-      context.cleanLines.forEach((line, index) => {
-        this.processLine(line, index + 1);
-      });
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: context.scriptType,
+      };
     }
+
+    this.collectTimeDataFromAst(ast);
 
     // Perform post-validation checks
     this.validateTimePerformance();
@@ -118,7 +118,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
       warnings: this.warnings,
       info: this.info,
       typeMap: new Map(),
-      scriptType: null
+      scriptType: context.scriptType,
     };
   }
 
@@ -127,7 +127,6 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
     this.hasTimezoneReference = false;
     this.timeComparisonEmissions.clear();
     this.timeArithmeticEmissions.clear();
@@ -268,43 +267,6 @@ export class TimeDateFunctionsValidator implements ValidationModule {
 
     if (/utc/i.test(value) || /^[A-Za-z_]+\/[A-Za-z_]+$/.test(value)) {
       this.hasTimezoneReference = true;
-    }
-  }
-
-  private processLine(line: string, lineNumber: number): void {
-    // Skip empty lines and comments
-    if (!line.trim() || line.trim().startsWith('//')) {
-      return;
-    }
-
-    this.validateTimeFunctionCalls(line, lineNumber);
-    this.validateTimeVariables(line, lineNumber);
-    this.validateTimeZones(line, lineNumber);
-    this.validateSessionHandling(line, lineNumber);
-  }
-
-  private validateTimeFunctionCalls(line: string, lineNumber: number): void {
-    // Match time function calls
-    const timeFunctionRegex = /\b(time_close|time_tradingday|timestamp|timenow)\s*\(/g;
-    let match;
-
-    while ((match = timeFunctionRegex.exec(line)) !== null) {
-      const functionName = match[1];
-      
-      // Extract parameters
-      const paramMatch = this.extractFunctionParameters(line, match.index + functionName.length);
-      const parameters = paramMatch ? this.splitTopLevelArgs(paramMatch) : [];
-      
-      // Track the function call
-      this.timeFunctionCalls.push({
-        functionName,
-        line: lineNumber,
-        column: match.index + 1,
-        arguments: parameters
-      });
-
-      // Validate specific function
-      this.validateTimeFunction(functionName, parameters, lineNumber, match.index + 1);
     }
   }
 
@@ -489,62 +451,6 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     }
 
     this.addInfo(lineNum, column, 'timenow returns current time - use for real-time calculations', 'PSV6-TIMENOW-INFO');
-  }
-
-  private validateTimeVariables(line: string, lineNumber: number): void {
-    // Check for common time variable usage patterns
-    const timeVariables = ['time', 'hour', 'minute', 'second', 'year', 'month', 'dayofmonth', 'dayofweek', 'weekofyear'];
-    
-    for (const timeVar of timeVariables) {
-      if (line.includes(timeVar)) {
-        // Check for common misuse patterns
-        this.checkTimeVariableMisuse(line, lineNumber, timeVar);
-      }
-    }
-  }
-
-  private validateTimeZones(line: string, lineNumber: number): void {
-    // Check for timezone usage
-    const timezoneMatch = line.match(/timezone\.(\w+)/);
-    if (timezoneMatch) {
-      const timezone = `timezone.${timezoneMatch[1]}`;
-      this.addWarning(lineNumber, 1,
-        `Identifier '${timezone}' is not a valid Pine Script timezone constant. Provide an explicit string (e.g., "UTC") or use syminfo.timezone.`,
-        'PSV6-TIMEZONE-UNKNOWN');
-    }
-  }
-
-  private validateSessionHandling(line: string, lineNumber: number): void {
-    // Check for session usage
-    const sessionMatch = line.match(/session\.(\w+)/);
-    if (sessionMatch) {
-      const sessionConstant = `session.${sessionMatch[1]}`;
-      if (!VALID_SESSION_MEMBERS.has(sessionConstant)) {
-        this.addWarning(lineNumber, 1,
-          `Unknown session constant: ${sessionConstant}`,
-          'PSV6-SESSION-UNKNOWN');
-      }
-    }
-  }
-
-  private checkTimeVariableMisuse(line: string, lineNumber: number, timeVar: string): void {
-    // Check for common time variable misuse patterns
-    
-    // Check for direct comparison with specific values (may be fragile)
-    const directCompareMatch = line.match(new RegExp(`\\b${timeVar}\\s*[=!]=\\s*(\\d+)`));
-    if (directCompareMatch) {
-      const value = directCompareMatch[1];
-      this.addWarning(lineNumber, 1, 
-        `Direct comparison of ${timeVar} with ${value} may be fragile. Consider using time ranges or functions.`, 
-        'PSV6-TIME-DIRECT-COMPARE');
-    }
-
-    // Check for time arithmetic without proper handling
-    if (line.includes(`${timeVar} +`) || line.includes(`${timeVar} -`)) {
-      this.addInfo(lineNumber, 1, 
-        `Time arithmetic detected with ${timeVar}. Ensure proper time unit handling.`, 
-        'PSV6-TIME-ARITHMETIC-INFO');
-    }
   }
 
   private validateTimezoneParameter(timezoneParam: string, lineNum: number, column: number): void {
@@ -745,11 +651,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     }
 
     // Check for timezone awareness
-    const hasTimezone = this.usingAst
-      ? this.hasTimezoneReference
-      : this.context.cleanLines.some(line =>
-          line.includes('syminfo.timezone') || /['"]UTC['"]/i.test(line) || /['"][A-Za-z_]+\/[A-Za-z_]+['"]/i.test(line)
-        );
+    const hasTimezone = this.hasTimezoneReference;
     if ((hasTimeClose || hasTimeTradingday || hasTimestamp) && !hasTimezone) {
       this.addInfo(
         1,
@@ -763,19 +665,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
   private checkTimeFunctionsInLoops(): void {
     // Check if time functions are called inside loops (performance concern)
     for (const timeCall of this.timeFunctionCalls) {
-      if (this.usingAst) {
-        if (timeCall.inLoop) {
-          this.addWarning(
-            timeCall.line,
-            timeCall.column,
-            `Time function ${timeCall.functionName} inside loop may impact performance`,
-            'PSV6-TIME-PERF-LOOP'
-          );
-        }
-        continue;
-      }
-
-      if (this.isInLoop(timeCall.line)) {
+      if (timeCall.inLoop) {
         this.addWarning(
           timeCall.line,
           timeCall.column,
@@ -784,15 +674,6 @@ export class TimeDateFunctionsValidator implements ValidationModule {
         );
       }
     }
-  }
-
-  private isInLoop(lineIndex: number): boolean {
-    // Look back a few lines for a for/while with greater indentation
-    for (let i = lineIndex - 1; i >= 0 && i >= lineIndex - 6; i--) {
-      const ln = this.context.cleanLines[i - 1] || '';
-      if (/^\s*(for|while)\b/.test(ln)) return true;
-    }
-    return false;
   }
 
   private emitTimeComparison(node: BinaryExpressionNode, identifier: string, compared: ExpressionNode): void {
@@ -826,6 +707,8 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     }
     this.timeArithmeticEmissions.add(key);
 
+    this.complexTimeExpressions += 1;
+
     this.addInfo(
       loc.line,
       loc.column,
@@ -853,73 +736,6 @@ export class TimeDateFunctionsValidator implements ValidationModule {
       return unary.argument?.kind === 'NumberLiteral';
     }
     return false;
-  }
-
-  private extractFunctionParameters(line: string, startIndex: number): string | null {
-    let parenCount = 0;
-    let start = startIndex;
-    let end = startIndex;
-    
-    // Find the opening parenthesis
-    while (start < line.length && line[start] !== '(') {
-      start++;
-    }
-    
-    if (start >= line.length) return null;
-    
-    start++; // Skip the opening parenthesis
-    end = start;
-    
-    // Find the matching closing parenthesis
-    while (end < line.length) {
-      if (line[end] === '(') {
-        parenCount++;
-      } else if (line[end] === ')') {
-        if (parenCount === 0) {
-          break;
-        }
-        parenCount--;
-      }
-      end++;
-    }
-    
-    if (end >= line.length) return null;
-    
-    return line.substring(start, end).trim();
-  }
-
-  private splitTopLevelArgs(argsStr: string): string[] {
-    if (!argsStr.trim()) return [];
-    const args: string[] = [];
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-    
-    for (let i = 0; i < argsStr.length; i++) {
-      const ch = argsStr[i];
-      if (!inString && (ch === '"' || ch === "'")) { 
-        inString = true; 
-        stringChar = ch; 
-        current += ch; 
-        continue; 
-      }
-      if (inString) { 
-        current += ch; 
-        if (ch === stringChar) { 
-          inString = false; 
-          stringChar = ''; 
-        } 
-        continue; 
-      }
-      if (ch === '(') { depth++; current += ch; continue; }
-      if (ch === ')') { depth--; current += ch; continue; }
-      if (ch === ',' && depth === 0) { args.push(current.trim()); current = ''; continue; }
-      current += ch;
-    }
-    
-    if (current.trim()) args.push(current.trim());
-    return args;
   }
 
   private argumentToString(argument: ArgumentNode): string {

@@ -39,6 +39,15 @@ class SyntaxValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledSyntaxValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new SyntaxValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 function createProgramFromSource(
   source: string,
   directives: ProgramNode['directives'],
@@ -62,6 +71,16 @@ function createProgramFromSource(
 }
 
 describe('SyntaxValidator AST integration', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const validator = new DisabledSyntaxValidatorHarness();
+    const result = validator.validate('');
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('emits PSW01 and PS002 for misplaced and duplicate version directives', () => {
     const source = [
       'plot(close)',

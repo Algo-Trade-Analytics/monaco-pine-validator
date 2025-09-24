@@ -20,7 +20,7 @@ import {
   type UnaryExpressionNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
-import { IDENT, BUILTIN_FUNCTIONS_V6_RULES, KEYWORDS, NAMESPACES, NS_MEMBERS } from '../core/constants';
+import { BUILTIN_FUNCTIONS_V6_RULES, KEYWORDS, NAMESPACES, NS_MEMBERS } from '../core/constants';
 
 interface FunctionInfo {
   name: string;
@@ -66,7 +66,6 @@ export class FunctionValidator implements ValidationModule {
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   // Function tracking (extracted from EnhancedPineScriptValidator)
   private functionNames = new Set<string>();
@@ -215,17 +214,23 @@ export class FunctionValidator implements ValidationModule {
     this.config = config;
 
     this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
+    const program = this.astContext?.ast;
+
+    if (!program) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
+    }
 
     // Extract comprehensive function validation logic from EnhancedPineScriptValidator
     // NOTE: FunctionDeclarationsValidator also collects functions, but this module needs its own
     // collection for complete validation. Future optimization: coordinate with FunctionDeclarationsValidator
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectFunctionsFromAst(this.astContext.ast);
-      this.collectStaticFunctionDeclarations(context.cleanLines);
-    } else {
-      this.collectFunctions(context.cleanLines);
-    }
+    this.collectFunctionsFromAst(program);
 
     if (this.isDebugEnabled()) {
       console.log('[FunctionValidator] collected names', Array.from(this.functionNames));
@@ -273,7 +278,6 @@ export class FunctionValidator implements ValidationModule {
     this.userFunctions.clear();
     this.functionCalls = [];
     this.astContext = null;
-    this.usingAst = false;
   }
 
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
@@ -286,115 +290,6 @@ export class FunctionValidator implements ValidationModule {
 
   private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
     this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
-
-  /**
-   * Collect function declarations (extracted from EnhancedPineScriptValidator.collectFunctions)
-   * Handles both single-line and multi-line function declarations
-   */
-  private collectFunctions(lines: string[]): void {
-    const START_QUAL = new RegExp(`^\\s*(?:export\\s+)?(${IDENT.source}(?:\\.${IDENT.source})*)\\s*\\(`);
-    const START_STATIC = new RegExp(`^\\s*(?:export\\s+)?static\\s+(${IDENT.source})\\s+(${IDENT.source})\\s*\\(`);
-    const START_FUNC = new RegExp(`^\\s*(?:export\\s+)?func\\s+(${IDENT.source}(?:\\.${IDENT.source})*)\\s*\\(`);
-    const START_METH = new RegExp(`^\\s*method\\s+(${IDENT.source}(?:\\.${IDENT.source})*)\\s*\\(`);
-    let buf = '';
-    let startIdx = -1;
-    let name: string | null = null;
-    let linesSeen = 0;
-    const MAX_HDR_LINES = 12;
-
-    const reset = () => { buf = ''; startIdx = -1; name = null; linesSeen = 0; };
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (startIdx < 0) {
-        const staticMatch = line.match(START_STATIC);
-        if (staticMatch) {
-          startIdx = i;
-          name = `${staticMatch[1]}.${staticMatch[2]}`;
-          buf = line + '\n';
-          linesSeen = 1;
-
-          if (/=>/.test(line)) {
-            this.processFunctionDeclaration(buf, startIdx + 1);
-            reset();
-          }
-          continue;
-        }
-
-        const funcMatch = line.match(START_FUNC);
-        if (funcMatch) {
-          startIdx = i;
-          name = funcMatch[1];
-          buf = line + '\n';
-          linesSeen = 1;
-
-          if (/=>/.test(line)) {
-            this.processFunctionDeclaration(buf, startIdx + 1);
-            reset();
-          }
-          continue;
-        }
-
-        const methodMatch = line.match(START_METH);
-        const qualMatch = methodMatch ? null : line.match(START_QUAL);
-        const m = methodMatch || qualMatch;
-        if (m) {
-          const before = line.slice(0, m.index ?? 0);
-          const dotted = before.endsWith('.') || /\.\s*$/.test(before);
-          let candidate = methodMatch ? methodMatch[1] : m[1];
-
-          if (candidate === 'func') {
-            const fallback = line.match(/^\s*(?:export\s+)?func\s+(${IDENT.source}(?:\.${IDENT.source})*)\s*\(/);
-            if (fallback) candidate = fallback[1];
-          }
-
-
-          // Skip script declarations (indicator/strategy/library)
-          if (/^(indicator|strategy|library)$/.test(candidate)) {
-            continue;
-          }
-
-         if (!dotted && !/=\s*[^=]/.test(line.substring(0, line.indexOf('(')))) {
-           startIdx = i;
-           name = candidate;
-           buf = line + '\n';
-           linesSeen = 1;
-
-            if (this.isDebugEnabled()) {
-              console.log('Start function candidate', candidate, 'line', i + 1);
-            }
-
-           // Check if this line also contains => (single-line method)
-           if (/=>/.test(line)) {
-             this.processFunctionDeclaration(buf, startIdx + 1);
-             reset();
-            }
-          }
-        }
-        continue;
-      }
-
-      // collecting
-      if (line.trim() === '') {
-        buf += line + '\n';
-        continue; // Allow blank lines without penalty
-      }
-      if (/^(if|for|while|switch|export\s+\S+\s+as\s+\S+)\b/.test(line.trim())) { reset(); continue; }
-      buf += line + '\n';
-      linesSeen++;
-
-      // Header ended without => (very likely a call or something else)
-      if (/\)\s*$/.test(line) && !/=>/.test(buf)) { reset(); continue; }
-
-      if (/=>/.test(line)) {
-        this.processFunctionDeclaration(buf, startIdx + 1);
-        reset();
-        continue;
-      }
-
-      if (linesSeen >= MAX_HDR_LINES) reset(); // safety bail
-    }
   }
 
   private collectFunctionsFromAst(program: ProgramNode): void {
@@ -500,169 +395,12 @@ export class FunctionValidator implements ValidationModule {
     return `${base}<${generics.join(', ')}>`;
   }
 
-  private collectStaticFunctionDeclarations(lines: string[]): void {
-    const START_STATIC = new RegExp(`^\\s*(?:export\\s+)?static\\s+(${IDENT.source})\\s+(${IDENT.source})\\s*\\(`);
-    const FULL_STATIC = new RegExp(
-      `^\\s*(?:export\\s+)?static\\s+(${IDENT.source})\\s+(${IDENT.source})\\s*\\(([\\s\\S]*?)\\)\\s*=>`,
-      'm',
-    );
-
-    let buffer = '';
-    let startIndex = -1;
-    let linesSeen = 0;
-    const MAX_HEADER_LINES = 12;
-
-    const reset = () => {
-      buffer = '';
-      startIndex = -1;
-      linesSeen = 0;
-    };
-
-    const processBuffer = () => {
-      if (startIndex < 0) {
-        return;
-      }
-      const match = buffer.match(FULL_STATIC);
-      if (!match) {
-        return;
-      }
-
-      const typeName = match[1];
-      const methodName = match[2];
-      const paramsRaw = match[3];
-      const params = paramsRaw.split(',').map((param) => param.trim()).filter(Boolean);
-      const full = `${typeName}.${methodName}`;
-      const lineNum = startIndex + 1;
-
-      if (!this.context.functionParams.has(full)) {
-        this.context.functionParams.set(full, params);
-      }
-
-      this.functionNames.add(full);
-      const signature = this.createSignatureMeta(params, false, lineNum);
-      this.addFunctionSignature(full, signature);
-      if (!this.functionHeaderLine.has(full)) {
-        this.functionHeaderLine.set(full, lineNum);
-      }
-
-      const info = this.createFunctionInfo(full, params, lineNum, 1, false);
-      this.addUserFunction(full, info);
-
-      this.addError(lineNum, 1, `'static' is not a valid type keyword in Pine Script v6.`, 'PSV6-STATIC-UNSUPPORTED');
-    };
-
-    for (let index = 0; index < lines.length; index++) {
-      const line = lines[index];
-      if (startIndex < 0) {
-        const staticMatch = line.match(START_STATIC);
-        if (!staticMatch) {
-          continue;
-        }
-
-        startIndex = index;
-        buffer = `${line}\n`;
-        linesSeen = 1;
-
-        if (/=>/.test(line)) {
-          processBuffer();
-          reset();
-        }
-        continue;
-      }
-
-      buffer += `${line}\n`;
-      linesSeen++;
-
-      if (/=>/.test(line)) {
-        processBuffer();
-        reset();
-        continue;
-      }
-
-      if (linesSeen >= MAX_HEADER_LINES) {
-        reset();
-      }
-    }
-  }
-
-  private processFunctionDeclaration(buf: string, lineNum: number): void {
-    const staticMatch = buf.match(new RegExp(`^\s*(?:export\s+)?static\s+(${IDENT.source})\s+(${IDENT.source})\s*\(([\s\S]*?)\)\s*=>`, 'm'));
-    if (staticMatch) {
-      const typeName = staticMatch[1];
-      const methodName = staticMatch[2];
-      const paramsRaw = staticMatch[3];
-      const full = `${typeName}.${methodName}`;
-      const params = paramsRaw.split(',').map(s => s.trim()).filter(Boolean);
-
-      if (this.isDebugEnabled()) {
-        console.log('Registered static method', full, params);
-      }
-
-      this.registerFunctionSignature(full, params, lineNum, false);
-      this.addError(lineNum, 1, `'static' is not a valid type keyword in Pine Script v6.`, 'PSV6-STATIC-UNSUPPORTED');
-      return;
-    }
-
-    const funcDecl = buf.match(new RegExp(`^\s*(?:export\s+)?func\s+(${IDENT.source}(?:\.${IDENT.source})*)\s*\(([\s\S]*?)\)\s*=>`, 'm'));
-    if (funcDecl) {
-      const funcName = funcDecl[1];
-      const paramsRaw = funcDecl[2];
-      const params = paramsRaw.split(',').map(s => s.trim()).filter(Boolean);
-
-      this.registerFunctionSignature(funcName, params, lineNum, false);
-      if (this.isDebugEnabled()) {
-        console.log('Registered func', funcName, params);
-      }
-      return;
-    }
-
-    const methodDecl = buf.match(new RegExp(`^\s*method\s+(${IDENT.source}(?:\.${IDENT.source})*)\s*\(([\s\S]*?)\)\s*=>`, 'm'));
-    const generalRegex = new RegExp('^\\s*(?:export\\s+)?(' + IDENT.source + '(?:\\.' + IDENT.source + ')*)\\s*\\(([\\s\\S]*?)\\)\\s*=>', 'm');
-    const generalDecl = methodDecl ? null : generalRegex.exec(buf);
-    const m = methodDecl || generalDecl;
-
-    if (this.isDebugEnabled()) {
-      const codes = Array.from(buf).map(ch => ch.charCodeAt(0));
-      console.log('processFunctionDeclaration buffer', JSON.stringify(buf), 'codes', codes, 'methodDecl?', !!methodDecl, 'general?', !!generalDecl, 'generalPattern', generalRegex.source, 'regexTest', generalRegex.test(buf), 'exec', generalDecl);
-    }
-
-    if (m) {
-      const full = m[1];
-      const isMethod = !!methodDecl;
-      let storeName = full;
-      if (isMethod && full.includes('.')) {
-        storeName = full.split('.').pop()!;
-      } else if (!isMethod && full === 'func') {
-        const funcNameMatch = buf.match(/^\s*(?:export\s+)?func\s+(${IDENT.source}(?:\.${IDENT.source})*)\s*\(/m);
-        if (funcNameMatch) {
-          storeName = funcNameMatch[1];
-        }
-      }
-      if (isMethod) this.methodNames.add(storeName);
-
-      const params = m[2].split(',').map(s => s.trim()).filter(Boolean);
-      this.registerFunctionSignature(storeName, params, lineNum, isMethod);
-      if (isMethod && full !== storeName) {
-        this.registerFunctionSignature(full, params, lineNum, isMethod, false);
-      }
-      if (this.isDebugEnabled()) {
-        console.log('Registered method/general', full, 'store', storeName, params);
-      }
-    }
-  }
   /**
    * Validate function calls (extracted from UltimateValidator.validateFunctionCalls)
    */
   private validateFunctionCalls(): void {
-    if (this.usingAst && this.astContext?.ast) {
+    if (this.astContext?.ast) {
       this.collectFunctionCallsFromAst(this.astContext.ast);
-    } else {
-      for (let i = 0; i < this.context.cleanLines.length; i++) {
-        const line = this.context.cleanLines[i];
-        const lineNum = i + 1;
-
-        this.collectFunctionCalls(line, lineNum);
-      }
     }
 
     // Validate all collected function calls
@@ -698,101 +436,6 @@ export class FunctionValidator implements ValidationModule {
         },
       },
     });
-  }
-
-  private collectFunctionCalls(line: string, lineNum: number): void {
-    // Skip script declarations - they should be handled by core validation
-    if (/^\s*(indicator|strategy|library)\s*\(/.test(line)) {
-      return;
-    }
-
-    // Skip function and method declarations
-    if (/^\s*(?:export\s+)?static\s+[A-Za-z_][A-Za-z0-9_]*\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(line)) {
-      return;
-    }
-    if (/^\s*method\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(line)) {
-      return;
-    }
-    if (/^\s*(?:export\s+)?func\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(line)) {
-      return;
-    }
-    if (/^\s*[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\)\s*=>/.test(line)) {
-      return;
-    }
-
-    const funcCallRegex = /\b([a-zA-Z_][a-zA-Z0-9_.]*)\s*\(/g;
-    let match;
-
-    while ((match = funcCallRegex.exec(line)) !== null) {
-      const funcName = match[1];
-      const startIndex = match.index;
-      
-      // Find the matching closing parenthesis
-      let openParens = 1;
-      let pos = startIndex + funcName.length + 1;
-      let endPos = pos;
-
-      while (pos < line.length && openParens > 0) {
-        if (line[pos] === '(') openParens++;
-        else if (line[pos] === ')') openParens--;
-        pos++;
-      }
-      
-      if (openParens === 0) {
-        endPos = pos - 1;
-        const argsStr = line.substring(startIndex + funcName.length + 1, endPos);
-        const args = this.parseFunctionArguments(argsStr);
-
-        this.functionCalls.push({
-          name: funcName,
-          arguments: args,
-          line: lineNum,
-          column: startIndex + 1,
-          startIndex
-        });
-        
-      }
-    }
-  }
-
-  private parseFunctionArguments(argsStr: string): string[] {
-    if (!argsStr.trim()) return [];
-    
-    const args: string[] = [];
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-
-    for (let i = 0; i < argsStr.length; i++) {
-      const char = argsStr[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-        current += char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        current += char;
-      } else if (!inString && char === '(') {
-        depth++;
-        current += char;
-      } else if (!inString && char === ')') {
-        depth--;
-        current += char;
-      } else if (!inString && char === ',' && depth === 0) {
-        args.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    
-    if (current.trim()) {
-      args.push(current.trim());
-    }
-    
-    return args;
   }
 
   private getExpressionQualifiedName(expression: ExpressionNode): string | null {
@@ -1252,96 +895,11 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private validateFunctionComplexity(): void {
-    if (this.usingAst && this.astContext?.ast) {
-      this.validateFunctionComplexityAst();
+    if (!this.astContext?.ast) {
       return;
     }
 
-    this.validateFunctionComplexityLegacy();
-  }
-
-  private validateFunctionComplexityLegacy(): void {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const funcMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*=>/);
-      if (!funcMatch) {
-        continue;
-      }
-
-      const funcName = funcMatch[1];
-      const lineNum = i + 1;
-      const complexity = this.calculateFunctionComplexityLegacy(funcName, i);
-
-      if (complexity > 10) {
-        this.addWarning(
-          lineNum,
-          1,
-          `Function '${funcName}' has high complexity (${complexity}). Consider breaking it into smaller functions`,
-          'PSV6-FUNCTION-STYLE-COMPLEXITY',
-        );
-      }
-    }
-  }
-
-  private calculateFunctionComplexityLegacy(funcName: string, startLine: number): number {
-    let complexity = 1; // Base complexity
-    const baseIndent = this.getLineIndentation(this.context.cleanLines[startLine]);
-
-    // Look for control structures in the function body
-    for (let i = startLine + 1; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineIndent = this.getLineIndentation(line);
-      
-      // Stop if we've unindented back to the function level or beyond
-      if (lineIndent <= baseIndent && line.trim() !== '') {
-        break;
-      }
-      
-      // Count control structures that increase complexity
-      const trimmed = line.trim();
-      
-      // if statements
-      if (/^\s*if\s+/.test(trimmed)) {
-        complexity += 1;
-      }
-      
-      // else statements
-      if (/^\s*else\s*$/.test(trimmed) || /^\s*else\s+if\s+/.test(trimmed)) {
-        complexity += 1;
-      }
-      
-      // for loops
-      if (/^\s*for\s+/.test(trimmed)) {
-        complexity += 2;
-      }
-      
-      // while loops
-      if (/^\s*while\s+/.test(trimmed)) {
-        complexity += 2;
-      }
-      
-      // switch statements
-      if (/^\s*switch\s+/.test(trimmed)) {
-        complexity += 1;
-      }
-      
-      // case statements
-      if (/^\s*case\s+/.test(trimmed)) {
-        complexity += 1;
-      }
-      
-      // Logical operators (and, or)
-      if (/\band\b/.test(trimmed) || /\bor\b/.test(trimmed)) {
-        complexity += 1;
-      }
-      
-      // Comparison operators
-      if (/[<>=!]=/.test(trimmed)) {
-        complexity += 0.5;
-      }
-    }
-
-    return Math.round(complexity);
+    this.validateFunctionComplexityAst();
   }
 
   private validateFunctionComplexityAst(): void {
@@ -1477,11 +1035,6 @@ export class FunctionValidator implements ValidationModule {
   }
 
   // Helper methods
-  private stripStringsAndLineComment(line: string): string {
-    return line.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, (m) => ' '.repeat(m.length))
-               .replace(/\/\/.*$/, '');
-  }
-
   private isValidParameterType(arg: string, expectedType: string): boolean {
     const actualType = this.inferArgumentType(arg);
     // Direct type match

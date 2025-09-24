@@ -11,25 +11,7 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
-import {
-  VERSION_RE,
-  SCRIPT_START_RE,
-  QUALIFIED_FN_RE,
-  METHOD_DECL_RE,
-  VAR_DECL_RE,
-  VAR_REASSIGN_RE,
-  COMPOUND_ASSIGN_RE,
-  ELEM_REASSIGN_RE,
-  ELEM_COMPOUND_RE,
-  SIMPLE_ASSIGN_RE,
-  TUPLE_DECL_RE,
-  TUPLE_REASSIGN_RE,
-  KEYWORDS,
-  NAMESPACES,
-  PSEUDO_VARS,
-  WILDCARD_IDENT,
-  IDENT,
-} from '../core/constants';
+import { VERSION_RE, SCRIPT_START_RE, KEYWORDS, NAMESPACES, PSEUDO_VARS } from '../core/constants';
 import {
   type AssignmentStatementNode,
   type BinaryExpressionNode,
@@ -53,7 +35,6 @@ export class SyntaxValidator implements ValidationModule {
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
@@ -68,13 +49,19 @@ export class SyntaxValidator implements ValidationModule {
     this.context = context;
     this.config = config;
     this.astContext = this.getAstContext(context, config);
-    this.usingAst = !!this.astContext?.ast;
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.validateWithAst(this.astContext.ast);
-    } else {
-      this.validateWithLegacy();
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: context.typeMap,
+        scriptType: context.scriptType,
+      };
     }
+
+    this.validateWithAst(this.astContext.ast);
 
     this.validateOverallStructure();
 
@@ -93,7 +80,6 @@ export class SyntaxValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
   }
 
   private validateWithAst(program: ProgramNode): void {
@@ -357,364 +343,6 @@ export class SyntaxValidator implements ValidationModule {
     }
   }
 
-  private validateWithLegacy(): void {
-    this.validateVersionDirectiveLegacy();
-    this.validateScriptDeclarationLegacy();
-
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-
-      this.validateLineLegacy(line, lineNum);
-    }
-  }
-
-  private validateVersionDirectiveLegacy(): void {
-    if (!this.context.hasVersion) {
-      return;
-    }
-
-    const versionLine = this.context.firstVersionLine;
-    if (versionLine && versionLine !== 1) {
-      const sourceLines = this.context.rawLines?.length ? this.context.rawLines : this.context.cleanLines;
-      const onlyCommentsAbove = sourceLines.slice(0, versionLine - 1).every((raw) => {
-        const trimmed = (raw || '').trim();
-        if (trimmed === '') return true;
-        if (/^\/{2}/.test(trimmed)) return true;
-        if (/^\/\*/.test(trimmed) || /^\*/.test(trimmed) || /^\*\//.test(trimmed)) return true;
-        return false;
-      });
-
-      if (!onlyCommentsAbove) {
-        this.addWarning(versionLine, 1, 'Version directive should be on the first line.', 'PSW01');
-      }
-    }
-  }
-
-  private validateScriptDeclarationLegacy(): void {
-    if (!this.context.scriptType) {
-      return;
-    }
-
-    const firstReal = this.context.cleanLines.findIndex((line) => line.trim() && !VERSION_RE.test(line));
-    if (firstReal > -1 && !this.hasScriptDeclStartingAtOrSoon(this.context, firstReal)) {
-      this.addInfo(
-        firstReal + 1,
-        1,
-        'Consider placing the script declaration at the top for clarity.',
-        'PSI01',
-      );
-    }
-  }
-
-  private validateLineLegacy(line: string, lineNum: number): void {
-    const t = line.trim();
-    if (t === '') return;
-
-    const noStrings = this.stripStringsAndLineComment(line);
-
-    if (VERSION_RE.test(line)) {
-      this.validateVersionLineLegacy(line, lineNum);
-      return;
-    }
-
-    if (SCRIPT_START_RE.test(line)) {
-      this.validateScriptDeclLineLegacy(line, lineNum);
-      return;
-    }
-
-    if (QUALIFIED_FN_RE.test(line) || METHOD_DECL_RE.test(line)) {
-      this.validateFunctionDeclarationLegacy(line, lineNum);
-    }
-
-    if (VAR_DECL_RE.test(line)) {
-      this.validateVariableDeclarationLegacy(line, lineNum);
-    }
-
-    if (VAR_REASSIGN_RE.test(line)) {
-      this.validateReassignmentLegacy(line, lineNum);
-    }
-
-    if (COMPOUND_ASSIGN_RE.test(line)) {
-      this.validateCompoundAssignmentLegacy(line, lineNum);
-    }
-
-    if (ELEM_REASSIGN_RE.test(noStrings)) {
-      this.validateElementReassignmentLegacy(line, lineNum);
-    }
-
-    if (ELEM_COMPOUND_RE.test(noStrings)) {
-      this.validateElementCompoundAssignmentLegacy(line, lineNum);
-    }
-
-    if (TUPLE_DECL_RE.test(line)) {
-      this.validateTupleDeclarationLegacy(line, lineNum);
-    }
-
-    if (TUPLE_REASSIGN_RE.test(noStrings)) {
-      this.validateTupleReassignmentLegacy(noStrings, lineNum);
-    }
-
-    this.validateFieldAssignmentOperatorsLegacy(line, lineNum);
-    this.validateOperatorsLegacy(line, lineNum, noStrings);
-    this.validateHistoryReferencesLegacy(noStrings, lineNum);
-    this.validateNAComparisonsLegacy(noStrings, lineNum);
-  }
-
-  private validateVersionLineLegacy(line: string, lineNum: number): void {
-    const m = line.match(VERSION_RE);
-    if (!m) {
-      return;
-    }
-
-    const v = parseInt(m[1], 10);
-    if (this.context.firstVersionLine === null) {
-      if (this.config.targetVersion && v !== this.config.targetVersion) {
-        const sev = v < this.config.targetVersion ? 'error' : 'warning';
-        this.addBySeverity(
-          sev,
-          lineNum,
-          1,
-          `Script declares //@version=${v} but targetVersion is ${this.config.targetVersion}.`,
-          'PS001',
-        );
-      }
-      if (v < 5) {
-        this.addWarning(lineNum, 1, `Pine version ${v} is deprecated. Prefer v5 or v6.`, 'PSW02');
-      }
-    } else if (lineNum !== this.context.firstVersionLine) {
-      this.addError(lineNum, 1, 'Multiple //@version directives. Only one allowed.', 'PS002');
-    }
-  }
-
-  private validateScriptDeclLineLegacy(line: string, lineNum: number): void {
-    const m = line.match(SCRIPT_START_RE);
-    if (m) {
-      const scriptType = m[1] as 'indicator' | 'strategy' | 'library';
-      if (this.context.scriptType && this.context.scriptType !== scriptType) {
-        this.addError(
-          lineNum,
-          1,
-          `Multiple script declarations not allowed (already '${this.context.scriptType}').`,
-          'PS004B',
-        );
-      }
-    }
-  }
-
-  private validateFunctionDeclarationLegacy(line: string, lineNum: number): void {
-    const funcMatch = line.match(QUALIFIED_FN_RE);
-    const methMatch = line.match(METHOD_DECL_RE);
-
-    if (funcMatch) {
-      const name = funcMatch[1];
-      if (KEYWORDS.has(name)) {
-        this.addError(lineNum, line.indexOf(name) + 1, `Function name '${name}' conflicts with a Pine keyword.`, 'PS006');
-      }
-    } else if (methMatch) {
-      const name = methMatch[1];
-      if (KEYWORDS.has(name)) {
-        this.addError(lineNum, line.indexOf(name) + 1, `Method name '${name}' conflicts with a Pine keyword.`, 'PS006');
-      }
-    }
-  }
-
-  private validateVariableDeclarationLegacy(line: string, lineNum: number): void {
-    const decl = line.match(VAR_DECL_RE);
-    if (decl) {
-      const name = decl[1];
-      if (KEYWORDS.has(name) || PSEUDO_VARS.has(name)) {
-        this.addError(
-          lineNum,
-          line.indexOf(name) + 1,
-          `Identifier '${name}' conflicts with a Pine keyword/builtin.`,
-          'PS007',
-        );
-      }
-    }
-  }
-
-  private validateReassignmentLegacy(line: string, lineNum: number): void {
-    const m = line.match(VAR_REASSIGN_RE);
-    if (!m) {
-      return;
-    }
-
-    const varName = m[1];
-    const udtFieldMatch = line.match(/^\s*this\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*:=\s*/);
-    if (udtFieldMatch) {
-      return;
-    }
-
-    if (this.isMethodParameterLegacy(varName, lineNum)) {
-      return;
-    }
-
-    const column = line.indexOf(varName) + 1;
-    const nextChar = line[column - 1 + varName.length];
-    const prevChar = column > 1 ? line[column - 2] : '';
-    if (nextChar === '.' || prevChar === '.') {
-      return;
-    }
-
-    if (!this.context.declaredVars.has(varName)) {
-      this.addError(
-        lineNum,
-        column,
-        `Variable '${varName}' not declared before ':='. Use '=' on first assignment.`,
-        'PS016',
-      );
-    }
-  }
-
-  private validateCompoundAssignmentLegacy(line: string, lineNum: number): void {
-    const comp = line.match(COMPOUND_ASSIGN_RE);
-    if (comp) {
-      const name = comp[1];
-      if (!this.context.declaredVars.has(name)) {
-        this.addError(
-          lineNum,
-          line.indexOf(name) + 1,
-          `Variable '${name}' not declared before '${comp[2]}='. Use '=' for first assignment or declare it.`,
-          'PS017',
-        );
-      }
-    }
-  }
-
-  private validateElementReassignmentLegacy(line: string, lineNum: number): void {
-    const elemReassign = this.stripStringsAndLineComment(line).match(ELEM_REASSIGN_RE);
-    if (!elemReassign) {
-      return;
-    }
-
-    const base = elemReassign[1];
-    if (!this.context.declaredVars.has(base)) {
-      this.addError(
-        lineNum,
-        line.indexOf(base) + 1,
-        `Variable '${base}' not declared before ':=' on element.`,
-        'PS016A',
-      );
-    }
-  }
-
-  private validateElementCompoundAssignmentLegacy(line: string, lineNum: number): void {
-    const elemCompound = this.stripStringsAndLineComment(line).match(ELEM_COMPOUND_RE);
-    if (!elemCompound) {
-      return;
-    }
-
-    const base = elemCompound[1];
-    const op = elemCompound[2];
-    if (!this.context.declaredVars.has(base)) {
-      this.addError(
-        lineNum,
-        line.indexOf(base) + 1,
-        `Variable '${base}' not declared before '${op}=' on element.`,
-        'PS017A',
-      );
-    }
-  }
-
-  private validateTupleDeclarationLegacy(line: string, lineNum: number): void {
-    const tupleMatch = line.match(TUPLE_DECL_RE);
-    if (!tupleMatch) {
-      return;
-    }
-
-    const content = tupleMatch[1];
-    if (/^\s*,|,\s*,|,\s*$/.test(content)) {
-      this.addWarning(lineNum, line.indexOf('[') + 1, 'Empty slot in destructuring tuple.', 'PST02');
-    }
-  }
-
-  private validateTupleReassignmentLegacy(noStrings: string, lineNum: number): void {
-    if (TUPLE_REASSIGN_RE.test(noStrings)) {
-      this.addError(lineNum, 1, 'Tuple destructuring must use "=" (not ":=").', 'PST03');
-    }
-  }
-
-  private validateFieldAssignmentOperatorsLegacy(line: string, lineNum: number): void {
-    const stripped = this.stripStrings(line);
-    const fieldAssignRe = /\b((?:this)|[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?![=>])/g;
-    const declaredVars = this.context.declaredVars ?? new Map<string, number>();
-    let match: RegExpExecArray | null;
-
-    while ((match = fieldAssignRe.exec(stripped)) !== null) {
-      const base = match[1];
-      const field = match[2];
-
-      if (NAMESPACES.has(base) || KEYWORDS.has(base) || KEYWORDS.has(`${base}.${field}`)) {
-        continue;
-      }
-
-      if (base !== 'this' && !declaredVars.has(base)) {
-        continue;
-      }
-
-      const eqOffset = match[0].indexOf('=');
-      const column = match.index + eqOffset + 1;
-
-      this.addError(
-        lineNum,
-        column,
-        `Use ':=' to assign to '${base}.${field}'. '=' is reserved for the first assignment.`,
-        'PS016',
-      );
-    }
-  }
-
-  private validateOperatorsLegacy(line: string, lineNum: number, noStrings: string): void {
-    const invalidOps = ['===', '!==', '++', '--', '^', '~'];
-    for (const op of invalidOps) {
-      let from = 0;
-      while (true) {
-        const idx = noStrings.indexOf(op, from);
-        if (idx === -1) break;
-        this.addWarning(lineNum, idx + 1, `Operator '${op}' is not valid in Pine Script.`, 'PSO01');
-        from = idx + op.length;
-      }
-    }
-
-    const logicalOps = ['&&', '||'];
-    for (const op of logicalOps) {
-      let from = 0;
-      while (true) {
-        const idx = noStrings.indexOf(op, from);
-        if (idx === -1) break;
-        this.addWarning(lineNum, idx + 1, `Operator '${op}' is not valid in Pine Script. Use 'and'/'or' instead.`, 'PSO01');
-        from = idx + op.length;
-      }
-    }
-
-    const bangScan = noStrings.replace(/!=/g, '  ');
-    let p = bangScan.indexOf('!');
-    while (p !== -1) {
-      this.addWarning(lineNum, p + 1, "Operator '!' is not valid in Pine. Use 'not'.", 'PSO01');
-      p = bangScan.indexOf('!', p + 1);
-    }
-  }
-
-  private validateHistoryReferencesLegacy(noStrings: string, lineNum: number): void {
-    const negHist = noStrings.match(/\[\s*-\d+\s*\]/);
-    if (negHist) {
-      this.addError(lineNum, (negHist.index ?? 0) + 1, 'Invalid history reference: negative indexes are not allowed.', 'PS024');
-    }
-  }
-
-  private validateNAComparisonsLegacy(noStrings: string, lineNum: number): void {
-    if (/(\bna\s*[!=]=)|([!=]=\s*na\b)/.test(noStrings)) {
-      this.addWarning(
-        lineNum,
-        1,
-        "Direct comparison with 'na' is unreliable. Use na(x), e.g., na(myValue).",
-        'PS023',
-        'Replace `x == na` with `na(x)` and `x != na` with `not na(x)`.',
-      );
-    }
-  }
-
   private validateOverallStructure(): void {
     const hasContent = this.context.cleanLines.some((line) => line.trim() !== '');
     if (!hasContent) {
@@ -727,83 +355,6 @@ export class SyntaxValidator implements ValidationModule {
       if (SCRIPT_START_RE.test(context.cleanLines[i])) return true;
       if (context.cleanLines[i].trim() && !/^[('"\s,)]/.test(context.cleanLines[i])) break;
     }
-    return false;
-  }
-
-  private stripStringsAndLineComment(line: string): string {
-    return this.stripStrings(line).replace(/\/\/.*$/, '');
-  }
-
-  private stripStrings(line: string): string {
-    return line.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, (m) => ' '.repeat(m.length));
-  }
-
-  private parseParameterList(params: string): string[] {
-    const result: string[] = [];
-    let current = '';
-    let depth = 0;
-
-    for (let i = 0; i < params.length; i++) {
-      const char = params[i];
-
-      if (char === '(') {
-        depth++;
-      } else if (char === ')') {
-        depth--;
-      } else if (char === ',' && depth === 0) {
-        result.push(current.trim());
-        current = '';
-        continue;
-      }
-
-      current += char;
-    }
-
-    if (current.trim()) {
-      result.push(current.trim());
-    }
-
-    return result;
-  }
-
-  private extractParameterName(param: string): string {
-    const match = param.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)/);
-    return match ? match[1] : param.trim();
-  }
-
-  private getLineIndentation(line: string): number {
-    return line.length - line.trimStart().length;
-  }
-
-  private isMethodParameterLegacy(varName: string, lineNum: number): boolean {
-    for (let i = lineNum - 1; i >= 0; i--) {
-      const line = this.context.cleanLines[i];
-
-      const methodMatch = line.match(/^\s*method\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*=>/);
-      if (methodMatch) {
-        const params = methodMatch[2];
-        const paramList = this.parseParameterList(params);
-        for (const param of paramList) {
-          const paramName = this.extractParameterName(param);
-          if (paramName === varName) {
-            return true;
-          }
-        }
-
-        if (varName === 'this') {
-          return true;
-        }
-      }
-
-      const currentIndent = this.getLineIndentation(line);
-      const nextLineIndent = i < this.context.cleanLines.length - 1 ?
-        this.getLineIndentation(this.context.cleanLines[i + 1]) : 0;
-
-      if (currentIndent === 0 && nextLineIndent > 0) {
-        break;
-      }
-    }
-
     return false;
   }
 

@@ -22,7 +22,27 @@ class PolylineValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledPolylineValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new PolylineFunctionsValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('PolylineFunctionsValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new DisabledPolylineValidatorHarness();
+    const result = harness.validate('polyline.new(points)\npolyline.delete(points)');
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+    expect(result.typeMap.size).toBe(0);
+  });
+
   it('reports missing points argument for polyline.new', () => {
     const source = 'polyline.new()';
     const polylineIdentifier = createIdentifier('polyline', source.indexOf('polyline'), 1);

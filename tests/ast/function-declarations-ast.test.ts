@@ -36,6 +36,15 @@ class FunctionDeclarationsHarness extends BaseValidator {
   }
 }
 
+class DisabledFunctionDeclarationsHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new FunctionDeclarationsValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 function createProgramFromSource(
   source: string,
   directives: ProgramNode['directives'],
@@ -59,6 +68,15 @@ function createProgramFromSource(
 }
 
 describe('FunctionDeclarationsValidator AST integration', () => {
+  it('returns no diagnostics when AST execution is disabled', () => {
+    const validator = new DisabledFunctionDeclarationsHarness();
+    const result = validator.validate('indicator("Example")');
+
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(result.info).toEqual([]);
+  });
+
   it('collects function declarations from AST traversal', () => {
     const source = [
       '//@version=6',

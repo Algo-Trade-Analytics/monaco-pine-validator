@@ -30,7 +30,25 @@ class FunctionValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledFunctionValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new FunctionValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('FunctionValidator (AST)', () => {
+  it('returns no diagnostics when AST execution is disabled', () => {
+    const harness = new DisabledFunctionValidatorHarness();
+    const result = harness.validate('indicator("Example")');
+
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(result.info).toEqual([]);
+  });
+
   it('reports unknown functions that are not declared', () => {
     const fooIdentifier = createIdentifier('foo', 0, 1);
     const call = createCallExpression(fooIdentifier, [], 0, 5, 1);

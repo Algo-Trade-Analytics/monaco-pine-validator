@@ -25,6 +25,15 @@ class MathValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class MathValidatorDisabledHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new MathFunctionsValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('MathFunctionsValidator (AST)', () => {
   it('warns on unknown math members', () => {
     const mathIdentifier = createIdentifier('math', 0, 1);
@@ -143,5 +152,15 @@ describe('MathFunctionsValidator (AST)', () => {
     const warningCodes = result.warnings.map((warning) => warning.code);
 
     expect(warningCodes).toContain('PSV6-MATH-COMPLEXITY');
+  });
+
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new MathValidatorDisabledHarness();
+
+    const result = harness.validate('math.pow(close, 2)');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
   });
 });

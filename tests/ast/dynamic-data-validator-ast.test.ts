@@ -29,7 +29,26 @@ class DynamicDataValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledDynamicDataValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new DynamicDataValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('DynamicDataValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new DisabledDynamicDataValidatorHarness();
+    const result = harness.validate('request.security("AAPL", "D", close)');
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('reports unknown request members', () => {
     const source = 'request.unknown()';
     const requestIdentifier = createIdentifier('request', 0, 1);

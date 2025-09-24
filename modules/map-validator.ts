@@ -19,7 +19,6 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
-import { IDENT } from '../core/constants';
 import {
   type ArgumentNode,
   type AssignmentStatementNode,
@@ -72,9 +71,7 @@ export class MapValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   // Map tracking
   private mapDeclarations = new Map<string, MapDeclarationInfo>();
@@ -90,20 +87,23 @@ export class MapValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
+    this.astContext = this.getAstContext(context, config);
 
-    this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
-
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectMapDataAst(this.astContext.ast);
-      this.validateMapPerformanceAst();
-      this.validateMapBestPracticesAst();
-    } else {
-      this.collectMapDataLegacy();
-      this.validateMapPerformanceLegacy();
-      this.validateMapBestPracticesLegacy();
+    const ast = this.astContext?.ast;
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: context.scriptType,
+      };
     }
+
+    this.collectMapDataAst(ast);
+    this.validateMapPerformanceAst();
+    this.validateMapBestPracticesAst();
 
     const typeMap = new Map();
     for (const [mapName, mapInfo] of this.mapDeclarations) {
@@ -121,7 +121,7 @@ export class MapValidator implements ValidationModule {
       warnings: this.warnings,
       info: this.info,
       typeMap,
-      scriptType: null,
+      scriptType: context.scriptType,
     };
   }
 
@@ -135,19 +135,6 @@ export class MapValidator implements ValidationModule {
     this.mapUsage.clear();
     this.reportedLoopWarnings.clear();
     this.astContext = null;
-    this.usingAst = false;
-  }
-
-  private collectMapDataLegacy(): void {
-    this.context.cleanLines.forEach((line, index) => {
-      this.processLineLegacy(line, index + 1);
-    });
-  }
-
-  private processLineLegacy(line: string, lineNum: number): void {
-    this.validateMapDeclarationsLegacy(line, lineNum);
-    this.validateMapOperationsLegacy(line, lineNum);
-    this.validateMapMethodsLegacy(line, lineNum);
   }
 
   private collectMapDataAst(program: ProgramNode): void {
@@ -445,380 +432,6 @@ export class MapValidator implements ValidationModule {
     }
   }
 
-  private validateMapDeclarationsLegacy(line: string, lineNum: number): void {
-    this.validateInvalidMapDeclarationsLegacy(line, lineNum);
-
-    const mapDeclPattern = new RegExp(
-      `^\\s*(${IDENT.source})\\s*(?::?\\s*map<(.+)>\\s*)?=\\s*map\\.new<(.+)>\\(\\s*\\)`,
-      'g',
-    );
-
-    let match;
-    while ((match = mapDeclPattern.exec(line)) !== null) {
-      const varName = match[1];
-      const declaredType = match[2] || null;
-      const newType = match[3];
-      const column = match.index + 1;
-
-      if (declaredType && declaredType !== newType) {
-        this.addError(
-          lineNum,
-          column,
-          `Map type mismatch: declared as 'map<${declaredType}>' but initialized as 'map<${newType}>'`,
-          'PSV6-MAP-TYPE-MISMATCH',
-          `Use consistent types: 'map<${newType}>'`,
-        );
-      }
-
-      if (!newType) {
-        this.addError(
-          lineNum,
-          column,
-          'Map declaration requires type parameter: map.new<type>()',
-          'PSV6-MAP-DECLARATION',
-          'Add type parameter: map.new<string>()',
-        );
-      } else {
-        const typeParts = newType.split(',').map((part) => part.trim()).filter(Boolean);
-        const rawValueType = typeParts[typeParts.length - 1] || newType.trim();
-        const normalizedValueType = /^map<.+>$/.test(rawValueType) ? 'map' : rawValueType;
-
-        this.mapDeclarations.set(varName, {
-          name: varName,
-          valueType: normalizedValueType,
-          line: lineNum,
-          column,
-          isInitialized: false,
-        });
-        this.mapAllocations++;
-      }
-    }
-  }
-
-  private validateInvalidMapDeclarationsLegacy(line: string, lineNum: number): void {
-    const missingTypePattern = new RegExp(`map\\.new\\s*\\(\\s*\\)`, 'g');
-    if (missingTypePattern.test(line)) {
-      this.addError(
-        lineNum,
-        1,
-        'Map declaration requires type parameter: map.new<type>()',
-        'PSV6-MAP-DECLARATION',
-        'Add type parameter: map.new<string>()',
-      );
-    }
-  }
-
-  private validateMapOperationsLegacy(line: string, lineNum: number): void {
-    const putPattern = new RegExp(`map\\.put\\s*\\(\\s*(${IDENT.source})\\s*,\\s*([^,]+)\\s*,\\s*([^)]+)\\s*\\)`, 'g');
-    let match;
-    while ((match = putPattern.exec(line)) !== null) {
-      const mapName = match[1];
-      const key = match[2];
-      const value = match[3];
-      const column = match.index + 1;
-
-      this.validateMapOperationLegacy(mapName, lineNum, column, 'put', key, value);
-      this.trackMapOperation(mapName, lineNum);
-    }
-
-    const getPattern = new RegExp(`map\\.get\\s*\\(\\s*(${IDENT.source})\\s*,\\s*([^)]+)\\s*\\)`, 'g');
-    while ((match = getPattern.exec(line)) !== null) {
-      const mapName = match[1];
-      const key = match[2];
-      const column = match.index + 1;
-
-      this.validateMapOperationLegacy(mapName, lineNum, column, 'get', key);
-      this.trackMapOperation(mapName, lineNum);
-    }
-
-    const removePattern = new RegExp(`map\\.remove\\s*\\(\\s*(${IDENT.source})\\s*,\\s*([^)]+)\\s*\\)`, 'g');
-    while ((match = removePattern.exec(line)) !== null) {
-      const mapName = match[1];
-      const key = match[2];
-      const column = match.index + 1;
-
-      this.validateMapOperationLegacy(mapName, lineNum, column, 'remove', key);
-      this.trackMapOperation(mapName, lineNum);
-    }
-
-    const containsPattern = new RegExp(`map\\.contains\\s*\\(\\s*(${IDENT.source})\\s*,\\s*([^)]+)\\s*\\)`, 'g');
-    while ((match = containsPattern.exec(line)) !== null) {
-      const mapName = match[1];
-      const key = match[2];
-      const column = match.index + 1;
-
-      this.validateMapOperationLegacy(mapName, lineNum, column, 'contains', key);
-      this.trackMapOperation(mapName, lineNum);
-    }
-
-    const includesPattern = new RegExp(`map\\.includes\\s*\\(\\s*(${IDENT.source})\\s*,\\s*([^)]+)\\s*\\)`, 'g');
-    while ((match = includesPattern.exec(line)) !== null) {
-      const mapName = match[1];
-      const value = match[2];
-      const column = match.index + 1;
-
-      this.validateMapOperationLegacy(mapName, lineNum, column, 'includes', value);
-      this.trackMapOperation(mapName, lineNum);
-    }
-
-    const clearPattern = new RegExp(`map\\.clear\\s*\\(\\s*(${IDENT.source})\\s*\\)`, 'g');
-    while ((match = clearPattern.exec(line)) !== null) {
-      const mapName = match[1];
-      const column = match.index + 1;
-
-      this.validateMapOperationLegacy(mapName, lineNum, column, 'clear');
-      this.trackMapOperation(mapName, lineNum, true);
-    }
-  }
-
-  private validateMapMethodsLegacy(line: string, lineNum: number): void {
-    const sizePattern = new RegExp(`map\\.size\\s*\\(\\s*([^)]*)\\s*\\)`, 'g');
-    let match;
-    while ((match = sizePattern.exec(line)) !== null) {
-      const params = match[1].trim();
-      const column = match.index + 1;
-
-      if (!params) {
-        this.addError(
-          lineNum,
-          column,
-          'map.size() requires a map parameter',
-          'PSV6-MAP-METHOD-PARAMS',
-          'Provide map parameter: map.size(myMap)',
-        );
-      } else {
-        const parts = params.split(',');
-        if (parts.length > 1) {
-          this.addError(
-            lineNum,
-            column,
-            'map.size() takes only one parameter',
-            'PSV6-MAP-METHOD-PARAMS',
-            'Remove extra parameters: map.size(myMap)',
-          );
-        } else {
-          const mapName = parts[0].trim();
-          this.trackMapOperation(mapName, lineNum);
-        }
-      }
-    }
-
-    const keysPattern = new RegExp(`map\\.keys\\s*\\(\\s*([^)]*)\\s*\\)`, 'g');
-    while ((match = keysPattern.exec(line)) !== null) {
-      const params = match[1].trim();
-      const column = match.index + 1;
-
-      if (!params) {
-        this.addError(
-          lineNum,
-          column,
-          'map.keys() requires a map parameter',
-          'PSV6-MAP-METHOD-PARAMS',
-          'Provide map parameter: map.keys(myMap)',
-        );
-      } else {
-        const parts = params.split(',');
-        if (parts.length > 1) {
-          this.addError(
-            lineNum,
-            column,
-            'map.keys() takes only one parameter',
-            'PSV6-MAP-METHOD-PARAMS',
-            'Remove extra parameters: map.keys(myMap)',
-          );
-        } else {
-          const mapName = parts[0].trim();
-          this.trackMapOperation(mapName, lineNum);
-        }
-      }
-    }
-
-    const valuesPattern = new RegExp(`map\\.values\\s*\\(\\s*([^)]*)\\s*\\)`, 'g');
-    while ((match = valuesPattern.exec(line)) !== null) {
-      const params = match[1].trim();
-      const column = match.index + 1;
-
-      if (!params) {
-        this.addError(
-          lineNum,
-          column,
-          'map.values() requires a map parameter',
-          'PSV6-MAP-METHOD-PARAMS',
-          'Provide map parameter: map.values(myMap)',
-        );
-      } else {
-        const parts = params.split(',');
-        if (parts.length > 1) {
-          this.addError(
-            lineNum,
-            column,
-            'map.values() takes only one parameter',
-            'PSV6-MAP-METHOD-PARAMS',
-            'Remove extra parameters: map.values(myMap)',
-          );
-        } else {
-          const mapName = parts[0].trim();
-          this.trackMapOperation(mapName, lineNum);
-        }
-      }
-    }
-
-    const copyPattern = new RegExp(`map\\.copy\\s*\\(\\s*([^)]*)\\s*\\)`, 'g');
-    while ((match = copyPattern.exec(line)) !== null) {
-      const params = match[1].trim();
-      const column = match.index + 1;
-
-      if (!params) {
-        this.addError(
-          lineNum,
-          column,
-          'map.copy() requires a map parameter',
-          'PSV6-MAP-METHOD-PARAMS',
-          'Provide map parameter: map.copy(myMap)',
-        );
-      } else {
-        const parts = params.split(',');
-        if (parts.length > 1) {
-          this.addError(
-            lineNum,
-            column,
-            'map.copy() takes only one parameter',
-            'PSV6-MAP-METHOD-PARAMS',
-            'Remove extra parameters: map.copy(myMap)',
-          );
-        } else {
-          const mapName = parts[0].trim();
-          this.trackMapOperation(mapName, lineNum);
-        }
-      }
-    }
-  }
-
-  private validateMapOperationLegacy(mapName: string, lineNum: number, column: number, operation: string, _key?: string, value?: string): void {
-    const mapInfo = this.mapDeclarations.get(mapName);
-
-    if (!mapInfo) {
-      if (this.isKnownNonMapVariable(mapName)) {
-        this.addError(
-          lineNum,
-          column,
-          `map.${operation}() called on non-map variable '${mapName}'`,
-          'PSV6-MAP-OPERATION-NON-MAP',
-          `Use a map variable: map.${operation}(myMap, ...)`,
-        );
-      }
-      return;
-    }
-
-    if (operation === 'put' && value) {
-      const valueType = this.inferLegacyValueType(value);
-      const compatible = valueType === null || valueType === 'na' || valueType === mapInfo.valueType;
-      if (!compatible) {
-        this.addError(
-          lineNum,
-          column,
-          `Type mismatch: trying to put '${valueType}' value into 'map<${mapInfo.valueType}>'`,
-          'PSV6-MAP-VALUE-TYPE-MISMATCH',
-          `Use '${mapInfo.valueType}' value or change map type`,
-        );
-      }
-    }
-
-    if (operation === 'put') {
-      mapInfo.isInitialized = true;
-      this.recordMapUsage(mapName, 'put', lineNum);
-    } else if (operation === 'clear') {
-      this.recordMapUsage(mapName, 'clear', lineNum);
-    }
-  }
-
-  private validateMapPerformanceLegacy(): void {
-    if (this.mapAllocations > 10) {
-      this.addWarning(
-        1,
-        1,
-        `Too many map allocations (${this.mapAllocations}). Consider reusing maps or using arrays.`,
-        'PSV6-MAP-PERF-ALLOCATION',
-        'Consider using arrays for simple key-value storage or reusing existing maps',
-      );
-    }
-
-    for (const [mapName, operationCount] of this.mapOperations) {
-      if (operationCount > 100) {
-        const mapInfo = this.mapDeclarations.get(mapName);
-        this.addWarning(
-          mapInfo?.line || 1,
-          mapInfo?.column || 1,
-          `Map '${mapName}' has many operations (${operationCount}). Consider optimization.`,
-          'PSV6-MAP-PERF-LARGE',
-          'Consider caching frequently accessed values or using arrays for better performance',
-        );
-      }
-    }
-
-    this.context.cleanLines.forEach((line, index) => {
-      if (line.includes('for ') || line.includes('while ')) {
-        for (let i = index; i < Math.min(index + 5, this.context.cleanLines.length); i++) {
-          const checkLine = this.context.cleanLines[i];
-          if (checkLine.match(/\bmap\.(put|get|remove|contains|clear|size|keys|values|copy)\s*\(/)) {
-            this.addWarning(
-              i + 1,
-              1,
-              'Map operations detected inside loop. Consider optimization.',
-              'PSV6-MAP-PERF-LOOP',
-              'Consider caching map operations or moving them outside the loop for better performance',
-            );
-            break;
-          }
-        }
-      }
-    });
-  }
-
-  private validateMapBestPracticesLegacy(): void {
-    for (const [mapName, mapInfo] of this.mapDeclarations) {
-      if (mapName.length <= 2 || /^m\d*$/.test(mapName)) {
-        this.addInfo(
-          mapInfo.line,
-          mapInfo.column,
-          `Consider using a more descriptive name for map '${mapName}'`,
-          'PSV6-MAP-NAMING',
-          'Use descriptive names like "priceMap" or "userSettings"',
-        );
-      }
-    }
-
-    for (const [mapName, mapInfo] of this.mapDeclarations) {
-      if (!mapInfo.isInitialized) {
-        this.addInfo(
-          mapInfo.line,
-          mapInfo.column,
-          `Map '${mapName}' is declared but never initialized with values`,
-          'PSV6-MAP-INITIALIZATION',
-          'Initialize the map with data or remove if unused',
-        );
-      }
-    }
-
-    const hasClearOperations = Array.from(this.mapOperations.keys()).some((mapName) => {
-      const mapInfo = this.mapDeclarations.get(mapName);
-      return (
-        mapInfo &&
-        this.context.cleanLines.some((line) => line.includes(`map.clear(${mapName})`))
-      );
-    });
-
-    if (this.mapAllocations > 0 && !hasClearOperations) {
-      this.addInfo(
-        1,
-        1,
-        'Consider using map.clear() to free memory when maps are no longer needed',
-        'PSV6-MAP-MEMORY',
-        'Add map.clear(myMap) calls to free memory',
-      );
-    }
-  }
-
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
     if (this.isClearlyInvalid(message, code)) {
       this.errors.push({ line, column, message, severity: 'error', code, suggestion });
@@ -1070,17 +683,6 @@ export class MapValidator implements ValidationModule {
     }
   }
 
-  private inferLegacyValueType(value: string): string | null {
-    const trimmed = value.trim();
-    if (trimmed.startsWith('"') && trimmed.endsWith('"')) return 'string';
-    if (trimmed === 'true' || trimmed === 'false') return 'bool';
-    if (trimmed === 'na') return 'na';
-    if (/^-?\d+$/.test(trimmed)) return 'int';
-    if (/^-?\d*\.\d+$/.test(trimmed)) return 'float';
-    if (trimmed.startsWith('color.')) return 'color';
-    return null;
-  }
-
   private isKnownNonMapVariable(varName: string): boolean {
     if (this.mapDeclarations.has(varName)) return false;
 
@@ -1089,25 +691,22 @@ export class MapValidator implements ValidationModule {
       return typeInfo.type !== 'map';
     }
 
-    if (this.context && this.context.cleanLines) {
-      for (const line of this.context.cleanLines) {
-        const stringAssignPattern = new RegExp(`^\\s*${varName}\\s*=\\s*"[^"]*"\\s*$`);
-        const numberAssignPattern = new RegExp(`^\\s*${varName}\\s*=\\s*[+\-]?\\d+(?:\\.\\d+)?\\s*$`);
-        const boolAssignPattern = new RegExp(`^\\s*${varName}\\s*=\\s*(true|false)\\s*$`);
-        if (stringAssignPattern.test(line) || numberAssignPattern.test(line) || boolAssignPattern.test(line)) {
-          return true;
-        }
-      }
+    const identifierMetadata = this.astContext?.typeEnvironment?.identifiers.get(varName);
+    if (identifierMetadata) {
+      return identifierMetadata.kind !== 'unknown';
     }
 
     return false;
   }
 
-  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+  private getAstContext(
+    context: ValidationContext,
+    config: ValidatorConfig,
+  ): AstValidationContext | null {
     if (!config.ast || config.ast.mode === 'disabled') {
       return null;
     }
-    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+    return isAstValidationContext(context) ? (context as AstValidationContext) : null;
   }
 
   // Getter methods for other modules

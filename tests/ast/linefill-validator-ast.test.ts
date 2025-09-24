@@ -25,7 +25,26 @@ class LinefillValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledLinefillValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new LinefillValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('LinefillValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new DisabledLinefillValidatorHarness();
+    const result = harness.validate('linefill.new(line1, line2)');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+    expect(result.isValid).toBe(true);
+  });
+
   it('emits parameter count diagnostics for linefill.new', () => {
     const source = 'linefill.new(line1)';
     const namespace = createIdentifier('linefill', source.indexOf('linefill'), 1);

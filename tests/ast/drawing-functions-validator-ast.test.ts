@@ -25,6 +25,15 @@ class DrawingFunctionsHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DrawingFunctionsDisabledHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new DrawingFunctionsValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('DrawingFunctionsValidator (AST)', () => {
   it('enforces required parameter counts for drawing constructors', () => {
     const namespace = createIdentifier('line', 0, 1);
@@ -135,5 +144,15 @@ describe('DrawingFunctionsValidator (AST)', () => {
 
     expect(warningCodes).toContain('PSV6-DRAWING-COMPLEX-EXPRESSION');
     expect(infoCodes).toContain('PSV6-DRAWING-STYLE-SUGGESTION');
+  });
+
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new DrawingFunctionsDisabledHarness();
+
+    const result = harness.validate('line.new(1, 2, 3, 4)');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
   });
 });

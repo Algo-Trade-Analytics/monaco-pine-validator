@@ -29,12 +29,10 @@ export class EnhancedQualityValidator implements ValidationModule {
   priority = 60; // Run after other validations
 
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   getDependencies(): string[] {
     return ['CoreValidator', 'SyntaxValidator'];
@@ -43,16 +41,21 @@ export class EnhancedQualityValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
 
     this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
-
-    if (this.usingAst && this.astContext?.ast) {
-      this.validateWithAst(this.astContext.ast);
-    } else {
-      this.validateLegacy();
+    const ast = this.astContext?.ast;
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.validateWithAst(ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -330,175 +333,6 @@ export class EnhancedQualityValidator implements ValidationModule {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Legacy validation
-  // ──────────────────────────────────────────────────────────────────────────
-  private validateLegacy(): void {
-    const lines = this.context.lines;
-    this.validateCyclomaticComplexityLegacy(lines);
-    this.validateNestingDepthLegacy(lines);
-    this.validateFunctionLengthLegacy(lines);
-  }
-
-  private validateCyclomaticComplexityLegacy(lines: string[]): void {
-    let scriptComplexity = 0;
-    let currentFunctionComplexity = 0;
-    let currentFunctionName = '';
-    let currentFunctionStartLine = 0;
-    let inFunction = false;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
-      const indent = this.getLineIndentation(line);
-
-      if (this.isFunctionStart(line)) {
-        if (inFunction && currentFunctionComplexity > 8) {
-          this.addWarning(
-            currentFunctionStartLine,
-            1,
-            `Function '${currentFunctionName}' has high cyclomatic complexity (${currentFunctionComplexity}). Consider breaking it into smaller functions.`,
-            'PSV6-QUALITY-COMPLEXITY',
-            'Refactor function to reduce complexity below 8',
-          );
-        }
-
-        const funcMatch = line.match(/(\w+)\s*\(/);
-        currentFunctionName = funcMatch ? funcMatch[1] : 'anonymous';
-        currentFunctionStartLine = lineNum;
-        currentFunctionComplexity = 0;
-        inFunction = true;
-      }
-
-      if (inFunction && indent === 0 && line.trim() !== '') {
-        if (currentFunctionComplexity > 8) {
-          this.addWarning(
-            currentFunctionStartLine,
-            1,
-            `Function '${currentFunctionName}' has high cyclomatic complexity (${currentFunctionComplexity}). Consider breaking it into smaller functions.`,
-            'PSV6-QUALITY-COMPLEXITY',
-            'Refactor function to reduce complexity below 8',
-          );
-        }
-        inFunction = false;
-        currentFunctionComplexity = 0;
-      }
-
-      const lineComplexity = this.getLineComplexity(line);
-      scriptComplexity += lineComplexity;
-      if (inFunction) {
-        currentFunctionComplexity += lineComplexity;
-      }
-    }
-
-    if (scriptComplexity > 8) {
-      this.addWarning(
-        1,
-        0,
-        `Script has high cyclomatic complexity (${scriptComplexity}). Consider breaking it into smaller functions.`,
-        'PSV6-QUALITY-COMPLEXITY',
-        'Refactor script to reduce complexity below 8',
-      );
-    }
-  }
-
-  private validateNestingDepthLegacy(lines: string[]): void {
-    const indentStack: number[] = [0];
-    let maxDepth = 0;
-    let deepestLine = 1;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
-      const indent = this.getLineIndentation(line);
-
-      if (line.trim() === '') {
-        continue;
-      }
-
-      if (indent > indentStack[indentStack.length - 1]) {
-        indentStack.push(indent);
-      } else if (indent < indentStack[indentStack.length - 1]) {
-        while (indentStack.length > 1 && indent < indentStack[indentStack.length - 1]) {
-          indentStack.pop();
-        }
-      }
-
-      const currentDepth = indentStack.length - 1;
-      if (currentDepth > maxDepth) {
-        maxDepth = currentDepth;
-        deepestLine = lineNum;
-      }
-    }
-
-    if (maxDepth > 3) {
-      this.addWarning(
-        deepestLine,
-        0,
-        `Excessive nesting depth detected (${maxDepth} levels). Consider extracting nested logic into separate functions.`,
-        'PSV6-QUALITY-DEPTH',
-        'Refactor nested code to reduce depth below 3 levels',
-      );
-    }
-  }
-
-  private validateFunctionLengthLegacy(lines: string[]): void {
-    let currentFunctionStartLine = 0;
-    let currentFunctionName = '';
-    let inFunction = false;
-    let functionLineCount = 0;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
-      const indent = this.getLineIndentation(line);
-
-      if (this.isFunctionStart(line)) {
-        if (inFunction && functionLineCount > 50) {
-          this.addWarning(
-            currentFunctionStartLine,
-            1,
-            `Function '${currentFunctionName}' is very long (${functionLineCount} lines). Consider breaking it into smaller functions.`,
-            'PSV6-QUALITY-LENGTH',
-            'Refactor function to reduce length below 50 lines',
-          );
-        }
-
-        const funcMatch = line.match(/(\w+)\s*\(/);
-        currentFunctionName = funcMatch ? funcMatch[1] : 'anonymous';
-        currentFunctionStartLine = lineNum;
-        functionLineCount = 1;
-        inFunction = true;
-      } else if (inFunction) {
-        if (indent === 0 && line.trim() !== '') {
-          if (functionLineCount > 50) {
-            this.addWarning(
-              currentFunctionStartLine,
-              1,
-              `Function '${currentFunctionName}' is very long (${functionLineCount} lines). Consider breaking it into smaller functions.`,
-              'PSV6-QUALITY-LENGTH',
-              'Refactor function to reduce length below 50 lines',
-            );
-          }
-          inFunction = false;
-          functionLineCount = 0;
-        } else {
-          functionLineCount += 1;
-        }
-      }
-    }
-
-    if (inFunction && functionLineCount > 50) {
-      this.addWarning(
-        currentFunctionStartLine,
-        1,
-        `Function '${currentFunctionName}' is very long (${functionLineCount} lines). Consider breaking it into smaller functions.`,
-        'PSV6-QUALITY-LENGTH',
-        'Refactor function to reduce length below 50 lines',
-      );
-    }
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
   // Shared helpers
   // ──────────────────────────────────────────────────────────────────────────
   private reset(): void {
@@ -506,38 +340,10 @@ export class EnhancedQualityValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
   }
 
   private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
     this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
-
-  private isFunctionStart(line: string): boolean {
-    return /^\s*\w+\s*\([^)]*\)\s*=>/.test(line);
-  }
-
-  private getLineComplexity(line: string): number {
-    let complexity = 0;
-
-    if (/\bif\b/.test(line)) complexity++;
-    if (/\belse\b/.test(line)) complexity++;
-    if (/\bfor\b/.test(line)) complexity++;
-    if (/\bwhile\b/.test(line)) complexity++;
-    if (/\bswitch\b/.test(line)) complexity++;
-    if (/\bcase\b/.test(line)) complexity++;
-
-    if (/\band\b/.test(line)) complexity++;
-    if (/\bor\b/.test(line)) complexity++;
-
-    if (/\?/.test(line)) complexity++;
-
-    return complexity;
-  }
-
-  private getLineIndentation(line: string): number {
-    const match = line.match(/^(\s*)/);
-    return match ? match[1].length : 0;
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {

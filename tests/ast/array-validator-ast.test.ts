@@ -26,7 +26,26 @@ class ArrayValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledArrayValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new ArrayValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('ArrayValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new DisabledArrayValidatorHarness();
+    const result = harness.validate('var arr = array.new_float(1)');
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('reports type mismatches when pushing incompatible values', () => {
     const arrayIdentifier = createIdentifier('array', 8, 1);
     const newFloatIdentifier = createIdentifier('new_float', 14, 1);

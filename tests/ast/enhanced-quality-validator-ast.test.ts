@@ -21,6 +21,15 @@ class EnhancedQualityHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class EnhancedQualityDisabledHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new EnhancedQualityValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 const createNoopStatement = (line: number, name = 'noop') =>
   createExpressionStatement(createIdentifier(name, 4, line), 4, 8, line);
 
@@ -134,5 +143,15 @@ describe('EnhancedQualityValidator (AST)', () => {
       .map((warning) => warning.message);
 
     expect(depthWarningCodes.length).toBeGreaterThan(0);
+  });
+
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new EnhancedQualityDisabledHarness();
+
+    const result = harness.validate('noop');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
   });
 });

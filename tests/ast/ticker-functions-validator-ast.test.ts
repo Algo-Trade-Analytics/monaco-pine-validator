@@ -37,6 +37,7 @@ describe('TickerFunctionsValidator (AST)', () => {
     const harness = new DisabledTickerValidatorHarness();
     const result = harness.validate('ticker.modify(symbol, adjustment=adjustment.dividends)');
 
+    expect(result.isValid).toBe(true);
     expect(result.errors).toHaveLength(0);
     expect(result.warnings).toHaveLength(0);
     expect(result.info).toHaveLength(0);
