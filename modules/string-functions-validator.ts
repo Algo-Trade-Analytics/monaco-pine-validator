@@ -21,7 +21,6 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
-import { IDENT } from '../core/constants';
 import {
   type ArgumentNode,
   type BinaryExpressionNode,
@@ -54,9 +53,7 @@ export class StringFunctionsValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   // String function tracking
   private stringFunctionCalls: StringFunctionCall[] = [];
@@ -70,22 +67,21 @@ export class StringFunctionsValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
 
     this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
-
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectStringDataAst(this.astContext.ast);
-      this.validateStringPerformanceAst();
-    } else {
-      // Process each line for string function calls
-      context.cleanLines.forEach((line, index) => {
-        this.processLine(line, index + 1);
-      });
-      this.validateStringPerformanceLegacy();
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null
+      };
     }
 
+    this.collectStringDataAst(this.astContext.ast);
+    this.validateStringPerformanceAst();
     this.validateStringBestPractices();
 
 
@@ -99,30 +95,11 @@ export class StringFunctionsValidator implements ValidationModule {
     };
   }
 
-  private isLoopHeader(line: string): boolean {
-    return /^\s*(for|while)\b/.test(line.trim());
-  }
-
-  private computeLoopLines(): Set<number> {
-    const loopLines = new Set<number>();
-    const stack: number[] = [];
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const ln = this.context.cleanLines[i];
-      const ind = ln.length - ln.trimStart().length;
-      const t = ln.trim();
-      while (stack.length && ind <= stack[stack.length - 1] && t !== '') stack.pop();
-      if (this.isLoopHeader(ln)) stack.push(ind);
-      if (stack.length) loopLines.add(i + 1);
-    }
-    return loopLines;
-  }
-
   private reset(): void {
     this.errors = [];
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
     this.stringFunctionCalls = [];
     this.stringOperations.clear();
     this.astConcatenationCounts = new Map();
@@ -143,14 +120,6 @@ export class StringFunctionsValidator implements ValidationModule {
 
   private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
     this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
-
-  private processLine(line: string, lineNum: number): void {
-    // String function patterns
-    this.validateStringFunctionCalls(line, lineNum);
-
-    // String concatenation patterns
-    this.validateStringConcatenationLegacy(line, lineNum);
   }
 
   private collectStringDataAst(program: ProgramNode): void {
@@ -223,60 +192,6 @@ export class StringFunctionsValidator implements ValidationModule {
     this.astConcatenationCounts.set(line, (this.astConcatenationCounts.get(line) || 0) + 1);
   }
 
-  private validateStringFunctionCalls(line: string, lineNum: number): void {
-    // Pattern: str.functionName(args...)
-    // We need to handle nested parentheses, so we'll use a different approach
-    const strFunctionPattern = new RegExp(`str\\.(\\w+)\\s*\\(`, 'g');
-    
-    let match;
-    while ((match = strFunctionPattern.exec(line)) !== null) {
-      const functionName = match[1];
-      const startIndex = match.index;
-      const openParenIndex = match.index + match[0].length - 1;
-      
-      // Find the matching closing parenthesis
-      const argsString = this.extractBalancedParentheses(line, openParenIndex);
-      if (argsString === null) continue; // Skip if we can't find balanced parentheses
-      
-      const column = startIndex + 1;
-
-      // Parse arguments
-      const args = this.parseArguments(argsString);
-
-      // Store function call
-      this.stringFunctionCalls.push({
-        name: functionName,
-        line: lineNum,
-        column,
-        arguments: args,
-        argumentNodes: [],
-      });
-
-      // Validate specific function
-      this.validateStringFunction(functionName, args, lineNum, column);
-      
-      // Track operation
-      const count = this.stringOperations.get(functionName) || 0;
-      this.stringOperations.set(functionName, count + 1);
-
-      // Fallback performance signals for tests
-      // Loop proximity
-      for (let i = Math.max(1, lineNum - 3); i <= lineNum; i++) {
-        const ln = this.context.cleanLines[i - 1] || '';
-        if (/\b(for|while)\b/.test(ln)) {
-          this.addWarning(lineNum, column, 'String operation in loop', 'PSV6-STR-PERF-LOOP');
-          break;
-        }
-      }
-      // Complexity on line: multiple string operations
-      const strCallsOnLine = (line.match(/\bstr\.[A-Za-z_][A-Za-z0-9_]*\s*\(/g) || []).length;
-      if (strCallsOnLine > 1) {
-        this.addWarning(lineNum, 1, 'Complex string operations on one line', 'PSV6-STR-PERF-COMPLEX');
-      }
-    }
-  }
-
-
   private isClearlyInvalid(message: string, code?: string): boolean {
     // Only generate errors for clearly invalid cases
     // Parameter type errors are clearly invalid
@@ -300,47 +215,6 @@ export class StringFunctionsValidator implements ValidationModule {
     
     // For other cases, generate warnings instead of errors
     return false;
-  }
-
-  private parseArguments(argsString: string): string[] {
-    if (!argsString.trim()) return [];
-    
-    const args: string[] = [];
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-
-    for (let i = 0; i < argsString.length; i++) {
-      const char = argsString[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-        current += char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        stringChar = '';
-        current += char;
-      } else if (!inString && char === '(') {
-        depth++;
-        current += char;
-      } else if (!inString && char === ')') {
-        depth--;
-        current += char;
-      } else if (!inString && char === ',' && depth === 0) {
-        args.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    
-    if (current.trim()) {
-      args.push(current.trim());
-    }
-    
-    return args;
   }
 
   private validateStringFunction(
@@ -815,21 +689,6 @@ export class StringFunctionsValidator implements ValidationModule {
     }
   }
 
-  private validateStringConcatenationLegacy(line: string, lineNum: number): void {
-    // Detect string concatenation with + operator
-    const concatPattern = /("[^"]*"|'[^']*'|\w+)\s*\+\s*("[^"]*"|'[^']*'|\w+)/g;
-    let match;
-    let concatCount = 0;
-    
-    while ((match = concatPattern.exec(line)) !== null) {
-      concatCount++;
-    }
-    
-    if (concatCount >= 1) {
-      this.addInfo(lineNum, 1, 'Consider using str.format() instead of multiple string concatenations', 'PSV6-STR-FORMAT-SUGGESTION');
-    }
-  }
-
   private validateStringPerformanceAst(): void {
     const expensiveFunctions = new Set(['format', 'split', 'replace', 'match']);
     const countsByLine = new Map<number, number>();
@@ -856,34 +715,6 @@ export class StringFunctionsValidator implements ValidationModule {
       }
       if (count >= 2) {
         this.addWarning(line, 1, 'Excessive string concatenation', 'PSV6-STR-PERF-CONCAT');
-      }
-    }
-  }
-
-  private validateStringPerformanceLegacy(): void {
-    const loopLines = this.computeLoopLines();
-    const expensiveFunctions = ['format', 'split', 'replace', 'match'];
-    const countsByLine = new Map<number, number>();
-
-    for (const call of this.stringFunctionCalls) {
-      // warn for loop usage
-      if (loopLines.has(call.line)) {
-        this.addWarning(call.line, call.column, 'String operation in loop', 'PSV6-STR-PERF-LOOP');
-      }
-      // count complexity per line
-      countsByLine.set(call.line, (countsByLine.get(call.line) || 0) + 1);
-      // caching suggestion for repeated expensive calls
-      if (expensiveFunctions.includes(call.name)) {
-        // low threshold for tests
-        this.addWarning(call.line, call.column, `Expensive str.${call.name}() call`, 'PSV6-STR-PERF-COMPLEX');
-      }
-    }
-    // concatenation detection
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const plusMatches = line.match(/\+/g);
-      if (plusMatches && plusMatches.length >= 2) {
-        this.addWarning(i + 1, 1, 'Excessive string concatenation', 'PSV6-STR-PERF-CONCAT');
       }
     }
   }
@@ -989,36 +820,6 @@ export class StringFunctionsValidator implements ValidationModule {
       return null;
     }
     return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
-  }
-
-  private extractBalancedParentheses(line: string, openParenIndex: number): string | null {
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-
-    for (let i = openParenIndex; i < line.length; i++) {
-      const char = line[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        stringChar = '';
-      } else if (!inString) {
-        if (char === '(') {
-          depth++;
-        } else if (char === ')') {
-          depth--;
-          if (depth === 0) {
-            // Found the matching closing parenthesis
-            return line.substring(openParenIndex + 1, i);
-          }
-        }
-      }
-    }
-    
-    return null; // No matching closing parenthesis found
   }
 
   private extractNumericValue(arg: string, node?: ExpressionNode): number | null {

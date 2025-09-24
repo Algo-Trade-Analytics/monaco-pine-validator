@@ -11,8 +11,26 @@
  * Extracted from function-validator.ts to improve maintainability.
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../../core/types';
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+} from '../../core/types';
 import { BUILTIN_FUNCTIONS_V6_RULES, NS_MEMBERS } from '../../core/constants';
+import {
+  type CallExpressionNode,
+  type ExpressionNode,
+  type FunctionDeclarationNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type ProgramNode,
+  type ReturnStatementNode,
+} from '../../core/ast/nodes';
+import { visit, type NodePath } from '../../core/ast/traversal';
+import type { TypeMetadata } from '../../core/ast/types';
 
 interface FunctionCall {
   name: string;
@@ -30,20 +48,29 @@ export class FunctionTypesValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
 
   getDependencies(): string[] {
-    return ['SyntaxValidator', 'FunctionDeclarationsValidator', 'BuiltinFunctionsValidator'];
+    return ['SyntaxValidator', 'FunctionDeclarationsValidator', 'FunctionValidator'];
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
+    this.astContext = this.getAstContext(config);
 
-    // Validate function types and return type usage
-    this.validateInconsistentReturnTypes();
-    this.validateFunctionComplexity();
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
+    }
+
+    this.validateFunctionsAst(this.astContext.ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -59,6 +86,7 @@ export class FunctionTypesValidator implements ValidationModule {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.astContext = null;
   }
 
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
@@ -71,148 +99,6 @@ export class FunctionTypesValidator implements ValidationModule {
 
   private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
     this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
-
-  /**
-   * Validate inconsistent return types in user-defined functions
-   */
-  private validateInconsistentReturnTypes(): void {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      let funcName: string | null = null;
-      const staticMatch = line.match(/^\s*(?:export\s+)?static\s+([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*=>/);
-      if (staticMatch) {
-        funcName = `${staticMatch[1]}.${staticMatch[2]}`;
-      } else {
-        const methodMatch = line.match(/^\s*method\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\([^)]*\)\s*=>/);
-        if (methodMatch) {
-          funcName = methodMatch[1];
-        } else {
-          const funcMatch = line.match(/^\s*(?:export\s+)?func\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*=>/);
-          if (funcMatch) {
-            funcName = funcMatch[1];
-          } else {
-            const generalMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*=>/);
-            if (generalMatch) {
-              funcName = generalMatch[1];
-            }
-          }
-        }
-      }
-
-      if (funcName) {
-        const lineNum = i + 1;
-        
-        // Find the function body and analyze return types
-        const returnTypes = this.analyzeFunctionReturnTypes(funcName, i);
-        if (returnTypes.length > 1) {
-          this.addError(lineNum, 1, 
-            `Function '${funcName}' has inconsistent return types: ${returnTypes.join(', ')}`, 
-            'PSV6-FUNCTION-RETURN-TYPE');
-        }
-      }
-    }
-  }
-
-  /**
-   * Analyze return types in a function body
-   */
-  private analyzeFunctionReturnTypes(funcName: string, startLine: number): string[] {
-    const returnTypes = new Set<string>();
-    const baseIndent = this.getLineIndentation(this.context.cleanLines[startLine]);
-    
-    // Look for return statements in the function body
-    for (let i = startLine + 1; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineIndent = this.getLineIndentation(line);
-      
-      // Stop if we've unindented back to the function level or beyond
-      if (lineIndent <= baseIndent && line.trim() !== '') {
-        break;
-      }
-      
-      // Look for return values (expressions that are not assignments or control structures)
-      if (lineIndent > baseIndent) {
-        const trimmed = line.trim();
-        
-        // Skip control structures
-        if (/^(if|for|while|switch|plot\b|array\.|map\.)/.test(trimmed)) {
-          continue;
-        }
-        
-        // Skip assignments
-        if (/^\s*[A-Za-z_][A-Za-z0-9_]*\s*=/.test(trimmed)) {
-          continue;
-        }
-        
-        // This looks like a return value - analyze its type
-        const returnType = this.inferReturnValueType(trimmed);
-        if (returnType !== 'unknown') {
-          returnTypes.add(returnType);
-        }
-      }
-    }
-    
-    return Array.from(returnTypes);
-  }
-
-  /**
-   * Infer the type of a return value expression
-   */
-  private inferReturnValueType(expression: string): string {
-    const trimmed = expression.trim();
-    
-    // String literals
-    if (/^"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'$/.test(trimmed)) {
-      return 'string';
-    }
-    
-    // Numeric literals
-    if (/^[+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?$/.test(trimmed)) {
-      return trimmed.includes('.') || /[eE]/.test(trimmed) ? 'float' : 'int';
-    }
-    
-    // Boolean literals
-    if (trimmed === 'true' || trimmed === 'false') {
-      return 'bool';
-    }
-    
-    // Function calls
-    if (trimmed.includes('(') && trimmed.includes(')')) {
-      const funcMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*\.?[A-Za-z_][A-Za-z0-9_]*)\s*\(/);
-      if (funcMatch) {
-        return this.getFunctionReturnType(funcMatch[1]);
-      }
-    }
-    
-    // Variable references
-    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
-      const typeInfo = this.context.typeMap.get(trimmed);
-      if (typeInfo) {
-        return typeInfo.type;
-      }
-
-      const inferred = this.findAssignedType(trimmed);
-      if (inferred && inferred !== 'unknown') {
-        return inferred;
-      }
-    }
-    
-    return 'unknown';
-  }
-
-  private findAssignedType(varName: string): string | null {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i].trim();
-      if (!line.startsWith(varName)) continue;
-      if (/^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*array\.new<([^>]+)>/.test(line)) {
-        return 'array';
-      }
-      if (/^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*map\.new<([^>]+)>/.test(line)) {
-        return 'map';
-      }
-    }
-    return null;
   }
 
   /**
@@ -302,127 +188,218 @@ export class FunctionTypesValidator implements ValidationModule {
     return 'series';
   }
 
-  /**
-   * Validate function complexity
-   */
-  private validateFunctionComplexity(): void {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const funcMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*=>/);
-      if (funcMatch) {
-        const funcName = funcMatch[1];
-        const lineNum = i + 1;
-        
-        // Calculate function complexity
-        const complexity = this.calculateFunctionComplexity(funcName, i);
-        
-        // Warn on high complexity
-        if (complexity > 10) {
-          this.addWarning(lineNum, 1, 
-            `Function '${funcName}' has high complexity (${complexity}). Consider breaking it into smaller functions.`, 
-            'PSV6-FUNCTION-COMPLEXITY');
-        }
-        
-        // Check function length
-        const functionLength = this.calculateFunctionLength(funcName, i);
-        if (functionLength > 50) {
-          this.addWarning(lineNum, 1, 
-            `Function '${funcName}' is very long (${functionLength} lines). Consider breaking it into smaller functions.`, 
-            'PSV6-FUNCTION-LENGTH');
-        }
-      }
-    }
+  private validateFunctionsAst(program: ProgramNode): void {
+    this.validateReturnTypesAst(program);
+    this.validateFunctionMetricsAst(program);
   }
 
-  /**
-   * Calculate cyclomatic complexity of a function
-   */
-  private calculateFunctionComplexity(funcName: string, startLine: number): number {
-    let complexity = 1; // Base complexity
-    const baseIndent = this.getLineIndentation(this.context.cleanLines[startLine]);
-    
-    for (let i = startLine + 1; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineIndent = this.getLineIndentation(line);
-      
-      // Stop if we've unindented back to the function level or beyond
-      if (lineIndent <= baseIndent && line.trim() !== '') {
-        break;
+  private validateReturnTypesAst(program: ProgramNode): void {
+    visit(program, {
+      FunctionDeclaration: {
+        enter: (path) => {
+          const fn = path.node as FunctionDeclarationNode;
+          const name = fn.identifier?.name ?? 'anonymous function';
+          const location = fn.identifier ?? fn;
+          const returnTypes = this.collectReturnTypesAst(fn);
+
+          if (returnTypes.length > 1) {
+            this.addError(
+              location.loc.start.line,
+              location.loc.start.column,
+              `Function '${name}' has inconsistent return types: ${returnTypes.join(', ')}`,
+              'PSV6-FUNCTION-RETURN-TYPE',
+            );
+          }
+        },
+      },
+    });
+  }
+
+  private validateFunctionMetricsAst(program: ProgramNode): void {
+    visit(program, {
+      FunctionDeclaration: {
+        enter: (path) => {
+          const fn = path.node as FunctionDeclarationNode;
+          const name = fn.identifier?.name ?? 'anonymous function';
+          const location = fn.identifier ?? fn;
+          const complexity = this.calculateFunctionComplexityAst(fn);
+
+          if (complexity > 10) {
+            this.addWarning(
+              location.loc.start.line,
+              location.loc.start.column,
+              `Function '${name}' has high complexity (${complexity}). Consider breaking it into smaller functions.`,
+              'PSV6-FUNCTION-COMPLEXITY',
+            );
+          }
+
+          const length = this.calculateFunctionLengthAst(fn);
+          if (length > 50) {
+            this.addWarning(
+              location.loc.start.line,
+              location.loc.start.column,
+              `Function '${name}' is very long (${length} lines). Consider breaking it into smaller functions.`,
+              'PSV6-FUNCTION-LENGTH',
+            );
+          }
+        },
+      },
+    });
+  }
+
+  private collectReturnTypesAst(fn: FunctionDeclarationNode): string[] {
+    if (!this.astContext) {
+      return [];
+    }
+
+    const types = new Set<string>();
+
+    visit(fn.body, {
+      FunctionDeclaration: {
+        enter: () => 'skip',
+      },
+      ReturnStatement: {
+        enter: (returnPath: NodePath<ReturnStatementNode>) => {
+          const argument = returnPath.node.argument as ExpressionNode | null;
+          if (!argument) {
+            types.add('void');
+            return;
+          }
+
+          const inferred = this.inferReturnTypeAst(argument);
+          if (inferred && inferred !== 'unknown') {
+            types.add(inferred);
+          }
+        },
+      },
+    });
+
+    return Array.from(types);
+  }
+
+  private inferReturnTypeAst(expression: ExpressionNode): string | null {
+    if (!this.astContext) {
+      return null;
+    }
+
+    const metadata = this.astContext.typeEnvironment.nodeTypes.get(expression) ?? null;
+    const described = this.describeTypeMetadata(metadata);
+    if (described && described !== 'unknown') {
+      return described;
+    }
+
+    if (expression.kind === 'Identifier') {
+      const identifier = expression as IdentifierNode;
+      const identifierMetadata = this.astContext.typeEnvironment.identifiers.get(identifier.name) ?? null;
+      const describedIdentifier = this.describeTypeMetadata(identifierMetadata);
+      if (describedIdentifier && describedIdentifier !== 'unknown') {
+        return describedIdentifier;
       }
-      
-      // Count decision points
-      if (lineIndent > baseIndent) {
-        const trimmed = line.trim();
-        
-        // if statements
-        if (/^\s*if\s+/.test(trimmed)) {
-          complexity++;
-        }
-        
-        // else if statements
-        if (/^\s*else\s+if\s+/.test(trimmed)) {
-          complexity++;
-        }
-        
-        // for loops
-        if (/^\s*for\s+/.test(trimmed)) {
-          complexity++;
-        }
-        
-        // while loops
-        if (/^\s*while\s+/.test(trimmed)) {
-          complexity++;
-        }
-        
-        // switch statements
-        if (/^\s*switch\s+/.test(trimmed)) {
-          complexity++;
-        }
-        
-        // case statements
-        if (/^\s*case\s+/.test(trimmed)) {
-          complexity++;
-        }
-        
-        // logical operators
-        if (/\b(and|or)\b/.test(trimmed)) {
-          complexity++;
+      const typeInfo = this.context.typeMap.get(identifier.name);
+      if (typeInfo) {
+        return typeInfo.type;
+      }
+    }
+
+    if (expression.kind === 'CallExpression') {
+      const call = expression as CallExpressionNode;
+      const calleeName = this.getExpressionQualifiedName(call.callee);
+      if (calleeName) {
+        const inferred = this.getFunctionReturnType(calleeName);
+        if (inferred && inferred !== 'unknown') {
+          return inferred;
         }
       }
     }
-    
+
+    return null;
+  }
+
+  private describeTypeMetadata(metadata: TypeMetadata | null): string | null {
+    if (!metadata) {
+      return null;
+    }
+
+    return metadata.kind;
+  }
+
+  private calculateFunctionComplexityAst(fn: FunctionDeclarationNode): number {
+    let complexity = 1;
+
+    visit(fn.body, {
+      FunctionDeclaration: {
+        enter: () => 'skip',
+      },
+      IfStatement: {
+        enter: (path) => {
+          complexity += 1;
+          if (path.node.alternate) {
+            complexity += 1;
+          }
+        },
+      },
+      ForStatement: {
+        enter: () => {
+          complexity += 1;
+        },
+      },
+      WhileStatement: {
+        enter: () => {
+          complexity += 1;
+        },
+      },
+      SwitchStatement: {
+        enter: () => {
+          complexity += 1;
+        },
+      },
+      ConditionalExpression: {
+        enter: () => {
+          complexity += 1;
+        },
+      },
+      BinaryExpression: {
+        enter: (binaryPath) => {
+          const operator = binaryPath.node.operator;
+          if (operator === 'and' || operator === 'or') {
+            complexity += 1;
+          }
+        },
+      },
+    });
+
     return complexity;
   }
 
-  /**
-   * Calculate the length of a function
-   */
-  private calculateFunctionLength(funcName: string, startLine: number): number {
-    const baseIndent = this.getLineIndentation(this.context.cleanLines[startLine]);
-    let length = 0;
-    
-    for (let i = startLine + 1; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineIndent = this.getLineIndentation(line);
-      
-      // Stop if we've unindented back to the function level or beyond
-      if (lineIndent <= baseIndent && line.trim() !== '') {
-        break;
-      }
-      
-      if (lineIndent > baseIndent) {
-        length++;
-      }
+  private calculateFunctionLengthAst(fn: FunctionDeclarationNode): number {
+    if (fn.body.body.length === 0) {
+      return 0;
     }
-    
-    return length;
+
+    const first = fn.body.body[0];
+    const last = fn.body.body[fn.body.body.length - 1];
+    return last.loc.end.line - first.loc.start.line + 1;
   }
 
-  /**
-   * Get the indentation level of a line
-   */
-  private getLineIndentation(line: string): number {
-    return line.length - line.trimStart().length;
+  private getExpressionQualifiedName(expression: ExpressionNode | null): string | null {
+    if (!expression) {
+      return null;
+    }
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+      const objectName = this.getExpressionQualifiedName(member.object);
+      if (!objectName) {
+        return null;
+      }
+      return `${objectName}.${member.property.name}`;
+    }
+    return null;
   }
 
   /**
@@ -510,4 +487,15 @@ export class FunctionTypesValidator implements ValidationModule {
     const stringOps = ['+', 'str.'];
     return stringOps.some(op => before.endsWith(op) || after.startsWith(op));
   }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+  }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }

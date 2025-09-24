@@ -20,17 +20,18 @@ import {
 import { type ImportDeclarationNode, type ProgramNode } from '../core/ast/nodes';
 import { visit } from '../core/ast/traversal';
 
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
+}
+
 export class EnhancedLibraryValidator implements ValidationModule {
   name = 'EnhancedLibraryValidator';
   priority = 80; // Run after basic syntax validation
 
-  private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   private static readonly BUILT_IN_ALIAS_CONFLICTS = new Set([
     'plot',
@@ -95,17 +96,22 @@ export class EnhancedLibraryValidator implements ValidationModule {
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
-    this.context = context;
-    this.config = config;
+    void config;
 
-    this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
+    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.validateUsingAst(this.astContext.ast);
-    } else {
-      this.validateUsingLegacy();
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.validateUsingAst(this.astContext.ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -321,240 +327,6 @@ export class EnhancedLibraryValidator implements ValidationModule {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Legacy validation fallback
-  // ──────────────────────────────────────────────────────────────────────────
-  private validateUsingLegacy(): void {
-    const lines = this.context.lines;
-    const userDefinedNames = this.collectUserDefinedNamesLegacy(lines);
-
-    lines.forEach((line, index) => {
-      const lineNumber = index + 1;
-      this.validateLibraryPathLegacy(line, lineNumber);
-      this.validateLibraryAliasLegacy(line, lineNumber, userDefinedNames);
-    });
-
-    this.validateCircularDependenciesLegacy(lines);
-    this.validateVersionCompatibilityLegacy(lines);
-    this.validateUnusedImportsLegacy(lines);
-  }
-
-  private collectUserDefinedNamesLegacy(lines: string[]): Set<string> {
-    const names = new Set<string>();
-
-    for (const line of lines) {
-      const funcMatch = line.match(/^\s*(?:export\s+)?(\w+)\s*\(/);
-      if (funcMatch) {
-        names.add(funcMatch[1]);
-      }
-
-      const methodMatch = line.match(/^\s*method\s+(\w+)\s*\(/);
-      if (methodMatch) {
-        names.add(methodMatch[1]);
-      }
-
-      const typeMatch = line.match(/^\s*type\s+(\w+)/);
-      if (typeMatch) {
-        names.add(typeMatch[1]);
-      }
-
-      const varMatch = line.match(
-        /^\s*(?:(?:var|varip|const)\s+)?(?:(?:int|float|bool|string|color|line|label|box|table|array|matrix|map)\s+)?(\w+)\s*=/,
-      );
-      if (varMatch) {
-        names.add(varMatch[1]);
-      }
-
-      const assignMatch = line.match(/^\s*(\w+)\s*=\s*[^=]/);
-      if (assignMatch) {
-        names.add(assignMatch[1]);
-      }
-    }
-
-    return names;
-  }
-
-  private validateLibraryPathLegacy(line: string, lineNum: number): void {
-    const importMatch = line.match(/^\s*import\s+"([^"]+)"\s+as\s+(\w+)/);
-    if (!importMatch) {
-      return;
-    }
-
-    const [, path] = importMatch;
-
-    if (path.includes('//')) {
-      this.addError(
-        lineNum,
-        1,
-        `Invalid library path: double slashes not allowed in '${path}'`,
-        'PSV6-LIB-PATH',
-        'Remove double slashes from library path',
-      );
-      return;
-    }
-
-    const parts = path.split('/');
-    if (parts.length < 3) {
-      this.addError(
-        lineNum,
-        1,
-        `Incomplete library path: '${path}' must include username/scriptname/version`,
-        'PSV6-LIB-PATH',
-        "Add version number to library path (e.g., username/scriptname/1)",
-      );
-      return;
-    }
-
-    if (parts.length === 1) {
-      this.addError(
-        lineNum,
-        1,
-        `Incomplete library path: '${path}' must include scriptname and version`,
-        'PSV6-LIB-PATH',
-        "Add scriptname and version to library path (e.g., username/scriptname/1)",
-      );
-      return;
-    }
-
-    const version = parts[parts.length - 1];
-    if (!/^\d+$/.test(version)) {
-      this.addError(
-        lineNum,
-        1,
-        `Invalid library version: '${version}' must be an integer`,
-        'PSV6-LIB-PATH',
-        'Use an integer version number (e.g., 1, 2, 3)',
-      );
-    }
-  }
-
-  private validateLibraryAliasLegacy(
-    line: string,
-    lineNum: number,
-    userDefinedNames: Set<string>,
-  ): void {
-    const importMatch = line.match(/^\s*import\s+"([^"]+)"\s+as\s+(\w+)/);
-    if (!importMatch) {
-      return;
-    }
-
-    const alias = importMatch[2];
-
-    if (userDefinedNames.has(alias)) {
-      this.addError(
-        lineNum,
-        1,
-        `Library alias '${alias}' conflicts with user-defined name`,
-        'PSV6-LIB-ALIAS',
-        this.createAliasSuggestion(alias),
-      );
-      return;
-    }
-
-    if (EnhancedLibraryValidator.BUILT_IN_ALIAS_CONFLICTS.has(alias)) {
-      this.addError(
-        lineNum,
-        1,
-        `Library alias '${alias}' conflicts with built-in function`,
-        'PSV6-LIB-ALIAS',
-        this.createAliasSuggestion(alias),
-      );
-    }
-  }
-
-  private validateCircularDependenciesLegacy(lines: string[]): void {
-    const imports: Array<{ path: string; alias: string; line: number }> = [];
-
-    lines.forEach((line, index) => {
-      const importMatch = line.match(/^\s*import\s+"([^"]+)"\s+as\s+(\w+)/);
-      if (importMatch) {
-        const [, path, alias] = importMatch;
-        imports.push({ path, alias, line: index + 1 });
-      }
-    });
-
-    if (imports.length < 2) {
-      return;
-    }
-
-    const hasOtherlib = imports.some((imp) => imp.path.includes('otherlib'));
-    const hasTestlib = imports.some((imp) => imp.path.includes('testlib'));
-
-    if (hasOtherlib && hasTestlib) {
-      const first = imports[0];
-      this.addError(
-        first.line,
-        1,
-        'Circular dependency detected between libraries',
-        'PSV6-LIB-CIRCULAR',
-        'Remove circular dependencies by restructuring library imports',
-      );
-    }
-  }
-
-  private validateVersionCompatibilityLegacy(lines: string[]): void {
-    const imports: Array<{ path: string; version: number; line: number }> = [];
-
-    lines.forEach((line, index) => {
-      const importMatch = line.match(/^\s*import\s+"([^"]+)\/(\d+)"\s+as\s+(\w+)/);
-      if (importMatch) {
-        const [, path, versionStr] = importMatch;
-        imports.push({ path, version: Number.parseInt(versionStr, 10), line: index + 1 });
-      }
-    });
-
-    const versions = imports.map((imp) => imp.version);
-    if (versions.length <= 1) {
-      return;
-    }
-
-    const minVersion = Math.min(...versions);
-    const maxVersion = Math.max(...versions);
-
-    if (maxVersion - minVersion > 3) {
-      this.addWarning(
-        1,
-        1,
-        'Large version gap detected between libraries may cause compatibility issues',
-        'PSV6-LIB-VERSION',
-        'Consider using libraries with similar version numbers',
-      );
-    }
-  }
-
-  private validateUnusedImportsLegacy(lines: string[]): void {
-    const imports: Array<{ alias: string; line: number }> = [];
-    const usedNames = new Set<string>();
-
-    lines.forEach((line, index) => {
-      const importMatch = line.match(/^\s*import\s+"([^"]+)"\s+as\s+(\w+)/);
-      if (importMatch) {
-        imports.push({ alias: importMatch[2], line: index + 1 });
-      }
-    });
-
-    lines.forEach((line) => {
-      if (/^\s*import\s+/.test(line)) {
-        return;
-      }
-
-      const words = line.match(/\b\w+\b/g) || [];
-      words.forEach((word) => usedNames.add(word));
-    });
-
-    imports.forEach((importInfo) => {
-      if (!usedNames.has(importInfo.alias)) {
-        this.addWarning(
-          importInfo.line,
-          1,
-          `Unused library import: ${importInfo.alias}`,
-          'PSV6-LIB-UNUSED',
-          `Remove unused import or use ${importInfo.alias} in your code`,
-        );
-      }
-    });
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
   // Shared helpers
   // ──────────────────────────────────────────────────────────────────────────
   private reset(): void {
@@ -562,7 +334,6 @@ export class EnhancedLibraryValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
   }
 
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
@@ -576,15 +347,4 @@ export class EnhancedLibraryValidator implements ValidationModule {
   private createAliasSuggestion(alias: string): string {
     return `Use a different alias name (e.g., '${alias}Lib' or '${alias}Module')`;
   }
-
-  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-    return isAstValidationContext(this.context) && this.context.ast ? (this.context as AstValidationContext) : null;
-  }
-}
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
 }

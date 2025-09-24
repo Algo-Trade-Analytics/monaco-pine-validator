@@ -19,6 +19,15 @@ class SyminfoValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class SyminfoValidatorDisabledHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new SyminfoVariablesValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('SyminfoVariablesValidator (AST)', () => {
   it('records company syminfo variables through AST traversal', () => {
     const syminfoNamespace = createIdentifier('syminfo', 0, 1);
@@ -79,6 +88,16 @@ describe('SyminfoVariablesValidator (AST)', () => {
 
     expect(infoCodes).toContain('PSV6-SYMINFO-RECOMMENDATIONS');
     expect(infoCodes).toContain('PSV6-FINANCIAL-DATA-USAGE');
+  });
+
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new SyminfoValidatorDisabledHarness();
+
+    const result = harness.validate('syminfo.employees');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
   });
 });
 

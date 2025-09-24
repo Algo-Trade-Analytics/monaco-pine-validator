@@ -23,7 +23,25 @@ class TickerValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledTickerValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new TickerFunctionsValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('TickerFunctionsValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new DisabledTickerValidatorHarness();
+    const result = harness.validate('ticker.modify(symbol, adjustment=adjustment.dividends)');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('flags unknown named parameters for ticker.modify calls', () => {
     const source = 'ticker.modify(symbol, weird=weird)';
     const tickerIdentifier = createIdentifier('ticker', source.indexOf('ticker'), 1);

@@ -178,4 +178,131 @@ describe('StrategyOrderLimitsValidator (AST)', () => {
 
     expect(warningCodes).toContain('PSV6-STRATEGY-UNCONDITIONAL-ORDER');
   });
+
+  it('acknowledges time filtering as a good practice when detected via AST metadata', () => {
+    const version = createVersionDirective(6, 0, 12, 1);
+    const scriptDeclaration = createScriptDeclaration('strategy', null, [], 0, 15, 2);
+
+    const inputIdentifier = createIdentifier('input', 0, 3);
+    const timeIdentifier = createIdentifier('time', 6, 3);
+    const inputTimeCallee = createMemberExpression(inputIdentifier, timeIdentifier, 0, 10, 3);
+    const labelArgument = createArgument(createStringLiteral('Session', '"Session"', 11, 3), 11, 21, 3);
+    const timeCall = createCallExpression(inputTimeCallee, [labelArgument], 0, 22, 3);
+    const timeStatement = createExpressionStatement(timeCall, 0, 22, 3);
+
+    const strategyIdentifier = createIdentifier('strategy', 0, 4);
+    const entryIdentifier = createIdentifier('entry', 9, 4);
+    const orderCallee = createMemberExpression(strategyIdentifier, entryIdentifier, 0, 14, 4);
+    const idArgument = createArgument(createStringLiteral('L', '"L"', 15, 4), 15, 18, 4);
+    const directionArgument = createArgument(createIdentifier('cond', 19, 4), 19, 23, 4);
+    const orderCall = createCallExpression(orderCallee, [idArgument, directionArgument], 0, 24, 4);
+    const orderStatement = createExpressionStatement(orderCall, 0, 24, 4);
+
+    const program = createProgram([scriptDeclaration, timeStatement, orderStatement], 0, 24, 1, 4, [version]);
+
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new StrategyOrderLimitsHarness(service);
+
+    const source = [
+      '//@version=6',
+      'strategy("Demo")',
+      'input.time("Session")',
+      'strategy.entry("L",cond)',
+    ].join('\n');
+
+    const result = harness.validate(source);
+    const infoCodes = result.info.map(info => info.code);
+
+    expect(infoCodes).toContain('PSV6-STRATEGY-GOOD-PRACTICE');
+  });
+
+  it('suppresses the position size suggestion when AST detects strategy.position_size usage', () => {
+    const version = createVersionDirective(6, 0, 12, 1);
+    const scriptDeclaration = createScriptDeclaration('strategy', null, [], 0, 15, 2);
+
+    const strategyIdentifier = createIdentifier('strategy', 0, 3);
+    const positionSizeIdentifier = createIdentifier('position_size', 9, 3);
+    const positionMember = createMemberExpression(strategyIdentifier, positionSizeIdentifier, 0, 21, 3);
+    const comparison = createBinaryExpression('==', positionMember, createNumberLiteral(0, '0', 24, 3), 0, 25, 3);
+    const positionStatement = createExpressionStatement(comparison, 0, 25, 3);
+
+    const entryIdentifier = createIdentifier('entry', 9, 4);
+    const orderCallee = createMemberExpression(createIdentifier('strategy', 0, 4), entryIdentifier, 0, 14, 4);
+    const firstOrder = createCallExpression(orderCallee, [
+      createArgument(createStringLiteral('A', '"A"', 15, 4), 15, 18, 4),
+      createArgument(createIdentifier('condA', 19, 4), 19, 24, 4),
+    ], 0, 25, 4);
+    const secondOrder = createCallExpression(orderCallee, [
+      createArgument(createStringLiteral('B', '"B"', 15, 5), 15, 18, 5),
+      createArgument(createIdentifier('condB', 19, 5), 19, 24, 5),
+    ], 0, 25, 5);
+    const thirdOrder = createCallExpression(orderCallee, [
+      createArgument(createStringLiteral('C', '"C"', 15, 6), 15, 18, 6),
+      createArgument(createIdentifier('condC', 19, 6), 19, 24, 6),
+    ], 0, 25, 6);
+
+    const program = createProgram([
+      scriptDeclaration,
+      positionStatement,
+      createExpressionStatement(firstOrder, 0, 25, 4),
+      createExpressionStatement(secondOrder, 0, 25, 5),
+      createExpressionStatement(thirdOrder, 0, 25, 6),
+    ], 0, 25, 1, 6, [version]);
+
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new StrategyOrderLimitsHarness(service);
+
+    const source = [
+      '//@version=6',
+      'strategy("Demo")',
+      'strategy.position_size == 0',
+      'strategy.entry("A",condA)',
+      'strategy.entry("B",condB)',
+      'strategy.entry("C",condC)',
+    ].join('\n');
+
+    const result = harness.validate(source);
+    const infoCodes = result.info.map(info => info.code);
+
+    expect(infoCodes).not.toContain('PSV6-STRATEGY-POSITION-SIZE-CHECK');
+  });
+
+  it('recommends caching when expensive calculations are detected through AST traversal', () => {
+    const version = createVersionDirective(6, 0, 12, 1);
+    const scriptDeclaration = createScriptDeclaration('strategy', null, [], 0, 15, 2);
+
+    const taIdentifier = createIdentifier('ta', 0, 3);
+    const smaIdentifier = createIdentifier('sma', 3, 3);
+    const taSmaCallee = createMemberExpression(taIdentifier, smaIdentifier, 0, 7, 3);
+    const smaCall = createCallExpression(taSmaCallee, [
+      createArgument(createIdentifier('close', 8, 3), 8, 13, 3),
+      createArgument(createNumberLiteral(14, '14', 14, 3), 14, 17, 3),
+    ], 0, 18, 3);
+    const smaStatement = createExpressionStatement(smaCall, 0, 18, 3);
+
+    const strategyIdentifier = createIdentifier('strategy', 0, 4);
+    const entryIdentifier = createIdentifier('entry', 9, 4);
+    const orderCallee = createMemberExpression(strategyIdentifier, entryIdentifier, 0, 14, 4);
+    const idArgument = createArgument(createStringLiteral('L', '"L"', 15, 4), 15, 18, 4);
+    const directionArgument = createArgument(createIdentifier('cond', 19, 4), 19, 23, 4);
+    const orderCall = createCallExpression(orderCallee, [idArgument, directionArgument], 0, 24, 4);
+    const orderStatement = createExpressionStatement(orderCall, 0, 24, 4);
+
+    const program = createProgram([scriptDeclaration, smaStatement, orderStatement], 0, 24, 1, 4, [version]);
+
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new StrategyOrderLimitsHarness(service);
+
+    const source = [
+      '//@version=6',
+      'strategy("Demo")',
+      'ta.sma(close, 14)',
+      'strategy.entry("L",cond)',
+    ].join('\n');
+
+    const result = harness.validate(source);
+    const infoCodes = result.info.map(info => info.code);
+
+    expect(infoCodes).toContain('PSV6-STRATEGY-CACHE-CALCULATIONS');
+  });
 });

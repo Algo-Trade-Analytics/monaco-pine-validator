@@ -23,6 +23,7 @@ import {
 import { STRATEGY_ORDER_LIMITS, STRATEGY_ORDER_FUNCTIONS, EXPENSIVE_CALCULATION_FUNCTIONS } from '../core/constants';
 import {
   type ArgumentNode,
+  type BinaryExpressionNode,
   type CallExpressionNode,
   type ExpressionNode,
   type MemberExpressionNode,
@@ -70,6 +71,14 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
   private hasTimeFiltering = false;
   private prevLineHadExpensiveCondition = false;
   private astHasLoop = false;
+  private astMemberNames = new Set<string>();
+  private astFirstIndexStandalone: Array<{ line: number; column: number }> = [];
+  private astComplexCalculations = new Set<string>();
+  private astHasPositionSizeReference = false;
+  private astHasPositionSizeReset = false;
+  private astHasOrderCountTracking = false;
+  private astHasOpenTradesReference = false;
+  private astHasVarEntryTracking = false;
   
   // Suggestion flags
   private hasConsolidationSuggestion = false;
@@ -102,13 +111,13 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     this.astContext = this.getAstContext(config);
     this.usingAst = !!this.astContext?.ast;
 
-    // Process each line for shared heuristics
-    context.cleanLines.forEach((line, index) => {
-      this.processLine(line, index + 1);
-    });
-
     if (this.usingAst && this.astContext?.ast) {
       this.collectStrategyOrdersAst(this.astContext.ast);
+    } else {
+      // Process each line for shared heuristics when AST is unavailable
+      context.cleanLines.forEach((line, index) => {
+        this.processLine(line, index + 1);
+      });
     }
 
     // Analyze patterns and provide suggestions
@@ -153,6 +162,14 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     this.astContext = null;
     this.usingAst = false;
     this.astHasLoop = false;
+    this.astMemberNames.clear();
+    this.astFirstIndexStandalone = [];
+    this.astComplexCalculations.clear();
+    this.astHasPositionSizeReference = false;
+    this.astHasPositionSizeReset = false;
+    this.astHasOrderCountTracking = false;
+    this.astHasOpenTradesReference = false;
+    this.astHasVarEntryTracking = false;
 
     // Reset suggestion flags
     this.hasConsolidationSuggestion = false;
@@ -448,7 +465,11 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
 
     // If there are several entry calls throughout the script, warn about multiple entries pattern
     const totalEntryCalls = this.strategyOrderCalls.filter(c => c.orderType === 'entry').length;
-    const hasPyramidingManagement = this.pyramidingLevel > 0 || this.context.cleanLines.some(l => l.includes('strategy.opentrades'));
+    const hasPyramidingManagement = this.pyramidingLevel > 0 || (
+      this.usingAst
+        ? this.astHasOpenTradesReference
+        : this.context.cleanLines.some(l => l.includes('strategy.opentrades'))
+    );
     if (!hasPyramidingManagement && totalEntryCalls >= STRATEGY_ORDER_LIMITS.MAX_ENTRIES_PER_BAR) {
       const firstEntry = this.strategyOrderCalls.find(c => c.orderType === 'entry');
       if (firstEntry) {
@@ -577,6 +598,14 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     // Simple estimation based on order calls and loop patterns
     let estimate = this.totalOrderCount;
 
+    if (this.usingAst) {
+      const loopedOrders = this.strategyOrderCalls.filter(call => call.inLoop).length;
+      if (loopedOrders > 0) {
+        estimate += loopedOrders * 10;
+      }
+      return estimate;
+    }
+
     // Heuristic: if script maintains an order counter variable, use that as a floor
     for (const line of this.context.cleanLines) {
       const m = line.match(/\b(?:var\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\d{2,})/);
@@ -606,9 +635,11 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
 
   private checkOrderTrimmingOptimizations(): void {
     // Check for patterns that could benefit from v6 trimming awareness
-    const hasOrderCountTracking = this.context.cleanLines.some(line => 
-      /strategy\.closedtrades\.size|strategy\.opentrades\.size/.test(line)
-    );
+    const hasOrderCountTracking = this.usingAst
+      ? this.astHasOrderCountTracking
+      : this.context.cleanLines.some(line =>
+        /strategy\.closedtrades\.size|strategy\.opentrades\.size/.test(line)
+      );
     
     if (this.totalOrderCount > 100 && !hasOrderCountTracking) {
       this.addInfo(
@@ -622,9 +653,11 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
 
   private validateTrimmingFeatures(): void {
     // Check for proper use of v6 trimming features
-    const usesFirstIndex = this.context.cleanLines.some(line => 
-      /strategy\.closedtrades\.first_index/.test(line)
-    );
+    const usesFirstIndex = this.usingAst
+      ? this.astMemberNames.has('strategy.closedtrades.first_index')
+      : this.context.cleanLines.some(line =>
+        /strategy\.closedtrades\.first_index/.test(line)
+      );
     
     const hasHighOrderCount = this.totalOrderCount > 50;
     
@@ -638,10 +671,14 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     }
     
     // Validate proper first_index usage
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      if (/strategy\.closedtrades\.first_index/.test(line)) {
-        this.validateFirstIndexUsage(line, i + 1);
+    if (this.usingAst) {
+      this.validateFirstIndexUsageAst();
+    } else {
+      for (let i = 0; i < this.context.cleanLines.length; i++) {
+        const line = this.context.cleanLines[i];
+        if (/strategy\.closedtrades\.first_index/.test(line)) {
+          this.validateFirstIndexUsage(line, i + 1);
+        }
       }
     }
   }
@@ -668,8 +705,31 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     }
   }
 
+  private validateFirstIndexUsageAst(): void {
+    for (const usage of this.astFirstIndexStandalone) {
+      this.addInfo(
+        usage.line,
+        usage.column,
+        'strategy.closedtrades.first_index represents the index of the earliest non-trimmed order. Consider using it in calculations or comparisons.',
+        'PSV6-STRATEGY-FIRST-INDEX-USAGE'
+      );
+    }
+  }
+
   private checkOrderTrimmingRisk(): void {
     // Look for patterns that might cause order trimming
+    if (this.usingAst) {
+      if (this.strategyOrderCalls.some(call => call.inLoop)) {
+        this.addWarning(
+          1,
+          1,
+          'Order trimming may occur due to orders in loops. Oldest orders will be removed when limit is reached.',
+          'PSV6-STRATEGY-ORDER-TRIMMING-RISK'
+        );
+      }
+      return;
+    }
+
     // Collect loop header line numbers
     const loopLines: number[] = [];
     for (let i = 0; i < this.context.cleanLines.length; i++) {
@@ -703,10 +763,16 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     // Check for complex calculations that could be cached
     const complexCalculations = new Set<string>();
 
-    // Scan entire script for expensive calculations used around order logic
-    for (const line of this.context.cleanLines) {
-      for (const expensiveFunc of EXPENSIVE_CALCULATION_FUNCTIONS) {
-        if (line.includes(expensiveFunc)) complexCalculations.add(expensiveFunc);
+    if (this.usingAst) {
+      for (const func of this.astComplexCalculations) {
+        complexCalculations.add(func);
+      }
+    } else {
+      // Scan entire script for expensive calculations used around order logic
+      for (const line of this.context.cleanLines) {
+        for (const expensiveFunc of EXPENSIVE_CALCULATION_FUNCTIONS) {
+          if (line.includes(expensiveFunc)) complexCalculations.add(expensiveFunc);
+        }
       }
     }
     
@@ -724,9 +790,11 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
   private provideBestPracticesSuggestions(): void {
     // Suggest position size checks
     if (this.strategyOrderCalls.length >= 3 && !this.hasPositionSizeSuggestion) {
-      const hasPositionSizeCheck = this.context.cleanLines.some(line => 
-        line.includes('strategy.position_size')
-      );
+      const hasPositionSizeCheck = this.usingAst
+        ? this.astHasPositionSizeReference
+        : this.context.cleanLines.some(line =>
+          line.includes('strategy.position_size')
+        );
       
       if (!hasPositionSizeCheck) {
         this.addInfo(
@@ -741,9 +809,11 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     
     // Suggest var tracking for entry management
     if (this.entriesPerLine.size >= 2 && !this.hasVarTrackingSuggestion) {
-      const hasVarTracking = this.context.cleanLines.some(line => 
-        line.includes('var bool') && line.includes('entered')
-      );
+      const hasVarTracking = this.usingAst
+        ? this.astHasVarEntryTracking
+        : this.context.cleanLines.some(line =>
+          line.includes('var bool') && line.includes('entered')
+        );
       
       if (!hasVarTracking) {
         this.addInfo(
@@ -786,8 +856,12 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
         this.addInfo(1, 1, 'Good practice: Time-based filtering detected for order management', 'PSV6-STRATEGY-GOOD-PRACTICE');
       }
       // Also recognize good practice if entry tracking via var + position_size management is present
-      const hasVarEntryTracking = this.context.cleanLines.some(line => /var\s+bool\s+\w*entered\w*/.test(line));
-      const hasPosSizeReset = this.context.cleanLines.some(line => /strategy\.position_size\s*==\s*0/.test(line));
+      const hasVarEntryTracking = this.usingAst
+        ? this.astHasVarEntryTracking
+        : this.context.cleanLines.some(line => /var\s+bool\s+\w*entered\w*/.test(line));
+      const hasPosSizeReset = this.usingAst
+        ? this.astHasPositionSizeReset
+        : this.context.cleanLines.some(line => /strategy\.position_size\s*==\s*0/.test(line));
       if (hasVarEntryTracking && hasPosSizeReset) {
         this.addInfo(1, 1, 'Good practice: Entry tracking with var and position size checks', 'PSV6-STRATEGY-GOOD-PRACTICE');
       }
@@ -958,8 +1032,89 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
           conditionalStack.pop();
         },
       },
+      ScriptDeclaration: {
+        enter: (path) => {
+          if (path.node.scriptType === 'strategy') {
+            for (const argument of path.node.arguments) {
+              if (argument.name?.name === 'pyramiding') {
+                const value = this.getNumericLiteralValue(argument.value);
+                if (typeof value === 'number') {
+                  this.pyramidingLevel = value;
+                }
+              }
+            }
+          }
+        },
+      },
+      VariableDeclaration: {
+        enter: (path) => {
+          if (path.node.declarationKind === 'var' && /entered/i.test(path.node.identifier.name)) {
+            this.astHasVarEntryTracking = true;
+          }
+        },
+      },
+      MemberExpression: {
+        enter: (path) => {
+          const name = this.getExpressionQualifiedName(path.node);
+          if (!name) {
+            return;
+          }
+
+          this.astMemberNames.add(name);
+
+          if (name.startsWith('strategy.opentrades')) {
+            this.astHasOpenTradesReference = true;
+          }
+
+          if (name === 'strategy.closedtrades.size' || name === 'strategy.opentrades.size') {
+            this.astHasOrderCountTracking = true;
+          }
+
+          if (name === 'strategy.position_size') {
+            this.astHasPositionSizeReference = true;
+          }
+
+          if (name === 'strategy.closedtrades.first_index') {
+            const parent = path.parent?.node ?? null;
+            if (parent?.kind === 'ExpressionStatement' && path.key === 'expression') {
+              this.astFirstIndexStandalone.push({
+                line: path.node.loc.start.line,
+                column: path.node.loc.start.column,
+              });
+            }
+          }
+
+          if (name === 'input.time') {
+            this.hasTimeFiltering = true;
+          }
+        },
+      },
+      BinaryExpression: {
+        enter: (path) => {
+          if (!this.hasTimeFiltering && this.binaryExpressionIndicatesTimeFilter(path.node)) {
+            this.hasTimeFiltering = true;
+          }
+
+          if (!this.astHasPositionSizeReset && this.binaryExpressionIndicatesPositionSizeReset(path.node)) {
+            this.astHasPositionSizeReset = true;
+          }
+        },
+      },
       CallExpression: {
         enter: (path) => {
+          const qualifiedName = this.getExpressionQualifiedName(path.node.callee);
+          if (qualifiedName && EXPENSIVE_CALCULATION_FUNCTIONS.has(qualifiedName)) {
+            this.astComplexCalculations.add(qualifiedName);
+          }
+
+          if (qualifiedName === 'timestamp' || qualifiedName === 'tradeDateIsAllowed') {
+            this.hasTimeFiltering = true;
+          }
+
+          if (qualifiedName === 'input.time') {
+            this.hasTimeFiltering = true;
+          }
+
           this.processAstOrderCall(
             path as NodePath<CallExpressionNode>,
             loopStack.length > 0,
@@ -1101,6 +1256,119 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
       return `${objectName}.${member.property.name}`;
     }
     return null;
+  }
+
+  private getNumericLiteralValue(expression: ExpressionNode): number | null {
+    if (expression.kind === 'NumberLiteral') {
+      return expression.value;
+    }
+    return null;
+  }
+
+  private binaryExpressionIndicatesTimeFilter(expression: BinaryExpressionNode): boolean {
+    const operators = new Set(['>=', '<=', '>', '<']);
+    if (!operators.has(expression.operator)) {
+      return false;
+    }
+
+    const hasTimeIdentifier = this.expressionHasIdentifier(expression.left, name => name === 'time')
+      || this.expressionHasIdentifier(expression.right, name => name === 'time');
+
+    if (!hasTimeIdentifier) {
+      return false;
+    }
+
+    const otherSideHasDateIdentifier = this.expressionHasIdentifier(expression.left, name => /date/i.test(name))
+      || this.expressionHasIdentifier(expression.right, name => /date/i.test(name));
+
+    return otherSideHasDateIdentifier;
+  }
+
+  private binaryExpressionIndicatesPositionSizeReset(expression: BinaryExpressionNode): boolean {
+    if (!['==', '==='].includes(expression.operator)) {
+      return false;
+    }
+
+    if (this.expressionHasMemberName(expression.left, name => name === 'strategy.position_size') && this.expressionIsZero(expression.right)) {
+      return true;
+    }
+
+    if (this.expressionHasMemberName(expression.right, name => name === 'strategy.position_size') && this.expressionIsZero(expression.left)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private expressionHasIdentifier(expression: ExpressionNode, predicate: (name: string) => boolean): boolean {
+    let found = false;
+    visit(expression, {
+      Identifier: {
+        enter: (path) => {
+          if (found) {
+            return false;
+          }
+          if (predicate(path.node.name)) {
+            found = true;
+            return false;
+          }
+          return;
+        },
+      },
+    });
+    return found;
+  }
+
+  private expressionHasMemberName(expression: ExpressionNode, predicate: (name: string) => boolean): boolean {
+    let found = false;
+    visit(expression, {
+      MemberExpression: {
+        enter: (path) => {
+          if (found) {
+            return false;
+          }
+          const name = this.getExpressionQualifiedName(path.node);
+          if (name && predicate(name)) {
+            found = true;
+            return false;
+          }
+          return;
+        },
+      },
+      Identifier: {
+        enter: (path) => {
+          if (found) {
+            return false;
+          }
+          if (predicate(path.node.name)) {
+            found = true;
+            return false;
+          }
+          return;
+        },
+      },
+    });
+    return found;
+  }
+
+  private expressionIsZero(expression: ExpressionNode): boolean {
+    if (expression.kind === 'NumberLiteral') {
+      return expression.value === 0;
+    }
+
+    let isZero = false;
+    visit(expression, {
+      NumberLiteral: {
+        enter: (path) => {
+          if (path.node.value === 0) {
+            isZero = true;
+            return false;
+          }
+          return;
+        },
+      },
+    });
+    return isZero;
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {

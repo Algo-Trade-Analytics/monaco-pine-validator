@@ -39,9 +39,7 @@ export class TAFunctionsValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
   private astTaCallLines: Set<number> = new Set();
   private astLineCallCounts: Map<number, number> = new Map();
   private boolAssignmentTargets: Map<string, { callName: string }> = new Map();
@@ -58,23 +56,27 @@ export class TAFunctionsValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
 
     this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
+    const program = this.astContext?.ast;
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectTAFunctionDataAst(this.astContext.ast);
-      this.emitAstLineWarnings();
-      this.validateBooleanAssignmentsAst(this.astContext.ast);
-      for (const line of this.astTaCallLines) {
-        const sourceLine = this.context.cleanLines[line - 1] ?? '';
-        this.validateTAComplexity(sourceLine, line);
-      }
-    } else {
-      context.cleanLines.forEach((line, index) => {
-        this.processLine(line, index + 1);
-      });
+    if (!program) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
+    }
+
+    this.collectTAFunctionDataAst(program);
+    this.emitAstLineWarnings();
+    this.validateBooleanAssignmentsAst(program);
+    for (const line of this.astTaCallLines) {
+      const sourceLine = this.context.cleanLines[line - 1] ?? '';
+      this.validateTAComplexity(sourceLine, line);
     }
 
     this.validateTAPerformance();
@@ -105,7 +107,6 @@ export class TAFunctionsValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
     this.astTaCallLines.clear();
     this.astLineCallCounts.clear();
     this.boolAssignmentTargets.clear();
@@ -113,17 +114,6 @@ export class TAFunctionsValidator implements ValidationModule {
     this.taFunctionCalls.clear();
     this.taFunctionCount = 0;
     this.complexTAExpressions = 0;
-  }
-
-  private processLine(line: string, lineNumber: number): void {
-    // Skip empty lines and comments
-    if (!line.trim() || line.trim().startsWith('//')) {
-      return;
-    }
-
-    this.validateTAFunctionCalls(line, lineNumber);
-    this.validateTAParameters(line, lineNumber);
-    this.validateTAComplexity(line, lineNumber);
   }
 
   private collectTAFunctionDataAst(program: ProgramNode): void {
@@ -277,135 +267,6 @@ export class TAFunctionsValidator implements ValidationModule {
         },
       },
     });
-  }
-
-  private validateTAFunctionCalls(line: string, lineNumber: number): void {
-    // Match TA function calls like ta.sma(), ta.rsi(), etc.
-    const taFunctionRegex = /\bta\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-    let match: RegExpExecArray | null;
-
-    while ((match = taFunctionRegex.exec(line)) !== null) {
-      const fullFunctionName = `ta.${match[1]}`;
-      const functionName = match[1];
-      
-      // Check if it's a known TA function
-      if (NS_MEMBERS.ta && NS_MEMBERS.ta.has(functionName)) {
-        this.taFunctionCount++;
-        
-        // Extract parameters from the function call
-        const paramMatch = this.extractFunctionParameters(line, match.index + fullFunctionName.length - 1);
-        const parameters = paramMatch ? this.splitTopLevelArgs(paramMatch) : [];
-        
-        // Determine return type based on function
-        const returnType = this.getTAReturnType(fullFunctionName);
-        const isComplex = this.isComplexTAFunction(fullFunctionName, parameters);
-        
-        if (isComplex) {
-          this.complexTAExpressions++;
-        }
-
-        this.taFunctionCalls.set(fullFunctionName, {
-          name: fullFunctionName,
-          parameters,
-          returnType,
-          line: lineNumber,
-          column: match.index + 1,
-          isComplex
-        });
-
-        // If this TA function is assigned to a variable and returns boolean, track misuse in arithmetic later
-        if (returnType === 'bool') {
-          const assignmentMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
-          if (assignmentMatch) {
-            const varName = assignmentMatch[1];
-            // Scan subsequent lines for arithmetic usage of the variable
-            for (let i = lineNumber; i < this.context.lines.length; i++) {
-              const currentLine = this.context.lines[i];
-              if (!currentLine || !currentLine.includes(varName)) continue;
-              if (this.isVariableUsedInArithmetic(currentLine, varName)) {
-                this.addError(i + 1, 1, 'PSV6-FUNCTION-RETURN-TYPE', `Variable '${varName}' contains boolean result from '${fullFunctionName}' and cannot be used in arithmetic operations`);
-              }
-            }
-          }
-        }
-
-        // Fallback invalid parameter checks for tests
-        const rules = BUILTIN_FUNCTIONS_V6_RULES[fullFunctionName];
-        if (rules && Array.isArray(rules.parameters)) {
-          rules.parameters.forEach((exp: any, idx: number) => {
-            if (idx < parameters.length && exp && exp.required) {
-              const val = parameters[idx].trim();
-              // string literal where numeric expected
-              if ((exp.type === 'int' || exp.type === 'float') && /^"[^"]*"$/.test(val)) {
-                this.addError(lineNumber, (match?.index ?? 0) + 1, 'PSV6-TA-FUNCTION-PARAM', `Parameter ${idx + 1} of '${fullFunctionName}' should be ${exp.type}, got string`);
-              }
-              // negative length check
-              if (exp.type === 'int' && /length/i.test(exp.name || '')) {
-                const num = parseFloat(val);
-                // Allow zero for length parameters; only flag negatives
-                if (!Number.isNaN(num) && num < 0) {
-                  this.addError(lineNumber, (match?.index ?? 0) + 1, 'PSV6-TA-FUNCTION-PARAM', `Parameter '${exp.name}' of '${fullFunctionName}' must be a positive integer`);
-                }
-              }
-            }
-          });
-        }
-        // Fallback loop detection and nested complexity for tests
-        // Add loop warning if recent lines include a loop header
-        for (let i = Math.max(1, lineNumber - 3); i <= lineNumber; i++) {
-          const ln = this.context.cleanLines[i - 1] || '';
-          if (/\b(for|while)\b/.test(ln)) {
-            this.addWarning(lineNumber, match.index + 1, 'PSV6-TA-PERF-LOOP', 'TA operation in loop');
-            break;
-          }
-        }
-        // Nested expensive calls on same line
-        const taCallsOnLine = (line.match(/\bta\.[A-Za-z_][A-Za-z0-9_]*\s*\(/g) || []).length;
-        if (taCallsOnLine > 1) {
-          this.addWarning(lineNumber, 1, 'PSV6-TA-PERF-NESTED', 'Multiple TA operations on one line');
-        }
-      } else {
-        this.addError(
-          lineNumber,
-          match.index + 1,
-          `PSV6-TA-FUNCTION-UNKNOWN: Unknown TA function: ${fullFunctionName}`,
-          `TA function '${fullFunctionName}' is not recognized. Check spelling and ensure it's a valid Pine Script v6 TA function.`
-        );
-      }
-    }
-  }
-
-  private isVariableUsedInArithmetic(line: string, varName: string): boolean {
-    const ops = ['+', '-', '*', '/', '%', '^'];
-    for (const op of ops) {
-      const patterns = [
-        new RegExp(`\\b${varName}\\s*\\${op}`),
-        new RegExp(`\\${op}\\s*\\b${varName}\\b`)
-      ];
-      if (patterns.some(p => p.test(line))) return true;
-    }
-    return false;
-  }
-
-  private validateTAParameters(line: string, lineNumber: number): void {
-    // Match TA function calls and validate their parameters
-    const taFunctionRegex = /\bta\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-    let match: RegExpExecArray | null;
-
-    while ((match = taFunctionRegex.exec(line)) !== null) {
-      const fullFunctionName = `ta.${match[1]}`;
-      const functionName = match[1];
-      
-      if (NS_MEMBERS.ta && NS_MEMBERS.ta.has(functionName)) {
-        const paramMatch = this.extractFunctionParameters(line, match.index + fullFunctionName.length - 1);
-        if (paramMatch) {
-          const parameters = this.splitTopLevelArgs(paramMatch);
-          this.validateTAParameterTypes(fullFunctionName, parameters, lineNumber, match.index + 1);
-
-          this.validatePivotParameters(fullFunctionName, parameters, lineNumber, match.index + 1);
-        }
-      }
-    }
   }
 
   private validatePivotParameters(
@@ -584,35 +445,11 @@ export class TAFunctionsValidator implements ValidationModule {
       );
     }
 
-    // TA calls inside loops
-    if (this.usingAst) {
-      for (const info of this.taFunctionCalls.values()) {
-        if (info.inLoop) {
-          this.addWarning(info.line, info.column, 'PSV6-TA-PERF-LOOP', 'TA operation in loop');
-        }
-      }
-      return;
-    }
-    const loopLines = this.computeLoopLines();
     for (const info of this.taFunctionCalls.values()) {
-      if (loopLines.has(info.line)) {
+      if (info.inLoop) {
         this.addWarning(info.line, info.column, 'PSV6-TA-PERF-LOOP', 'TA operation in loop');
       }
     }
-  }
-
-  private computeLoopLines(): Set<number> {
-    const loopLines = new Set<number>();
-    const stack: number[] = [];
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const ln = this.context.cleanLines[i];
-      const ind = ln.length - ln.trimStart().length;
-      const t = ln.trim();
-      while (stack.length && ind <= stack[stack.length - 1] && t !== '') stack.pop();
-      if (/^\s*(for|while)\b/.test(t)) stack.push(ind);
-      if (stack.length) loopLines.add(i + 1);
-    }
-    return loopLines;
   }
 
   private validateTABestPractices(): void {
@@ -660,73 +497,6 @@ export class TAFunctionsValidator implements ValidationModule {
         'Good combination of trend and momentum indicators detected. Consider using crossover/crossunder for signals.'
       );
     }
-  }
-
-  private extractFunctionParameters(line: string, startIndex: number): string | null {
-    let parenCount = 0;
-    let start = startIndex;
-    let end = startIndex;
-    
-    // Find the opening parenthesis
-    while (start < line.length && line[start] !== '(') {
-      start++;
-    }
-    
-    if (start >= line.length) return null;
-    
-    start++; // Skip the opening parenthesis
-    end = start;
-    
-    // Find the matching closing parenthesis
-    while (end < line.length) {
-      if (line[end] === '(') {
-        parenCount++;
-      } else if (line[end] === ')') {
-        if (parenCount === 0) {
-          break;
-        }
-        parenCount--;
-      }
-      end++;
-    }
-    
-    if (end >= line.length) return null;
-    
-    return line.substring(start, end).trim();
-  }
-
-  // Split arguments by commas at top level only (ignore commas inside nested parentheses or strings)
-  private splitTopLevelArgs(argsStr: string): string[] {
-    if (!argsStr.trim()) return [];
-    const args: string[] = [];
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-    for (let i = 0; i < argsStr.length; i++) {
-      const ch = argsStr[i];
-      if (!inString && (ch === '"' || ch === "'")) {
-        inString = true;
-        stringChar = ch;
-        current += ch;
-      } else if (inString && ch === stringChar) {
-        inString = false;
-        current += ch;
-      } else if (!inString && ch === '(') {
-        depth++;
-        current += ch;
-      } else if (!inString && ch === ')') {
-        depth--;
-        current += ch;
-      } else if (!inString && ch === ',' && depth === 0) {
-        args.push(current.trim());
-        current = '';
-      } else {
-        current += ch;
-      }
-    }
-    if (current.trim()) args.push(current.trim());
-    return args;
   }
 
   private getTAReturnType(functionName: string): string {

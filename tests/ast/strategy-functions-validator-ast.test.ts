@@ -26,6 +26,15 @@ class StrategyValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class StrategyValidatorDisabledHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new StrategyFunctionsValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('StrategyFunctionsValidator (AST)', () => {
   it('reports unknown strategy members', () => {
     const strategyIdentifier = createIdentifier('strategy', 0, 1);
@@ -100,5 +109,15 @@ describe('StrategyFunctionsValidator (AST)', () => {
 
     expect(warningCodes).toContain('PSV6-STRATEGY-PERF-LOOP');
     expect(warningCodes).toContain('PSV6-STRATEGY-PERF-NESTED');
+  });
+
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new StrategyValidatorDisabledHarness();
+
+    const result = harness.validate('strategy.entry("Long", strategy.long)');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
   });
 });

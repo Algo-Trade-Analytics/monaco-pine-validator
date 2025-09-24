@@ -29,7 +29,6 @@ export class TextFormattingValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
 
   private formatCalls: Array<{
@@ -47,15 +46,20 @@ export class TextFormattingValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
     this.astContext = this.getAstContext(config);
 
-    if (this.astContext?.ast) {
-      this.validateTextFormattingAst(this.astContext.ast);
-    } else {
-      this.validateTextFormattingFunctionsLegacy();
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null
+      };
     }
 
+    this.validateTextFormattingAst(this.astContext.ast);
     this.validateTextFormattingPerformance();
 
     return {
@@ -104,24 +108,6 @@ export class TextFormattingValidator implements ValidationModule {
       code,
       severity: 'info'
     });
-  }
-
-  private validateTextFormattingFunctionsLegacy(): void {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-
-      // Look for str.format function calls - more flexible regex
-      const formatRegex = /str\.format\s*\(\s*"([^"]*)"\s*,\s*(.+)\)/g;
-      let match;
-      
-      while ((match = formatRegex.exec(line)) !== null) {
-        const formatString = match[1];
-        const parameters = match[2];
-        
-        this.validateFormatString(formatString, parameters, lineNum);
-      }
-    }
   }
 
   private validateFormatString(formatString: string, parameters: string | string[], lineNum: number): void {
@@ -233,15 +219,15 @@ export class TextFormattingValidator implements ValidationModule {
     
     const isValidFormat = validNumericPatterns.some(pattern => pattern.test(format));
     if (!isValidFormat) {
-      this.addWarning(lineNum, 1, 
-        `Invalid numeric format: "${format}". Use patterns like #, ##, #.##, #,###, or #%`, 
+      this.addWarning(lineNum, 1,
+        `Invalid numeric format: "${format}". Use patterns like #, ##, #.##, #,###, or #%`,
         'PSV6-TEXT-INVALID-NUMERIC-FORMAT');
     }
-    
+
     // Check if parameter is numeric
     if (!this.isNumericParameter(parameter)) {
-      this.addWarning(lineNum, 1, 
-        `Non-numeric parameter "${parameter}" used with numeric format`, 
+      this.addWarning(lineNum, 1,
+        `Non-numeric parameter "${parameter}" used with numeric format`,
         'PSV6-TEXT-NON-NUMERIC-FORMAT');
     }
   }
@@ -291,84 +277,10 @@ export class TextFormattingValidator implements ValidationModule {
     
     // Check if parameter is time-related
     if (!this.isTimeParameter(parameter)) {
-      this.addWarning(lineNum, 1, 
-        `Non-time parameter "${parameter}" used with time format`, 
+      this.addWarning(lineNum, 1,
+        `Non-time parameter "${parameter}" used with time format`,
         'PSV6-TEXT-NON-TIME-FORMAT');
     }
-  }
-
-  private validateTextFormattingPerformance(): void {
-    if (this.astContext?.ast) {
-      this.validateTextFormattingInLoopsAst();
-      this.validateComplexTextFormattingAst();
-      return;
-    }
-
-    this.validateTextFormattingInLoopsLegacy();
-    this.validateComplexTextFormattingLegacy();
-  }
-
-  private validateTextFormattingInLoopsLegacy(): void {
-    let inLoop = false;
-    let loopStartLine = 0;
-
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-      
-      // Check for loop start
-      if (line.match(/^\s*for\s+/) || line.match(/^\s*while\s+/)) {
-        inLoop = true;
-        loopStartLine = lineNum;
-        continue;
-      }
-      
-      // Check for loop end
-      if (inLoop && line.match(/^\s*end\s*$/)) {
-        inLoop = false;
-        continue;
-      }
-
-      // If we're in a loop, check for text formatting
-      if (inLoop && line.includes('str.format')) {
-        this.addWarning(lineNum, 1,
-          `Text formatting in loop (line ${loopStartLine}). Consider caching formatted text outside the loop for better performance`,
-          'PSV6-TEXT-PERF-LOOP');
-      }
-    }
-  }
-
-  private validateComplexTextFormattingLegacy(): void {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-
-      // Look for complex text formatting (multiple parameters with different formats)
-      const formatRegex = /\bstr\.format\s*\(\s*"([^"]*)"\s*,\s*(.+)\)/g;
-      let match;
-      
-      while ((match = formatRegex.exec(line)) !== null) {
-        const formatString = match[1];
-        const parameters = match[2];
-        
-        // Check for complex formatting
-        const placeholderCount = (formatString.match(/\{\d+/g) || []).length;
-        const paramCount = this.countParameters(parameters);
-
-        if (placeholderCount >= 3 || paramCount >= 3) {
-          this.addWarning(lineNum, 1,
-            `Complex text formatting with ${placeholderCount} placeholders and ${paramCount} parameters. Consider breaking into simpler expressions`,
-            'PSV6-TEXT-PERF-COMPLEX');
-        }
-      }
-    }
-  }
-
-  private countParameters(parameters: string | string[]): number {
-    if (Array.isArray(parameters)) {
-      return parameters.length;
-    }
-    return this.parseParameterList(parameters).length;
   }
 
   private parseParameterList(parameters: string): string[] {
@@ -377,96 +289,101 @@ export class TextFormattingValidator implements ValidationModule {
     let depth = 0;
     let inString = false;
     let escapeNext = false;
-    
+
     for (let i = 0; i < parameters.length; i++) {
       const char = parameters[i];
-      
+
       if (escapeNext) {
         current += char;
         escapeNext = false;
         continue;
       }
-      
+
       if (char === '\\') {
         escapeNext = true;
         current += char;
         continue;
       }
-      
+
       if (char === '"' && !inString) {
         inString = true;
         current += char;
         continue;
       }
-      
+
       if (char === '"' && inString) {
         inString = false;
         current += char;
         continue;
       }
-      
+
       if (char === '(' && !inString) {
         depth++;
         current += char;
         continue;
       }
-      
+
       if (char === ')' && !inString) {
         depth--;
         current += char;
         continue;
       }
-      
+
       if (char === ',' && depth === 0 && !inString) {
         result.push(current.trim());
         current = '';
         continue;
       }
-      
+
       current += char;
     }
-    
+
     if (current.trim()) {
       result.push(current.trim());
     }
-    
+
     return result;
   }
 
   private isNumericParameter(parameter: string): boolean {
-    // Check for numeric literals
-    if (parameter.match(/^\d+\.?\d*$/)) return true;
-    
-    // Check for numeric variables
+    if (parameter.match(/^\d+\.?\d*$/)) {
+      return true;
+    }
+
     const numericVariables = ['close', 'open', 'high', 'low', 'volume', 'hl2', 'hlc3', 'ohlc4', 'hlcc4'];
-    if (numericVariables.includes(parameter)) return true;
-    
-    // Check for arithmetic expressions
+    if (numericVariables.includes(parameter)) {
+      return true;
+    }
+
     if (parameter.includes('+') || parameter.includes('-') || parameter.includes('*') || parameter.includes('/')) {
       return true;
     }
-    
+
     return false;
   }
 
   private isDateParameter(parameter: string): boolean {
-    // Check for date-related variables
     const dateVariables = ['time', 'bar_index'];
-    if (dateVariables.includes(parameter)) return true;
-    
-    // Check for date functions
-    if (parameter.includes('time(') || parameter.includes('timestamp(')) return true;
-    
+    if (dateVariables.includes(parameter)) {
+      return true;
+    }
+
+    if (parameter.includes('time(') || parameter.includes('timestamp(')) {
+      return true;
+    }
+
     return false;
   }
 
   private isTimeParameter(parameter: string): boolean {
-    // Check for time-related variables
     const timeVariables = ['time'];
-    if (timeVariables.includes(parameter)) return true;
+    if (timeVariables.includes(parameter)) {
+      return true;
+    }
 
-    // Check for time functions
-    if (parameter.includes('time(') || parameter.includes('timestamp(')) return true;
+    if (parameter.includes('time(') || parameter.includes('timestamp(')) {
+      return true;
+    }
 
     return false;
   }
@@ -515,6 +432,11 @@ export class TextFormattingValidator implements ValidationModule {
       parameterCount: parameterStrings.length,
       loopLine: loopAncestor?.node.loc.start.line ?? null,
     });
+  }
+
+  private validateTextFormattingPerformance(): void {
+    this.validateTextFormattingInLoopsAst();
+    this.validateComplexTextFormattingAst();
   }
 
   private validateTextFormattingInLoopsAst(): void {

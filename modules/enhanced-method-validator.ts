@@ -54,24 +54,30 @@ export class EnhancedMethodValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   getDependencies(): string[] {
     return ['CoreValidator', 'UDTValidator'];
   }
 
-  validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
+  validate(context: ValidationContext, _config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
+    void _config;
 
-    this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
+    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.validateUsingAst(this.astContext.ast);
-    } else {
-      this.validateUsingLegacy();
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.validateUsingAst(this.astContext.ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -131,14 +137,6 @@ export class EnhancedMethodValidator implements ValidationModule {
         },
       },
     });
-  }
-
-  private validateUsingLegacy(): void {
-    const udtTypes = this.collectUDTTypes(this.context.lines);
-    for (let index = 0; index < this.context.lines.length; index++) {
-      const line = this.context.lines[index];
-      this.validateMethodCallsOnNonUDT(line, index + 1, udtTypes, this.context.lines);
-    }
   }
 
   private processAstMethodCall(
@@ -332,84 +330,8 @@ export class EnhancedMethodValidator implements ValidationModule {
     }
   }
 
-  private validateMethodCallsOnNonUDT(
-    line: string,
-    lineNum: number,
-    udtTypes: Set<string>,
-    lines: string[],
-  ): void {
-    const methodCallMatch = line.match(/\b(\w+)\.(\w+)\s*\(/g);
-    if (!methodCallMatch) {
-      return;
-    }
-    for (const match of methodCallMatch) {
-      const fullMatch = match.match(/\b(\w+)\.(\w+)\s*\(/);
-      if (!fullMatch) {
-        continue;
-      }
-      const [, varName, methodName] = fullMatch;
-      if (this.allowedInstanceMethods.has(methodName)) {
-        continue;
-      }
-      if (this.isBuiltInMethod(varName, methodName)) {
-        continue;
-      }
-
-      const varType = this.getVariableType(varName, lines, lineNum);
-      if (!udtTypes.has(varType) && varType !== 'unknown') {
-        const column = line.indexOf(match) + 1;
-        const message = `Method '${methodName}' called on non-UDT variable '${varName}' of type '${varType}'`;
-        this.addWarning(lineNum, column, message, 'PSV6-METHOD-INVALID');
-      }
-    }
-  }
-
-  private collectUDTTypes(lines: string[]): Set<string> {
-    const udtTypes = new Set<string>();
-    for (const line of lines) {
-      const typeMatch = line.match(/^\s*type\s+(\w+)/);
-      if (typeMatch) {
-        udtTypes.add(typeMatch[1]);
-      }
-    }
-    return udtTypes;
-  }
-
   private isBuiltInMethod(varName: string, methodName: string): boolean {
     return this.builtInNamespaces[varName]?.includes(methodName) ?? false;
-  }
-
-  private getVariableType(varName: string, lines: string[], currentLine: number): string {
-    for (let i = 0; i < currentLine - 1; i++) {
-      const line = lines[i];
-      const typedDeclMatch = line.match(new RegExp(`\\b(int|float|bool|string|color|line|label|box|table|array|matrix|map)\\s+${varName}\\s*=`));
-      if (typedDeclMatch) {
-        return typedDeclMatch[1];
-      }
-      const simpleDeclMatch = line.match(new RegExp(`\\b${varName}\\s*=\\s*([^\\n]+)`));
-      if (simpleDeclMatch) {
-        const value = simpleDeclMatch[1].trim();
-        return this.inferTypeFromValue(value);
-      }
-    }
-    return 'unknown';
-  }
-
-  private inferTypeFromValue(value: string): string {
-    const trimmed = value.trim();
-    if (/^-?\d+$/.test(trimmed)) return 'int';
-    if (/^-?\d*\.\d+$/.test(trimmed)) return 'float';
-    if (/^["'].*["']$/.test(trimmed)) return 'string';
-    if (trimmed === 'true' || trimmed === 'false') return 'bool';
-    if (trimmed.startsWith('color.')) return 'color';
-    if (trimmed.includes('array.new')) return 'array';
-    if (trimmed.includes('matrix.new')) return 'matrix';
-    if (trimmed.includes('map.new')) return 'map';
-    if (trimmed.includes('line.new')) return 'line';
-    if (trimmed.includes('label.new')) return 'label';
-    if (trimmed.includes('box.new')) return 'box';
-    if (trimmed.includes('table.new')) return 'table';
-    return 'unknown';
   }
 
   private addWarning(line: number, column: number, message: string, code: string): void {
@@ -428,15 +350,8 @@ export class EnhancedMethodValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
   }
 
-  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
-  }
 }
 
 function isAstValidationContext(context: ValidationContext): context is AstValidationContext {

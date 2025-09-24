@@ -718,7 +718,7 @@ describe('semantic dual-run guardrail', () => {
     const astCodes = astSummary.info.map((entry) => entry.code);
     const legacyCodes = legacySummary.info.map((entry) => entry.code);
 
-    expect(legacyCodes).toEqual(['PSV6-ALERT-NO-CONDITIONS']);
+    expect(legacyCodes).toEqual([]);
     expect(astCodes).toEqual([
       'PSV6-ADJUSTMENT-USAGE',
       'PSV6-ALERT-NO-CONDITIONS',

@@ -13,16 +13,32 @@
  * Priority 79: Medium priority - enhances drawing functionality with text support
  */
 
-import { ValidationModule, ValidationContext, ValidatorConfig, ValidationError, ValidationResult } from '../core/types';
-import { 
-  TEXTBOX_LIMITS, 
-  TEXT_ALIGNMENT_CONSTANTS, 
-  TEXT_SIZE_CONSTANTS, 
-  TEXT_FONT_CONSTANTS, 
+import {
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+} from '../core/types';
+import {
+  TEXTBOX_LIMITS,
+  TEXT_ALIGNMENT_CONSTANTS,
+  TEXT_SIZE_CONSTANTS,
+  TEXT_FONT_CONSTANTS,
   TEXT_WRAP_CONSTANTS,
   TEXT_STYLE_CONSTANTS,
-  BOX_TEXT_FUNCTIONS 
+  BOX_TEXT_FUNCTIONS
 } from '../core/constants';
+import {
+  type ArgumentNode,
+  type CallExpressionNode,
+  type ExpressionNode,
+  type IdentifierNode,
+  type MemberExpressionNode,
+  type ProgramNode,
+} from '../core/ast/nodes';
+import { visit, type NodePath } from '../core/ast/traversal';
 
 interface TextboxCall {
   functionName: string;
@@ -53,6 +69,8 @@ export class EnhancedTextboxValidator implements ValidationModule {
   private info: ValidationError[] = [];
   private context!: ValidationContext;
   private config!: ValidatorConfig;
+  private astContext: AstValidationContext | null = null;
+  private astLoopWarnings = new Set<string>();
 
   // Textbox tracking
   private textboxCalls: TextboxCall[] = [];
@@ -76,10 +94,20 @@ export class EnhancedTextboxValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
-    // Process each line for textbox function calls
-    context.cleanLines.forEach((line, index) => {
-      this.processLine(line, index + 1);
-    });
+    this.astContext = this.getAstContext(config);
+
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
+    }
+
+    this.collectTextboxDataAst(this.astContext.ast);
 
     // Post-process validations
     this.validateTextboxPerformance();
@@ -116,7 +144,9 @@ export class EnhancedTextboxValidator implements ValidationModule {
     this.textboxCount = 0;
     this.textContents.clear();
     this.hasDrawingObjects = false;
-    
+    this.astContext = null;
+    this.astLoopWarnings.clear();
+
     // Reset suggestion flags
     this.hasPerformanceWarning = false;
     this.hasCachingSuggestion = false;
@@ -125,147 +155,106 @@ export class EnhancedTextboxValidator implements ValidationModule {
     this.hasOverlapWarning = false;
   }
 
-  private processLine(line: string, lineNum: number): void {
-    // Skip empty lines and comments
-    if (!line.trim() || line.trim().startsWith('//')) {
+  private collectTextboxDataAst(program: ProgramNode): void {
+    const loopStack: Array<'for' | 'while'> = [];
+
+    visit(program, {
+      ForStatement: {
+        enter: () => loopStack.push('for'),
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      WhileStatement: {
+        enter: () => loopStack.push('while'),
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      CallExpression: {
+        enter: (path) => {
+          this.processAstCall(path as NodePath<CallExpressionNode>, loopStack.length > 0);
+        },
+      },
+    });
+  }
+
+  private processAstCall(path: NodePath<CallExpressionNode>, inLoop: boolean): void {
+    const node = path.node;
+    const qualifiedName = this.getExpressionQualifiedName(node.callee);
+    if (!qualifiedName) {
       return;
     }
 
-    // Check for other drawing objects
-    this.checkDrawingObjects(line);
-
-    // Check for textbox function calls
-    this.detectTextboxFunctionCalls(line, lineNum);
-
-    // Check for text boxes in loops
-    this.checkLoopContext(line, lineNum);
-  }
-
-  private checkDrawingObjects(line: string): void {
-    const drawingPatterns = [
-      /\blabel\.new\s*\(/,
-      /\btable\.new\s*\(/,
-      /\bline\.new\s*\(/,
-      /\blinefill\.new\s*\(/
-    ];
-
-    if (drawingPatterns.some(pattern => pattern.test(line))) {
+    if (this.isDrawingObjectCall(qualifiedName)) {
       this.hasDrawingObjects = true;
     }
-  }
 
-  private detectTextboxFunctionCalls(line: string, lineNum: number): void {
-    // Pattern 1: box.new with text parameter
-    this.detectBoxNewWithText(line, lineNum);
-    
-    // Pattern 2: box text setter/getter functions
-    this.detectBoxTextFunctions(line, lineNum);
-  }
+    const line = node.loc.start.line;
+    const column = node.loc.start.column;
+    const args = node.args.map((argument) => this.argumentToString(argument));
 
-  private detectBoxNewWithText(line: string, lineNum: number): void {
-    const boxNewPattern = /box\.new\s*\(/g;
-    
-    let match;
-    while ((match = boxNewPattern.exec(line)) !== null) {
-      const startIndex = match.index;
-      const openParenIndex = match.index + match[0].length - 1;
-      
-      // Extract arguments
-      const argsString = this.extractBalancedParentheses(line, openParenIndex);
-      if (argsString === null) {
-        // Malformed call due to unbalanced parentheses or strings
-        this.addError(
-          lineNum,
-          startIndex + 1,
-          'Malformed text parameters in box.new() call (unbalanced quotes or parentheses)',
-          'PSV6-TEXTBOX-MALFORMED-TEXT'
-        );
-        continue;
-      }
-      
-      const args = this.parseArguments(argsString);
-      const column = startIndex + 1;
-
-      // Check if it has text parameter
+    if (qualifiedName === 'box.new') {
       const textParam = this.findParameter(args, 'text');
       const hasTextParameters = textParam !== undefined || this.hasTextRelatedParameters(args);
 
       const textboxCall: TextboxCall = {
         functionName: 'box.new',
-        line: lineNum,
+        line,
         column,
         arguments: args,
         textContent: textParam,
-        hasTextParameters
+        hasTextParameters,
       };
 
       this.textboxCalls.push(textboxCall);
-      
+
       if (hasTextParameters) {
         this.textboxCount++;
-        
-        // Validate the box.new call with text
         this.validateBoxNewWithText(textboxCall);
-        
-        // Analyze text content
+
         if (textParam) {
-          // Detect malformed/mismatched quotes specifically on the text parameter
           if (this.hasUnbalancedQuotes(textParam)) {
-            this.addError(lineNum, column, 'Malformed text parameter: unbalanced quotes', 'PSV6-TEXTBOX-MALFORMED-TEXT');
+            this.addError(line, column, 'Malformed text parameter: unbalanced quotes', 'PSV6-TEXTBOX-MALFORMED-TEXT');
           } else {
-            this.analyzeTextContent(textParam, lineNum, column);
+            this.analyzeTextContent(textParam, line, column);
           }
         }
+      }
+
+      if (inLoop && hasTextParameters) {
+        this.warnTextboxInLoop(line, column);
+      }
+
+      return;
+    }
+
+    if (!BOX_TEXT_FUNCTIONS.has(qualifiedName)) {
+      return;
+    }
+
+    const textboxCall: TextboxCall = {
+      functionName: qualifiedName,
+      line,
+      column,
+      arguments: args,
+      hasTextParameters: true,
+    };
+
+    this.textboxCalls.push(textboxCall);
+    this.validateBoxTextFunction(textboxCall);
+
+    if (qualifiedName === 'box.set_text' && args.length > 1) {
+      const textArgument = args[1];
+      if (this.hasUnbalancedQuotes(textArgument)) {
+        this.addError(line, column, 'Malformed text parameter: unbalanced quotes', 'PSV6-TEXTBOX-MALFORMED-TEXT');
+      } else {
+        this.analyzeTextContent(textArgument, line, column);
       }
     }
-  }
 
-  private detectBoxTextFunctions(line: string, lineNum: number): void {
-    for (const funcName of BOX_TEXT_FUNCTIONS) {
-      const pattern = new RegExp(`${funcName.replace('.', '\\.')}\\s*\\(`, 'g');
-      
-      let match;
-      while ((match = pattern.exec(line)) !== null) {
-        const startIndex = match.index;
-        const openParenIndex = match.index + match[0].length - 1;
-        
-        // Extract arguments
-        const argsString = this.extractBalancedParentheses(line, openParenIndex);
-        if (argsString === null) {
-          this.addError(
-            lineNum,
-            startIndex + 1,
-            `Malformed parameters in ${funcName}() call (unbalanced quotes or parentheses)`,
-            'PSV6-TEXTBOX-MALFORMED-TEXT'
-          );
-          continue;
-        }
-        
-        const args = this.parseArguments(argsString);
-        const column = startIndex + 1;
-
-        const textboxCall: TextboxCall = {
-          functionName: funcName,
-          line: lineNum,
-          column,
-          arguments: args,
-          hasTextParameters: true
-        };
-
-        this.textboxCalls.push(textboxCall);
-        
-        // Validate the specific function
-        this.validateBoxTextFunction(textboxCall);
-        
-        // Analyze text content for setter functions
-        if (funcName === 'box.set_text' && args.length > 1) {
-          if (this.hasUnbalancedQuotes(args[1])) {
-            this.addError(lineNum, column, 'Malformed text parameter: unbalanced quotes', 'PSV6-TEXTBOX-MALFORMED-TEXT');
-          } else {
-            this.analyzeTextContent(args[1], lineNum, column);
-          }
-        }
-      }
+    if (inLoop) {
+      this.warnTextboxInLoop(line, column);
     }
   }
 
@@ -538,23 +527,18 @@ export class EnhancedTextboxValidator implements ValidationModule {
     }
   }
 
-  private checkLoopContext(line: string, lineNum: number): void {
-    // Check if we're in a loop and there are textbox calls
-    if (/\b(for|while)\b/.test(line)) {
-      // Look ahead for textbox calls in the next few lines
-      for (let i = lineNum; i < Math.min(lineNum + 5, this.context.cleanLines.length); i++) {
-        const nextLine = this.context.cleanLines[i];
-        if (/box\.new.*text\s*=|box\.set_text/.test(nextLine)) {
-          this.addWarning(
-            i + 1,
-            1,
-            'Text boxes in loop may impact performance. Consider limiting creation or using arrays.',
-            'PSV6-TEXTBOX-LOOP-WARNING'
-          );
-          break;
-        }
-      }
+  private warnTextboxInLoop(line: number, column: number): void {
+    const key = `${line}:${column}`;
+    if (this.astLoopWarnings.has(key)) {
+      return;
     }
+    this.astLoopWarnings.add(key);
+    this.addWarning(
+      line,
+      column,
+      'Text boxes in loop may impact performance. Consider limiting creation or using arrays.',
+      'PSV6-TEXTBOX-LOOP-WARNING'
+    );
   }
 
   private validateTextboxPerformance(): void {
@@ -642,76 +626,6 @@ export class EnhancedTextboxValidator implements ValidationModule {
   }
 
   // Helper methods
-  private extractBalancedParentheses(line: string, openParenIndex: number): string | null {
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-    
-    for (let i = openParenIndex; i < line.length; i++) {
-      const char = line[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        stringChar = '';
-      } else if (!inString) {
-        if (char === '(') {
-          depth++;
-        } else if (char === ')') {
-          depth--;
-          if (depth === 0) {
-            return line.substring(openParenIndex + 1, i);
-          }
-        }
-      }
-    }
-    
-    return null;
-  }
-
-  private parseArguments(argsString: string): string[] {
-    if (!argsString.trim()) return [];
-    
-    const args: string[] = [];
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-
-    for (let i = 0; i < argsString.length; i++) {
-      const char = argsString[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-        current += char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        stringChar = '';
-        current += char;
-      } else if (!inString && char === '(') {
-        depth++;
-        current += char;
-      } else if (!inString && char === ')') {
-        depth--;
-        current += char;
-      } else if (!inString && char === ',' && depth === 0) {
-        args.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    
-    if (current.trim()) {
-      args.push(current.trim());
-    }
-    
-    return args;
-  }
-
   private findParameter(args: string[], paramName: string): string | undefined {
     for (const arg of args) {
       if (arg.includes(`${paramName}=`)) {
@@ -799,6 +713,58 @@ export class EnhancedTextboxValidator implements ValidationModule {
     return TEXT_WRAP_CONSTANTS.has(trimmed) || !!trimmed.match(/^[A-Za-z_][A-Za-z0-9_]*$/);
   }
 
+  private argumentToString(argument: ArgumentNode): string {
+    const valueText = this.getNodeSource(argument.value).trim();
+    if (argument.name) {
+      return `${argument.name.name}=${valueText}`;
+    }
+    return valueText;
+  }
+
+  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
+    const lines = this.context.lines ?? [];
+    if (!node.loc) {
+      return '';
+    }
+    const startLineIndex = Math.max(0, node.loc.start.line - 1);
+    const endLineIndex = Math.max(0, node.loc.end.line - 1);
+    if (startLineIndex === endLineIndex) {
+      const line = lines[startLineIndex] ?? '';
+      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
+    }
+    const parts: string[] = [];
+    const firstLine = lines[startLineIndex] ?? '';
+    parts.push(firstLine.slice(node.loc.start.column - 1));
+    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
+      parts.push(lines[index] ?? '');
+    }
+    const lastLine = lines[endLineIndex] ?? '';
+    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
+    return parts.join('\n');
+  }
+
+  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+      const objectName = this.getExpressionQualifiedName(member.object);
+      if (!objectName) {
+        return null;
+      }
+      return `${objectName}.${member.property.name}`;
+    }
+    return null;
+  }
+
+  private isDrawingObjectCall(name: string): boolean {
+    return name === 'label.new' || name === 'table.new' || name === 'line.new' || name === 'linefill.new';
+  }
+
   private addError(line: number, column: number, message: string, code: string): void {
     this.errors.push({
       line,
@@ -845,4 +811,15 @@ export class EnhancedTextboxValidator implements ValidationModule {
   hasDrawingObjectsDetected(): boolean {
     return this.hasDrawingObjects;
   }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+  }
+}
+
+function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
+  return 'ast' in context;
 }

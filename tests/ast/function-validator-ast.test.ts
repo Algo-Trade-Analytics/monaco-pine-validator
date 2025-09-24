@@ -5,16 +5,20 @@ import { FunctionAstService } from '../../core/ast/service';
 import { createAstDiagnostics } from '../../core/ast/types';
 import {
   createArgument,
+  createAssignmentStatement,
   createBinaryExpression,
   createBlock,
   createCallExpression,
   createExpressionStatement,
   createFunctionDeclaration,
   createIdentifier,
+  createIfStatement,
+  createMemberExpression,
   createNumberLiteral,
   createParameter,
   createProgram,
   createReturn,
+  createStringLiteral,
 } from './fixtures';
 
 class FunctionValidatorHarness extends BaseValidator {
@@ -110,5 +114,69 @@ describe('FunctionValidator (AST)', () => {
 
     const result = harness.validate(source);
     expect(result.errors.map((error) => error.code)).toContain('PSV6-FUNCTION-NAMESPACE');
+  });
+
+  it('emits PSV6-FUNCTION-RETURN-TYPE when boolean calls participate in arithmetic', () => {
+    const taIdentifier = createIdentifier('ta', 9, 1);
+    const crossoverIdentifier = createIdentifier('crossover', 12, 1);
+    const callee = createMemberExpression(taIdentifier, crossoverIdentifier, 9, 21, 1);
+
+    const closeArgument = createArgument(createIdentifier('close', 22, 1), 22, 27, 1);
+    const openArgument = createArgument(createIdentifier('open', 29, 1), 29, 33, 1);
+    const crossoverCall = createCallExpression(callee, [closeArgument, openArgument], 9, 34, 1);
+
+    const addition = createBinaryExpression('+', crossoverCall, createNumberLiteral(1, '1', 37, 1), 9, 38, 1);
+    const assignment = createAssignmentStatement(createIdentifier('result', 0, 1), addition, 0, 38, 1);
+
+    const program = createProgram([assignment], 0, 38, 1, 1);
+    const source = 'result = ta.crossover(close, open) + 1';
+
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new FunctionValidatorHarness(service);
+
+    const result = harness.validate(source);
+    expect(result.errors.map((error) => error.code)).toContain('PSV6-FUNCTION-RETURN-TYPE');
+  });
+
+  it('emits PSV6-FUNCTION-RETURN-TYPE when non-string calls concatenate strings', () => {
+    const mathIdentifier = createIdentifier('math', 14, 1);
+    const sqrtIdentifier = createIdentifier('sqrt', 19, 1);
+    const callee = createMemberExpression(mathIdentifier, sqrtIdentifier, 14, 24, 1);
+
+    const priceArgument = createArgument(createIdentifier('price', 25, 1), 25, 30, 1);
+    const sqrtCall = createCallExpression(callee, [priceArgument], 14, 31, 1);
+    const stringLiteral = createStringLiteral('units', '"units"', 34, 1);
+
+    const addition = createBinaryExpression('+', sqrtCall, stringLiteral, 14, 41, 1);
+    const assignment = createAssignmentStatement(createIdentifier('labelText', 0, 1), addition, 0, 41, 1);
+
+    const program = createProgram([assignment], 0, 41, 1, 1);
+    const source = 'labelText = math.sqrt(price) + "units"';
+
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new FunctionValidatorHarness(service);
+
+    const result = harness.validate(source);
+    expect(result.errors.map((error) => error.code)).toContain('PSV6-FUNCTION-RETURN-TYPE');
+  });
+
+  it('warns when function complexity exceeds the threshold using AST traversal', () => {
+    const identifier = createIdentifier('complex', 5, 1);
+    const statements = Array.from({ length: 11 }, (_, index) => {
+      const line = index + 2;
+      const condition = createIdentifier(`cond${index}`, 8, line);
+      const consequent = createBlock([], 12, 14, line, line);
+      return createIfStatement(condition, consequent, null, 8, 14, line);
+    });
+    const body = createBlock(statements, 0, 20, 1, 12);
+    const fn = createFunctionDeclaration(identifier, [], body, 0, 20, 1, 12);
+    const program = createProgram([fn], 0, 20, 1, 12);
+    const source = ['func complex() =>', ...Array.from({ length: 11 }, () => '    if cond => 0')].join('\n');
+
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new FunctionValidatorHarness(service);
+
+    const result = harness.validate(source);
+    expect(result.warnings.map((warning) => warning.code)).toContain('PSV6-FUNCTION-STYLE-COMPLEXITY');
   });
 });
