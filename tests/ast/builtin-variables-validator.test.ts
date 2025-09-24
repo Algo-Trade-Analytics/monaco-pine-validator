@@ -15,7 +15,26 @@ class BuiltinValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledBuiltinValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new BuiltinVariablesValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('BuiltinVariablesValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const validator = new DisabledBuiltinValidatorHarness();
+    const result = validator.validate(`//@version=6\nindicator("Disabled")\nvar tf = timeframe.isdaily`);
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('records built-in constant usage from AST member expressions', () => {
     const astProgram = createBuiltinConstantsProgram();
     const service = new FunctionAstService(() => ({

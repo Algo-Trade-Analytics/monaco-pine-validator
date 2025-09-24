@@ -60,7 +60,6 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   // Order tracking
   private strategyOrderCalls: StrategyOrderCall[] = [];
@@ -69,7 +68,6 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
   private entriesPerLine = new Map<number, number>();
   private pyramidingLevel = 0;
   private hasTimeFiltering = false;
-  private prevLineHadExpensiveCondition = false;
   private astHasLoop = false;
   private astMemberNames = new Set<string>();
   private astFirstIndexStandalone: Array<{ line: number; column: number }> = [];
@@ -109,16 +107,18 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     }
 
     this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
-
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectStrategyOrdersAst(this.astContext.ast);
-    } else {
-      // Process each line for shared heuristics when AST is unavailable
-      context.cleanLines.forEach((line, index) => {
-        this.processLine(line, index + 1);
-      });
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null
+      };
     }
+
+    this.collectStrategyOrdersAst(this.astContext.ast);
 
     // Analyze patterns and provide suggestions
     this.analyzeOrderPatterns();
@@ -158,9 +158,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     this.entriesPerLine.clear();
     this.pyramidingLevel = 0;
     this.hasTimeFiltering = false;
-    this.prevLineHadExpensiveCondition = false;
     this.astContext = null;
-    this.usingAst = false;
     this.astHasLoop = false;
     this.astMemberNames.clear();
     this.astFirstIndexStandalone = [];
@@ -177,133 +175,6 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     this.hasVarTrackingSuggestion = false;
     this.hasTimeFilterSuggestion = false;
     this.hasCachingSuggestion = false;
-  }
-
-  private processLine(line: string, lineNum: number): void {
-    // Skip empty lines and comments
-    if (!line.trim() || line.trim().startsWith('//')) {
-      return;
-    }
-
-    // Check for time-based filtering patterns
-    this.checkTimeFiltering(line);
-
-    // Check for pyramiding parameter
-    this.checkPyramidingParameter(line);
-
-    if (!this.usingAst) {
-      // Track if previous line had an expensive condition for performance warnings
-      this.prevLineHadExpensiveCondition = this.isExpensiveConditionLine(this.context.cleanLines[lineNum - 2] || '');
-
-      // Detect strategy order function calls
-      this.detectStrategyOrderCalls(line, lineNum);
-    }
-
-    // Check for expensive calculations in conditions
-    this.checkExpensiveCalculations(line, lineNum);
-  }
-
-  private checkTimeFiltering(line: string): void {
-    // Look for common time filtering patterns
-    const timeFilterPatterns = [
-      /tradeDateIsAllowed/,
-      /time\s*>=.*fromDate/,
-      /time\s*<=.*toDate/,
-      /timestamp\s*\(/,
-      /input\.time\s*\(/
-    ];
-
-    if (timeFilterPatterns.some(pattern => pattern.test(line))) {
-      this.hasTimeFiltering = true;
-    }
-  }
-
-  private checkPyramidingParameter(line: string): void {
-    const pyramidingMatch = line.match(/pyramiding\s*=\s*(\d+)/);
-    if (pyramidingMatch) {
-      this.pyramidingLevel = parseInt(pyramidingMatch[1]);
-    }
-  }
-
-  private detectStrategyOrderCalls(line: string, lineNum: number): void {
-    // Pattern: strategy.functionName(args...)
-    const strategyFunctionPattern = /strategy\.(\w+)\s*\(/g;
-    
-    let match;
-    while ((match = strategyFunctionPattern.exec(line)) !== null) {
-      const functionName = match[1];
-      const fullFunctionName = `strategy.${functionName}`;
-      
-      if (STRATEGY_ORDER_FUNCTIONS.has(fullFunctionName)) {
-        const startIndex = match.index;
-        const openParenIndex = match.index + match[0].length - 1;
-        
-        // Extract arguments
-        const argsString = this.extractBalancedParentheses(line, openParenIndex);
-        const args = argsString ? this.parseArguments(argsString) : [];
-        
-        // Determine order type
-        const orderType = this.getOrderType(functionName);
-        
-        // Extract entry ID if present
-        const entryId = this.extractEntryId(functionName, args);
-        
-        const orderCall: StrategyOrderCall = {
-          functionName: fullFunctionName,
-          line: lineNum,
-          column: startIndex + 1,
-          arguments: args,
-          entryId,
-          orderType
-        };
-        
-        this.strategyOrderCalls.push(orderCall);
-        this.totalOrderCount++;
-        
-        // Track entries per line
-        if (orderType === 'entry') {
-          const currentCount = this.entriesPerLine.get(lineNum) || 0;
-          this.entriesPerLine.set(lineNum, currentCount + 1);
-        }
-        
-        // Validate individual order call
-        this.validateOrderCall(orderCall);
-
-        // If previous line had an expensive condition and performance analysis enabled, warn
-        if (this.config.enablePerformanceAnalysis && this.prevLineHadExpensiveCondition) {
-          this.addWarning(
-            lineNum,
-            1,
-            'Expensive calculations in order conditions may impact performance',
-            'PSV6-STRATEGY-EXPENSIVE-CONDITIONS'
-          );
-        }
-      }
-    }
-  }
-
-  private checkExpensiveCalculations(line: string, lineNum: number): void {
-    if (!this.config.enablePerformanceAnalysis) return;
-    
-    // Check if line contains strategy order calls and expensive calculations
-    const hasStrategyCall = Array.from(STRATEGY_ORDER_FUNCTIONS).some(func => line.includes(func));
-    const hasExpensiveCalc = Array.from(EXPENSIVE_CALCULATION_FUNCTIONS).some(func => line.includes(func));
-    
-    if (hasStrategyCall && hasExpensiveCalc) {
-      this.addWarning(
-        lineNum,
-        1,
-        'Expensive calculations in order conditions may impact performance',
-        'PSV6-STRATEGY-EXPENSIVE-CONDITIONS'
-      );
-    }
-  }
-
-  private isExpensiveConditionLine(line: string): boolean {
-    if (!line) return false;
-    const isIf = /^\s*if\b/.test(line);
-    const hasExpensive = Array.from(EXPENSIVE_CALCULATION_FUNCTIONS).some(func => line.includes(func));
-    return isIf && hasExpensive;
   }
 
   private validateOrderCall(orderCall: StrategyOrderCall): void {
@@ -324,24 +195,13 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     // Check for loop context
     this.checkLoopContext(orderCall);
 
-    if (this.config.enablePerformanceAnalysis) {
-      if (this.usingAst) {
-        if (orderCall.hasExpensiveCondition) {
-          this.addWarning(
-            orderCall.line,
-            orderCall.column,
-            'Expensive calculations in order conditions may impact performance',
-            'PSV6-STRATEGY-EXPENSIVE-CONDITIONS'
-          );
-        }
-      } else if (this.prevLineHadExpensiveCondition) {
-        this.addWarning(
-          orderCall.line,
-          orderCall.column,
-          'Expensive calculations in order conditions may impact performance',
-          'PSV6-STRATEGY-EXPENSIVE-CONDITIONS'
-        );
-      }
+    if (this.config.enablePerformanceAnalysis && orderCall.hasExpensiveCondition) {
+      this.addWarning(
+        orderCall.line,
+        orderCall.column,
+        'Expensive calculations in order conditions may impact performance',
+        'PSV6-STRATEGY-EXPENSIVE-CONDITIONS'
+      );
     }
   }
 
@@ -387,30 +247,13 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
   }
 
   private checkLoopContext(orderCall: StrategyOrderCall): void {
-    if (this.usingAst) {
-      if (orderCall.inLoop) {
-        this.addWarning(
-          orderCall.line,
-          orderCall.column,
-          'Strategy orders in loop may cause excessive order generation',
-          'PSV6-STRATEGY-ORDER-LOOP'
-        );
-      }
-      return;
-    }
-
-    // Check if we're in a loop by looking at previous lines
-    for (let i = Math.max(1, orderCall.line - 3); i <= orderCall.line; i++) {
-      const line = this.context.cleanLines[i - 1] || '';
-      if (/\b(for|while)\b/.test(line)) {
-        this.addWarning(
-          orderCall.line,
-          orderCall.column,
-          'Strategy orders in loop may cause excessive order generation',
-          'PSV6-STRATEGY-ORDER-LOOP'
-        );
-        break;
-      }
+    if (orderCall.inLoop) {
+      this.addWarning(
+        orderCall.line,
+        orderCall.column,
+        'Strategy orders in loop may cause excessive order generation',
+        'PSV6-STRATEGY-ORDER-LOOP'
+      );
     }
   }
 
@@ -420,9 +263,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     this.detectUnconditionalOrders();
     this.detectExcessivePyramiding();
     // Broad safety net: if loops exist anywhere with any orders present, surface trimming risk
-    const hasAnyLoop = this.usingAst
-      ? this.astHasLoop
-      : this.context.cleanLines.some(l => /^\s*(for|while)\b/.test(l));
+    const hasAnyLoop = this.astHasLoop;
     if (hasAnyLoop && this.strategyOrderCalls.length > 0) {
       this.addWarning(
         1,
@@ -465,11 +306,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
 
     // If there are several entry calls throughout the script, warn about multiple entries pattern
     const totalEntryCalls = this.strategyOrderCalls.filter(c => c.orderType === 'entry').length;
-    const hasPyramidingManagement = this.pyramidingLevel > 0 || (
-      this.usingAst
-        ? this.astHasOpenTradesReference
-        : this.context.cleanLines.some(l => l.includes('strategy.opentrades'))
-    );
+    const hasPyramidingManagement = this.pyramidingLevel > 0 || this.astHasOpenTradesReference;
     if (!hasPyramidingManagement && totalEntryCalls >= STRATEGY_ORDER_LIMITS.MAX_ENTRIES_PER_BAR) {
       const firstEntry = this.strategyOrderCalls.find(c => c.orderType === 'entry');
       if (firstEntry) {
@@ -513,17 +350,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     let unconditionalCount = 0;
 
     for (const orderCall of this.strategyOrderCalls) {
-      if (this.usingAst) {
-        if (!orderCall.inConditional) {
-          unconditionalCount++;
-        }
-        continue;
-      }
-
-      const line = this.context.cleanLines[orderCall.line - 1];
-
-      // Check if the order call is not inside an if statement
-      if (!line.trim().startsWith('if ') && !this.isInConditionalBlock(orderCall.line)) {
+      if (!orderCall.inConditional) {
         unconditionalCount++;
       }
     }
@@ -598,48 +425,17 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     // Simple estimation based on order calls and loop patterns
     let estimate = this.totalOrderCount;
 
-    if (this.usingAst) {
-      const loopedOrders = this.strategyOrderCalls.filter(call => call.inLoop).length;
-      if (loopedOrders > 0) {
-        estimate += loopedOrders * 10;
-      }
-      return estimate;
+    const loopedOrders = this.strategyOrderCalls.filter(call => call.inLoop).length;
+    if (loopedOrders > 0) {
+      estimate += loopedOrders * 10;
     }
 
-    // Heuristic: if script maintains an order counter variable, use that as a floor
-    for (const line of this.context.cleanLines) {
-      const m = line.match(/\b(?:var\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\d{2,})/);
-      if (m && /order.*count/i.test(m[1])) {
-        const val = parseInt(m[2]);
-        if (!isNaN(val)) estimate = Math.max(estimate, val);
-      }
-    }
-    
-    // Check for loops that might multiply orders
-    for (const orderCall of this.strategyOrderCalls) {
-      const line = this.context.cleanLines[orderCall.line - 1];
-      
-      // Look for loops in previous lines
-      for (let i = Math.max(0, orderCall.line - 5); i < orderCall.line - 1; i++) {
-        const prevLine = this.context.cleanLines[i];
-        const loopMatch = prevLine.match(/for\s+\w+\s*=\s*\d+\s+to\s+(\d+)/);
-        if (loopMatch) {
-          const loopCount = parseInt(loopMatch[1]);
-          estimate += loopCount * 10; // Rough multiplier
-        }
-      }
-    }
-    
     return estimate;
   }
 
   private checkOrderTrimmingOptimizations(): void {
     // Check for patterns that could benefit from v6 trimming awareness
-    const hasOrderCountTracking = this.usingAst
-      ? this.astHasOrderCountTracking
-      : this.context.cleanLines.some(line =>
-        /strategy\.closedtrades\.size|strategy\.opentrades\.size/.test(line)
-      );
+    const hasOrderCountTracking = this.astHasOrderCountTracking;
     
     if (this.totalOrderCount > 100 && !hasOrderCountTracking) {
       this.addInfo(
@@ -653,11 +449,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
 
   private validateTrimmingFeatures(): void {
     // Check for proper use of v6 trimming features
-    const usesFirstIndex = this.usingAst
-      ? this.astMemberNames.has('strategy.closedtrades.first_index')
-      : this.context.cleanLines.some(line =>
-        /strategy\.closedtrades\.first_index/.test(line)
-      );
+    const usesFirstIndex = this.astMemberNames.has('strategy.closedtrades.first_index');
     
     const hasHighOrderCount = this.totalOrderCount > 50;
     
@@ -671,38 +463,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     }
     
     // Validate proper first_index usage
-    if (this.usingAst) {
-      this.validateFirstIndexUsageAst();
-    } else {
-      for (let i = 0; i < this.context.cleanLines.length; i++) {
-        const line = this.context.cleanLines[i];
-        if (/strategy\.closedtrades\.first_index/.test(line)) {
-          this.validateFirstIndexUsage(line, i + 1);
-        }
-      }
-    }
-  }
-
-  private validateFirstIndexUsage(line: string, lineNum: number): void {
-    // Check for common first_index usage patterns
-    if (/strategy\.closedtrades\.first_index\s*\+/.test(line)) {
-      // Good: using first_index in calculations
-      return;
-    }
-    
-    if (/strategy\.closedtrades\.first_index\s*==/.test(line)) {
-      // Good: comparing first_index
-      return;
-    }
-    
-    if (/strategy\.closedtrades\.first_index$/.test(line.trim())) {
-      this.addInfo(
-        lineNum,
-        1,
-        'strategy.closedtrades.first_index represents the index of the earliest non-trimmed order. Consider using it in calculations or comparisons.',
-        'PSV6-STRATEGY-FIRST-INDEX-USAGE'
-      );
-    }
+    this.validateFirstIndexUsageAst();
   }
 
   private validateFirstIndexUsageAst(): void {
@@ -716,66 +477,16 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     }
   }
 
-  private checkOrderTrimmingRisk(): void {
-    // Look for patterns that might cause order trimming
-    if (this.usingAst) {
-      if (this.strategyOrderCalls.some(call => call.inLoop)) {
-        this.addWarning(
-          1,
-          1,
-          'Order trimming may occur due to orders in loops. Oldest orders will be removed when limit is reached.',
-          'PSV6-STRATEGY-ORDER-TRIMMING-RISK'
-        );
-      }
-      return;
-    }
-
-    // Collect loop header line numbers
-    const loopLines: number[] = [];
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      if (/^\s*(for|while)\b/.test(this.context.cleanLines[i])) loopLines.push(i + 1);
-    }
-
-    let hasLoopOrders = false;
-    if (loopLines.length > 0) {
-      // Any strategy order after a loop line indicates potential trimming risk
-      for (const call of this.strategyOrderCalls) {
-        if (loopLines.some(loopLine => loopLine < call.line)) {
-          hasLoopOrders = true;
-          break;
-        }
-      }
-    }
-    
-    if (hasLoopOrders) {
-      this.addWarning(
-        1,
-        1,
-        'Order trimming may occur due to orders in loops. Oldest orders will be removed when limit is reached.',
-        'PSV6-STRATEGY-ORDER-TRIMMING-RISK'
-      );
-    }
-  }
-
   private validatePerformanceOptimizations(): void {
     if (!this.config.enablePerformanceAnalysis) return;
-    
+
     // Check for complex calculations that could be cached
     const complexCalculations = new Set<string>();
 
-    if (this.usingAst) {
-      for (const func of this.astComplexCalculations) {
-        complexCalculations.add(func);
-      }
-    } else {
-      // Scan entire script for expensive calculations used around order logic
-      for (const line of this.context.cleanLines) {
-        for (const expensiveFunc of EXPENSIVE_CALCULATION_FUNCTIONS) {
-          if (line.includes(expensiveFunc)) complexCalculations.add(expensiveFunc);
-        }
-      }
+    for (const func of this.astComplexCalculations) {
+      complexCalculations.add(func);
     }
-    
+
     if (complexCalculations.size > 0 && !this.hasCachingSuggestion) {
       this.addInfo(
         1,
@@ -790,12 +501,8 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
   private provideBestPracticesSuggestions(): void {
     // Suggest position size checks
     if (this.strategyOrderCalls.length >= 3 && !this.hasPositionSizeSuggestion) {
-      const hasPositionSizeCheck = this.usingAst
-        ? this.astHasPositionSizeReference
-        : this.context.cleanLines.some(line =>
-          line.includes('strategy.position_size')
-        );
-      
+      const hasPositionSizeCheck = this.astHasPositionSizeReference;
+
       if (!hasPositionSizeCheck) {
         this.addInfo(
           1,
@@ -806,15 +513,11 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
         this.hasPositionSizeSuggestion = true;
       }
     }
-    
+
     // Suggest var tracking for entry management
     if (this.entriesPerLine.size >= 2 && !this.hasVarTrackingSuggestion) {
-      const hasVarTracking = this.usingAst
-        ? this.astHasVarEntryTracking
-        : this.context.cleanLines.some(line =>
-          line.includes('var bool') && line.includes('entered')
-        );
-      
+      const hasVarTracking = this.astHasVarEntryTracking;
+
       if (!hasVarTracking) {
         this.addInfo(
           1,
@@ -855,90 +558,13 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
       if (this.hasTimeFiltering) {
         this.addInfo(1, 1, 'Good practice: Time-based filtering detected for order management', 'PSV6-STRATEGY-GOOD-PRACTICE');
       }
-      // Also recognize good practice if entry tracking via var + position_size management is present
-      const hasVarEntryTracking = this.usingAst
-        ? this.astHasVarEntryTracking
-        : this.context.cleanLines.some(line => /var\s+bool\s+\w*entered\w*/.test(line));
-      const hasPosSizeReset = this.usingAst
-        ? this.astHasPositionSizeReset
-        : this.context.cleanLines.some(line => /strategy\.position_size\s*==\s*0/.test(line));
-      if (hasVarEntryTracking && hasPosSizeReset) {
+      if (this.astHasVarEntryTracking && this.astHasPositionSizeReset) {
         this.addInfo(1, 1, 'Good practice: Entry tracking with var and position size checks', 'PSV6-STRATEGY-GOOD-PRACTICE');
       }
     }
   }
 
   // Helper methods
-  private extractBalancedParentheses(line: string, openParenIndex: number): string | null {
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-    
-    for (let i = openParenIndex; i < line.length; i++) {
-      const char = line[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        stringChar = '';
-      } else if (!inString) {
-        if (char === '(') {
-          depth++;
-        } else if (char === ')') {
-          depth--;
-          if (depth === 0) {
-            return line.substring(openParenIndex + 1, i);
-          }
-        }
-      }
-    }
-    
-    return null;
-  }
-
-  private parseArguments(argsString: string): string[] {
-    if (!argsString.trim()) return [];
-    
-    const args: string[] = [];
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-
-    for (let i = 0; i < argsString.length; i++) {
-      const char = argsString[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-        current += char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        stringChar = '';
-        current += char;
-      } else if (!inString && char === '(') {
-        depth++;
-        current += char;
-      } else if (!inString && char === ')') {
-        depth--;
-        current += char;
-      } else if (!inString && char === ',' && depth === 0) {
-        args.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    
-    if (current.trim()) {
-      args.push(current.trim());
-    }
-    
-    return args;
-  }
-
   private getOrderType(functionName: string): StrategyOrderCall['orderType'] {
     if (functionName === 'entry') return 'entry';
     if (functionName === 'exit') return 'exit';
@@ -976,28 +602,6 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     const trimmed = value.trim();
     const num = parseFloat(trimmed);
     return !isNaN(num) && num < 0;
-  }
-
-  private isInConditionalBlock(lineNum: number): boolean {
-    // Simple check for conditional context by looking at indentation
-    const line = this.context.cleanLines[lineNum - 1];
-    const currentIndent = line.length - line.trimStart().length;
-
-    // Look backwards for if/else statements
-    for (let i = lineNum - 2; i >= 0; i--) {
-      const prevLine = this.context.cleanLines[i];
-      const prevIndent = prevLine.length - prevLine.trimStart().length;
-
-      if (prevIndent < currentIndent && /^\s*(if|else)\b/.test(prevLine)) {
-        return true;
-      }
-
-      if (prevIndent <= currentIndent && prevLine.trim() !== '') {
-        break;
-      }
-    }
-
-    return false;
   }
 
   private collectStrategyOrdersAst(program: ProgramNode): void {

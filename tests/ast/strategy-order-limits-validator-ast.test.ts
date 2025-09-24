@@ -34,7 +34,28 @@ class StrategyOrderLimitsHarness extends BaseValidator {
   }
 }
 
+class DisabledStrategyOrderLimitsHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new StrategyOrderLimitsValidator());
+  }
+
+  protected runCoreValidation(): void {
+    this.context.scriptType = 'strategy';
+    this.scriptType = 'strategy';
+  }
+}
+
 describe('StrategyOrderLimitsValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new DisabledStrategyOrderLimitsHarness();
+    const result = harness.validate(['//@version=6', 'strategy("Demo")'].join('\n'));
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('flags invalid order quantities from AST traversal', () => {
     const version = createVersionDirective(6, 0, 12, 1);
     const titleValue = createStringLiteral('Demo', '"Demo"', 10, 2);

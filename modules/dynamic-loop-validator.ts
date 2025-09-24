@@ -4,12 +4,11 @@
  */
 
 import {
-  AstValidationContext,
-  ValidationModule,
-  ValidationContext,
-  ValidationError,
-  ValidationResult,
-  ValidatorConfig,
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidationResult,
+  type ValidatorConfig,
 } from '../core/types';
 import type {
   AssignmentStatementNode,
@@ -24,19 +23,14 @@ import type {
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
-}
-
 export class DynamicLoopValidator implements ValidationModule {
   name = 'DynamicLoopValidator';
   priority = 76; // run near other control-flow validators
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private errors: Array<{ line: number; column: number; message: string; code: string }> = [];
+  private warnings: Array<{ line: number; column: number; message: string; code: string }> = [];
+  private info: Array<{ line: number; column: number; message: string; code: string }> = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
 
   getDependencies(): string[] {
@@ -46,23 +40,29 @@ export class DynamicLoopValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
+    this.astContext = this.getAstContext(config);
+    const ast = this.astContext?.ast;
 
-    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
-
-    if (this.astContext?.ast) {
-      this.validateDynamicLoopsAst(this.astContext.ast);
-    } else {
-      this.validateDynamicForLoopsLegacy();
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: context.typeMap ?? new Map(),
+        scriptType: context.scriptType ?? null,
+      };
     }
+
+    this.validateDynamicLoopsAst(ast);
 
     return {
       isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
+      errors: this.errors.map((error) => ({ ...error, severity: 'error' as const })),
+      warnings: this.warnings.map((warning) => ({ ...warning, severity: 'warning' as const })),
+      info: this.info.map((entry) => ({ ...entry, severity: 'info' as const })),
+      typeMap: context.typeMap ?? new Map(),
+      scriptType: context.scriptType ?? null,
     };
   }
 
@@ -73,12 +73,16 @@ export class DynamicLoopValidator implements ValidationModule {
     this.astContext = null;
   }
 
+  private addError(line: number, column: number, message: string, code: string): void {
+    this.errors.push({ line, column, message, code });
+  }
+
   private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({ line, column, message, code, severity: 'warning' });
+    this.warnings.push({ line, column, message, code });
   }
 
   private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({ line, column, message, code, severity: 'info' });
+    this.info.push({ line, column, message, code });
   }
 
   private validateDynamicLoopsAst(program: ProgramNode): void {
@@ -369,95 +373,12 @@ export class DynamicLoopValidator implements ValidationModule {
     return this.isDynamicNumericExpression(expression, null);
   }
 
-  private validateDynamicForLoopsLegacy(): void {
-    interface ForFrame {
-      startLine: number;
-      indexVar: string;
-      startExpr: string;
-      endExpr: string;
-      stepExpr: string | null;
-      boundVars: Set<string>; // identifiers referenced by start/end/step
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
     }
 
-    const loopStack: ForFrame[] = [];
-
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const raw = this.context.cleanLines[i];
-      const line = raw;
-      const lineNum = i + 1;
-
-      // for i = <start> to <end> [by <step>]
-      const forMatch = line.match(/^\s*for\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s+to\s+(.+?)(?:\s+by\s+(.+?))?\s*$/);
-      if (forMatch) {
-        const [, indexVar, startExpr, endExpr, stepExprRaw] = forMatch;
-        const stepExpr = stepExprRaw ?? null;
-
-        // Heuristic checks for dynamic expressions
-        const isStaticNumber = (expr: string) => /^\s*[+\-]?\d+(?:\.\d+)?\s*$/.test(expr);
-        const isStaticArith = (expr: string) => /^\s*[+\-]?\d+(?:\.\d+)?(?:\s*[-+*\/]\s*[+\-]?\d+(?:\.\d+)?)*\s*$/.test(expr);
-        const isDynamic = (expr: string) => !(isStaticNumber(expr) || isStaticArith(expr));
-
-        if (isDynamic(startExpr)) {
-          this.addWarning(lineNum, 1, 'For-loop start bound is dynamic; verify correctness and performance.', 'PSV6-FOR-DYNAMIC-START');
-        }
-        if (isDynamic(endExpr)) {
-          this.addWarning(lineNum, 1, 'For-loop end bound is dynamic; verify correctness and performance.', 'PSV6-FOR-DYNAMIC-END');
-        }
-        if (stepExpr && isDynamic(stepExpr)) {
-          this.addWarning(lineNum, 1, 'For-loop step is dynamic; verify correctness and performance.', 'PSV6-FOR-DYNAMIC-STEP');
-        }
-
-        // Collect identifiers referenced in bounds/step to detect modifications later
-        const identsIn = (expr: string): string[] => {
-          const ids = expr.match(/\b[A-Za-z_][A-Za-z0-9_]*\b/g) || [];
-          const banned = new Set(['to', 'by', 'and', 'or', 'true', 'false', 'na']);
-          return ids.filter((id) => !banned.has(id));
-        };
-
-        const boundVars = new Set<string>([
-          ...identsIn(startExpr),
-          ...identsIn(endExpr),
-          ...(stepExpr ? identsIn(stepExpr) : []),
-        ]);
-
-        loopStack.push({
-          startLine: lineNum,
-          indexVar,
-          startExpr,
-          endExpr,
-          stepExpr,
-          boundVars,
-        });
-        continue;
-      }
-
-      // end of a block
-      if (/^\s*end\s*$/.test(line) && loopStack.length > 0) {
-        loopStack.pop();
-        continue;
-      }
-
-      // Inside for-loop: detect modifications
-      if (loopStack.length > 0) {
-        const current = loopStack[loopStack.length - 1];
-
-        // Reassignment patterns (both = and :=)
-        const assignMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(:=|=)\s*/);
-        if (assignMatch) {
-          const target = assignMatch[1];
-
-          // Index variable modified
-          if (target === current.indexVar) {
-            this.addWarning(lineNum, 1, `Loop index '${current.indexVar}' modified inside for-loop.`, 'PSV6-FOR-INDEX-MODIFIED');
-          }
-
-          // Bound variable modified
-          if (current.boundVars.has(target)) {
-            this.addWarning(lineNum, 1, `Variable '${target}' used in for-loop bounds modified inside loop.`, 'PSV6-FOR-BOUND-MODIFIED');
-          }
-        }
-      }
-    }
+    return 'ast' in this.context ? (this.context as AstValidationContext) : null;
   }
 }
 

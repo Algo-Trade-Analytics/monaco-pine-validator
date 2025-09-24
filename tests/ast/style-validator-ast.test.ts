@@ -27,7 +27,26 @@ class StyleValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledStyleValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new StyleValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('StyleValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const validator = new DisabledStyleValidatorHarness();
+    const result = validator.validate(['var tmp = 1', 'plot(tmp)'].join('\n'));
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('reports poor variable naming from AST variable declarations', () => {
     const identifier = createIdentifier('tmp', 4, 1);
     const value = createNumberLiteral(1, '1', 10, 1);

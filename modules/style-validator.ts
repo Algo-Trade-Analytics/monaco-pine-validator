@@ -41,8 +41,6 @@ export class StyleValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
-  private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   getDependencies(): string[] {
     return ['SyntaxValidator'];
@@ -51,16 +49,22 @@ export class StyleValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
+    const astContext = this.getAstContext(config);
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.runAstAnalysis(this.astContext.ast);
-    } else {
-      this.runLegacyAnalysis(this.context);
+    if (!astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: context.typeMap,
+        scriptType: context.scriptType,
+      };
     }
 
-    // Textual style checks still operate on clean lines regardless of AST availability
+    this.runAstAnalysis(astContext.ast);
+
+    // Textual style checks still operate on clean lines
     this.analyzeCodeQualityTextual(this.context);
 
     return {
@@ -77,8 +81,6 @@ export class StyleValidator implements ValidationModule {
     this.errors = [];
     this.warnings = [];
     this.info = [];
-    this.astContext = null;
-    this.usingAst = false;
   }
 
   private runAstAnalysis(program: ProgramNode): void {
@@ -86,13 +88,6 @@ export class StyleValidator implements ValidationModule {
     this.analyzeMagicNumbersAst(program);
     this.analyzeFunctionComplexityAst(program);
     this.analyzeCodeOrganizationAst(program);
-  }
-
-  private runLegacyAnalysis(context: ValidationContext): void {
-    this.analyzeVariableNamingLegacy(context);
-    this.analyzeMagicNumbersLegacy(context);
-    this.analyzeFunctionComplexityLegacy(context);
-    this.analyzeCodeOrganizationLegacy(context);
   }
 
   private analyzeVariableNamingAst(program: ProgramNode): void {
@@ -531,158 +526,6 @@ export class StyleValidator implements ValidationModule {
     return expression.kind === 'Identifier' && (expression as IdentifierNode).name === name;
   }
 
-  private analyzeVariableNamingLegacy(context: ValidationContext): void {
-    const poorNames: string[] = [];
-    const variableDeclarations = new Map<string, number>();
-
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-      const lineNum = i + 1;
-
-      const varMatch = line.match(/^\s*(?:var|varip|const)?\s*(?:int|float|bool|string|color)?\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=/);
-      if (varMatch) {
-        const varName = varMatch[1];
-        variableDeclarations.set(varName, lineNum);
-
-        if (this.isPoorVariableName(varName)) {
-          poorNames.push(varName);
-        }
-      }
-
-      const assignMatch = line.match(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*[^=]/);
-      if (assignMatch && !line.includes('if ') && !line.includes('for ') && !line.includes('while ')) {
-        const varName = assignMatch[1];
-        if (!variableDeclarations.has(varName) && this.isPoorVariableName(varName)) {
-          poorNames.push(varName);
-        }
-      }
-    }
-
-    if (poorNames.length > 0) {
-      this.addInfo(
-        1,
-        1,
-        `Poor variable naming detected: ${poorNames.slice(0, 5).join(', ')}${poorNames.length > 5 ? '...' : ''}`,
-        'PSV6-STYLE-NAMING',
-        'Use descriptive variable names that clearly indicate their purpose (e.g., sma_20 instead of x).',
-      );
-    }
-  }
-
-  private analyzeMagicNumbersLegacy(context: ValidationContext): void {
-    const magicNumbers: Array<{ value: string; line: number }> = [];
-
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-      const lineNum = i + 1;
-      const noStrings = this.stripStringsAndLineComment(line);
-
-      const numberMatches = noStrings.match(/\b(\d+(?:\.\d+)?)\b/g);
-      if (!numberMatches) {
-        continue;
-      }
-
-      for (const match of numberMatches) {
-        const value = parseFloat(match);
-        if (value < 5 || value === 100 || value === 1000 || value === 10000) {
-          continue;
-        }
-
-        if (this.isMagicNumberValue(value)) {
-          magicNumbers.push({ value: match, line: lineNum });
-        }
-      }
-    }
-
-    if (magicNumbers.length > 0) {
-      const uniqueValues = [...new Set(magicNumbers.map((m) => m.value))];
-      this.addInfo(
-        magicNumbers[0]?.line ?? 1,
-        1,
-        `Magic numbers detected: ${uniqueValues.slice(0, 3).join(', ')}${uniqueValues.length > 3 ? '...' : ''}`,
-        'PSV6-STYLE-MAGIC',
-        'Consider defining named constants for magic numbers to improve readability and maintainability.',
-      );
-    }
-  }
-
-  private analyzeFunctionComplexityLegacy(context: ValidationContext): void {
-    const functions = this.extractFunctions(context);
-
-    for (const func of functions) {
-      const complexity = this.calculateFunctionComplexityLegacy(func, context);
-
-      if (complexity > 5) {
-        this.addWarning(
-          func.startLine,
-          1,
-          `Function '${func.name}' has high complexity (${complexity} conditions).`,
-          'PSV6-STYLE-COMPLEXITY',
-          'Consider breaking down complex functions into smaller, more focused functions.',
-        );
-      }
-
-      const length = func.endLine - func.startLine + 1;
-      if (length > 20) {
-        this.addInfo(
-          func.startLine,
-          1,
-          `Function '${func.name}' is quite long (${length} lines).`,
-          'PSV6-STYLE-FUNCTION-LENGTH',
-          'Consider breaking long functions into smaller, more manageable pieces.',
-        );
-      }
-    }
-  }
-
-  private analyzeCodeOrganizationLegacy(context: ValidationContext): void {
-    let taCount = 0;
-    let plotCount = 0;
-    let inputCount = 0;
-    let mixedSections = false;
-
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-
-      if (line.includes('ta.')) taCount++;
-      if (line.includes('plot(')) plotCount++;
-      if (line.includes('input.')) inputCount++;
-
-      if (i > 0 && i < context.cleanLines.length - 1) {
-        const prevLine = context.cleanLines[i - 1];
-        const nextLine = context.cleanLines[i + 1];
-
-        if (this.hasDifferentOperationTypes(line, prevLine, nextLine)) {
-          mixedSections = true;
-        }
-      }
-    }
-
-    if (taCount >= 3 && plotCount >= 1) {
-      this.addInfo(
-        1,
-        1,
-        'Consider organizing code into logical sections: inputs, calculations, and plots.',
-        'PSV6-STYLE-ORGANIZATION',
-        'Group related operations together: inputs at the top, calculations in the middle, plots at the bottom.',
-      );
-    }
-
-    if (mixedSections) {
-      this.addInfo(
-        1,
-        1,
-        'Code sections appear mixed. Consider grouping related operations.',
-        'PSV6-STYLE-MIXED-SECTIONS',
-        'Organize code into clear sections: inputs, variables, calculations, conditions, and outputs.',
-      );
-    }
-
-    if (inputCount > 0) {
-      this.validateInputPlacementLegacy(context);
-    }
-  }
-
   private analyzeCodeQualityTextual(context: ValidationContext): void {
     this.checkCommentedCode(context);
     this.checkLongLines(context);
@@ -710,107 +553,6 @@ export class StyleValidator implements ValidationModule {
       return false;
     }
     return magnitude >= 20;
-  }
-
-  private extractFunctions(context: ValidationContext): Array<{ name: string; startLine: number; endLine: number }> {
-    const functions: Array<{ name: string; startLine: number; endLine: number }> = [];
-
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-
-      const funcMatch = line.match(/^\s*(\w+)\s*\([^)]*\)\s*=>/);
-      if (!funcMatch) {
-        continue;
-      }
-
-      const funcName = funcMatch[1];
-      const startLine = i + 1;
-      let endLine = context.cleanLines.length;
-
-      for (let j = i + 1; j < context.cleanLines.length; j++) {
-        const nextLine = context.cleanLines[j];
-        if (
-          nextLine.match(/^\s*\w+\s*\([^)]*\)\s*=>/) ||
-          nextLine.match(/^\s*(indicator|strategy|library)\s*\(/)
-        ) {
-          endLine = j;
-          break;
-        }
-      }
-
-      functions.push({ name: funcName, startLine, endLine });
-    }
-
-    return functions;
-  }
-
-  private calculateFunctionComplexityLegacy(
-    func: { name: string; startLine: number; endLine: number },
-    context: ValidationContext,
-  ): number {
-    let complexity = 0;
-
-    for (let i = func.startLine - 1; i < func.endLine - 1; i++) {
-      const line = context.cleanLines[i];
-
-      if (line.includes('if ') || line.includes('else')) complexity++;
-      if (line.includes('switch')) complexity++;
-      if (line.includes('for ') || line.includes('while ')) complexity++;
-
-      const andCount = (line.match(/\band\b/g) || []).length;
-      const orCount = (line.match(/\bor\b/g) || []).length;
-      complexity += andCount + orCount;
-    }
-
-    return complexity;
-  }
-
-  private hasDifferentOperationTypes(line: string, prevLine: string, nextLine: string): boolean {
-    const getOperationType = (l: string) => {
-      if (l.includes('input.')) return 'input';
-      if (l.includes('ta.')) return 'calculation';
-      if (l.includes('plot(')) return 'plot';
-      if (l.includes('strategy.')) return 'strategy';
-      return 'other';
-    };
-
-    const currentType = getOperationType(line);
-    const prevType = getOperationType(prevLine);
-    const nextType = getOperationType(nextLine);
-
-    return (
-      currentType !== prevType &&
-      currentType !== nextType &&
-      prevType !== 'other' &&
-      nextType !== 'other'
-    );
-  }
-
-  private validateInputPlacementLegacy(context: ValidationContext): void {
-    let firstInputLine = -1;
-    let firstCalculationLine = -1;
-
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-
-      if (line.includes('input.') && firstInputLine === -1) {
-        firstInputLine = i + 1;
-      }
-
-      if ((line.includes('ta.') || line.includes('var ') || line.includes('const ')) && firstCalculationLine === -1) {
-        firstCalculationLine = i + 1;
-      }
-    }
-
-    if (firstInputLine > firstCalculationLine && firstCalculationLine !== -1) {
-      this.addWarning(
-        firstInputLine,
-        1,
-        'Inputs should be declared before calculations.',
-        'PSV6-STYLE-INPUT-PLACEMENT',
-        'Move input declarations to the top of the script, before any calculations.',
-      );
-    }
   }
 
   private checkCommentedCode(context: ValidationContext): void {
@@ -908,14 +650,6 @@ export class StyleValidator implements ValidationModule {
     ];
 
     return codePatterns.some((pattern) => pattern.test(line));
-  }
-
-  private stripStringsAndLineComment(line: string): string {
-    return this.stripStrings(line).replace(/\/\/.*$/, '');
-  }
-
-  private stripStrings(line: string): string {
-    return line.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, (m) => ' '.repeat(m.length));
   }
 
   private addInfo(line: number, column: number, message: string, code: string, suggestion?: string): void {

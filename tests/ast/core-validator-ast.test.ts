@@ -53,6 +53,15 @@ class CoreValidatorHarness extends BaseValidator {
   }
 }
 
+class DisabledCoreValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new CoreValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 function createProgramFromSource(
   source: string,
   directives: ProgramNode['directives'],
@@ -76,6 +85,16 @@ function createProgramFromSource(
 }
 
 describe('CoreValidator AST integration', () => {
+  it('returns no diagnostics when AST execution is disabled', () => {
+    const validator = new DisabledCoreValidatorHarness();
+    const result = validator.validate(['indicator(title="Example")'].join('\n'));
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('derives version placement warnings and script metadata from the AST program', () => {
     const source = [
       '// comment',

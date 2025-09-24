@@ -26,7 +26,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Golden semantic coverage snapshots assert the combined scope, symbol, and type metadata for representative scripts to guard end-to-end analysis.
 - Control-flow graph construction models branch merges, loop back-edges, and return terminators while exposing the graph on the validation context for future analyses.
 - Member expression nodes model namespaced property access (e.g., timeframe.period) with traversal, scope, and type inference coverage so builtin-variable validators can rely on structured AST data.
-- The built-in variables validator now consumes AST member expressions to detect namespace constants, keeping Monaco diagnostics aligned with Pine nodes without relying on legacy line-based scanning.
+- The built-in variables validator now consumes AST member expressions to detect namespace constants and short-circuits when structured analysis is disabled, keeping Monaco diagnostics aligned with Pine nodes without relying on legacy line-based scanning.
 - Switch statements, matrix literals, and historical index expressions now have dedicated AST nodes with traversal, scope, type inference, and control-flow coverage, unblocking downstream modules that depend on these constructs.
 - Type inference heuristics recognise namespaced TA and strategy helpers, applying return-type overrides and boosting series certainty when fed series arguments so downstream validators can rely on richer call metadata.
 - The core validator consumes AST version directives and script declarations to pre-populate script metadata, emitting Monaco-aligned diagnostics for misplaced directives, missing titles, and duplicate script declarations without re-scanning raw lines.
@@ -45,11 +45,13 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - ✅ Function declarations validator now short-circuits when no AST is available, relying solely on structured traversal for metadata, duplicate parameter diagnostics, and static declaration errors after retiring the legacy text scanner.
 - Core validator AST analysis now inspects tuple destructuring patterns to raise PST01/PST02/PST03 diagnostics without regex fallbacks.
 - Core validator AST analysis now warns when local declarations shadow function parameters, removing the textual scope heuristic for PSW05.
+- ✅ Core validator now requires AST data before executing, short-circuiting when structured analysis is disabled while keeping textual hygiene checks for indentation and braces in place.
 - Scope validator now leverages AST symbol metadata to surface PSW03/PSW04 duplicate and shadowed declaration diagnostics without relying on indentation heuristics.
 - Scope validator now analyses AST identifier references to emit PSU02 warnings without legacy text scanning heuristics.
 - Scope validator now inspects AST declaration names to emit PS006/PS007 identifier errors without the legacy line scanner.
+- ✅ Scope validator now short-circuits when no AST is available, relying solely on structured traversal for duplicate, shadowing, undefined reference, and identifier diagnostics after retiring the legacy text scanner.
 - ✅ Type validator now short-circuits when no AST is available, relying solely on structured traversal for PSV6 type diagnostics after retiring the legacy text scanner.
-- Dynamic loop validator now uses AST for-loop metadata to surface PSV6-FOR-DYNAMIC and PSV6-FOR-MODIFY warnings, leaving the regex scanner as a fallback only when structured analysis is unavailable.
+- ✅ Dynamic loop validator now uses AST for-loop metadata to surface PSV6-FOR-DYNAMIC and PSV6-FOR-MODIFY warnings after retiring the legacy regex fallback path.
 - ✅ While loop validator now consumes AST while statements to analyse conditions, performance, and control-flow best practices after retiring the legacy line-scanner fallback.
 - ✅ Alert functions validator now inspects AST call expressions to validate alert frequencies, empty messages, and control-flow placement exclusively from structured traversal after retiring the legacy regex fallback.
 - ✅ Strategy functions validator now analyses AST call expressions to validate known members, parameter usage, loop placement, and nested strategy references after retiring the legacy regex fallback path.
@@ -58,7 +60,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - ✅ Dynamic data validator now analyses AST request.* invocations to validate parameters, detect dynamic contexts, and surface performance heuristics after retiring the legacy regex fallback path.
 - ✅ Math functions validator now inspects AST call expressions to validate parameters, detect loop usage, and surface performance guidance exclusively from structured traversal after retiring the legacy regex fallback path.
 - ✅ String functions validator now analyses AST call expressions to validate parameters, formatting helpers, and performance heuristics exclusively from structured traversal after retiring the legacy regex fallback.
-- Drawing functions validator now analyses AST call expressions to validate line/label/box/table helpers, optional parameters, and performance heuristics while retaining the regex scanner as a fallback for non-AST runs.
+- Drawing functions validator now analyses AST call expressions to validate line/label/box/table helpers, optional parameters, and performance heuristics after retiring the legacy regex fallback path.
 - ✅ Polyline functions validator now analyses AST call expressions to validate creation/deletion patterns after retiring the legacy regex scanner fallback.
 - ✅ Enhanced method validator now analyses AST member invocations to surface PSV6-METHOD-INVALID diagnostics after retiring the regex implementation fallback.
 - ✅ Enhanced boolean validator now analyses AST if conditions to raise literal-condition, namespace, and short-circuit diagnostics after retiring the legacy regex fallback.
@@ -74,7 +76,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - ✅ Type inference validator now analyses AST declarations, assignments, function calls, and conditional expressions to surface assignment, annotation, conversion, and ambiguity diagnostics after retiring the legacy scanner fallback.
 - ✅ Input functions validator now traverses AST call expressions to validate parameter counts, defaults, and best-practice guidance after retiring the legacy regex fallback path.
 - ✅ Text formatting validator now inspects AST str.format calls to validate placeholders, parameter usage, and performance guidance after retiring the legacy regex scanner fallback.
-- Time/date functions validator now inspects AST call expressions and member references to validate time_close, time_tradingday, timestamp, and timezone/session usage while retaining the regex scanner as a fallback for non-AST runs.
+- Time/date functions validator now inspects AST call expressions and member references to validate time_close, time_tradingday, timestamp, and timezone/session usage after retiring the legacy regex fallback path.
 - ✅ Array validator now records AST-traversed declarations and operations so PSV6 array diagnostics, performance checks, and best-practice suggestions rely exclusively on structured traversal after retiring the legacy fallback.
 - ✅ Varip validator now analyses AST varip declarations, assignments, and scope to surface performance and usage diagnostics after retiring the legacy regex fallback path.
 - Enum validator now analyses AST enum declarations, value usage, comparisons, function parameters, and switch cases exclusively through structured traversal after retiring the regex-based fallback path.
@@ -86,7 +88,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 3. ✅ **Broaden AST Node Coverage** – added structural nodes for `switch`, matrix literals, and historical index expressions so currently blocked validators can migrate without bespoke fallbacks.
 4. ✅ **Deepen Type Inference Rules** – namespaced TA and strategy helpers now surface richer return metadata and series certainty so the `strategy-functions` and `ta-functions` validators can rely on AST semantics.
 5. ✅ **Document Monaco Integration Plan** – recorded the staged worker rollout strategy, testing plan, and dependencies in `docs/monaco-integration-plan.md`.
-6. 🔄 **Kick Off Core Validator AST Port** – AST directives now seed version/script metadata while call and index analysis drive strategy/plotting/library diagnostics and negative history checks; continue expanding coverage to the remaining core validator responsibilities.
+6. ✅ **Kick Off Core Validator AST Port** – Core validator now executes solely on structured traversal, retiring the legacy fallback while AST directives seed version/script metadata and drive strategy, plotting, library, and history diagnostics.
 7. ✅ **Prototype Monaco Worker Harness** – landed a Vitest-driven worker harness that loads the AST pipeline and validates RPC wiring ahead of editor rollout.
 
 ## 3. Target Architecture Overview
@@ -212,20 +214,21 @@ Suggested migration order:
 
 | Module | Legacy Complexity | AST Migration Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
-| core-validator | High | 🔄 Ready for AST port | Validator Infra | AST context + diagnostics helpers landed; waiting on dual-run guardrail before switchover |
+| core-validator | High | ✅ Migrated | Validator Infra | Module now requires AST data, short-circuits when structured analysis is disabled, and drives core diagnostics solely from traversal with textual hygiene retained |
 | syntax-validator | High | ✅ Migrated | Validator Infra | AST traversal now surfaces version, script, identifier, tuple, and assignment diagnostics after retiring the legacy regex fallback path |
 | function-declarations | High | ✅ Migrated | Validator Infra | Function metadata, duplicate params, and static method errors sourced from AST traversal; legacy scanner retired |
 | function-validator | High | ✅ Migrated | Module Owners Guild | AST traversal now gathers function declarations, call metadata, and parameter usage after retiring the legacy regex fallback |
 | function-types-validator | High | ✅ Migrated | Module Owners Guild | AST traversal now enforces return consistency, complexity, and length diagnostics after retiring the legacy regex fallback |
 | type-validator | High | ✅ Migrated | Semantic Working Group | AST traversal now surfaces PSV6 type diagnostics exclusively and the legacy text scanner has been retired |
 | type-inference-validator | High | ✅ Migrated | Semantic Working Group | AST traversal now surfaces assignment, annotation, conversion, and ambiguity diagnostics after retiring the regex fallback |
-| scope-validator | High | 🔄 Migrating | Semantic Working Group | AST metadata now drives PSW03/PSW04 and PSU02 diagnostics; continue porting remaining scope checks |
-| udt-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal records type declarations, methods, and diagnostics while retaining the regex scanner as a fallback |
+| scope-validator | High | ✅ Migrated | Semantic Working Group | Scope diagnostics now rely exclusively on AST traversal for duplicate, shadowing, undefined-reference, and identifier checks after retiring the legacy text scanner |
+| udt-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal records type declarations, methods, and diagnostics after retiring the legacy regex fallback path |
 | enum-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates enum declarations, usage, and comparisons with the legacy regex scanner retired |
-| switch-validator | Medium | ✅ Migrated | Language Infra | Switch diagnostics now sourced from AST cases and discriminants; legacy regex path retained as fallback |
+| switch-validator | Medium | ✅ Migrated | Language Infra | Switch diagnostics now sourced from AST cases and discriminants after retiring the legacy regex fallback path |
 | alert-functions-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal validates alert calls, frequency usage, and control-flow guidance after retiring the legacy regex fallback |
 | while-loop-validator | Medium | ✅ Migrated | Language Infra | AST traversal now surfaces while-loop diagnostics after retiring the legacy line-scanner fallback |
-| builtin-variables-validator | Medium | ✅ Migrated | Module Owners Guild | Validator now reads AST member expressions for constants, having removed the legacy line-scanner path |
+| dynamic-loop-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now surfaces dynamic loop bounds and mutation diagnostics after retiring the legacy regex fallback path |
+| builtin-variables-validator | Medium | ✅ Migrated | Module Owners Guild | Validator now reads AST member expressions for constants, short-circuits when AST is disabled, and has removed the legacy line-scanner path |
 | final-constants-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now records specialized constants after retiring the legacy regex fallback |
 | v6-features-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now surfaces switch, request, enum, varip, and history guidance after retiring the legacy fallback path |
 | ta-functions-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates TA calls, parameters, and loop placement after retiring the legacy regex fallback |
@@ -243,12 +246,12 @@ Suggested migration order:
 | enhanced-migration-validator | Low | ✅ Migrated | Module Owners Guild | AST traversal now surfaces study, security, transp, and TA namespace migration guidance after retiring the legacy regex fallback |
 | enhanced-library-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates library imports, alias conflicts, version gaps, and usage guidance after retiring the legacy regex scanner |
 | linefill-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates linefill constructors, updates, loop placement, and performance heuristics after retiring the regex fallback |
-| style-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now inspects declarations, literals, and call sections to surface naming, magic number, complexity, and organization diagnostics while retaining legacy fallbacks |
+| style-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now surfaces naming, magic number, complexity, and organization diagnostics and the module short-circuits when no AST is available, retaining only textual hygiene checks |
 | input-functions-validator | High | ✅ Migrated | Module Owners Guild | AST traversal now validates input calls, defaults, and best-practice guidance after retiring the legacy regex fallback |
 | text-formatting-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates str.format usage and performance guidance after retiring the legacy regex scanner fallback |
 | time-date-functions-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates time/date helpers, timezone arguments, and session constants after retiring the legacy regex fallback |
 | strategy-functions-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal records strategy calls, loop contexts, and nested usage after retiring the legacy regex fallback |
-| strategy-order-limits-validator | Medium | 🔄 Migrating | Module Owners Guild | AST traversal now captures strategy order calls, loop context, and trimming heuristics while keeping the regex scanner as a fallback |
+| strategy-order-limits-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates order metadata, trimming heuristics, and time-filter guidance after retiring the legacy regex fallback path |
 | ticker-functions-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates ticker constructors, modifiers, and named arguments after retiring the legacy regex fallback |
 | performance-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now inspects memory allocations, loop structure, and expensive calls after retiring the legacy regex fallback path |
 | lazy-evaluation-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now analyses conditional historical usage, user functions, and series consistency after retiring the legacy regex fallback path |
@@ -259,9 +262,9 @@ Suggested migration order:
 | varip-validator | Medium | ✅ Migrated | Module Owners Guild | AST traversal now validates varip declarations, assignments, and scope after retiring the legacy regex fallback path |
 | ... | ... | ... | ... | Extend table as modules migrate |
 
-- ✅ Switch validator now emits PSV6 switch diagnostics from AST traversal, keeping the regex-based scanner only as a fallback for non-AST runs.
-- 🔄 Strategy order limits validator records strategy order metadata through AST traversal to drive loop, trimming, and parameter diagnostics while retaining the legacy scanner for non-AST runs.
-- 🔄 Strategy order limits validator now derives time-filter recognition, position-size guidance, and caching suggestions from AST metadata, falling back to line scanning only when structured analysis is unavailable.
+- ✅ Switch validator now emits PSV6 switch diagnostics from AST traversal after retiring the legacy regex fallback path.
+- ✅ Strategy order limits validator analyses AST order metadata to drive loop, trimming, and parameter diagnostics after retiring the legacy regex fallback path.
+- ✅ Strategy order limits validator now derives time-filter recognition, position-size guidance, and caching suggestions from AST metadata without relying on the legacy line scanner.
 - ✅ Syntax validator analyses AST directives, script declarations, naming, tuple destructuring, and assignment semantics after retiring the regex fallback path.
 - ✅ Drawing functions validator records drawing call metadata through AST traversal to validate parameters, loop guidance, and performance heuristics after retiring the legacy regex fallback path.
 - ✅ Linefill validator records linefill call metadata through AST traversal to validate parameters, loop guidance, and performance heuristics after retiring the regex fallback path.
@@ -278,11 +281,12 @@ Suggested migration order:
 - ✅ Varip validator analyses AST declarations, assignments, and scope to surface PSV6 guidance after retiring the legacy regex fallback path.
 - ✅ Lazy evaluation validator analyses conditional historical usage, user functions, and series consistency through AST traversal after retiring the legacy regex fallback path.
 - ✅ Function validator now records declarations, validates calls, and enforces complexity guidance exclusively through AST traversal after retiring the legacy regex fallback path.
-- 🔄 Style validator analyses AST declarations, literals, and call sections to drive naming, magic number, complexity, and input placement diagnostics while preserving textual fallbacks for comment and indentation checks.
+- ✅ Style validator now requires AST data before running structural diagnostics, short-circuits when no tree is available, and continues to run textual hygiene checks for comments and indentation.
 - ✅ Syminfo variables validator inspects AST member expressions to surface advanced syminfo usage and additional constants after retiring the legacy regex fallback path.
 - ✅ Enhanced migration validator analyses AST call expressions and declarations to surface deprecated study/security usage, transp parameters, and TA namespace guidance after retiring the legacy regex fallback path.
 - ✅ Enhanced semantic validator analyses AST declarations, assignments, and functions to surface PSV6 type-flow errors and inference guidance after retiring the legacy regex implementation.
-- 🔄 UDT validator gathers type declarations, methods, and usage diagnostics from AST traversal while keeping the regex implementation as a fallback when structured data is unavailable.
+- ✅ UDT validator gathers type declarations, methods, and usage diagnostics from AST traversal after retiring the legacy regex fallback path.
+- ✅ History referencing validator now short-circuits when AST execution is disabled and surfaces negative-index, loop, and varip diagnostics exclusively from structured traversal after retiring the legacy regex fallback path.
 
 ## 10. Immediate Next Steps (Post-Review)
 

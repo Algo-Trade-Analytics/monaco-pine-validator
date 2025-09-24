@@ -34,7 +34,26 @@ class UdtValidatorHarness extends BaseValidator {
   }
 }
 
+class DisabledUdtValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new UDTValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('UDTValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new DisabledUdtValidatorHarness();
+    const result = harness.validate('type Point\n    float x');
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('reports duplicate type declarations', () => {
     const pointIdentifier = createIdentifier('Point', 0, 1);
     const floatReference = createTypeReference('float', 5, 2);

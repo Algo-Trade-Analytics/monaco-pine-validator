@@ -14,7 +14,26 @@ class DynamicLoopHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledDynamicLoopHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new DynamicLoopValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('DynamicLoopValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const validator = new DisabledDynamicLoopHarness();
+    const result = validator.validate(['for i = 0 to 1', '    plot(i)', 'end'].join('\n'));
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('emits dynamic bound warnings from AST metadata', () => {
     const program = createDynamicLoopProgram();
     const service = new FunctionAstService(() => ({
