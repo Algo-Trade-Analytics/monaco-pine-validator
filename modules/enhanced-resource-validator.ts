@@ -37,9 +37,7 @@ export class EnhancedResourceValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   private totalCollectionElements = 0;
   private arrayAllocationCount = 0;
@@ -54,16 +52,21 @@ export class EnhancedResourceValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
 
     this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
-
-    if (this.usingAst && this.astContext?.ast) {
-      this.validateWithAst(this.astContext.ast);
-    } else {
-      this.validateLegacy();
+    const ast = this.astContext?.ast;
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.validateWithAst(ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -80,7 +83,6 @@ export class EnhancedResourceValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
     this.totalCollectionElements = 0;
     this.arrayAllocationCount = 0;
     this.varAllocationElements = 0;
@@ -367,181 +369,6 @@ export class EnhancedResourceValidator implements ValidationModule {
 
     const declaration = declarationAncestor.node as VariableDeclarationNode;
     return declaration.declarationKind === 'var';
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Legacy validation
-  // ──────────────────────────────────────────────────────────────────────────
-
-  private validateLegacy(): void {
-    this.validateMemoryUsageLegacy();
-    this.validateComputationalComplexityLegacy();
-  }
-
-  private validateMemoryUsageLegacy(): void {
-    let totalCollectionElements = 0;
-    let arrayCount = 0;
-    const largeCollections: Array<{ line: number; size: number; type: string }> = [];
-    let varAllocElements = 0;
-    let sawVarAlloc = false;
-
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-
-      const arrayMatch = line.match(/array\.new<[^>]+>\s*\(\s*(\d+)\s*\)/);
-      if (arrayMatch) {
-        const size = parseInt(arrayMatch[1], 10);
-        totalCollectionElements += size;
-        arrayCount++;
-        const isVarDecl = /^\s*var\b/.test(line);
-        if (isVarDecl) {
-          varAllocElements += size;
-          sawVarAlloc = true;
-        }
-
-        if (size > 50000) {
-          largeCollections.push({ line: lineNum, size, type: 'array' });
-          this.addWarning(
-            lineNum,
-            1,
-            `Large array allocation detected: ${size} elements. Consider using smaller arrays or alternative data structures.`,
-            'PSV6-MEMORY-ARRAYS',
-            'Consider using smaller arrays or alternative data structures',
-          );
-        }
-
-        if (isVarDecl && size >= 50000) {
-          this.addError(lineNum, 1, 'Type issue detected due to large array allocation', 'PSV6-ENUM-UNDEFINED-TYPE');
-        }
-      }
-
-      const arrayNoSizeMatch = line.match(/array\.new<[^>]+>\s*\(\s*\)/);
-      if (arrayNoSizeMatch) {
-        arrayCount++;
-      }
-
-      const matrixMatch = line.match(/matrix\.new<[^>]+>\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)/);
-      if (matrixMatch) {
-        const rows = parseInt(matrixMatch[1], 10);
-        const cols = parseInt(matrixMatch[2], 10);
-        const totalElements = rows * cols;
-        totalCollectionElements += totalElements;
-        const isVarDecl = /^\s*var\b/.test(line);
-        if (isVarDecl) {
-          varAllocElements += totalElements;
-          sawVarAlloc = true;
-        }
-
-        if (totalElements > 50000) {
-          largeCollections.push({ line: lineNum, size: totalElements, type: 'matrix' });
-          this.addWarning(
-            lineNum,
-            1,
-            `Large matrix allocation detected: ${rows}x${cols} = ${totalElements} elements. Consider using smaller matrices.`,
-            'PSV6-MEMORY-ARRAYS',
-            'Consider using smaller matrices or alternative data structures',
-          );
-        }
-      }
-    }
-
-    if (totalCollectionElements >= 30000) {
-      this.addWarning(
-        1,
-        1,
-        `High total collection elements detected: ${totalCollectionElements}. This may impact performance.`,
-        'PSV6-MEMORY-LARGE-COLLECTION',
-        'Consider reducing the number of collection elements or using alternative approaches',
-      );
-    }
-
-    if (sawVarAlloc && varAllocElements >= 30000) {
-      this.addError(1, 1, 'Type issue detected due to high total collection elements', 'PSV6-ENUM-UNDEFINED-TYPE');
-    }
-
-    if (arrayCount > 10) {
-      this.addWarning(
-        1,
-        1,
-        `Excessive array usage detected: ${arrayCount} arrays. This may impact performance.`,
-        'PSV6-MEMORY-ARRAYS',
-        'Consider reducing the number of arrays or using alternative data structures',
-      );
-    }
-  }
-
-  private validateComputationalComplexityLegacy(): void {
-    const loopStack: number[] = [];
-
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-      const indent = this.getLineIndentation(line);
-
-      const isLoop = /^\s*(for|while)\b/.test(line);
-      if (isLoop) {
-        loopStack.push(indent);
-
-        if (this.hasConditionalComplexityLegacy(line)) {
-          this.addWarning(
-            lineNum,
-            1,
-            'Conditional complexity detected in loop bounds. This may impact performance.',
-            'PSV6-PERF-NESTED-LOOPS',
-            'Consider simplifying loop bounds or pre-calculating values',
-          );
-        }
-      }
-
-      while (loopStack.length > 0 && indent < loopStack[loopStack.length - 1]) {
-        loopStack.pop();
-      }
-
-      if (loopStack.length > 1) {
-        const largeBounds = this.detectLargeLoopBoundsLegacy(line);
-        if (largeBounds) {
-          this.addWarning(
-            lineNum,
-            1,
-            `Large loop bounds detected in nested loop: ${largeBounds}. This may impact performance.`,
-            'PSV6-PERF-NESTED-LOOPS',
-            'Consider reducing loop bounds or optimizing the algorithm',
-          );
-        }
-      }
-    }
-  }
-
-  private hasConditionalComplexityLegacy(line: string): boolean {
-    const complexConditionPattern = /(?:if|for|while)\s*\([^)]*(?:&&|\|\||\?|:)[^)]*\)/;
-    const ternaryPattern = /\?.*:/;
-    return complexConditionPattern.test(line) || ternaryPattern.test(line);
-  }
-
-  private detectLargeLoopBoundsLegacy(line: string): string | null {
-    const forMatch = line.match(/for\s+[^=]+\s*=\s*\d+\s+to\s+(\d+)/);
-    if (forMatch) {
-      const bound = parseInt(forMatch[1], 10);
-      if (bound >= 1000) {
-        return `bound: ${bound}`;
-      }
-    }
-
-    const whileMatch = line.match(/while\s+[^<>=]+[<>=]\s*(\d+)/);
-    if (whileMatch) {
-      const bound = parseInt(whileMatch[1], 10);
-      if (bound >= 1000) {
-        return `bound: ${bound}`;
-      }
-    }
-
-    return null;
-  }
-
-  private getLineIndentation(line: string): number {
-    const match = line.match(/^(\s*)/);
-    return match ? match[1].length : 0;
   }
 
   // ──────────────────────────────────────────────────────────────────────────

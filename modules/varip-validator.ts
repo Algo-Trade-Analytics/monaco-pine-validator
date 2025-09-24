@@ -42,9 +42,7 @@ export class VaripValidator implements ValidationModule {
   private warnings: DiagnosticEntry[] = [];
   private info: DiagnosticEntry[] = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   private astVaripDeclarations: VaripDeclarationInfo[] = [];
   private astVaripNames = new Set<string>();
@@ -59,16 +57,21 @@ export class VaripValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
-
     this.astContext = this.getAstContext(config);
-    this.usingAst = Boolean(this.astContext?.ast);
+    const ast = this.astContext?.ast;
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.validateWithAst(this.astContext.ast);
-    } else {
-      this.validateWithLegacyHeuristics();
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: context.typeMap,
+        scriptType: context.scriptType,
+      };
     }
+
+    this.validateWithAst(ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -382,278 +385,6 @@ export class VaripValidator implements ValidationModule {
         this.addError(lineNumber, 1, 'varip declaration must include an initial value', 'PSV6-VARIP-INITIAL-VALUE');
       }
     }
-  }
-
-  private validateWithLegacyHeuristics(): void {
-    this.validateVaripDeclarationsLegacy();
-    this.validateVaripUsageLegacy();
-    this.validateVaripScopeLegacy();
-    this.validateVaripPerformanceLegacy();
-  }
-
-  private validateVaripDeclarationsLegacy(): void {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-
-      if (!/^\s*varip\s*/.test(line)) {
-        continue;
-      }
-
-      const typedMatch = line.match(/^\s*varip\s+[A-Za-z_][A-Za-z0-9_]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
-      if (typedMatch) {
-        const varName = typedMatch[1];
-        const initialValue = typedMatch[2];
-        this.validateVaripSyntaxLegacy(line, lineNum);
-        this.validateVaripTypeLegacy(varName, initialValue, lineNum);
-        this.validateVaripNamingLegacy(varName, lineNum);
-        continue;
-      }
-
-      const untypedMatch = line.match(/^\s*varip\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
-      if (untypedMatch) {
-        const varName = untypedMatch[1];
-        const initialValue = untypedMatch[2];
-        this.validateVaripSyntaxLegacy(line, lineNum);
-        this.validateVaripTypeLegacy(varName, initialValue, lineNum);
-        this.validateVaripNamingLegacy(varName, lineNum);
-        continue;
-      }
-
-      this.validateVaripSyntaxLegacy(line, lineNum);
-    }
-  }
-
-  private validateVaripUsageLegacy(): void {
-    const varipVariables = new Set<string>();
-
-    for (const line of this.context.cleanLines) {
-      const match = line.match(/^\s*varip\s+[A-Za-z_][A-Za-z0-9_]*\s+([A-Za-z_][A-Za-z0-9_]*)/);
-      if (match) {
-        varipVariables.add(match[1]);
-        continue;
-      }
-
-      const untypedMatch = line.match(/^\s*varip\s+([A-Za-z_][A-Za-z0-9_]*)/);
-      if (untypedMatch) {
-        varipVariables.add(untypedMatch[1]);
-      }
-    }
-
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-
-      for (const varName of varipVariables) {
-        if (!line.includes(varName)) {
-          continue;
-        }
-
-        if (/^\s*varip\s+/.test(line)) {
-          continue;
-        }
-
-        if (line.includes(varName) && line.includes(':=')) {
-          if (!line.includes('barstate.isconfirmed') && !line.includes('barstate.isnew')) {
-            this.addWarning(
-              lineNum,
-              1,
-              `varip '${varName}' modification should consider barstate conditions for proper intrabar behavior`,
-              'PSV6-VARIP-BARSTATE',
-            );
-          }
-        }
-
-        if (line.includes(varName) && line.includes('=') && !/^\s*varip\s+/.test(line)) {
-          const lineWithoutComments = line.replace(/\/\/.*$/, '').trim();
-          const hasCompoundAssignment = lineWithoutComments.includes(':=');
-          const assignmentPattern = new RegExp(`^\\s*${varName}\\s*=\\s*`);
-
-          if (assignmentPattern.test(lineWithoutComments) && !hasCompoundAssignment) {
-            this.addError(lineNum, 1, `varip '${varName}' should use ':=' for assignment, not '='`, 'PSV6-VARIP-ASSIGNMENT');
-          }
-        }
-      }
-    }
-  }
-
-  private validateVaripScopeLegacy(): void {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-
-      if (!line.includes('varip')) {
-        continue;
-      }
-
-      if (this.isInsideFunctionLegacy(i)) {
-        this.addError(lineNum, 1, 'varip declarations are not allowed inside functions', 'PSV6-VARIP-SCOPE-FUNCTION');
-      }
-
-      if (this.isInsideLoopLegacy(i)) {
-        this.addError(lineNum, 1, 'varip declarations are not allowed inside loops', 'PSV6-VARIP-SCOPE-LOOP');
-      }
-    }
-  }
-
-  private validateVaripPerformanceLegacy(): void {
-    const varipCount = this.countVaripDeclarationsLegacy();
-
-    if (varipCount > 10) {
-      this.addWarning(
-        1,
-        1,
-        `High number of varip variables (${varipCount}). Consider if all are necessary for performance`,
-        'PSV6-VARIP-PERFORMANCE',
-      );
-    }
-
-    if (this.isStrategyScriptLegacy() && varipCount > 5) {
-      this.addWarning(
-        1,
-        1,
-        'Strategy scripts should minimize varip usage for better backtesting accuracy',
-        'PSV6-VARIP-STRATEGY',
-      );
-    }
-  }
-
-  private validateVaripSyntaxLegacy(line: string, lineNum: number): void {
-    if (!/^\s*varip\s+[A-Za-z_][A-Za-z0-9_]*\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*/.test(line)) {
-      this.addError(
-        lineNum,
-        1,
-        'Invalid varip declaration syntax. Expected: varip <type> <name> = <value>',
-        'PSV6-VARIP-SYNTAX',
-      );
-    }
-
-    if (!line.includes('=')) {
-      this.addError(lineNum, 1, 'varip declaration must include an initial value', 'PSV6-VARIP-INITIAL-VALUE');
-    }
-  }
-
-  private validateVaripTypeLegacy(varName: string, initialValue: string, lineNum: number): void {
-    if (!this.isLiteralValueLegacy(initialValue)) {
-      this.addWarning(
-        lineNum,
-        1,
-        `varip '${varName}' should be initialized with a literal value for better performance`,
-        'PSV6-VARIP-LITERAL-INIT',
-      );
-    }
-
-    const inferredType = this.inferTypeFromValueLegacy(initialValue);
-    if (inferredType === 'unknown') {
-      this.addWarning(
-        lineNum,
-        1,
-        `Could not infer type for varip '${varName}'. Consider explicit type declaration`,
-        'PSV6-VARIP-TYPE-INFERENCE',
-      );
-    }
-  }
-
-  private validateVaripNamingLegacy(varName: string, lineNum: number): void {
-    if (varName.length < 3) {
-      this.addWarning(lineNum, 1, `varip '${varName}' should have a more descriptive name`, 'PSV6-VARIP-NAMING');
-    }
-
-    if (!/^(intrabar|bar|count|state|flag|persist)/i.test(varName)) {
-      this.addInfo(
-        lineNum,
-        1,
-        `Consider using descriptive prefixes like 'intrabar_' or 'bar_' for varip variables`,
-        'PSV6-VARIP-NAMING-SUGGESTION',
-      );
-    }
-  }
-
-  private isInsideFunctionLegacy(lineIndex: number): boolean {
-    let functionDepth = 0;
-
-    for (let i = 0; i <= lineIndex; i++) {
-      const line = this.context.cleanLines[i];
-      if (/^\s*[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\)\s*=>/.test(line)) {
-        functionDepth++;
-      }
-
-      if (i === lineIndex) {
-        return functionDepth > 0;
-      }
-    }
-
-    return false;
-  }
-
-  private isInsideLoopLegacy(lineIndex: number): boolean {
-    let loopDepth = 0;
-
-    for (let i = 0; i <= lineIndex; i++) {
-      const line = this.context.cleanLines[i];
-
-      if (/^\s*for\s+\w+\s*=\s*\d+\s+to\s+\d+/.test(line) || /^\s*while\s+/.test(line)) {
-        loopDepth++;
-      }
-
-      if (i === lineIndex) {
-        return loopDepth > 0;
-      }
-    }
-
-    return false;
-  }
-
-  private countVaripDeclarationsLegacy(): number {
-    return this.context.cleanLines.filter((line) => /^\s*varip\s+/.test(line)).length;
-  }
-
-  private isStrategyScriptLegacy(): boolean {
-    return this.context.cleanLines.some((line) => /^\s*strategy\s*\(/.test(line));
-  }
-
-  private isLiteralValueLegacy(value: string): boolean {
-    const trimmed = value.trim();
-
-    if (/^[+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?$/.test(trimmed)) {
-      return true;
-    }
-
-    if (trimmed === 'true' || trimmed === 'false') {
-      return true;
-    }
-
-    if (/^"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'$/.test(trimmed)) {
-      return true;
-    }
-
-    if (trimmed === 'na') {
-      return true;
-    }
-
-    return false;
-  }
-
-  private inferTypeFromValueLegacy(value: string): string {
-    const trimmed = value.trim();
-
-    if (/^[+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?$/.test(trimmed)) {
-      return trimmed.includes('.') || /[eE]/.test(trimmed) ? 'float' : 'int';
-    }
-
-    if (trimmed === 'true' || trimmed === 'false') {
-      return 'bool';
-    }
-
-    if (/^"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'$/.test(trimmed)) {
-      return 'string';
-    }
-
-    if (trimmed === 'na') {
-      return 'unknown';
-    }
-
-    return 'unknown';
   }
 
   private resolveAssignmentOperator(

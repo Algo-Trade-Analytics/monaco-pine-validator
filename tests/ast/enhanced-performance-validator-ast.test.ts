@@ -28,6 +28,15 @@ class EnhancedPerformanceHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class EnhancedPerformanceDisabledHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new EnhancedPerformanceValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('EnhancedPerformanceValidator (AST)', () => {
   it('flags expensive TA helpers executed inside nested loops', () => {
     const expensiveMember = createMemberExpression(
@@ -217,5 +226,15 @@ describe('EnhancedPerformanceValidator (AST)', () => {
     const errorCodes = result.errors.map((error) => error.code);
 
     expect(errorCodes).toContain('PSV6-PERF-NESTED-TA');
+  });
+
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new EnhancedPerformanceDisabledHarness();
+
+    const result = harness.validate('request.security("AAPL")');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
   });
 });

@@ -29,7 +29,26 @@ class VaripValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledVaripValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new VaripValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('VaripValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new DisabledVaripValidatorHarness();
+    const result = harness.validate('varip int count = 0');
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('reports PSV6-VARIP-ASSIGNMENT when reassignment uses "="', () => {
     const typeAnnotation = createTypeReference('int', 6, 1);
     const varIdentifier = createIdentifier('count', 10, 1);

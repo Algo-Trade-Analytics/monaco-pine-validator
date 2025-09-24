@@ -50,14 +50,12 @@ export class EnhancedPerformanceValidator implements ValidationModule {
   priority = 70;
 
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
 
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
 
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   getDependencies(): string[] {
     return ['CoreValidator', 'SyntaxValidator'];
@@ -66,16 +64,21 @@ export class EnhancedPerformanceValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
-
     this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.validateWithAst(this.astContext.ast);
-    } else {
-      this.validateLegacy();
+    const ast = this.astContext?.ast;
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.validateWithAst(ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -341,136 +344,6 @@ export class EnhancedPerformanceValidator implements ValidationModule {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Legacy fallback
-  // ──────────────────────────────────────────────────────────────────────────
-  private validateLegacy(): void {
-    const lines = (this.context as ValidationContext & { lines?: string[] }).lines ?? [];
-    this.validateExpensiveFunctionsInNestedLoopsLegacy(lines);
-    this.validateRepaintIssuesLegacy(lines);
-    this.validateAlertConsolidationLegacy(lines);
-  }
-
-  private validateExpensiveFunctionsInNestedLoopsLegacy(lines: string[]): void {
-    const loopStack: Array<{ indent: number; lineNum: number }> = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
-      const indent = this.getLineIndentation(line);
-
-      while (loopStack.length > 0 && indent <= loopStack[loopStack.length - 1].indent) {
-        loopStack.pop();
-      }
-
-      if (/^\s*(for|while)\b/.test(line)) {
-        loopStack.push({ indent, lineNum });
-      }
-
-      if (loopStack.length > 1) {
-        for (const func of EXPENSIVE_FUNCTIONS_IN_LOOPS) {
-          const funcRegex = new RegExp(`\\b${func.replace('.', '\\.') }\\s*\\(`, 'g');
-          let match;
-          while ((match = funcRegex.exec(line)) !== null) {
-            this.addError(
-              lineNum,
-              match.index + 1,
-              `Expensive function '${func}' called in nested loop may impact performance`,
-              'PSV6-PERF-NESTED-TA',
-              `Consider moving '${func}' outside the loop or caching its result`,
-            );
-          }
-        }
-      }
-    }
-  }
-
-  private validateRepaintIssuesLegacy(lines: string[]): void {
-    let hasBarstateConfirmed = false;
-    let hasRequestSecurity = false;
-    let hasHTFData = false;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
-
-      if (/barstate\.isconfirmed/.test(line)) {
-        hasBarstateConfirmed = true;
-      }
-
-      if (/request\.security\s*\(/.test(line)) {
-        hasRequestSecurity = true;
-
-        if (/lookahead\s*=\s*barmerge\.lookahead_on/.test(line)) {
-          this.addWarning(
-            lineNum,
-            1,
-            'request.security with lookahead enabled may cause repainting',
-            'PSV6-REPAINT-LOOKAHEAD',
-            'Consider using barstate.isconfirmed to prevent repainting',
-          );
-        }
-      }
-
-      if (/close\[-?\d+\]|open\[-?\d+\]|high\[-?\d+\]|low\[-?\d+\]/.test(line)) {
-        const negativeMatch = line.match(/(\w+)\[(-?\d+)\]/);
-        if (negativeMatch && parseInt(negativeMatch[2], 10) < 0) {
-          this.addError(
-            lineNum,
-            1,
-            'Negative history reference may cause future data leakage',
-            'PSV6-FUTURE-DATA',
-            'Use positive history references only',
-          );
-        }
-      }
-
-      if (/request\.security\s*\([^)]*timeframe/.test(line) && !hasBarstateConfirmed) {
-        hasHTFData = true;
-      }
-    }
-
-    if (hasRequestSecurity && !hasBarstateConfirmed) {
-      this.addWarning(
-        1,
-        1,
-        'request.security used without barstate.isconfirmed may cause repainting',
-        'PSV6-REPAINT-SECURITY',
-        'Use barstate.isconfirmed to prevent repainting',
-      );
-    }
-
-    if (hasHTFData && !hasBarstateConfirmed) {
-      this.addWarning(
-        1,
-        1,
-        'Higher timeframe data used without confirmation may cause repainting',
-        'PSV6-REPAINT-HTF',
-        'Use barstate.isconfirmed when accessing HTF data',
-      );
-    }
-  }
-
-  private validateAlertConsolidationLegacy(lines: string[]): void {
-    let alertCount = 0;
-
-    for (const line of lines) {
-      if (/\balert(condition)?\s*\(/.test(line)) {
-        alertCount++;
-      }
-    }
-
-    if (alertCount >= 2) {
-      this.addWarning(
-        1,
-        1,
-        `Multiple alert conditions detected (${alertCount}). Consider consolidating or documenting alert logic.`,
-        'PSV6-PERF-ALERT-CONSOLIDATE',
-        'Reduce duplicate alerts or combine conditions when possible.',
-      );
-    }
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
   // Utilities
   // ──────────────────────────────────────────────────────────────────────────
   private reset(): void {
@@ -478,7 +351,6 @@ export class EnhancedPerformanceValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
   }
 
   private addError(line: number, column: number, message: string, code: string, suggestion?: string): void {
@@ -487,11 +359,6 @@ export class EnhancedPerformanceValidator implements ValidationModule {
 
   private addWarning(line: number, column: number, message: string, code: string, suggestion?: string): void {
     this.warnings.push({ line, column, message, code, suggestion, severity: 'warning' });
-  }
-
-  private getLineIndentation(line: string): number {
-    const match = line.match(/^(\s*)/);
-    return match ? match[1].length : 0;
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {

@@ -56,13 +56,10 @@ export class MatrixValidator implements ValidationModule {
   private warnings: Array<{ line: number; column: number; message: string; code: string }> = [];
   private info: Array<{ line: number; column: number; message: string; code: string }> = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   private matrixDeclarations = new Map<string, MatrixInfo>();
   private matrixAllocations = 0;
-  private matrixOperations = 0;
   private matrixUsage = new Map<string, MatrixUsageRecord>();
 
   getDependencies(): string[] {
@@ -76,22 +73,24 @@ export class MatrixValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
 
     this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
+    const ast = this.astContext?.ast;
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectMatrixDataAst(this.astContext.ast);
-      this.validateMatrixPerformanceAst();
-      this.validateMatrixBestPracticesAst();
-    } else {
-      this.validateMatrixDeclarationsLegacy();
-      this.validateMatrixOperationsLegacy();
-      this.validateMatrixTypeConsistencyLegacy();
-      this.validateMatrixPerformanceLegacy();
-      this.validateMatrixBestPracticesLegacy();
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: context.scriptType,
+      };
     }
+
+    this.collectMatrixDataAst(ast);
+    this.validateMatrixPerformanceAst();
+    this.validateMatrixBestPracticesAst();
 
     return {
       isValid: this.errors.length === 0,
@@ -108,10 +107,8 @@ export class MatrixValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
     this.matrixDeclarations.clear();
     this.matrixAllocations = 0;
-    this.matrixOperations = 0;
     this.matrixUsage.clear();
   }
 
@@ -258,7 +255,6 @@ export class MatrixValidator implements ValidationModule {
   }
 
   private handleMatrixMethodCallAst(qualifiedName: string, call: CallExpressionNode, inLoop: boolean): void {
-    this.matrixOperations++;
 
     const line = call.loc.start.line;
     const column = call.loc.start.column;
@@ -835,439 +831,5 @@ export class MatrixValidator implements ValidationModule {
     }
 
     return false;
-  }
-
-  // Legacy validation paths retained as fallback when AST analysis is unavailable
-
-  private validateMatrixDeclarationsLegacy(): void {
-    for (let index = 0; index < this.context.cleanLines.length; index++) {
-      const line = this.context.cleanLines[index];
-      const lineNum = index + 1;
-
-      this.validateMatrixNewDeclarationLegacy(line, lineNum);
-      this.validateMatrixTypeAnnotationLegacy(line, lineNum);
-    }
-  }
-
-  private validateMatrixNewDeclarationLegacy(line: string, lineNum: number): void {
-    const genericMatch = line.match(/matrix\.new<([^>]+)>\s*\(\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*(.+))?\)/);
-    const oldMatch = line.match(/matrix\.new\s*\(\s*([^,)]+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*(.+))?\)/);
-
-    if (genericMatch) {
-      const [, type, rowsStr, colsStr] = genericMatch;
-      const rows = parseInt(rowsStr, 10);
-      const cols = parseInt(colsStr, 10);
-
-      this.validateMatrixType(type, lineNum, 1);
-      this.validateMatrixDimensions(rows, cols, lineNum, 1);
-      this.matrixAllocations++;
-
-      const varMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*matrix\.new/);
-      if (varMatch) {
-        const varName = varMatch[1];
-        this.matrixDeclarations.set(varName, {
-          elementType: type,
-          rows,
-          cols,
-          line: lineNum,
-          column: 1,
-        });
-
-        this.context.typeMap.set(varName, {
-          type: 'matrix',
-          isConst: false,
-          isSeries: false,
-          declaredAt: { line: lineNum, column: 1 },
-          usages: [],
-          elementType: type,
-        });
-      }
-    } else if (oldMatch) {
-      const [, type, rowsStr, colsStr] = oldMatch;
-      const rows = parseInt(rowsStr, 10);
-      const cols = parseInt(colsStr, 10);
-
-      this.validateMatrixType(type.trim(), lineNum, 1);
-      this.validateMatrixDimensions(rows, cols, lineNum, 1);
-      this.matrixAllocations++;
-
-      const varMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*matrix\.new/);
-      if (varMatch) {
-        const varName = varMatch[1];
-        this.matrixDeclarations.set(varName, {
-          elementType: type.trim(),
-          rows,
-          cols,
-          line: lineNum,
-          column: 1,
-        });
-
-        this.context.typeMap.set(varName, {
-          type: 'matrix',
-          isConst: false,
-          isSeries: false,
-          declaredAt: { line: lineNum, column: 1 },
-          usages: [],
-          elementType: type.trim(),
-        });
-      }
-    } else if (line.includes('matrix.new')) {
-      this.addError(
-        lineNum,
-        1,
-        'Invalid matrix.new syntax. Use matrix.new<type>(rows, cols) or matrix.new(type, rows, cols)',
-        'PSV6-MATRIX-INVALID-SYNTAX',
-      );
-    }
-  }
-
-  private validateMatrixTypeAnnotationLegacy(line: string, lineNum: number): void {
-    const matrixTypeMatch = line.match(/^\s*matrix<([^>]+)>\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/);
-    if (matrixTypeMatch) {
-      const [, type, varName] = matrixTypeMatch;
-      this.validateMatrixType(type, lineNum, 1);
-
-      this.context.typeMap.set(varName, {
-        type: 'matrix',
-        isConst: false,
-        isSeries: false,
-        declaredAt: { line: lineNum, column: 1 },
-        usages: [],
-        elementType: type,
-      });
-
-      const existing = this.matrixDeclarations.get(varName);
-      this.matrixDeclarations.set(varName, {
-        elementType: type,
-        rows: existing?.rows ?? null,
-        cols: existing?.cols ?? null,
-        line: lineNum,
-        column: 1,
-      });
-    }
-  }
-
-  private validateMatrixOperationsLegacy(): void {
-    for (let index = 0; index < this.context.cleanLines.length; index++) {
-      const line = this.context.cleanLines[index];
-      const lineNum = index + 1;
-      this.validateMatrixMethodCallsLegacy(line, lineNum);
-      this.validateMatrixIndexOperationsLegacy(line, lineNum);
-    }
-  }
-
-  private validateMatrixMethodCallsLegacy(line: string, lineNum: number): void {
-    for (const method of MATRIX_METHOD_SPECS) {
-      const methodRegex = new RegExp(`\\b${method.name.replace('.', '\\.')}\\s*\\(`);
-      if (!methodRegex.test(line)) {
-        continue;
-      }
-
-      this.matrixOperations++;
-
-      const methodCallMatch = line.match(new RegExp(`\\b${method.name.replace('.', '\\.')}\\s*\\(([^)]*)\\)`));
-      if (!methodCallMatch) {
-        continue;
-      }
-
-      const params = methodCallMatch[1].split(',').map((param) => param.trim()).filter((param) => param.length > 0);
-      if (params.length !== method.params) {
-        this.addError(
-          lineNum,
-          1,
-          `Invalid parameter count for ${method.name}. Expected ${method.params}, got ${params.length}. Usage: ${method.description}`,
-          'PSV6-MATRIX-METHOD-PARAMS',
-        );
-      }
-
-      if (params.length === 0) {
-        continue;
-      }
-
-      const matrixVar = params[0];
-      this.validateMatrixVariableLegacy(matrixVar, lineNum);
-    }
-  }
-
-  private validateMatrixIndexOperationsLegacy(line: string, lineNum: number): void {
-    const getMatch = line.match(/matrix\.get\s*\(\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^)]+)\s*\)/);
-    const setMatch = line.match(/matrix\.set\s*\(\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^)]+)\s*\)/);
-
-    if (getMatch) {
-      const [, matrixVar, row, col] = getMatch;
-      this.validateMatrixIndexLegacy(matrixVar.trim(), row.trim(), col.trim(), lineNum);
-    }
-
-    if (setMatch) {
-      const [, matrixVar, row, col, value] = setMatch;
-      this.validateMatrixIndexLegacy(matrixVar.trim(), row.trim(), col.trim(), lineNum);
-      this.validateMatrixSetTypeLegacy(matrixVar.trim(), value.trim(), lineNum);
-    }
-  }
-
-  private validateMatrixVariableLegacy(matrixVar: string, lineNum: number): void {
-    const matrixInfo = this.matrixDeclarations.get(matrixVar);
-    const typeInfo = this.context.typeMap.get(matrixVar);
-
-    if (matrixInfo || typeInfo?.type === 'matrix') {
-      return;
-    }
-
-    if (this.isLikelyFunctionParameterLegacy(matrixVar, lineNum)) {
-      return;
-    }
-
-    this.addError(lineNum, 1, `Variable '${matrixVar}' is not declared as a matrix`, 'PSV6-MATRIX-NOT-MATRIX');
-  }
-
-  private isLikelyFunctionParameterLegacy(varName: string, lineNum: number): boolean {
-    for (let index = lineNum - 1; index >= 0; index--) {
-      const line = this.context.cleanLines[index];
-      const funcMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*=>/);
-      if (funcMatch) {
-        return true;
-      }
-
-      if (line.trim() && !line.match(/^\s/)) {
-        break;
-      }
-    }
-    return false;
-  }
-
-  private validateMatrixIndexLegacy(matrixVar: string, row: string, col: string, lineNum: number): void {
-    const matrixInfo = this.matrixDeclarations.get(matrixVar);
-    if (!matrixInfo) {
-      return;
-    }
-
-    const rowMatch = row.match(/^\s*(\d+)\s*$/);
-    if (rowMatch) {
-      const rowValue = parseInt(rowMatch[1], 10);
-      if (matrixInfo.rows !== null && (rowValue < 0 || rowValue >= matrixInfo.rows)) {
-        this.addWarning(
-          lineNum,
-          1,
-          `Matrix row index ${rowValue} is out of bounds for matrix with ${matrixInfo.rows} rows`,
-          'PSV6-MATRIX-INDEX-BOUNDS',
-        );
-      }
-    }
-
-    const colMatch = col.match(/^\s*(\d+)\s*$/);
-    if (colMatch) {
-      const colValue = parseInt(colMatch[1], 10);
-      if (matrixInfo.cols !== null && (colValue < 0 || colValue >= matrixInfo.cols)) {
-        this.addWarning(
-          lineNum,
-          1,
-          `Matrix column index ${colValue} is out of bounds for matrix with ${matrixInfo.cols} columns`,
-          'PSV6-MATRIX-INDEX-BOUNDS',
-        );
-      }
-    }
-  }
-
-  private validateMatrixSetTypeLegacy(matrixVar: string, value: string, lineNum: number): void {
-    const matrixInfo = this.matrixDeclarations.get(matrixVar);
-    if (!matrixInfo) {
-      return;
-    }
-
-    const valueType = this.inferValueTypeLegacy(value);
-    if (!this.areTypesCompatible(matrixInfo.elementType, valueType)) {
-      this.addError(
-        lineNum,
-        1,
-        `Type mismatch: cannot set ${valueType} in ${matrixInfo.elementType} matrix '${matrixVar}'`,
-        'PSV6-MATRIX-TYPE-MISMATCH',
-      );
-    }
-  }
-
-  private inferValueTypeLegacy(value: string): string {
-    const trimmed = value.trim();
-
-    if (trimmed.match(/^"[^"]*"$/) || trimmed.match(/^'[^']*'$/)) {
-      return 'string';
-    }
-
-    if (trimmed.match(/^[+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?$/)) {
-      return trimmed.includes('.') || /[eE]/.test(trimmed) ? 'float' : 'int';
-    }
-
-    if (trimmed === 'true' || trimmed === 'false') {
-      return 'bool';
-    }
-
-    if (trimmed.match(/^color\./)) {
-      return 'color';
-    }
-
-    if (['open', 'high', 'low', 'close', 'volume', 'time', 'bar_index', 'hl2', 'hlc3', 'ohlc4', 'hlcc4'].includes(trimmed)) {
-      return 'float';
-    }
-
-    if (/[*+\-\/]/.test(trimmed)) {
-      return 'float';
-    }
-
-    if (trimmed.includes('(') && trimmed.includes(')')) {
-      const matrixGetMatch = trimmed.match(/matrix\.get\s*\(\s*([^,)]+)\s*,\s*[^)]+\s*,\s*[^)]+\s*\)/);
-      if (matrixGetMatch) {
-        const matrixVar = matrixGetMatch[1].trim();
-        const matrixInfo = this.matrixDeclarations.get(matrixVar);
-        if (matrixInfo) {
-          return matrixInfo.elementType;
-        }
-      }
-      return 'float';
-    }
-
-    const typeInfo = this.context.typeMap.get(trimmed);
-    if (typeInfo) {
-      return typeInfo.type;
-    }
-
-    return 'unknown';
-  }
-
-  private validateMatrixTypeConsistencyLegacy(): void {
-    for (let index = 0; index < this.context.cleanLines.length; index++) {
-      const line = this.context.cleanLines[index];
-      const lineNum = index + 1;
-
-      const setMatch = line.match(/matrix\.set\s*\(\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^)]+)\s*\)/);
-      if (setMatch) {
-        const [, matrixVar, , , value] = setMatch;
-        this.validateMatrixSetTypeLegacy(matrixVar.trim(), value.trim(), lineNum);
-      }
-    }
-  }
-
-  private validateMatrixPerformanceLegacy(): void {
-    if (this.matrixAllocations > 5) {
-      this.addWarning(
-        1,
-        1,
-        `Too many matrix allocations (${this.matrixAllocations}). Consider reusing matrices or using fewer matrices.`,
-        'PSV6-MATRIX-PERF-ALLOCATION',
-      );
-    }
-
-    this.validateMatrixOperationsInLoopsLegacy();
-    this.validateLargeMatrixOperationsLegacy();
-  }
-
-  private validateMatrixOperationsInLoopsLegacy(): void {
-    let inLoop = false;
-    let loopStartLine = 0;
-
-    for (let index = 0; index < this.context.cleanLines.length; index++) {
-      const line = this.context.cleanLines[index];
-      const lineNum = index + 1;
-
-      if (/^\s*(for|while)\s/.test(line)) {
-        inLoop = true;
-        loopStartLine = lineNum;
-      }
-
-      if (inLoop && /^\s*$/.test(line) && this.getIndentationLevelLegacy(line) === 0) {
-        inLoop = false;
-      }
-
-      if (inLoop) {
-        for (const op of EXPENSIVE_MATRIX_METHODS) {
-          if (line.includes(op)) {
-            this.addWarning(
-              lineNum,
-              1,
-              `Expensive matrix operation '${op}' detected in loop starting at line ${loopStartLine}`,
-              'PSV6-MATRIX-PERF-LOOP',
-            );
-          }
-        }
-      }
-    }
-  }
-
-  private validateLargeMatrixOperationsLegacy(): void {
-    for (const [name, info] of this.matrixDeclarations) {
-      if (info.rows !== null && info.cols !== null) {
-        const totalElements = info.rows * info.cols;
-        if (totalElements > 10000) {
-          this.addWarning(
-            info.line,
-            info.column,
-            `Large matrix '${name}' with ${totalElements} elements. Consider performance implications.`,
-            'PSV6-MATRIX-PERF-LARGE',
-          );
-        }
-      }
-    }
-  }
-
-  private validateMatrixBestPracticesLegacy(): void {
-    this.validateMatrixNaming();
-    this.validateMatrixInitializationLegacy();
-    this.validateMatrixMemoryManagementLegacy();
-  }
-
-  private validateMatrixInitializationLegacy(): void {
-    for (const [name, info] of this.matrixDeclarations) {
-      let hasInitialization = false;
-
-      for (let index = info.line; index < this.context.cleanLines.length; index++) {
-        const line = this.context.cleanLines[index];
-        if (line.includes(`matrix.set(${name}`)) {
-          hasInitialization = true;
-          break;
-        }
-      }
-
-      if (!hasInitialization) {
-        this.addInfo(
-          info.line,
-          info.column,
-          `Matrix '${name}' is declared but never initialized. Consider adding initial values.`,
-          'PSV6-MATRIX-INITIALIZATION-SUGGESTION',
-        );
-      }
-    }
-  }
-
-  private validateMatrixMemoryManagementLegacy(): void {
-    for (const [name, info] of this.matrixDeclarations) {
-      if (info.rows === null || info.cols === null) {
-        continue;
-      }
-
-      let hasReset = false;
-      let hasSet = false;
-
-      for (let index = info.line; index < this.context.cleanLines.length; index++) {
-        const line = this.context.cleanLines[index];
-        if (line.includes(`matrix.fill(${name}`)) {
-          hasReset = true;
-        }
-        if (line.includes(`matrix.set(${name}`)) {
-          hasSet = true;
-        }
-      }
-
-      if (hasSet && !hasReset && info.rows * info.cols > 100) {
-        this.addInfo(
-          info.line,
-          info.column,
-          `Matrix '${name}' is modified but never reset. Consider using matrix.fill() or recreating the matrix to manage memory.`,
-          'PSV6-MATRIX-MEMORY-SUGGESTION',
-        );
-      }
-    }
-  }
-
-  private getIndentationLevelLegacy(line: string): number {
-    const match = line.match(/^(\s*)/);
-    return match ? match[1].length : 0;
   }
 }

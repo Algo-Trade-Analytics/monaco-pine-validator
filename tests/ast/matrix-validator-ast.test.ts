@@ -26,7 +26,26 @@ class MatrixValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledMatrixValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new MatrixValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('MatrixValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new DisabledMatrixValidatorHarness();
+    const result = harness.validate('matrix.new<float>(2, 2)');
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('reports type mismatches when setting incompatible values', () => {
     const matrixIdentifier = createIdentifier('matrix', 10, 1);
     const newIdentifier = createIdentifier('new', 17, 1);

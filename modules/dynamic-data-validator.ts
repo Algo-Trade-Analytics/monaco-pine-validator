@@ -84,9 +84,7 @@ export class DynamicDataValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private context!: ValidationContext;
-  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
   private requestCalls: RequestCallInfo[] = [];
   private advancedPerformanceWarned = false;
 
@@ -97,16 +95,20 @@ export class DynamicDataValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.config = config;
-
     this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
 
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectRequestCallsAst(this.astContext.ast);
-    } else {
-      this.collectRequestCallsLegacy();
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.collectRequestCallsAst(this.astContext.ast);
 
     this.validateRequestCalls();
     this.validateRequestPerformance();
@@ -127,7 +129,6 @@ export class DynamicDataValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
     this.requestCalls = [];
     this.advancedPerformanceWarned = false;
   }
@@ -210,32 +211,6 @@ export class DynamicDataValidator implements ValidationModule {
         },
       },
     });
-  }
-
-  private collectRequestCallsLegacy(): void {
-    for (let index = 0; index < this.context.cleanLines.length; index++) {
-      const line = this.context.cleanLines[index];
-      const regex = /request\.(\w+)\s*\(/g;
-      let match: RegExpExecArray | null;
-
-      while ((match = regex.exec(line)) !== null) {
-        const functionName = match[1];
-        const openParenIndex = match.index + match[0].length - 1;
-        const argsStr = this.extractBalancedArgs(line, openParenIndex) ?? '';
-        const argumentInfos = this.parseLegacyArguments(argsStr);
-        const callInfo: RequestCallInfo = {
-          name: `request.${functionName}`,
-          functionName,
-          line: index + 1,
-          column: match.index + 1,
-          arguments: argumentInfos,
-          inLoop: this.isInLoop(index),
-          inConditional: this.isInConditional(index),
-          hasDynamicExpression: this.computeDynamicExpression(functionName, argumentInfos),
-        };
-        this.requestCalls.push(callInfo);
-      }
-    }
   }
 
   private validateRequestCalls(): void {
@@ -990,20 +965,6 @@ export class DynamicDataValidator implements ValidationModule {
     };
   }
 
-  private parseLegacyArguments(params: string): RequestArgumentInfo[] {
-    const parts = this.parseParameterList(params);
-    return parts.map((part) => {
-      const trimmed = part.trim();
-      const equalsIndex = trimmed.indexOf('=');
-      if (equalsIndex > 0) {
-        const name = trimmed.slice(0, equalsIndex).trim();
-        const value = trimmed.slice(equalsIndex + 1).trim();
-        return { raw: trimmed, value, name };
-      }
-      return { raw: trimmed, value: trimmed };
-    });
-  }
-
   private computeDynamicExpression(functionName: string, args: RequestArgumentInfo[]): boolean {
     const expressionArg = this.getExpressionArgument(functionName, args);
     if (!expressionArg) {
@@ -1231,83 +1192,6 @@ export class DynamicDataValidator implements ValidationModule {
         this.addInfo(line, column, `Exchange "${exchange}" not in common list. Verify it's supported.`, 'PSV6-REQUEST-EXCHANGE-UNKNOWN');
       }
     }
-  }
-
-  private extractBalancedArgs(line: string, openParenIndex: number): string | null {
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-    for (let i = openParenIndex; i < line.length; i++) {
-      const ch = line[i];
-      if (!inString && (ch === '"' || ch === '\'')) {
-        inString = true;
-        stringChar = ch;
-      } else if (inString && ch === stringChar) {
-        inString = false;
-        stringChar = '';
-      } else if (!inString) {
-        if (ch === '(') {
-          depth++;
-        } else if (ch === ')') {
-          depth--;
-          if (depth === 0) {
-            return line.substring(openParenIndex + 1, i);
-          }
-        }
-      }
-    }
-    return null;
-  }
-
-  private parseParameterList(params: string): string[] {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    let quoteChar = '';
-
-    for (let i = 0; i < params.length; i++) {
-      const char = params[i];
-      if (!inQuotes && (char === '"' || char === '\'')) {
-        inQuotes = true;
-        quoteChar = char;
-        current += char;
-      } else if (inQuotes && char === quoteChar) {
-        inQuotes = false;
-        quoteChar = '';
-        current += char;
-      } else if (!inQuotes && char === ',') {
-        result.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-
-    if (current.trim()) {
-      result.push(current.trim());
-    }
-
-    return result;
-  }
-
-  private isInLoop(lineIndex: number): boolean {
-    for (let i = lineIndex - 1; i >= 0 && i >= lineIndex - 6; i--) {
-      const ln = this.context.cleanLines[i] || '';
-      if (/^\s*(for|while)\b/.test(ln)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private isInConditional(lineIndex: number): boolean {
-    for (let i = lineIndex - 1; i >= 0 && i >= lineIndex - 6; i--) {
-      const ln = this.context.cleanLines[i] || '';
-      if (/^\s*if\b/.test(ln)) {
-        return true;
-      }
-    }
-    return false;
   }
 
   private getExpressionQualifiedName(expression: ExpressionNode): string | null {

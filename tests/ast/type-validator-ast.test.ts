@@ -24,7 +24,9 @@ import { createLocation, createPosition, createRange, type ProgramNode } from '.
 
 class TypeValidatorHarness extends BaseValidator {
   constructor(service: FunctionAstService, overrides: Partial<ValidatorConfig> = {}) {
-    super({ ...overrides, ast: { mode: 'primary', service } });
+    const { ast: astOverrides, ...rest } = overrides;
+    const astConfig = astOverrides ? { ...astOverrides, service } : { mode: 'primary', service };
+    super({ ...rest, ast: astConfig });
     this.registerModule(new CoreValidator());
     this.registerModule(new TypeValidator());
   }
@@ -200,5 +202,47 @@ describe('TypeValidator AST integration', () => {
     const inconsistent = result.warnings.find((warning) => warning.code === 'PSV6-TYPE-INCONSISTENT');
     expect(inconsistent).toBeDefined();
     expect(inconsistent).toMatchObject({ line: 4, column: 1 });
+  });
+
+  it('returns no diagnostics when AST execution is disabled', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Disabled")',
+      'int foo = 1',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleLiteral = createStringLiteral('Disabled', '"Disabled"', 10, 2);
+    const titleArgument = createArgument(titleLiteral, 9, 25, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 26, 2);
+
+    const identifier = createIdentifier('foo', 4, 3);
+    const annotation = createTypeReference('int', 0, 3);
+    const initializer = createNumberLiteral(1, '1', 10, 3);
+    const declaration = createVariableDeclaration(identifier, 0, 11, 3, {
+      declarationKind: 'simple',
+      initializer,
+      typeAnnotation: annotation,
+    });
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, declaration]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new TypeValidatorHarness(service, { ast: { mode: 'disabled' } });
+    const result = validator.validate(source);
+
+    const errorCodes = result.errors.map((error) => error.code).filter(Boolean);
+    const warningCodes = result.warnings.map((warning) => warning.code).filter(Boolean);
+    const infoCodes = result.info.map((info) => info.code).filter(Boolean);
+
+    const typeDiagnostics = [...errorCodes, ...warningCodes, ...infoCodes].filter((code) =>
+      typeof code === 'string' && code.startsWith('PSV6-TYPE'),
+    );
+
+    expect(typeDiagnostics).toHaveLength(0);
   });
 });

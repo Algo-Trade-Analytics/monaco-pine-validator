@@ -26,7 +26,26 @@ class TimeDateValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledTimeDateValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new TimeDateFunctionsValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('TimeDateFunctionsValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new DisabledTimeDateValidatorHarness();
+    const result = harness.validate('time_close()');
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('emits missing parameter diagnostics for time_close', () => {
     const source = 'time_close()';
     const callee = createIdentifier('time_close', source.indexOf('time_close'), 1);

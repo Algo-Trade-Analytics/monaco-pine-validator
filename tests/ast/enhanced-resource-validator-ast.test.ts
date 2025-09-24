@@ -27,6 +27,15 @@ class EnhancedResourceValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class EnhancedResourceValidatorDisabledHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new EnhancedResourceValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('EnhancedResourceValidator (AST)', () => {
   it('reports large array allocations and var thresholds from AST traversal', () => {
     const arrayNamespace = createIdentifier('array', 9, 1);
@@ -215,5 +224,15 @@ describe('EnhancedResourceValidator (AST)', () => {
     );
 
     expect(excessiveUsage).toBeTruthy();
+  });
+
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new EnhancedResourceValidatorDisabledHarness();
+
+    const result = harness.validate('var big = array.new_float(10)');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
   });
 });

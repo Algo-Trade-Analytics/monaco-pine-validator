@@ -40,7 +40,7 @@ interface DrawingFunctionCall {
   line: number;
   column: number;
   arguments: string[];
-  inLoop?: boolean;
+  inLoop: boolean;
 }
 
 export class DrawingFunctionsValidator implements ValidationModule {
@@ -53,7 +53,6 @@ export class DrawingFunctionsValidator implements ValidationModule {
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private usingAst = false;
 
   // Drawing function tracking
   private drawingFunctionCalls: DrawingFunctionCall[] = [];
@@ -69,16 +68,18 @@ export class DrawingFunctionsValidator implements ValidationModule {
     this.config = config;
 
     this.astContext = this.getAstContext(config);
-    this.usingAst = !!this.astContext?.ast;
-
-    if (this.usingAst && this.astContext?.ast) {
-      this.collectDrawingDataAst(this.astContext.ast);
-    } else {
-      // Process each line for drawing function calls
-      context.cleanLines.forEach((line, index) => {
-        this.processLine(line, index + 1);
-      });
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null
+      };
     }
+
+    this.collectDrawingDataAst(this.astContext.ast);
 
     // Post-process validations
     try {
@@ -108,7 +109,6 @@ export class DrawingFunctionsValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.usingAst = false;
     this.drawingFunctionCalls = [];
     this.drawingObjectCount = 0;
   }
@@ -163,11 +163,6 @@ export class DrawingFunctionsValidator implements ValidationModule {
     
     // For performance and best practice issues, generate warnings
     return false;
-  }
-
-  private processLine(line: string, lineNum: number): void {
-    // Drawing function patterns
-    this.validateDrawingFunctionCalls(line, lineNum);
   }
 
   private collectDrawingDataAst(program: ProgramNode): void {
@@ -232,91 +227,6 @@ export class DrawingFunctionsValidator implements ValidationModule {
     }
 
     this.validateDrawingFunction(namespace, functionName, args, line, column);
-  }
-
-  private validateDrawingFunctionCalls(line: string, lineNum: number): void {
-    // Pattern: namespace.functionName(args...)
-    // We need to handle nested parentheses, so we'll use a different approach
-    const drawingNamespaces = ['line', 'label', 'box', 'table'];
-    
-    for (const namespace of drawingNamespaces) {
-      // Ensure we don't match inside other identifiers like 'polyline'
-      const pattern = new RegExp(`\\b${namespace}\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\(`, 'g');
-      let match;
-      
-      while ((match = pattern.exec(line)) !== null) {
-        const functionName = match[1];
-        const startIndex = match.index;
-        const openParenIndex = match.index + match[0].length - 1;
-        
-        // Find the matching closing parenthesis
-        const argsString = this.extractBalancedParentheses(line, openParenIndex);
-        if (argsString === null) continue; // Skip if we can't find balanced parentheses
-        
-        const column = startIndex + 1;
-
-        // Parse arguments
-        const args = this.parseArguments(argsString);
-
-        // Store function call
-        this.drawingFunctionCalls.push({
-          namespace,
-          functionName,
-          line: lineNum,
-          column,
-          arguments: args
-        });
-
-        // Validate specific function
-        this.validateDrawingFunction(namespace, functionName, args, lineNum, column);
-        
-        // Track drawing object count
-        if (functionName === 'new') {
-          this.drawingObjectCount++;
-        }
-      }
-    }
-  }
-
-  private parseArguments(argsString: string): string[] {
-    if (!argsString.trim()) return [];
-    
-    const args: string[] = [];
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-
-    for (let i = 0; i < argsString.length; i++) {
-      const char = argsString[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-        current += char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        stringChar = '';
-        current += char;
-      } else if (!inString && char === '(') {
-        depth++;
-        current += char;
-      } else if (!inString && char === ')') {
-        depth--;
-        current += char;
-      } else if (!inString && char === ',' && depth === 0) {
-        args.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    
-    if (current.trim()) {
-      args.push(current.trim());
-    }
-    
-    return args;
   }
 
   private validateDrawingFunction(namespace: string, functionName: string, args: string[], lineNum: number, column: number): void {
@@ -1003,22 +913,11 @@ export class DrawingFunctionsValidator implements ValidationModule {
     }
 
     // Check for drawing objects in loops
-    if (this.usingAst) {
-      for (const call of this.drawingFunctionCalls) {
-        if (call.functionName === 'new' && call.inLoop) {
-          this.addWarning(call.line, call.column,
-            'Creating drawing objects in loops may cause performance issues',
-            'PSV6-DRAWING-IN-LOOP');
-        }
-      }
-    } else {
-      const loopContext = this.detectLoopContext();
-      for (const call of this.drawingFunctionCalls) {
-        if (call.functionName === 'new' && loopContext.has(call.line)) {
-          this.addWarning(call.line, call.column,
-            'Creating drawing objects in loops may cause performance issues',
-            'PSV6-DRAWING-IN-LOOP');
-        }
+    for (const call of this.drawingFunctionCalls) {
+      if (call.functionName === 'new' && call.inLoop) {
+        this.addWarning(call.line, call.column,
+          'Creating drawing objects in loops may cause performance issues',
+          'PSV6-DRAWING-IN-LOOP');
       }
     }
 
@@ -1120,37 +1019,6 @@ export class DrawingFunctionsValidator implements ValidationModule {
     }
   }
 
-  // Helper methods
-  private extractBalancedParentheses(line: string, openParenIndex: number): string | null {
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-    
-    for (let i = openParenIndex; i < line.length; i++) {
-      const char = line[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-        stringChar = '';
-      } else if (!inString) {
-        if (char === '(') {
-          depth++;
-        } else if (char === ')') {
-          depth--;
-          if (depth === 0) {
-            // Found the matching closing parenthesis
-            return line.substring(openParenIndex + 1, i);
-          }
-        }
-      }
-    }
-    
-    return null; // No matching closing parenthesis found
-  }
-
   private extractNumericValue(arg: string): number | null {
     const trimmed = arg.trim();
     const match = trimmed.match(/^[+\-]?\d+(\.\d+)?$/);
@@ -1226,32 +1094,6 @@ export class DrawingFunctionsValidator implements ValidationModule {
     return args.some(arg => 
       complexPatterns.some(pattern => pattern.test(arg))
     );
-  }
-
-  private detectLoopContext(): Set<number> {
-    const loopLines = new Set<number>();
-    let inLoop = false;
-    let loopDepth = 0;
-    
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      
-      if (line.includes('for ') || line.includes('while ')) {
-        inLoop = true;
-        loopDepth++;
-      } else if (line.includes('end') && inLoop) {
-        loopDepth--;
-        if (loopDepth === 0) {
-          inLoop = false;
-        }
-      }
-      
-      if (inLoop) {
-        loopLines.add(i + 1);
-      }
-    }
-    
-    return loopLines;
   }
 
   // Getter methods for other modules

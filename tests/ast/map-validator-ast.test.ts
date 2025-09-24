@@ -26,6 +26,15 @@ class MapValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class MapValidatorDisabledHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new MapValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('MapValidator (AST)', () => {
   it('reports type mismatches when putting incompatible values', () => {
     const mapNamespace = createIdentifier('map', 12, 1);
@@ -117,5 +126,15 @@ describe('MapValidator (AST)', () => {
     const warningCodes = result.warnings.map((warning) => warning.code);
 
     expect(warningCodes).toContain('PSV6-MAP-PERF-LOOP');
+  });
+
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new MapValidatorDisabledHarness();
+
+    const result = harness.validate('map.size()');
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
   });
 });
