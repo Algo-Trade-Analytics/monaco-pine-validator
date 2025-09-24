@@ -23,7 +23,26 @@ class SwitchValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledSwitchValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new SwitchValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('SwitchValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const validator = new DisabledSwitchValidatorHarness();
+    const result = validator.validate('switch mode\n    "long" => "buy"');
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('warns about missing default clauses and duplicate case values', () => {
     const discriminant = createIdentifier('mode', 7, 1);
     const firstCase = createSwitchCase(

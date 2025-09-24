@@ -27,7 +27,7 @@ import {
 } from '../core/constants-registry';
 import { Codes } from '../core/codes';
 import { visit } from '../core/ast/traversal';
-import type { ExpressionNode, MemberExpressionNode } from '../core/ast/nodes';
+import type { ExpressionNode, MemberExpressionNode, ProgramNode } from '../core/ast/nodes';
 
 // TIMEFRAME_CONSTANTS and CURRENCY_CONSTANTS now imported from shared registry
 // DISPLAY_CONSTANTS now imported from shared registry
@@ -92,9 +92,20 @@ export class BuiltinVariablesValidator implements ValidationModule {
     this.backadjustmentConstantUsage.clear();
 
     const astContext = this.getAstContext(config);
-    if (astContext) {
-      this.collectConstantsFromAst(astContext);
+    const program = astContext?.ast;
+
+    if (!program) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: this.context.typeMap ?? new Map(),
+        scriptType: this.context.scriptType ?? null,
+      };
     }
+
+    this.collectConstantsFromAst(program);
 
     // Provide usage information
     this.analyzeConstantUsage();
@@ -104,8 +115,8 @@ export class BuiltinVariablesValidator implements ValidationModule {
       errors: this.errors,
       warnings: this.warnings,
       info: this.info,
-      typeMap: new Map(),
-      scriptType: this.context.scriptType
+      typeMap: this.context.typeMap ?? new Map(),
+      scriptType: this.context.scriptType ?? null,
     };
   }
 
@@ -116,12 +127,7 @@ export class BuiltinVariablesValidator implements ValidationModule {
     return 'ast' in this.context ? (this.context as AstValidationContext) : null;
   }
 
-  private collectConstantsFromAst(astContext: AstValidationContext): void {
-    const program = astContext.ast;
-    if (!program) {
-      return;
-    }
-
+  private collectConstantsFromAst(program: ProgramNode): void {
     visit(program, {
       MemberExpression: {
         enter: ({ node }) => {

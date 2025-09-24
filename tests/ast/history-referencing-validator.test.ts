@@ -14,7 +14,26 @@ class HistoryValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledHistoryValidatorHarness extends BaseValidator {
+  constructor() {
+    super({ ast: { mode: 'disabled' } });
+    this.registerModule(new HistoryReferencingValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 describe('HistoryReferencingValidator (AST)', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const harness = new DisabledHistoryValidatorHarness();
+    const result = harness.validate('close[1]');
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('derives history diagnostics from the AST structure', () => {
     const program = createHistoryReferencingProgram();
     const service = new FunctionAstService(() => ({

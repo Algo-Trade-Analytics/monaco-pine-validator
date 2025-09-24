@@ -736,9 +736,9 @@ describe('semantic dual-run guardrail', () => {
       'PSV6-BACKADJUSTMENT-CONSTANT',
     ]);
 
-    expect(legacySummary.warnings.map((warning) => warning.code)).toEqual(['PS014']);
+    expect(legacySummary.warnings).toEqual([]);
     expect(astSummary.warnings).toEqual([
-      legacySummary.warnings[0],
+      expect.objectContaining({ code: 'PS014' }),
       expect.objectContaining({
         code: 'PSU01',
         line: 3,

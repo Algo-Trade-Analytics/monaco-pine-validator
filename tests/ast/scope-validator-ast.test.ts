@@ -37,6 +37,16 @@ class ScopeValidatorHarness extends BaseValidator {
   protected runCoreValidation(): void {}
 }
 
+class DisabledScopeValidatorHarness extends BaseValidator {
+  constructor(overrides: Partial<ValidatorConfig> = {}) {
+    super({ ...overrides, ast: { mode: 'disabled' } });
+    this.registerModule(new CoreValidator());
+    this.registerModule(new ScopeValidator());
+  }
+
+  protected runCoreValidation(): void {}
+}
+
 function createProgramFromSource(
   source: string,
   directives: ProgramNode['directives'],
@@ -60,6 +70,18 @@ function createProgramFromSource(
 }
 
 describe('ScopeValidator AST integration', () => {
+  it('returns no diagnostics when AST mode is disabled', () => {
+    const validator = new DisabledScopeValidatorHarness();
+    const source = ['//@version=6', 'indicator("Disabled")', 'plot(close)', ''].join('\n');
+
+    const result = validator.validate(source);
+
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.info).toHaveLength(0);
+  });
+
   it('emits PSW03 for duplicate declarations in the same block', () => {
     const source = [
       '//@version=6',

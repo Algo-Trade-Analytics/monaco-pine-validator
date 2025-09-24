@@ -185,13 +185,21 @@ export class CoreValidator implements ValidationModule {
     this.reset();
     this.context = context;
     this.config = config;
-    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
-    this.astVersionDirectiveLines.clear();
-    this.astScriptDeclarationLines.clear();
+    this.astContext = this.getAstContext(config);
 
-    if (this.astContext?.ast) {
-      this.processAstProgram(this.astContext.ast);
+    if (!this.astContext?.ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    const ast = this.astContext.ast;
+    this.processAstProgram(ast);
 
     // Function declarations are now handled by FunctionDeclarationsValidator
     // Scan each line for core validation
@@ -2709,5 +2717,13 @@ export class CoreValidator implements ValidationModule {
 
   private getLineIndentation(line: string): number {
     return line.length - line.trimStart().length;
+  }
+
+  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return null;
+    }
+
+    return isAstValidationContext(this.context) && this.context.ast ? this.context : null;
   }
 }
