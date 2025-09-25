@@ -1,6 +1,7 @@
 export * from './types';
 export * from './service';
 export * from './lexer';
+export * from './parser';
 export * from './nodes';
 export * from './traversal';
 export * from './scope';
