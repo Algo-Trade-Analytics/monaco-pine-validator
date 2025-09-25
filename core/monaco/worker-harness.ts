@@ -11,6 +11,12 @@ import {
   type MarkerData,
   createMarkerFromSyntaxError,
 } from '../ast/diagnostics';
+import {
+  createHoverEntries,
+  createSemanticModel,
+  type MonacoHoverEntry,
+  type MonacoSemanticModel,
+} from './semantic-model';
 
 function normalisePosition(value: number | null | undefined, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 1) {
@@ -48,6 +54,8 @@ export interface WorkerValidationResponse {
   readonly syntaxMarkers: MarkerData[];
   readonly result: ValidationResult;
   readonly scriptType: ValidationResult['scriptType'];
+  readonly semanticModel: MonacoSemanticModel;
+  readonly hoverData: readonly MonacoHoverEntry[];
 }
 
 export interface MonacoWorkerHarness {
@@ -217,12 +225,17 @@ export function createMonacoWorkerHarness(
         }
       }
 
+      const semanticModel = createSemanticModel(context);
+      const hoverData = createHoverEntries(context, result, semanticModel);
+
       const response: WorkerValidationResponse = {
         version,
         markers: [...syntaxMarkers, ...issueMarkers],
         syntaxMarkers,
         result,
         scriptType: result.scriptType,
+        semanticModel,
+        hoverData,
       };
 
       lastSource = request.code;

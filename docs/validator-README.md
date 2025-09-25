@@ -65,7 +65,7 @@ npm install
 npm run dev
 ```
 
-This launches a lightweight Monaco editor wired to `EnhancedModularValidator` for interactive experimentation.
+This launches a lightweight Monaco editor backed by the AST worker (via the new host client) for interactive experimentation.
 
 ### Using the Validator
 ```typescript
@@ -155,9 +155,13 @@ The validator is a large, modular codebase (≈50 modules) backed by dozens of V
 - **Final Edge Cases**: All remaining specialized constants (30+ tests) ✅
 
 #### **🏗️ Major Architectural Refactoring Completed:**
+- **AST-Only Validation Pipeline**: Every module now executes on structured AST traversal with legacy regex scanners retired ✅
+- **Monaco Worker Entry Point**: `core/monaco/worker.ts` streams AST diagnostics and lifecycle events for the editor integration track ✅
+- **Semantic Payloads for Monaco**: Worker responses now include serialised semantic models and hover datasets derived from the AST context ✅
+- **Worker Client Harness**: `core/monaco/client.ts` provides a ready/configure/validate/dispose orchestrator for host apps wiring the AST worker ✅
 - **Centralized Constants Registry**: `core/constants-registry.ts` - Single source of truth ✅
 - **Shared Argument Parsing**: `core/arg-parser.ts` - Consistent function call parsing ✅
-- **Enhanced Scanning Utilities**: `core/scanner.ts` - Optimized constant detection ✅
+- **AST-First Traversal Pipeline**: `core/ast/*` - Structured diagnostics + scope/type graphs ✅
 - **Centralized Codes System**: `core/codes.ts` - Standardized error/warning codes ✅
 - **Modules Index**: `modules/index.ts` - Clean module registration ✅
 - **Legacy Code Cleanup**: Debug statements removed, unused files archived ✅

@@ -15,11 +15,11 @@ The validator follows a modular, plugin-based architecture with the following ke
 ├── 📁 core/                    # Core framework + shared utilities ✨ ENHANCED
 │   ├── base-validator.ts       # Abstract base class
 │   ├── types.ts               # Type definitions 
-│   ├── constants.ts           # Legacy constants & regex patterns
+│   ├── constants.ts           # Shared lexical constants & identifier metadata
 │   ├── constants-registry.ts  # Centralized constants registry ✨ NEW
 │   ├── codes.ts              # Centralized validation codes ✨ NEW
 │   ├── arg-parser.ts         # Shared argument parsing ✨ NEW
-│   └── scanner.ts            # Shared scanning utilities ✨ NEW
+│   └── ast/                  # Parser, traversal, scope/type graphs ✨ NEW
 ├── 📁 modules/                # Validation modules (47 total)
 │   ├── 📁 functions/          # Function-specific utilities
 │   │   ├── function-declarations.ts
@@ -45,6 +45,8 @@ The validator follows a modular, plugin-based architecture with the following ke
 ├── ModularUltimateValidator.ts # Lightweight validator (7 modules) ✨ TEST-ONLY
 └── index.ts                   # Public exports
 ```
+
+Every module in the tree now consumes the AST, scope graph, and type information exposed from `core/ast`. The legacy line-scanning fallbacks that previously lived alongside these modules have been removed, so the structured traversal pipeline is the single source of truth for validator diagnostics.
 
 ## Validator Classes
 
