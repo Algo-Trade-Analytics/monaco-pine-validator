@@ -9,15 +9,17 @@
 ## Architecture Overview
 
 1. **Worker Bootstrap**
-   - Bundle the Chevrotain-powered parser, AST normaliser, and validation passes into a dedicated `pineWorker.ts` entry point.
+   - Bundle the Chevrotain-powered parser, AST normaliser, and validation passes into a dedicated worker entry point (implemented in `core/monaco/worker.ts`).
    - Lazy-load heavy modules (semantic passes, strategy heuristics) using dynamic `import()` so the worker initialises quickly.
 
 2. **Validation Pipeline**
    - Accept `validate(document: TextDocument)` RPC calls from Monaco and run them through the AST pipeline.
-   - Populate a new `MonacoResult` object containing:
+   - ✅ Populate a `MonacoResult` payload containing:
      - `markers`: Diagnostics derived via `createMarkerFromNode` / `createMarkerFromSyntaxError` helpers.
-     - `hoverData`: Resolved symbol/type info keyed by source range.
-     - `semanticModel`: Optional payload with scope/type/CFG handles for advanced features.
+     - `hoverData`: Resolved symbol/type info now sourced from the AST symbol table and validator type maps.
+     - `semanticModel`: Scope graph, control-flow, and inferred-type snapshots serialised from the AST context for advanced features.
+   - ✅ Provide a host-side worker client that coordinates the configure/validate/dispose handshake so the Monaco host can drive the AST worker without bespoke message wiring.
+   - ✅ Wire the playground to the worker client so markers originate from the AST worker, giving us an end-to-end reference integration in the browser.
 
 3. **Incremental Updates**
    - Cache the previous AST + semantic context and perform cheap diffing when the document version increments.

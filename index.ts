@@ -33,7 +33,14 @@ export {
   validatePineScriptV6 
 } from './ModularUltimateValidator';
 
-export { 
+export {
   createEnhancedModularValidator,
-  validatePineScriptV6Enhanced 
+  validatePineScriptV6Enhanced
 } from './EnhancedModularValidator';
+
+// Monaco worker integration
+export * from './core/monaco/messages';
+export * from './core/monaco/worker-harness';
+export * from './core/monaco/worker';
+export * from './core/monaco/semantic-model';
+export * from './core/monaco/client';

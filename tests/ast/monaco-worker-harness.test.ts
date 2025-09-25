@@ -106,6 +106,12 @@ describe('Monaco worker harness', () => {
     expect(response.result.errors.some((error) => error.code === 'PS024')).toBe(true);
     expect(harness.getLastContext()?.scriptType).toBe('indicator');
 
+    expect(response.semanticModel.ast).toBe(program);
+    expect(response.semanticModel.symbols.some((symbol) => symbol.name === 'values')).toBe(true);
+    expect(response.hoverData.some((entry) => entry.name === 'values')).toBe(true);
+    const valuesHover = response.hoverData.find((entry) => entry.name === 'values');
+    expect(valuesHover?.type).toBeDefined();
+
     const ps024Marker = response.markers.find((marker) => marker.code === 'PS024');
     expect(ps024Marker).toBeDefined();
     expect(ps024Marker?.source).toBe('worker');

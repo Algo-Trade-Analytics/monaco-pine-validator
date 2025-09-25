@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import type { editor as MonacoEditor } from 'monaco-editor';
-import type { ValidationResult, ValidationError } from '../../core/types';
-import { EnhancedModularValidator } from '../../EnhancedModularValidator';
+import type { ValidationResult } from '../../core/types';
+import type { MarkerData } from '../../core/ast/diagnostics';
+import {
+  createMonacoWorkerClient,
+  type MonacoWorkerClient,
+  type WorkerReadyState,
+} from '../../core/monaco/client';
+import type { WorkerValidationResponse } from '../../core/monaco/worker-harness';
 
 const DEFAULT_SOURCE = `//@version=6
 indicator("Validator Playground", overlay = true)
@@ -15,36 +21,14 @@ if ta.crossover(close, ma)
     strategy.entry("Long", strategy.long)
 `; // Template script used on load
 
-type MarkerFactory = (result: ValidationResult) => MonacoEditor.IMarkerData[];
-
-function createMarkers(monaco: typeof import('monaco-editor'), model: MonacoEditor.ITextModel): MarkerFactory {
-  const clampPosition = (value: number, fallback: number) => {
-    if (!Number.isFinite(value) || value < 1) return fallback;
-    return Math.floor(value);
-  };
-
-  const toMarker = (issue: ValidationError, severity: MonacoEditor.MarkerSeverity): MonacoEditor.IMarkerData => {
-    const line = clampPosition(issue.line ?? 1, 1);
-    const column = clampPosition(issue.column ?? 1, 1);
-
-    return {
-      severity,
-      message: issue.message,
-      startLineNumber: line,
-      startColumn: column,
-      endLineNumber: line,
-      endColumn: column + 1,
-      source: issue.code ?? 'pine-validator'
-    };
-  };
-
-  return (result) => {
-    const markers: MonacoEditor.IMarkerData[] = [];
-    result.errors.forEach((error) => markers.push(toMarker(error, monaco.MarkerSeverity.Error)));
-    result.warnings.forEach((warning) => markers.push(toMarker(warning, monaco.MarkerSeverity.Warning)));
-    (result.info ?? []).forEach((info) => markers.push(toMarker(info, monaco.MarkerSeverity.Info)));
-
-    return markers;
+function createEmptyResult(): ValidationResult {
+  return {
+    isValid: true,
+    errors: [],
+    warnings: [],
+    info: [],
+    typeMap: new Map(),
+    scriptType: null,
   };
 }
 
@@ -128,51 +112,122 @@ const PYODIDE_INDEX_URL = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/';
 type ViewMode = 'validator' | 'ast';
 
 export default function App() {
-  const validatorRef = useRef<EnhancedModularValidator>();
-  if (!validatorRef.current) {
-    validatorRef.current = new EnhancedModularValidator({
-      strictMode: true,
-      allowDeprecated: true,
-      targetVersion: 6,
-      enableTypeChecking: true,
-      enableControlFlowAnalysis: true,
-      enablePerformanceAnalysis: true
-    });
-  }
+  const workerClientRef = useRef<MonacoWorkerClient | null>(null);
+  const markerSourceRef = useRef('pine-validator');
+  const lastMarkersRef = useRef<readonly MarkerData[]>([]);
+  const requestVersionRef = useRef(0);
+
+  const [workerState, setWorkerState] = useState<WorkerReadyState | null>(null);
+  const [workerReady, setWorkerReady] = useState(false);
+  const [workerError, setWorkerError] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
 
   const [code, setCode] = useState(DEFAULT_SOURCE);
-  const [result, setResult] = useState<ValidationResult>(() => validatorRef.current!.validate(DEFAULT_SOURCE));
+  const [result, setResult] = useState<ValidationResult>(() => createEmptyResult());
   const [theme, setTheme] = useState<'vs-dark' | 'vs-light'>('vs-light');
 
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null);
-  const markerFactoryRef = useRef<MarkerFactory | null>(null);
 
-  const applyMarkers = useCallback((validation: ValidationResult) => {
+  const applyMarkers = useCallback((markerData: readonly MarkerData[]) => {
     const monaco = monacoRef.current;
     const editor = editorRef.current;
-    if (!monaco || !editor) return;
-
-    const model = editor.getModel();
-    if (!model) return;
-
-    if (!markerFactoryRef.current) {
-      markerFactoryRef.current = createMarkers(monaco, model);
+    if (!monaco || !editor) {
+      return;
     }
 
-    const markers = markerFactoryRef.current(validation);
-    monaco.editor.setModelMarkers(model, 'pine-validator', markers);
+    const model = editor.getModel();
+    if (!model) {
+      return;
+    }
+
+    const markers = markerData.map((marker) => ({
+      ...marker,
+      severity: marker.severity as unknown as MonacoEditor.MarkerSeverity,
+    }));
+
+    monaco.editor.setModelMarkers(model, markerSourceRef.current, markers);
   }, []);
 
-  const runValidation = useCallback((source: string) => {
-    const output = validatorRef.current!.validate(source);
-    setResult(output);
-    applyMarkers(output);
-  }, [applyMarkers]);
+  useEffect(() => {
+    setWorkerError(null);
+    const worker = new Worker(new URL('./pine-worker.ts', import.meta.url), { type: 'module' });
+    const client = createMonacoWorkerClient({
+      worker,
+      onError: (error) => {
+        setWorkerError(error.message);
+      },
+    });
+    workerClientRef.current = client;
+
+    let disposed = false;
+
+    client
+      .waitUntilReady()
+      .then((state) => {
+        if (disposed) {
+          return;
+        }
+        markerSourceRef.current = state.markerSource;
+        setWorkerState(state);
+        setWorkerReady(true);
+        setWorkerError(null);
+      })
+      .catch((error) => {
+        if (disposed) {
+          return;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        setWorkerError(message);
+      });
+
+    return () => {
+      disposed = true;
+      setWorkerReady(false);
+      workerClientRef.current = null;
+      client.terminate();
+    };
+  }, []);
 
   useEffect(() => {
-    runValidation(code);
-  }, [code, runValidation]);
+    if (!workerReady) {
+      return;
+    }
+
+    const client = workerClientRef.current;
+    if (!client) {
+      return;
+    }
+
+    const version = requestVersionRef.current + 1;
+    requestVersionRef.current = version;
+    setIsValidating(true);
+    setWorkerError(null);
+
+    const run = async (): Promise<void> => {
+      try {
+        const message = await client.validate({ code, version });
+        if (requestVersionRef.current !== version) {
+          return;
+        }
+        const payload: WorkerValidationResponse = message.payload;
+        lastMarkersRef.current = payload.markers;
+        setResult(payload.result);
+        applyMarkers(payload.markers);
+        setIsValidating(false);
+        setWorkerError(null);
+      } catch (error) {
+        if (requestVersionRef.current !== version) {
+          return;
+        }
+        setIsValidating(false);
+        const message = error instanceof Error ? error.message : String(error);
+        setWorkerError(message);
+      }
+    };
+
+    void run();
+  }, [code, workerReady, applyMarkers]);
 
   const handleEditorWillMount = useCallback((monaco: typeof import('monaco-editor')) => {
     registerPineLanguage(monaco);
@@ -181,9 +236,8 @@ export default function App() {
   const handleEditorMount = useCallback((editor: MonacoEditor.IStandaloneCodeEditor, monaco: typeof import('monaco-editor')) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
-    markerFactoryRef.current = createMarkers(monaco, editor.getModel()!);
-    applyMarkers(result);
-  }, [applyMarkers, result]);
+    applyMarkers(lastMarkersRef.current);
+  }, [applyMarkers]);
 
   const onEditorChange = useCallback((value?: string) => {
     setCode(value ?? '');
@@ -207,11 +261,19 @@ export default function App() {
   const [astRunning, setAstRunning] = useState(false);
 
   const validationStatus = useMemo(() => {
-    if (!result) return { label: 'Idle', tone: 'warning' as const };
+    if (workerError) {
+      return { label: 'Worker error', tone: 'invalid' as const };
+    }
+    if (!workerReady) {
+      return { label: 'Starting validator…', tone: 'warning' as const };
+    }
+    if (isValidating) {
+      return { label: 'Validating…', tone: 'warning' as const };
+    }
     if (result.errors.length > 0) return { label: `${result.errors.length} error(s)`, tone: 'invalid' as const };
     if (result.warnings.length > 0) return { label: `${result.warnings.length} warning(s)`, tone: 'warning' as const };
     return { label: 'No issues detected', tone: 'valid' as const };
-  }, [result]);
+  }, [workerError, workerReady, isValidating, result]);
 
   const runtimeBadge = useMemo(() => {
     if (runtimeStatus === 'ready') return { label: 'Runtime ready', tone: 'valid' as const };
@@ -345,10 +407,31 @@ dump(tree, indent=2, include_attributes=True)
             <div className="panel-content">
               <section>
                 <strong>Summary</strong>
-                <div>
-                  Errors: {result.errors.length} · Warnings: {result.warnings.length} · Info: {result.info?.length ?? 0}
-                </div>
+                {workerReady ? (
+                  <div>
+                    Errors: {result.errors.length} · Warnings: {result.warnings.length} · Info: {result.info.length}
+                  </div>
+                ) : (
+                  <div>Worker initialising…</div>
+                )}
+                {workerState && (
+                  <div className="status-text">
+                    Source: {workerState.markerSource} · Worker v{workerState.version}
+                  </div>
+                )}
+                {isValidating && !workerError && (
+                  <div className="status-text">Validating…</div>
+                )}
               </section>
+
+              {workerError && (
+                <section>
+                  <h4>Worker Error</h4>
+                  <div className="validation-item error">
+                    <pre>{workerError}</pre>
+                  </div>
+                </section>
+              )}
 
               {result.errors.length > 0 && (
                 <section>

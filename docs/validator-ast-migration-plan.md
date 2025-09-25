@@ -10,7 +10,7 @@
 
 | Area | Current Approach | Pain Points |
 | --- | --- | --- |
-| Parsing | Hand-written scanners (`core/scanner.ts`, regex in modules) operating on raw line arrays | Complex branching logic, hard to reason about, duplicated parsing code across modules |
+| Parsing | Legacy hand-written scanners (regex across modules) operating on raw line arrays | Complex branching logic, hard to reason about, duplicated parsing code across modules |
 | Context | `BaseValidator` keeps many mutable maps/sets updated by individual modules | Coupled state makes module ordering critical and brittle |
 | Errors | Modules push `ValidationError` objects manually | Inconsistent ranges, difficult to relate to actual syntactic constructs |
 | Monaco integration | Diagnostics generated post-parse | Lacks structured nodes for hover, quick fixes, semantic highlighting |
@@ -30,10 +30,13 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Switch statements, matrix literals, and historical index expressions now have dedicated AST nodes with traversal, scope, type inference, and control-flow coverage, unblocking downstream modules that depend on these constructs.
 - Type inference heuristics recognise namespaced TA and strategy helpers, applying return-type overrides and boosting series certainty when fed series arguments so downstream validators can rely on richer call metadata.
 - The core validator consumes AST version directives and script declarations to pre-populate script metadata, emitting Monaco-aligned diagnostics for misplaced directives, missing titles, and duplicate script declarations without re-scanning raw lines.
+- The TypeScript parser now produces the validator's structured AST format directly inside the pipeline, removing the temporary Python bridge while still returning rich syntax diagnostics when parsing fails.
 - Core validator AST analysis now inspects call expressions to flag `strategy.*` usage in indicators, recognise plotting/drawing activity for PS014 guardrails, and enforce library restrictions without relying on regex fallbacks.
 - Core validator AST analysis now inspects member expressions so strategy namespace usage in indicators is flagged even when no call expression is present, ensuring parity with the legacy scanner.
 - Core validator AST analysis now inspects index expressions so negative history references on series data trigger PS024 errors without the legacy line scanner.
 - A Monaco worker harness now exercises the AST-backed validator in a simulated worker environment, translating semantic output and syntax errors into Monaco-compatible markers for upcoming editor integration work.
+- A dedicated Monaco worker entry point (`core/monaco/worker.ts`) now streams AST diagnostics, handles configuration updates, and exposes lifecycle messages for the editor integration path.
+- Monaco worker responses now serialise AST scope/type metadata into semantic-model and hover datasets so Monaco features can consume structured symbol information without rehydrating validator state.
 - Core validator AST analysis now inspects conditional tests, call arguments, and binary expressions to enforce v6 boolean guardrails, linewidth minimums, and `na` comparison warnings without relying on regex fallbacks.
 - Core validator AST analysis now inspects `for` loop tests and ternary conditional expressions so v6 boolean guardrails trigger consistently across structured control flow and expressions.
 - Core validator AST analysis now detects assignments inside conditional tests and surfaces expensive loop calls, replacing the PSO02 and PSP001 regex heuristics with structured traversal.
@@ -46,6 +49,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Core validator AST analysis now inspects tuple destructuring patterns to raise PST01/PST02/PST03 diagnostics without regex fallbacks.
 - Core validator AST analysis now warns when local declarations shadow function parameters, removing the textual scope heuristic for PSW05.
 - ✅ Core validator now requires AST data before executing, short-circuiting when structured analysis is disabled while keeping textual hygiene checks for indentation and braces in place.
+- ✅ All validation modules now run exclusively on AST-derived metadata and the shared traversal helpers, fully retiring the remaining regex fallbacks and marking the Phase 3 module migration as complete.
 - Scope validator now leverages AST symbol metadata to surface PSW03/PSW04 duplicate and shadowed declaration diagnostics without relying on indentation heuristics.
 - Scope validator now analyses AST identifier references to emit PSU02 warnings without legacy text scanning heuristics.
 - Scope validator now inspects AST declaration names to emit PS006/PS007 identifier errors without the legacy line scanner.
@@ -287,6 +291,7 @@ Suggested migration order:
 - ✅ Enhanced semantic validator analyses AST declarations, assignments, and functions to surface PSV6 type-flow errors and inference guidance after retiring the legacy regex implementation.
 - ✅ UDT validator gathers type declarations, methods, and usage diagnostics from AST traversal after retiring the legacy regex fallback path.
 - ✅ History referencing validator now short-circuits when AST execution is disabled and surfaces negative-index, loop, and varip diagnostics exclusively from structured traversal after retiring the legacy regex fallback path.
+- ✅ Retired the legacy `core/scanner.ts` helpers now that all validators rely on AST traversal for diagnostics.
 
 ## 10. Immediate Next Steps (Post-Review)
 
@@ -295,20 +300,21 @@ The initial AST plumbing is already landing (feature-flagged parsing in `BaseVal
 capitalise on this progress, align the next iteration around the following workstream
 plan:
 
-1. **Kick Off Phase 3 Module Ports**
-   - Leverage the new dual-run harness to compare `core-validator` diagnostics in shadow mode and capture mismatches as fixtures before swapping implementations.
-   - Define parity exit criteria and owners for the initial tranche of modules listed in the migration table, now that scope, types, and control flow graphs are available.
-2. **Close the Parser RFC Loop**
-   - Finalise the parser technology RFC by capturing findings from the lexer/prototype experiments, documenting the selected approach, and listing follow-ups like incremental parsing and recovery tuning.
-   - Extend the prototype to cover directives, variable declarations, and function bodies so upcoming semantic passes have representative node shapes.
+1. **Flip the AST Pipeline on by Default**
+   - ✅ Finalised the TypeScript parser bridge that returns validator-shaped AST data and syntax diagnostics without relying on the external Python runner; future work will expand node coverage and performance.
+   - Update packaging and integration samples so validators execute in AST `primary` mode without additional configuration.
 
-3. **Expand Semantic Coverage**
-   - Use the enhanced type inference heuristics to unblock the `strategy-functions` and `ta-functions` module ports, filling any remaining return overrides encountered during parity runs.
-   - Ensure the migration table’s blocked modules move to “Ready” once outstanding syntax or inference gaps surface during module migrations.
+2. **Phase 4 – Monaco Worker Integration**
+   - Follow `docs/monaco-integration-plan.md` to expose AST diagnostics through the worker, including syntax error streaming and incremental validation hooks.
+   - Port hover, completion, and quick-fix experiments to consume the AST scope/type metadata now available in the worker context.
 
-4. **Operationalise Monaco Worker Integration**
-   - Use the plan in `docs/monaco-integration-plan.md` to sequence worker bootstrap work, RPC wiring, and lazy-loading experiments.
-   - Identify any additional API shims or batching logic needed before exposing the AST pipeline to the editor and raise follow-up tasks as necessary.
+3. **Phase 5 – Configuration & Cleanup**
+   - Remove the dual-run/shadow toggles that are now redundant, simplify validator configuration, and collapse AST-disabled test harnesses.
+   - Audit any remaining textual hygiene helpers to confirm they behave correctly alongside the AST-first modules and document any exceptions.
+
+4. **Operational Hardening**
+   - Profile validation throughput with large scripts to capture AST construction and traversal costs and feed the results into Monaco performance budgets.
+   - Document rollout steps for enabling the AST pipeline in staged environments, including feature flags and regression monitoring.
 
 ## 11. Definition of Done
 
