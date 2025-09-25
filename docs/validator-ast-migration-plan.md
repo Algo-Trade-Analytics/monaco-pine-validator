@@ -31,6 +31,9 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Type inference heuristics recognise namespaced TA and strategy helpers, applying return-type overrides and boosting series certainty when fed series arguments so downstream validators can rely on richer call metadata.
 - The core validator consumes AST version directives and script declarations to pre-populate script metadata, emitting Monaco-aligned diagnostics for misplaced directives, missing titles, and duplicate script declarations without re-scanning raw lines.
 - The TypeScript parser now produces the validator's structured AST format directly inside the pipeline, removing the temporary Python bridge while still returning rich syntax diagnostics when parsing fails.
+- The Chevrotain parser now recognises assignment statements, compound operators, and variable declarations (including keyword modifiers, type annotations, and generic array types) while emitting range-accurate AST nodes backed by targeted regression tests.
+- The Chevrotain parser now recognises indentation-based `if`/`else` statements and emits block statement nodes for nested branches, keeping ranges accurate while extending the regression coverage with control-flow fixtures.
+- The Chevrotain parser now recognises indentation-based `while` loops alongside `return`, `break`, and `continue` statements, producing structured AST nodes and regression coverage for block-scoped flow control.
 - Core validator AST analysis now inspects call expressions to flag `strategy.*` usage in indicators, recognise plotting/drawing activity for PS014 guardrails, and enforce library restrictions without relying on regex fallbacks.
 - Core validator AST analysis now inspects member expressions so strategy namespace usage in indicators is flagged even when no call expression is present, ensuring parity with the legacy scanner.
 - Core validator AST analysis now inspects index expressions so negative history references on series data trigger PS024 errors without the legacy line scanner.
@@ -300,19 +303,26 @@ The initial AST plumbing is already landing (feature-flagged parsing in `BaseVal
 capitalise on this progress, align the next iteration around the following workstream
 plan:
 
-1. **Flip the AST Pipeline on by Default**
+1. **Chevrotain Parser Feature Parity**
+   - ✅ Assignment statements, unary/binary expressions, compound operators, and keyworded variable declarations now normalise into Pine AST nodes with location metadata and regression coverage.
+   - Expand statement coverage to include control-flow constructs (`if`/`else`, `for`, `while`, `switch`), return/break/continue statements, and block bodies so existing validator passes can traverse full scripts.
+   - Parse function declarations (including parameters, default arguments, and bodies) and ensure the AST service wires them into scope/type analysis.
+   - Broaden expression coverage with ternaries, indexing, arrays/maps/matrix literals, anonymous functions, and namespace literals so semantic passes no longer require fallbacks.
+   - Add negative and recovery-focused fixtures that exercise the new grammar branches and keep the Chevrotain regression suite aligned with Pine Script quirks (newline statement termination, semicolon support, dangling `else`, etc.).
+
+2. **Flip the AST Pipeline on by Default**
    - ✅ Finalised the TypeScript parser bridge that returns validator-shaped AST data and syntax diagnostics without relying on the external Python runner; future work will expand node coverage and performance.
    - Update packaging and integration samples so validators execute in AST `primary` mode without additional configuration.
 
-2. **Phase 4 – Monaco Worker Integration**
+3. **Phase 4 – Monaco Worker Integration**
    - Follow `docs/monaco-integration-plan.md` to expose AST diagnostics through the worker, including syntax error streaming and incremental validation hooks.
    - Port hover, completion, and quick-fix experiments to consume the AST scope/type metadata now available in the worker context.
 
-3. **Phase 5 – Configuration & Cleanup**
+4. **Phase 5 – Configuration & Cleanup**
    - Remove the dual-run/shadow toggles that are now redundant, simplify validator configuration, and collapse AST-disabled test harnesses.
    - Audit any remaining textual hygiene helpers to confirm they behave correctly alongside the AST-first modules and document any exceptions.
 
-4. **Operational Hardening**
+5. **Operational Hardening**
    - Profile validation throughput with large scripts to capture AST construction and traversal costs and feed the results into Monaco performance budgets.
    - Document rollout steps for enabling the AST pipeline in staged environments, including feature flags and regression monitoring.
 
