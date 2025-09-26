@@ -149,6 +149,55 @@ describe('Chevrotain parser', () => {
     expect(() => program.body.map((statement) => statement.loc)).not.toThrow();
   });
 
+  it('recovers from unterminated else blocks while preserving parsed branches', () => {
+    const source = ['if condition', '    foo()', 'else'].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
+
+    expect(diagnostics.syntaxErrors.length).toBeGreaterThan(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(Array.isArray(program.body)).toBe(true);
+    expect(() => program.body.map((statement) => statement?.kind)).not.toThrow();
+  });
+
+  it('keeps partial AST data when deeply nested expressions miss closing parentheses', () => {
+    const open = '('.repeat(20);
+    const close = ')'.repeat(10);
+    const source = `result = ${open}foo${close}`;
+
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
+
+    expect(diagnostics.syntaxErrors.length).toBeGreaterThan(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(Array.isArray(program.body)).toBe(true);
+    expect(() => program.body.map((statement) => statement?.kind)).not.toThrow();
+  });
+
+  it('handles mixed indentation without dropping the partial AST', () => {
+    const source = [
+      'if foo',
+      '    bar()',
+      '   baz()',
+      '',
+      'qux()',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
+
+    expect(diagnostics.syntaxErrors.length).toBeGreaterThanOrEqual(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(Array.isArray(program.body)).toBe(true);
+    expect(program.body.length).toBeGreaterThanOrEqual(1);
+    expect(() => program.body.map((statement) => statement?.kind)).not.toThrow();
+  });
+
   it('parses assignment statements with operator precedence and unary expressions', () => {
     const source = [
       'foo = 1 + 2 * 3',
@@ -771,5 +820,39 @@ describe('Chevrotain parser', () => {
 
     const explicitReturn = declaration.body.body[1] as ReturnStatementNode;
     expect(explicitReturn.argument?.kind).toBe('MemberExpression');
+  });
+
+  describe.skip('upcoming grammar coverage', () => {
+    it('parses repeat...until loops once implemented', () => {
+      const source = ['repeat', '    foo()', 'until bar', ''].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+      expect(ast).not.toBeNull();
+    });
+
+    it('parses compiler annotations preceding declarations', () => {
+      const source = [
+        '//@function foo',
+        '//@param value The input value.',
+        'float foo(float value) => value',
+        '',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+      expect(ast).not.toBeNull();
+    });
+
+    it('parses null-coalescing ternary sugar once syntax is confirmed', () => {
+      const source = ['result = foo ?? bar', ''].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+      expect(ast).not.toBeNull();
+    });
   });
 });

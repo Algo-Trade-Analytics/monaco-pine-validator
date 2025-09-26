@@ -301,6 +301,15 @@ Suggested migration order:
 - ✅ UDT validator gathers type declarations, methods, and usage diagnostics from AST traversal after retiring the legacy regex fallback path.
 - ✅ History referencing validator now short-circuits when AST execution is disabled and surfaces negative-index, loop, and varip diagnostics exclusively from structured traversal after retiring the legacy regex fallback path.
 - ✅ Retired the legacy `core/scanner.ts` helpers now that all validators rely on AST traversal for diagnostics.
+- Added Chevrotain recovery regression coverage for unterminated `else` clauses, truncated deeply nested expressions, and mixed indentation inside blocks so partial ASTs remain consumable for Monaco diagnostics.
+
+### Outstanding Chevrotain Grammar Coverage
+
+| Construct | Current Status | Action Items |
+| --- | --- | --- |
+| `repeat ... until` loops | Not yet tokenised or parsed; Vitest fixture staged via skipped coverage in `tests/ast/chevrotain-parser.test.ts`. | Add lexer tokens, AST node support, and positive/negative regression suites before enabling Monaco consumption. |
+| Compiler annotations (`//@function`, `//@param`, `//@returns`, `//@strategy_alert_message`, etc.) | Currently treated as comments; skip test added to capture a representative declaration prelude. | Introduce directive tokens, AST node builders, and parser wiring so annotations attach to downstream declarations. |
+| Null-coalescing / ternary sugar | Syntax requires confirmation; skip test seeded with `foo ?? bar` anchors follow-up grammar work once specification lands. | Confirm official syntax, extend the expression grammar, and layer precedence tests alongside Monaco diagnostics expectations. |
 
 ## 10. Immediate Next Steps (Post-Review)
 
@@ -312,7 +321,8 @@ plan:
 1. **Chevrotain Parser Hardening**
    - ✅ Assignment statements, unary/binary expressions, compound operators, control-flow statements, and function declarations now normalise into Pine AST nodes with location metadata and regression coverage.
    - Backfill remaining expression coverage (array/map constructors, anonymous functions, namespace literals) and ensure tuple patterns work in nested assignment/return positions.
-   - Extend recovery fixtures to cover indentation edge cases, dangling `else` branches, newline-separated expressions, and unterminated constructs so Monaco parsing remains resilient.
+   - ✅ Recovery fixtures now cover indentation edge cases, dangling `else` branches, newline-separated expressions, and unterminated constructs so Monaco parsing remains resilient.
+   - Implement the staged `repeat ... until` loops, compiler annotations, and null-coalescing helper syntax so the Chevrotain grammar matches the outstanding fixtures and Monaco feature backlog.
    - Profile large scripts under the shared parser instance to confirm the recovery configuration does not introduce unacceptable overhead or memory growth.
 
 2. **Flip the AST Pipeline on by Default**
