@@ -309,15 +309,26 @@ The initial AST plumbing is already landing (feature-flagged parsing in `BaseVal
 capitalise on this progress, align the next iteration around the following workstream
 plan:
 
-1. **Chevrotain Parser Feature Parity**
-   - ✅ Assignment statements, unary/binary expressions, compound operators, and keyworded variable declarations now normalise into Pine AST nodes with location metadata and regression coverage.
-   - Expand statement coverage to include control-flow constructs (`if`/`else`, `for`, `while`, `switch`), return/break/continue statements, and block bodies so existing validator passes can traverse full scripts.
-   - Parse function declarations (including parameters, default arguments, and bodies) and ensure the AST service wires them into scope/type analysis.
-   - Broaden expression coverage with ternaries, indexing, arrays/maps/matrix literals, anonymous functions, and namespace literals so semantic passes no longer require fallbacks.
-   - Add negative and recovery-focused fixtures that exercise the new grammar branches and keep the Chevrotain regression suite aligned with Pine Script quirks (newline statement termination, semicolon support, dangling `else`, etc.).
+1. **Chevrotain Parser Hardening**
+   - ✅ Assignment statements, unary/binary expressions, compound operators, control-flow statements, and function declarations now normalise into Pine AST nodes with location metadata and regression coverage.
+   - Backfill remaining expression coverage (array/map constructors, anonymous functions, namespace literals) and ensure tuple patterns work in nested assignment/return positions.
+   - Extend recovery fixtures to cover indentation edge cases, dangling `else` branches, newline-separated expressions, and unterminated constructs so Monaco parsing remains resilient.
+   - Profile large scripts under the shared parser instance to confirm the recovery configuration does not introduce unacceptable overhead or memory growth.
 
 2. **Flip the AST Pipeline on by Default**
-   - ✅ Finalised the TypeScript parser bridge that returns validator-shaped AST data and syntax diagnostics without relying on the external Python runner; future work will expand node coverage and performance.
+   - Audit module-level feature flags and ensure any lingering legacy fallbacks short-circuit cleanly once Chevrotain is the primary parser.
+   - Capture before/after timings for the validator suites and the Monaco worker harness to ensure Chevrotain parity does not regress latency budgets.
+   - Stage the rollout behind a configuration toggle, document rollback steps, and add release checklist items for monitoring diagnostics deltas in production.
+
+3. **Monaco Integration Enablement**
+   - Exercise the worker harness against representative IDE workflows (hover, diagnostics refresh, semantic tokens) to confirm Chevrotain ASTs flow through without additional shims.
+   - Document the editor-facing API contracts that rely on AST metadata so downstream feature work (quick fixes, go-to definition) can build atop the validated structures.
+   - Plan incremental editor release gates (internal dogfood, beta channel, general availability) with success metrics tied to AST-backed diagnostics quality.
+
+4. **Validator Operational Hardening**
+   - Re-run the out-of-memory Vitest validator suite with focused sharding or memory flags and capture the configuration needed for CI stability.
+   - Expand the semantic golden tests with scripts that stress tuple destructuring, matrix literals, and flow control to guard against regressions while the parser hardening work proceeds.
+   - Establish alerting for critical diagnostics regressions when the AST pipeline is enabled by default (e.g., compare against previous release baselines).
    - Update packaging and integration samples so validators execute in AST `primary` mode without additional configuration.
 
 3. **Phase 4 – Monaco Worker Integration**
