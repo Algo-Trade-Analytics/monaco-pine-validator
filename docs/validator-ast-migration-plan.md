@@ -44,6 +44,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Core validator AST analysis now inspects call expressions to flag `strategy.*` usage in indicators, recognise plotting/drawing activity for PS014 guardrails, and enforce library restrictions without relying on regex fallbacks.
 - The Chevrotain parser now recognises `repeat ... until` loops, emitting do-while style control-flow nodes with regression coverage for both successful parses and recovery from missing `until` guards.
 - Compiler annotations now tokenise as dedicated nodes, attach to subsequent script/type/enum/function/variable declarations, and feed regression coverage so Monaco metadata and validator modules can consume structured documentation strings.
+- ✅ Post-merge verification re-ran the Chevrotain regression suite after reconciling annotation and identifier handling conflicts, ensuring lexer tokens (including compiler annotations) and parser rules remain stable.
 - Core validator AST analysis now inspects member expressions so strategy namespace usage in indicators is flagged even when no call expression is present, ensuring parity with the legacy scanner.
 - Core validator AST analysis now inspects index expressions so negative history references on series data trigger PS024 errors without the legacy line scanner.
 - A Monaco worker harness now exercises the AST-backed validator in a simulated worker environment, translating semantic output and syntax errors into Monaco-compatible markers for upcoming editor integration work.
