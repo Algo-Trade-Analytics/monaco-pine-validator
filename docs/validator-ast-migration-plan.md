@@ -310,7 +310,7 @@ Suggested migration order:
 | Construct | Current Status | Action Items |
 | --- | --- | --- |
 | Compiler annotations (`//@function`, `//@param`, `//@returns`, `//@strategy_alert_message`, etc.) | ✅ Implemented | Dedicated lexer tokens and AST nodes attach annotations to declarations with regression coverage validating stacked metadata. |
-| Null-coalescing / ternary sugar | Syntax requires confirmation; skip test seeded with `foo ?? bar` anchors follow-up grammar work once specification lands. | Confirm official syntax, extend the expression grammar, and layer precedence tests alongside Monaco diagnostics expectations. |
+| Null-coalescing / ternary sugar | ✅ Implemented | Dedicated lexer token, precedence-aware binary rules, and regression coverage exercise chained/co-mingled `??` usage alongside logical and conditional expressions. |
 
 ## 10. Immediate Next Steps (Post-Review)
 
@@ -323,7 +323,7 @@ plan:
    - ✅ Assignment statements, unary/binary expressions, compound operators, control-flow statements, and function declarations now normalise into Pine AST nodes with location metadata and regression coverage.
    - Backfill remaining expression coverage (array/map constructors, anonymous functions, namespace literals) and ensure tuple patterns work in nested assignment/return positions.
    - ✅ Recovery fixtures now cover indentation edge cases, dangling `else` branches, newline-separated expressions, and unterminated constructs so Monaco parsing remains resilient.
-   - ✅ Implemented the staged `repeat ... until` loops and compiler annotations; continue with null-coalescing helper syntax so the Chevrotain grammar matches the outstanding fixtures and Monaco feature backlog.
+   - ✅ Implemented the staged `repeat ... until` loops, compiler annotations, and null-coalescing helpers; continue with iterable literals and inline function expressions so the Chevrotain grammar matches the outstanding fixtures and Monaco feature backlog.
    - Profile large scripts under the shared parser instance to confirm the recovery configuration does not introduce unacceptable overhead or memory growth.
 
 2. **Flip the AST Pipeline on by Default**

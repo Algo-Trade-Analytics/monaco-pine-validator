@@ -58,6 +58,7 @@ export const Minus = createToken({ name: 'Minus', pattern: /-/ });
 export const Star = createToken({ name: 'Star', pattern: /\*/ });
 export const Slash = createToken({ name: 'Slash', pattern: /\// });
 export const Percent = createToken({ name: 'Percent', pattern: /%/ });
+export const NullishCoalescing = createToken({ name: 'NullishCoalescing', pattern: /\?\?/ });
 export const Question = createToken({ name: 'Question', pattern: /\?/ });
 export const LessEqual = createToken({ name: 'LessEqual', pattern: /<=/ });
 export const GreaterEqual = createToken({ name: 'GreaterEqual', pattern: />=/ });
@@ -256,6 +257,7 @@ export const AllTokens = [
   Star,
   Slash,
   Percent,
+  NullishCoalescing,
   Question,
   FatArrow,
   Equal,

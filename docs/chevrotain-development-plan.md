@@ -5,16 +5,16 @@
 - Implemented `repeat ... until` loop parsing, including lexer support, AST node construction, and recovery coverage for missing `until` guards so the grammar now accepts Pine's do-while control flow.
 - Control-flow, scope, and type inference pipelines understand the new repeat nodes, keeping downstream validators aligned with the expanded Chevrotain AST.
 - Compiler annotations now tokenise as dedicated nodes and attach to subsequent declarations so library metadata, Monaco hovers, and downstream validators can surface structured documentation strings.
-- Regression tests assert positive parsing, AST shape, and recovery semantics to guard the new feature set while documenting outstanding fixtures for null-coalescing syntax.
+- Null-coalescing `??` expressions parse as binary nodes that chain correctly and interleave with logical/conditional operator precedence, rounding out the expression coverage required by the staged fixtures.
+- Regression tests assert positive parsing, AST shape, and recovery semantics to guard the new feature set while documenting outstanding fixtures for additional syntactic sugar.
 
 ## Parser Feature Backlog
 
-1. **Null-Coalescing / Conditional Sugar**
-   - Confirm the final Pine Script syntax, then extend the expression grammar with correct precedence relative to ternaries and logical operators.
-   - Cover chained usage (`foo ?? bar ?? baz`) and mixed `?:`/`??` nesting in regression tests.
-2. **Iterable Literals & Inline Functions**
+1. **Iterable Literals & Inline Functions**
    - Parse array/map literals and anonymous `=>` functions in expression positions to unlock remaining validator migrations.
    - Ensure tuple destructuring and inline function expressions co-exist with the new repeat loop semantics.
+2. **Additional Expression Sugar**
+   - Audit remaining Pine syntactic sugar (e.g., ternary shorthand, range literals) and extend the grammar plus fixtures so the Chevrotain pipeline mirrors production coverage.
 
 ## Recovery & Resilience Enhancements
 

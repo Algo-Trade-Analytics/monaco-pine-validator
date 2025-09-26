@@ -874,13 +874,45 @@ describe('Chevrotain parser', () => {
       expect(paramAnnotation.value).toBe('value The input value.');
     });
 
-    it.skip('parses null-coalescing ternary sugar once syntax is confirmed', () => {
-      const source = ['result = foo ?? bar', ''].join('\n');
+    it('parses null-coalescing ternary sugar with chaining and precedence', () => {
+      const source = [
+        'result = foo ?? bar ?? baz',
+        'fallback = foo or bar ?? baz',
+        'mixed = foo ?? bar or baz',
+        '',
+      ].join('\n');
 
       const { ast, diagnostics } = parseWithChevrotain(source);
 
       expect(diagnostics.syntaxErrors).toHaveLength(0);
       expect(ast).not.toBeNull();
+
+      const program = ast as ProgramNode;
+      expect(program.body).toHaveLength(3);
+
+      const firstAssignment = program.body[0] as AssignmentStatementNode;
+      expect(firstAssignment.kind).toBe('AssignmentStatement');
+      const chained = firstAssignment.right as BinaryExpressionNode;
+      expect(chained.operator).toBe('??');
+      const leftCoalesce = chained.left as BinaryExpressionNode;
+      expect(leftCoalesce.operator).toBe('??');
+      expect(leftCoalesce.left.kind).toBe('Identifier');
+      expect(leftCoalesce.right.kind).toBe('Identifier');
+      expect(chained.right.kind).toBe('Identifier');
+
+      const secondAssignment = program.body[1] as AssignmentStatementNode;
+      const leftAssociative = secondAssignment.right as BinaryExpressionNode;
+      expect(leftAssociative.operator).toBe('??');
+      const disjunction = leftAssociative.left as BinaryExpressionNode;
+      expect(disjunction.operator).toBe('or');
+      expect(leftAssociative.right.kind).toBe('Identifier');
+
+      const thirdAssignment = program.body[2] as AssignmentStatementNode;
+      const precedence = thirdAssignment.right as BinaryExpressionNode;
+      expect(precedence.operator).toBe('??');
+      const rightDisjunction = precedence.right as BinaryExpressionNode;
+      expect(rightDisjunction.operator).toBe('or');
+      expect(precedence.left.kind).toBe('Identifier');
     });
   });
 

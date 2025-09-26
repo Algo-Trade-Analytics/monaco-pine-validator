@@ -93,6 +93,7 @@ import {
   Star,
   Slash,
   Percent,
+  NullishCoalescing,
   Question,
   Less,
   LessEqual,
@@ -2311,7 +2312,7 @@ class PineParser extends EmbeddedActionsParser {
   private expression = this.RULE('expression', () => this.SUBRULE(this.conditionalExpression));
 
   private conditionalExpression = this.RULE('conditionalExpression', () => {
-    const test = this.SUBRULE(this.logicalOrExpression);
+    const test = this.SUBRULE(this.nullishCoalescingExpression);
     if (this.LA(1).tokenType === Question) {
       const questionToken = this.CONSUME(Question);
       const consequent = this.SUBRULE2(this.expression);
@@ -2328,6 +2329,17 @@ class PineParser extends EmbeddedActionsParser {
       );
     }
     return test;
+  });
+
+  private nullishCoalescingExpression = this.RULE('nullishCoalescingExpression', () => {
+    let expression = this.SUBRULE(this.logicalOrExpression);
+    this.MANY(() => {
+      const operator = this.CONSUME(NullishCoalescing);
+      const right = this.SUBRULE2(this.logicalOrExpression);
+      const endToken = this.LA(0);
+      expression = createBinaryExpressionNode(expression, operator, right, endToken);
+    });
+    return expression;
   });
 
   private logicalOrExpression = this.RULE('logicalOrExpression', () => {
