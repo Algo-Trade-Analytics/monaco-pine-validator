@@ -53,6 +53,7 @@ export const Less = createToken({ name: 'Less', pattern: /</ });
 export const Greater = createToken({ name: 'Greater', pattern: />/ });
 export const EqualEqual = createToken({ name: 'EqualEqual', pattern: /==/ });
 export const NotEqual = createToken({ name: 'NotEqual', pattern: /!=/ });
+export const FatArrow = createToken({ name: 'FatArrow', pattern: /=>/ });
 export const Equal = createToken({ name: 'Equal', pattern: /=/ });
 export const And = createToken({ name: 'And', pattern: /and/, longer_alt: Identifier });
 export const Or = createToken({ name: 'Or', pattern: /or/, longer_alt: Identifier });
@@ -190,6 +191,7 @@ export const AllTokens = [
   Star,
   Slash,
   Percent,
+  FatArrow,
   Equal,
   And,
   Or,

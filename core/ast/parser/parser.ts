@@ -8,6 +8,7 @@ import {
   type BreakStatementNode,
   type BooleanLiteralNode,
   type CallExpressionNode,
+  type FunctionDeclarationNode,
   type ContinueStatementNode,
   type ForStatementNode,
   type ExpressionNode,
@@ -17,6 +18,7 @@ import {
   type MemberExpressionNode,
   type NullLiteralNode,
   type NumberLiteralNode,
+  type ParameterNode,
   type ProgramNode,
   type Range,
   type ReturnStatementNode,
@@ -81,6 +83,7 @@ import {
   Break,
   Continue,
   Return,
+  FatArrow,
   To,
   By,
 } from './tokens';
@@ -127,6 +130,66 @@ function splitDeclarationTokens(tokens: IToken[]): { typeTokens: IToken[]; ident
   return {
     typeTokens: tokens.slice(0, lastIdentifierIndex),
     identifierToken: tokens[lastIdentifierIndex],
+  };
+}
+
+const FUNCTION_MODIFIER_KEYWORDS = new Set(['method', 'static']);
+
+function isFunctionModifierToken(token: IToken | undefined): boolean {
+  if (!token) {
+    return false;
+  }
+  return FUNCTION_MODIFIER_KEYWORDS.has(token.image?.toLowerCase() ?? '');
+}
+
+function isExportKeywordToken(token: IToken | undefined): boolean {
+  if (!token) {
+    return false;
+  }
+  return (token.image ?? '').toLowerCase() === 'export';
+}
+
+function splitFunctionHeadTokens(tokens: IToken[]): { typeTokens: IToken[]; nameTokens: IToken[] } {
+  if (tokens.length === 0) {
+    return { typeTokens: [], nameTokens: [] };
+  }
+
+  let nameStartIndex = tokens.length;
+
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    const token = tokens[index];
+    if (token?.tokenType !== IdentifierToken) {
+      continue;
+    }
+
+    nameStartIndex = index;
+    let lookbehind = index - 1;
+
+    while (lookbehind >= 0) {
+      const separator = tokens[lookbehind];
+      if (separator?.tokenType !== Dot) {
+        break;
+      }
+
+      const potentialIdentifier = tokens[lookbehind - 1];
+      if (potentialIdentifier?.tokenType !== IdentifierToken) {
+        break;
+      }
+
+      lookbehind -= 2;
+      nameStartIndex = lookbehind + 1;
+    }
+
+    break;
+  }
+
+  if (nameStartIndex >= tokens.length) {
+    return { typeTokens: tokens, nameTokens: [] };
+  }
+
+  return {
+    typeTokens: tokens.slice(0, nameStartIndex),
+    nameTokens: tokens.slice(nameStartIndex),
   };
 }
 
@@ -249,6 +312,22 @@ function createIdentifierNode(token?: IToken): IdentifierNode {
   };
 }
 
+function createIdentifierFromTokens(tokens: IToken[]): IdentifierNode {
+  if (tokens.length === 0) {
+    return createIdentifierNode();
+  }
+
+  const start = tokens[0];
+  const end = tokens[tokens.length - 1];
+  const name = tokens.map((token) => token.image ?? '').join('');
+
+  return {
+    kind: 'Identifier',
+    name,
+    ...spanFromTokens(start, end),
+  };
+}
+
 function createPlaceholderExpression(): ExpressionNode {
   return createIdentifierNode();
 }
@@ -296,6 +375,66 @@ function createNumberNode(token?: IToken): NumberLiteralNode {
     value,
     raw: safeToken.image,
     ...spanFromTokens(safeToken, safeToken),
+  };
+}
+
+function createParameterNode(
+  identifier: IdentifierNode,
+  typeAnnotation: TypeReferenceNode | null,
+  defaultValue: ExpressionNode | undefined,
+  startToken: IToken | undefined,
+): ParameterNode {
+  const startPosition = startToken ? tokenStart(startToken) : identifier.loc.start;
+  const startOffset = startToken?.startOffset ?? identifier.range[0];
+  const valueNode = defaultValue ?? null;
+  const endNode = defaultValue ?? identifier;
+
+  return {
+    kind: 'Parameter',
+    identifier,
+    typeAnnotation,
+    defaultValue: valueNode,
+    loc: createLocation(startPosition, endNode.loc.end),
+    range: createRange(startOffset, endNode.range[1]),
+  };
+}
+
+function createFunctionDeclarationNode(
+  identifier: IdentifierNode | null,
+  params: ParameterNode[],
+  body: BlockStatementNode,
+  isExported: boolean,
+  returnType: TypeReferenceNode | null,
+  startToken: IToken | undefined,
+): FunctionDeclarationNode {
+  const startPosition = startToken ? tokenStart(startToken) : identifier?.loc.start ?? body.loc.start;
+  const startOffset = startToken?.startOffset ?? identifier?.range[0] ?? body.range[0];
+
+  return {
+    kind: 'FunctionDeclaration',
+    identifier,
+    params,
+    body,
+    export: isExported,
+    returnType,
+    loc: createLocation(startPosition, body.loc.end),
+    range: createRange(startOffset, body.range[1]),
+  };
+}
+
+function createImplicitReturnStatementNode(
+  expression: ExpressionNode | undefined,
+  arrowToken: IToken,
+): ReturnStatementNode {
+  const returnToken = createSyntheticToken('return', Return, arrowToken);
+  const value = expression ?? createPlaceholderExpression();
+  const endPosition = value.loc?.end ?? tokenEnd(returnToken);
+  const rangeEnd = value.range?.[1] ?? (returnToken.endOffset ?? returnToken.startOffset ?? 0);
+  return {
+    kind: 'ReturnStatement',
+    argument: value,
+    loc: createLocation(tokenStart(returnToken), endPosition),
+    range: createRange(returnToken.startOffset ?? 0, rangeEnd),
   };
 }
 
@@ -695,6 +834,10 @@ class PineParser extends EmbeddedActionsParser {
         ALT: () => this.SUBRULE(this.scriptDeclaration),
       },
       {
+        GATE: () => this.isFunctionDeclarationStart(),
+        ALT: () => this.SUBRULE(this.functionDeclaration),
+      },
+      {
         GATE: () => this.LA(1).tokenType === If,
         ALT: () => this.SUBRULE(this.ifStatement),
       },
@@ -750,6 +893,130 @@ class PineParser extends EmbeddedActionsParser {
 
       return null;
     }
+  }
+
+  private collectFunctionHeadTokens(
+    startOffset: number,
+  ): { tokens: IToken[]; lParenOffset: number } | null {
+    const tokens: IToken[] = [];
+    let offset = startOffset;
+
+    while (true) {
+      const token = this.LA(offset);
+      const tokenType = token.tokenType;
+
+      if (tokenType === LParen) {
+        return { tokens, lParenOffset: offset };
+      }
+
+      if (
+        tokenType === IdentifierToken ||
+        tokenType === Less ||
+        tokenType === Greater ||
+        tokenType === Comma ||
+        tokenType === Dot
+      ) {
+        tokens.push(token);
+        offset += 1;
+        continue;
+      }
+
+      if (tokenType === EOF_TOKEN || tokenType === Newline) {
+        return null;
+      }
+
+      return null;
+    }
+  }
+
+  private collectParameterTokens(startOffset: number): IToken[] {
+    const tokens: IToken[] = [];
+    let offset = startOffset;
+    let genericDepth = 0;
+
+    while (true) {
+      const token = this.LA(offset);
+      const tokenType = token.tokenType;
+
+      if (tokenType === EOF_TOKEN) {
+        return tokens;
+      }
+
+      if (tokenType === Less) {
+        genericDepth += 1;
+      } else if (tokenType === Greater && genericDepth > 0) {
+        genericDepth -= 1;
+      }
+
+      if (genericDepth === 0 && (tokenType === Equal || tokenType === Comma || tokenType === RParen)) {
+        return tokens;
+      }
+
+      if (
+        tokenType === IdentifierToken ||
+        tokenType === Less ||
+        tokenType === Greater ||
+        tokenType === Comma ||
+        tokenType === Dot
+      ) {
+        tokens.push(token);
+        offset += 1;
+        continue;
+      }
+
+      return tokens;
+    }
+  }
+
+  private isFunctionDeclarationStart(): boolean {
+    let offset = 1;
+
+    if (isExportKeywordToken(this.LA(offset))) {
+      offset += 1;
+    }
+
+    while (isFunctionModifierToken(this.LA(offset))) {
+      offset += 1;
+    }
+
+    const collected = this.collectFunctionHeadTokens(offset);
+    if (!collected || collected.tokens.length === 0) {
+      return false;
+    }
+
+    let scanOffset = collected.lParenOffset;
+    let depth = 0;
+
+    while (true) {
+      const token = this.LA(scanOffset);
+      const tokenType = token.tokenType;
+
+      if (tokenType === EOF_TOKEN) {
+        return false;
+      }
+
+      if (tokenType === LParen) {
+        depth += 1;
+      } else if (tokenType === RParen) {
+        depth -= 1;
+        if (depth === 0) {
+          scanOffset += 1;
+          break;
+        }
+      }
+
+      if (tokenType === Newline && depth === 0) {
+        return false;
+      }
+
+      scanOffset += 1;
+    }
+
+    while (this.LA(scanOffset).tokenType === Newline) {
+      scanOffset += 1;
+    }
+
+    return this.LA(scanOffset).tokenType === FatArrow;
   }
 
   private isVariableDeclarationStart(): boolean {
@@ -833,6 +1100,116 @@ class PineParser extends EmbeddedActionsParser {
       return false;
     }
   }
+
+  private parameterList = this.RULE('parameterList', () => {
+    const params: ParameterNode[] = [];
+    params.push(this.SUBRULE(this.parameter));
+    this.MANY(() => {
+      this.CONSUME(Comma);
+      params.push(this.SUBRULE2(this.parameter));
+    });
+    return params;
+  });
+
+  private parameter = this.RULE('parameter', () => {
+    const tokens = this.collectParameterTokens(1);
+    const { typeTokens, identifierToken } = splitDeclarationTokens(tokens);
+    const typeAnnotation = buildTypeReferenceFromTokens(typeTokens);
+
+    const consumedTypeTokens: IToken[] = [];
+    for (const token of typeTokens) {
+      consumedTypeTokens.push(this.CONSUME(token.tokenType));
+    }
+
+    let identifierSource: IToken;
+    if (identifierToken) {
+      identifierSource = this.CONSUME(IdentifierToken);
+    } else {
+      identifierSource = this.CONSUME(IdentifierToken);
+    }
+
+    const identifier = createIdentifierNode(identifierSource);
+
+    let defaultValue: ExpressionNode | undefined;
+    if (this.LA(1).tokenType === Equal) {
+      this.CONSUME(Equal);
+      defaultValue = this.SUBRULE(this.expression) ?? createPlaceholderExpression();
+    }
+
+    const startToken = consumedTypeTokens[0] ?? identifierSource;
+    return createParameterNode(identifier, typeAnnotation, defaultValue, startToken);
+  });
+
+  private functionDeclaration = this.RULE('functionDeclaration', () => {
+    let startToken: IToken | undefined;
+    let exportToken: IToken | undefined;
+
+    if (isExportKeywordToken(this.LA(1))) {
+      exportToken = this.CONSUME(IdentifierToken);
+      startToken = exportToken;
+    }
+
+    while (isFunctionModifierToken(this.LA(1))) {
+      const modifierToken = this.CONSUME(IdentifierToken);
+      startToken = startToken ?? modifierToken;
+    }
+
+    const collected = this.collectFunctionHeadTokens(1);
+    const signatureTokens = collected?.tokens ?? [];
+    const split = splitFunctionHeadTokens(signatureTokens);
+
+    const typeTokens = split.typeTokens;
+    const nameTokens = split.nameTokens;
+    const typeAnnotation = buildTypeReferenceFromTokens(typeTokens);
+
+    const consumedTypeTokens: IToken[] = [];
+    for (const token of typeTokens) {
+      consumedTypeTokens.push(this.CONSUME(token.tokenType));
+    }
+
+    const consumedNameTokens: IToken[] = [];
+    let identifier: IdentifierNode | null = null;
+    if (nameTokens.length > 0) {
+      for (const token of nameTokens) {
+        consumedNameTokens.push(this.CONSUME(token.tokenType));
+      }
+      identifier = createIdentifierFromTokens(consumedNameTokens);
+    } else {
+      const fallbackToken = this.CONSUME(IdentifierToken);
+      consumedNameTokens.push(fallbackToken);
+      identifier = createIdentifierNode(fallbackToken);
+    }
+
+    this.CONSUME(LParen);
+    let params: ParameterNode[] = [];
+    if (this.LA(1).tokenType !== RParen) {
+      params = this.SUBRULE(this.parameterList);
+    }
+    this.CONSUME(RParen);
+    const arrowToken = this.CONSUME(FatArrow);
+
+    let body: BlockStatementNode;
+    const blockIndentToken = startToken ?? consumedTypeTokens[0] ?? consumedNameTokens[0] ?? arrowToken;
+
+    if (this.LA(1).tokenType === Newline) {
+      body = this.parseIndentedBlock(tokenIndent(blockIndentToken));
+    } else {
+      const expression = this.SUBRULE(this.expression) ?? createPlaceholderExpression();
+      const endToken = this.LA(0);
+      const returnStatement = createImplicitReturnStatementNode(expression, arrowToken);
+      body = createBlockStatementNode([returnStatement], arrowToken, endToken);
+    }
+
+    const functionStartToken = blockIndentToken;
+    return createFunctionDeclarationNode(
+      identifier,
+      params,
+      body,
+      Boolean(exportToken),
+      typeAnnotation,
+      functionStartToken,
+    );
+  });
 
   private scriptDeclaration = this.RULE('scriptDeclaration', () => {
     const token = this.OR([{

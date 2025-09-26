@@ -6,6 +6,7 @@ import type {
   BreakStatementNode,
   ContinueStatementNode,
   ForStatementNode,
+  FunctionDeclarationNode,
   IdentifierNode,
   BinaryExpressionNode,
   CallExpressionNode,
@@ -15,6 +16,7 @@ import type {
   ProgramNode,
   ReturnStatementNode,
   ScriptDeclarationNode,
+  ParameterNode,
   UnaryExpressionNode,
   VariableDeclarationNode,
   WhileStatementNode,
@@ -386,5 +388,71 @@ describe('Chevrotain parser', () => {
     expect(secondUpdate.operator).toBe('+');
     expect((secondUpdate.left as IdentifierNode).name).toBe('j');
     expect(secondUpdate.right.kind).toBe('UnaryExpression');
+  });
+
+  it('parses typed function declarations with implicit return bodies', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Fn")',
+      'float compute(series float x, float y=1) => x + y',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(2);
+
+    const declaration = program.body[1] as FunctionDeclarationNode;
+    expect(declaration.kind).toBe('FunctionDeclaration');
+    expect(declaration.identifier?.name).toBe('compute');
+    expect(declaration.returnType?.name.name).toBe('float');
+
+    const [seriesParam, defaultParam] = declaration.params as [ParameterNode, ParameterNode];
+    expect(seriesParam.identifier.name).toBe('x');
+    expect(seriesParam.typeAnnotation?.name.name).toBe('series');
+    expect(seriesParam.typeAnnotation?.generics[0]?.name.name).toBe('float');
+
+    expect(defaultParam.identifier.name).toBe('y');
+    expect(defaultParam.typeAnnotation?.name.name).toBe('float');
+    expect(defaultParam.defaultValue?.kind).toBe('NumberLiteral');
+
+    const body = declaration.body as BlockStatementNode;
+    expect(body.body).toHaveLength(1);
+    const returnStatement = body.body[0] as ReturnStatementNode;
+    expect(returnStatement.kind).toBe('ReturnStatement');
+    const addition = returnStatement.argument as BinaryExpressionNode;
+    expect(addition.operator).toBe('+');
+  });
+
+  it('parses method-style function declarations with block bodies', () => {
+    const source = [
+      'method Point.move(this, dx) =>',
+      '    this.x := this.x + dx',
+      '    return this.x',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(1);
+
+    const declaration = program.body[0] as FunctionDeclarationNode;
+    expect(declaration.identifier?.name).toBe('Point.move');
+    expect(declaration.params.map((param) => param.identifier.name)).toEqual(['this', 'dx']);
+    expect(declaration.body.body).toHaveLength(2);
+
+    const assignment = declaration.body.body[0] as AssignmentStatementNode;
+    expect(assignment.kind).toBe('AssignmentStatement');
+
+    const explicitReturn = declaration.body.body[1] as ReturnStatementNode;
+    expect(explicitReturn.argument?.kind).toBe('MemberExpression');
   });
 });
