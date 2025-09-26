@@ -42,11 +42,13 @@ export const StarEqual = createToken({ name: 'StarEqual', pattern: /\*=/ });
 export const SlashEqual = createToken({ name: 'SlashEqual', pattern: /\/=/ });
 export const PercentEqual = createToken({ name: 'PercentEqual', pattern: /%=/ });
 export const ColonEqual = createToken({ name: 'ColonEqual', pattern: /:=/ });
+export const Colon = createToken({ name: 'Colon', pattern: /:/ });
 export const Plus = createToken({ name: 'Plus', pattern: /\+/ });
 export const Minus = createToken({ name: 'Minus', pattern: /-/ });
 export const Star = createToken({ name: 'Star', pattern: /\*/ });
 export const Slash = createToken({ name: 'Slash', pattern: /\// });
 export const Percent = createToken({ name: 'Percent', pattern: /%/ });
+export const Question = createToken({ name: 'Question', pattern: /\?/ });
 export const LessEqual = createToken({ name: 'LessEqual', pattern: /<=/ });
 export const GreaterEqual = createToken({ name: 'GreaterEqual', pattern: />=/ });
 export const Less = createToken({ name: 'Less', pattern: /</ });
@@ -186,11 +188,13 @@ export const AllTokens = [
   SlashEqual,
   PercentEqual,
   ColonEqual,
+  Colon,
   Plus,
   Minus,
   Star,
   Slash,
   Percent,
+  Question,
   FatArrow,
   Equal,
   And,

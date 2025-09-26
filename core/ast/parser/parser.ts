@@ -8,6 +8,7 @@ import {
   type BreakStatementNode,
   type BooleanLiteralNode,
   type CallExpressionNode,
+  type ConditionalExpressionNode,
   type FunctionDeclarationNode,
   type ContinueStatementNode,
   type ForStatementNode,
@@ -59,6 +60,7 @@ import {
   Dot,
   Equal,
   ColonEqual,
+  Colon,
   PlusEqual,
   MinusEqual,
   StarEqual,
@@ -69,6 +71,7 @@ import {
   Star,
   Slash,
   Percent,
+  Question,
   Less,
   LessEqual,
   Greater,
@@ -675,6 +678,34 @@ function createBinaryExpressionNode(
     left: leftNode,
     right: rightNode,
     ...spanFromNodes(leftNode, endToken ?? safeOperator),
+  };
+}
+
+function createConditionalExpressionNode(
+  test: ExpressionNode | undefined,
+  consequent: ExpressionNode | undefined,
+  alternate: ExpressionNode | undefined,
+  questionToken: IToken | undefined,
+  colonToken: IToken | undefined,
+  endToken: IToken | undefined,
+): ConditionalExpressionNode {
+  const testNode = test ?? createPlaceholderExpression();
+  const consequentNode = consequent ?? createPlaceholderExpression();
+  const alternateNode = alternate ?? createPlaceholderExpression();
+  const hasRealAlternate = Boolean(alternate);
+  const fallbackEndToken = ensureToken(endToken ?? colonToken ?? questionToken);
+  const endPosition = hasRealAlternate ? alternateNode.loc.end : tokenEnd(fallbackEndToken);
+  const rangeEnd = hasRealAlternate
+    ? alternateNode.range[1]
+    : (fallbackEndToken.endOffset ?? fallbackEndToken.startOffset ?? 0) + 1;
+
+  return {
+    kind: 'ConditionalExpression',
+    test: testNode,
+    consequent: consequentNode,
+    alternate: alternateNode,
+    loc: createLocation(testNode.loc.start, endPosition),
+    range: createRange(testNode.range[0], rangeEnd),
   };
 }
 
@@ -1483,7 +1514,27 @@ class PineParser extends EmbeddedActionsParser {
 
   private assignmentTarget = this.RULE('assignmentTarget', () => this.SUBRULE(this.memberExpression));
 
-  private expression = this.RULE('expression', () => this.SUBRULE(this.logicalOrExpression));
+  private expression = this.RULE('expression', () => this.SUBRULE(this.conditionalExpression));
+
+  private conditionalExpression = this.RULE('conditionalExpression', () => {
+    const test = this.SUBRULE(this.logicalOrExpression);
+    if (this.LA(1).tokenType === Question) {
+      const questionToken = this.CONSUME(Question);
+      const consequent = this.SUBRULE2(this.expression);
+      const colonToken = this.CONSUME(Colon);
+      const alternate = this.SUBRULE3(this.expression);
+      const endToken = this.LA(0);
+      return createConditionalExpressionNode(
+        test,
+        consequent,
+        alternate,
+        questionToken,
+        colonToken,
+        endToken,
+      );
+    }
+    return test;
+  });
 
   private logicalOrExpression = this.RULE('logicalOrExpression', () => {
     let expression = this.SUBRULE(this.logicalAndExpression);

@@ -10,6 +10,7 @@ import type {
   IdentifierNode,
   BinaryExpressionNode,
   CallExpressionNode,
+  ConditionalExpressionNode,
   ExpressionStatementNode,
   IfStatementNode,
   MemberExpressionNode,
@@ -169,6 +170,40 @@ describe('Chevrotain parser', () => {
     expect(sixth.left.kind).toBe('Identifier');
     expect((sixth.left as IdentifierNode).name).toBe('quux');
     expect(sixth.right?.kind).toBe('NumberLiteral');
+  });
+
+  it('parses conditional expressions with nested ternaries', () => {
+    const source = [
+      'result = condition ? foo() : otherCondition ? bar() : baz',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(1);
+
+    const assignment = program.body[0] as AssignmentStatementNode;
+    expect(assignment.kind).toBe('AssignmentStatement');
+
+    const conditional = assignment.right as ConditionalExpressionNode;
+    expect(conditional.kind).toBe('ConditionalExpression');
+    expect((conditional.test as IdentifierNode).name).toBe('condition');
+
+    const consequentCall = conditional.consequent as CallExpressionNode;
+    expect(consequentCall.kind).toBe('CallExpression');
+    expect((consequentCall.callee as IdentifierNode).name).toBe('foo');
+
+    const nestedConditional = conditional.alternate as ConditionalExpressionNode;
+    expect(nestedConditional.kind).toBe('ConditionalExpression');
+    expect((nestedConditional.test as IdentifierNode).name).toBe('otherCondition');
+
+    const nestedConsequent = nestedConditional.consequent as CallExpressionNode;
+    expect((nestedConsequent.callee as IdentifierNode).name).toBe('bar');
+    expect((nestedConditional.alternate as IdentifierNode).name).toBe('baz');
   });
 
   it('parses variable declarations with optional types and declaration keywords', () => {
