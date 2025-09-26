@@ -30,6 +30,11 @@ import {
   type SwitchCaseNode,
   type SwitchStatementNode,
   type StringLiteralNode,
+  type ImportDeclarationNode,
+  type EnumDeclarationNode,
+  type EnumMemberNode,
+  type TypeDeclarationNode,
+  type TypeFieldNode,
   type TypeReferenceNode,
   type UnaryExpressionNode,
   type VariableDeclarationKind,
@@ -49,9 +54,13 @@ import {
   Indicator,
   Strategy,
   Library,
+  Import,
+  As,
   If,
   Else,
   Switch,
+  Enum,
+  Type,
   Identifier as IdentifierToken,
   StringLiteral as StringToken,
   NumberLiteral as NumberToken,
@@ -156,6 +165,10 @@ function isExportKeywordToken(token: IToken | undefined): boolean {
     return false;
   }
   return (token.image ?? '').toLowerCase() === 'export';
+}
+
+function isTokenKeyword(token: IToken | undefined, keyword: string): boolean {
+  return (token?.image ?? '').toLowerCase() === keyword;
 }
 
 function splitFunctionHeadTokens(tokens: IToken[]): { typeTokens: IToken[]; nameTokens: IToken[] } {
@@ -857,6 +870,148 @@ function createScriptDeclarationNode(
   };
 }
 
+function createImportDeclarationNode(
+  pathToken: IToken | undefined,
+  aliasToken: IToken | undefined,
+  startToken: IToken | undefined,
+  endToken: IToken | undefined,
+): ImportDeclarationNode {
+  const path = createStringNode(pathToken);
+  const alias = createIdentifierNode(aliasToken);
+  return {
+    kind: 'ImportDeclaration',
+    path,
+    alias,
+    ...spanFromTokens(startToken ?? pathToken, endToken ?? aliasToken ?? pathToken),
+  };
+}
+
+function createEnumMemberNode(
+  identifier: IdentifierNode,
+  value: ExpressionNode | null,
+  _startToken: IToken | undefined,
+  endToken: IToken | undefined,
+): EnumMemberNode {
+  return {
+    kind: 'EnumMember',
+    identifier,
+    value,
+    ...spanFromNodes(identifier, endToken),
+  };
+}
+
+function createEnumDeclarationNode(
+  identifier: IdentifierNode,
+  members: EnumMemberNode[],
+  isExported: boolean,
+  startToken: IToken | undefined,
+  endToken: IToken | undefined,
+): EnumDeclarationNode {
+  if (members.length > 0) {
+    const first = members[0];
+    const last = members[members.length - 1];
+    const startPosition = startToken ? tokenStart(startToken) : first.loc.start;
+    const startOffset = startToken?.startOffset ?? first.range[0];
+    return {
+      kind: 'EnumDeclaration',
+      identifier,
+      members,
+      export: isExported,
+      loc: createLocation(startPosition, last.loc.end),
+      range: createRange(startOffset, last.range[1]),
+    };
+  }
+
+  const startPosition = startToken ? tokenStart(startToken) : identifier.loc.start;
+  const endPosition = endToken ? tokenEnd(endToken) : identifier.loc.end;
+  const startOffset = startToken?.startOffset ?? identifier.range[0];
+  const endOffset = endToken
+    ? (endToken.endOffset ?? endToken.startOffset ?? identifier.range[1]) + 1
+    : identifier.range[1];
+
+  return {
+    kind: 'EnumDeclaration',
+    identifier,
+    members,
+    export: isExported,
+    loc: createLocation(startPosition, endPosition),
+    range: createRange(startOffset, endOffset),
+  };
+}
+
+function createTypeFieldNode(
+  identifier: IdentifierNode,
+  typeAnnotation: TypeReferenceNode | null,
+  startToken: IToken | undefined,
+  endToken: IToken | undefined,
+): TypeFieldNode {
+  if (typeAnnotation) {
+    return {
+      kind: 'TypeField',
+      identifier,
+      typeAnnotation,
+      loc: createLocation(typeAnnotation.loc.start, identifier.loc.end),
+      range: createRange(typeAnnotation.range[0], identifier.range[1]),
+    };
+  }
+
+  if (startToken) {
+    return {
+      kind: 'TypeField',
+      identifier,
+      typeAnnotation,
+      ...spanFromTokens(startToken, endToken ?? startToken),
+    };
+  }
+
+  return {
+    kind: 'TypeField',
+    identifier,
+    typeAnnotation,
+    loc: identifier.loc,
+    range: identifier.range,
+  };
+}
+
+function createTypeDeclarationNode(
+  identifier: IdentifierNode,
+  fields: TypeFieldNode[],
+  isExported: boolean,
+  startToken: IToken | undefined,
+  endToken: IToken | undefined,
+): TypeDeclarationNode {
+  if (fields.length > 0) {
+    const first = fields[0];
+    const last = fields[fields.length - 1];
+    const startPosition = startToken ? tokenStart(startToken) : first.loc.start;
+    const startOffset = startToken?.startOffset ?? first.range[0];
+    return {
+      kind: 'TypeDeclaration',
+      identifier,
+      fields,
+      export: isExported,
+      loc: createLocation(startPosition, last.loc.end),
+      range: createRange(startOffset, last.range[1]),
+    };
+  }
+
+  const startPosition = startToken ? tokenStart(startToken) : identifier.loc.start;
+  const endPosition = endToken ? tokenEnd(endToken) : identifier.loc.end;
+  const startOffset = startToken?.startOffset ?? identifier.range[0];
+  const endOffset = endToken
+    ? (endToken.endOffset ?? endToken.startOffset ?? identifier.range[1]) + 1
+    : identifier.range[1];
+
+  return {
+    kind: 'TypeDeclaration',
+    identifier,
+    fields,
+    export: isExported,
+    loc: createLocation(startPosition, endPosition),
+    range: createRange(startOffset, endOffset),
+  };
+}
+
 function createVersionDirectiveNode(token?: IToken): VersionDirectiveNode {
   const safeToken = ensureToken(token);
   const match = /\d+/.exec(safeToken.image);
@@ -933,6 +1088,44 @@ class PineParser extends EmbeddedActionsParser {
         ALT: () => this.SUBRULE(this.scriptDeclaration),
       },
       {
+        GATE: () => {
+          if (!isExportKeywordToken(this.LA(1))) {
+            return false;
+          }
+          const next = this.nextSignificantToken(2);
+          return (
+            next.tokenType === Type ||
+            next.tokenType === Enum ||
+            isTokenKeyword(next, 'type') ||
+            isTokenKeyword(next, 'enum') ||
+            this.isFunctionDeclarationStart()
+          );
+        },
+        ALT: () => {
+          const exportToken = this.CONSUME(IdentifierToken);
+          this.MANY(() => this.CONSUME(Newline));
+          if (this.LA(1).tokenType === Type || isTokenKeyword(this.LA(1), 'type')) {
+            return this.SUBRULE(this.typeDeclaration, { ARGS: [exportToken] });
+          }
+          if (this.LA(1).tokenType === Enum || isTokenKeyword(this.LA(1), 'enum')) {
+            return this.SUBRULE(this.enumDeclaration, { ARGS: [exportToken] });
+          }
+          return this.SUBRULE(this.functionDeclaration, { ARGS: [exportToken] });
+        },
+      },
+      {
+        GATE: () => this.LA(1).tokenType === Import,
+        ALT: () => this.SUBRULE(this.importDeclaration),
+      },
+      {
+        GATE: () => this.LA(1).tokenType === Enum,
+        ALT: () => this.SUBRULE(this.enumDeclaration),
+      },
+      {
+        GATE: () => this.LA(1).tokenType === Type,
+        ALT: () => this.SUBRULE(this.typeDeclaration),
+      },
+      {
         GATE: () => this.isFunctionDeclarationStart(),
         ALT: () => this.SUBRULE(this.functionDeclaration),
       },
@@ -975,6 +1168,20 @@ class PineParser extends EmbeddedActionsParser {
       { ALT: () => this.SUBRULE(this.expressionStatement) },
     ]);
   });
+
+  private nextSignificantToken(startOffset: number): IToken {
+    let offset = startOffset;
+    while (true) {
+      const token = this.LA(offset);
+      if (token.tokenType === EOF_TOKEN) {
+        return token;
+      }
+      if (token.tokenType !== Newline) {
+        return token;
+      }
+      offset += 1;
+    }
+  }
 
   private collectDeclarationTokens(startOffset: number): { tokens: IToken[]; terminator: IToken } | null {
     const tokens: IToken[] = [];
@@ -1263,11 +1470,11 @@ class PineParser extends EmbeddedActionsParser {
     return createParameterNode(identifier, typeAnnotation, defaultValue, startToken);
   });
 
-  private functionDeclaration = this.RULE('functionDeclaration', () => {
-    let startToken: IToken | undefined;
-    let exportToken: IToken | undefined;
+  private functionDeclaration = this.RULE('functionDeclaration', (providedExport?: IToken) => {
+    let startToken: IToken | undefined = providedExport;
+    let exportToken: IToken | undefined = providedExport;
 
-    if (isExportKeywordToken(this.LA(1))) {
+    if (!exportToken && isExportKeywordToken(this.LA(1))) {
       exportToken = this.CONSUME(IdentifierToken);
       startToken = exportToken;
     }
@@ -1352,6 +1559,134 @@ class PineParser extends EmbeddedActionsParser {
 
     const scriptType = token.tokenType === Indicator ? 'indicator' : token.tokenType === Strategy ? 'strategy' : 'library';
     return createScriptDeclarationNode(scriptType, args, token, endToken);
+  });
+
+
+  private importDeclaration = this.RULE('importDeclaration', () => {
+    const importToken = this.CONSUME(Import);
+    const pathToken = this.CONSUME(StringToken);
+    this.CONSUME(As);
+    const aliasToken = this.CONSUME(IdentifierToken);
+    return createImportDeclarationNode(pathToken, aliasToken, importToken, aliasToken);
+  });
+
+  private enumDeclaration = this.RULE('enumDeclaration', (providedExport?: IToken) => {
+    let exportToken: IToken | undefined = providedExport;
+    if (!exportToken && isExportKeywordToken(this.LA(1))) {
+      exportToken = this.CONSUME(IdentifierToken);
+    }
+
+    const enumToken = this.CONSUME(Enum);
+    const identifierToken = this.CONSUME(IdentifierToken);
+    const identifier = createIdentifierNode(identifierToken);
+
+    const members: EnumMemberNode[] = [];
+    const indentToken = exportToken ?? enumToken;
+    const baseIndent = tokenIndent(indentToken);
+
+    this.MANY(() => this.CONSUME(Newline));
+
+    while (true) {
+      const next = this.LA(1);
+      if (next.tokenType === EOF_TOKEN) {
+        break;
+      }
+
+      if (next.tokenType === Newline) {
+        this.CONSUME(Newline);
+        continue;
+      }
+
+      if (tokenIndent(next) <= baseIndent) {
+        break;
+      }
+
+      const member = this.SUBRULE(this.enumMember, { ARGS: [baseIndent] });
+      members.push(member);
+
+      while (this.LA(1).tokenType === Newline) {
+        this.CONSUME(Newline);
+      }
+    }
+
+    const endToken = members.length > 0 ? this.LA(0) : identifierToken;
+    return createEnumDeclarationNode(identifier, members, Boolean(exportToken), exportToken ?? enumToken, endToken);
+  });
+
+  private enumMember = this.RULE('enumMember', (_parentIndent: number) => {
+    const identifierToken = this.CONSUME(IdentifierToken);
+    const identifier = createIdentifierNode(identifierToken);
+
+    let value: ExpressionNode | null = null;
+    let endToken: IToken | undefined = identifierToken;
+
+    if (this.LA(1).tokenType === Equal) {
+      this.CONSUME(Equal);
+      value = this.SUBRULE(this.expression);
+      endToken = this.LA(0);
+    }
+
+    return createEnumMemberNode(identifier, value, identifierToken, endToken);
+  });
+
+  private typeDeclaration = this.RULE('typeDeclaration', (providedExport?: IToken) => {
+    let exportToken: IToken | undefined = providedExport;
+    if (!exportToken && isExportKeywordToken(this.LA(1))) {
+      exportToken = this.CONSUME(IdentifierToken);
+    }
+
+    const typeToken = this.CONSUME(Type);
+    const identifierToken = this.CONSUME(IdentifierToken);
+    const identifier = createIdentifierNode(identifierToken);
+
+    const fields: TypeFieldNode[] = [];
+    const indentToken = exportToken ?? typeToken;
+    const baseIndent = tokenIndent(indentToken);
+
+    this.MANY(() => this.CONSUME(Newline));
+
+    while (true) {
+      const next = this.LA(1);
+      if (next.tokenType === EOF_TOKEN) {
+        break;
+      }
+
+      if (next.tokenType === Newline) {
+        this.CONSUME(Newline);
+        continue;
+      }
+
+      if (tokenIndent(next) <= baseIndent) {
+        break;
+      }
+
+      const field = this.SUBRULE(this.typeField);
+      fields.push(field);
+
+      while (this.LA(1).tokenType === Newline) {
+        this.CONSUME(Newline);
+      }
+    }
+
+    const endToken = fields.length > 0 ? this.LA(0) : identifierToken;
+    return createTypeDeclarationNode(identifier, fields, Boolean(exportToken), exportToken ?? typeToken, endToken);
+  });
+
+  private typeField = this.RULE('typeField', () => {
+    const collected = this.collectDeclarationTokens(1);
+    const tokens = collected?.tokens ?? [];
+    const { typeTokens } = splitDeclarationTokens(tokens);
+    const typeAnnotation = buildTypeReferenceFromTokens(typeTokens);
+
+    const consumedTypeTokens: IToken[] = [];
+    for (const token of typeTokens) {
+      consumedTypeTokens.push(this.CONSUME(token.tokenType));
+    }
+
+    const identifierToken = this.CONSUME(IdentifierToken);
+    const identifier = createIdentifierNode(identifierToken);
+    const startToken = consumedTypeTokens[0] ?? identifierToken;
+    return createTypeFieldNode(identifier, typeAnnotation, startToken, identifierToken);
   });
 
   private variableDeclaration = this.RULE('variableDeclaration', () => {

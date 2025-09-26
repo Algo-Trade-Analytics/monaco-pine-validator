@@ -508,11 +508,13 @@ export function createTypeDeclaration(
   end: number,
   lineStart = 1,
   lineEnd = lineStart,
+  isExported = false,
 ): TypeDeclarationNode {
   return {
     kind: 'TypeDeclaration',
     identifier,
     fields,
+    export: isExported,
     ...createSpan({ start, end, lineStart, lineEnd }),
   };
 }

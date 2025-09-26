@@ -214,6 +214,7 @@ export interface TypeDeclarationNode extends BaseNode {
   kind: 'TypeDeclaration';
   identifier: IdentifierNode;
   fields: TypeFieldNode[];
+  export: boolean;
 }
 
 export interface TypeFieldNode extends BaseNode {

@@ -98,6 +98,18 @@ export const Library = createToken({
   longer_alt: Identifier,
 });
 
+export const Import = createToken({
+  name: 'Import',
+  pattern: /import/,
+  longer_alt: Identifier,
+});
+
+export const As = createToken({
+  name: 'As',
+  pattern: /as/,
+  longer_alt: Identifier,
+});
+
 export const If = createToken({
   name: 'If',
   pattern: /if/,
@@ -146,6 +158,18 @@ export const Switch = createToken({
   longer_alt: Identifier,
 });
 
+export const Enum = createToken({
+  name: 'Enum',
+  pattern: /enum/,
+  longer_alt: Identifier,
+});
+
+export const Type = createToken({
+  name: 'Type',
+  pattern: /type/,
+  longer_alt: Identifier,
+});
+
 export const To = createToken({
   name: 'To',
   pattern: /to/,
@@ -168,9 +192,13 @@ export const AllTokens = [
   Indicator,
   Strategy,
   Library,
+  Import,
+  As,
   If,
   Else,
   Switch,
+  Enum,
+  Type,
   While,
   For,
   Break,

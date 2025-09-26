@@ -5,9 +5,12 @@ import type {
   BlockStatementNode,
   BreakStatementNode,
   ContinueStatementNode,
+  EnumDeclarationNode,
+  EnumMemberNode,
   ForStatementNode,
   FunctionDeclarationNode,
   IdentifierNode,
+  ImportDeclarationNode,
   IndexExpressionNode,
   BinaryExpressionNode,
   CallExpressionNode,
@@ -20,6 +23,8 @@ import type {
   ReturnStatementNode,
   ScriptDeclarationNode,
   SwitchStatementNode,
+  TypeDeclarationNode,
+  TypeFieldNode,
   ParameterNode,
   UnaryExpressionNode,
   VariableDeclarationNode,
@@ -80,6 +85,32 @@ describe('Chevrotain parser', () => {
     expect(secondArg.name?.kind).toBe('Identifier');
     expect(secondArg.name?.name).toBe('baz');
     expect(secondArg.value.kind).toBe('NumberLiteral');
+  });
+
+  it('parses import declarations with aliases', () => {
+    const source = [
+      'import "user/lib/1" as lib',
+      'lib.run()',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(2);
+
+    const importDeclaration = program.body[0] as ImportDeclarationNode;
+    expect(importDeclaration.kind).toBe('ImportDeclaration');
+    expect(importDeclaration.path.value).toBe('user/lib/1');
+    expect(importDeclaration.alias.name).toBe('lib');
+
+    const statement = program.body[1] as ExpressionStatementNode;
+    const call = statement.expression as CallExpressionNode;
+    const callee = call.callee as MemberExpressionNode;
+    expect((callee.object as IdentifierNode).name).toBe('lib');
   });
 
   it('parses empty argument lists without introducing spurious errors', () => {
@@ -314,6 +345,95 @@ describe('Chevrotain parser', () => {
     expect(seventh.initializer?.kind).toBe('Identifier');
   });
 
+  it('parses enum declarations with optional values and export modifiers', () => {
+    const source = [
+      'enum Status',
+      '    ACTIVE',
+      '    INACTIVE = 1',
+      '',
+      'export enum Mode',
+      '    AUTO',
+      '    MANUAL',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(2);
+
+    const [statusEnum, modeEnum] = program.body as [EnumDeclarationNode, EnumDeclarationNode];
+    expect(statusEnum.kind).toBe('EnumDeclaration');
+    expect(statusEnum.export).toBe(false);
+    expect(statusEnum.identifier.name).toBe('Status');
+    expect(statusEnum.members).toHaveLength(2);
+
+    const [active, inactive] = statusEnum.members as [EnumMemberNode, EnumMemberNode];
+    expect(active.identifier.name).toBe('ACTIVE');
+    expect(active.value).toBeNull();
+    expect(inactive.identifier.name).toBe('INACTIVE');
+    expect((inactive.value as NumberLiteralNode).value).toBe(1);
+
+    expect(modeEnum.kind).toBe('EnumDeclaration');
+    expect(modeEnum.export).toBe(true);
+    expect(modeEnum.identifier.name).toBe('Mode');
+    expect(modeEnum.members.map((member) => member.identifier.name)).toEqual(['AUTO', 'MANUAL']);
+  });
+
+  it('parses type declarations with typed fields and respects exports', () => {
+    const source = [
+      'type Point',
+      '    float x',
+      '    array<float> values',
+      '    series int level',
+      '',
+      'export type Vector',
+      '    float x',
+      '    float y',
+      '',
+      'method Point.new() => 0',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body.map((node) => node.kind)).toEqual([
+      'TypeDeclaration',
+      'TypeDeclaration',
+      'FunctionDeclaration',
+    ]);
+    expect(program.body).toHaveLength(3);
+
+    const pointType = program.body[0] as TypeDeclarationNode;
+    expect(pointType.kind).toBe('TypeDeclaration');
+    expect(pointType.export).toBe(false);
+    expect(pointType.fields).toHaveLength(3);
+
+    const [xField, valuesField, levelField] = pointType.fields as [TypeFieldNode, TypeFieldNode, TypeFieldNode];
+    expect(xField.identifier.name).toBe('x');
+    expect(xField.typeAnnotation?.name.name).toBe('float');
+    expect(valuesField.typeAnnotation?.name.name).toBe('array');
+    expect(valuesField.typeAnnotation?.generics[0]?.name.name).toBe('float');
+    expect(levelField.typeAnnotation?.name.name).toBe('series');
+    expect(levelField.typeAnnotation?.generics[0]?.name.name).toBe('int');
+
+    const vectorType = program.body[1] as TypeDeclarationNode;
+    expect(vectorType.export).toBe(true);
+    expect(vectorType.identifier.name).toBe('Vector');
+    expect(vectorType.fields.map((field) => field.identifier.name)).toEqual(['x', 'y']);
+
+    const method = program.body[2] as FunctionDeclarationNode;
+    expect(method.kind).toBe('FunctionDeclaration');
+    expect(method.identifier?.name).toBe('Point.new');
+  });
+
   it('parses if/else statements with indentation-based blocks', () => {
     const source = [
       'if condition',
@@ -509,6 +629,28 @@ describe('Chevrotain parser', () => {
     expect(defaultCase.consequent).toHaveLength(1);
     const defaultExpression = defaultCase.consequent[0] as ExpressionStatementNode;
     expect(defaultExpression.expression.kind).toBe('StringLiteral');
+  });
+
+  it('parses exported function declarations', () => {
+    const source = [
+      'export float compute(series float x) => x',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body.map((node) => node.kind)).toEqual(['FunctionDeclaration']);
+    expect(program.body).toHaveLength(1);
+
+    const declaration = program.body[0] as FunctionDeclarationNode;
+    expect(declaration.kind).toBe('FunctionDeclaration');
+    expect(declaration.export).toBe(true);
+    expect(declaration.identifier?.name).toBe('compute');
+    expect(declaration.returnType?.name.name).toBe('float');
   });
 
   it('parses typed function declarations with implicit return bodies', () => {
