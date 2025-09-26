@@ -126,7 +126,8 @@ export type ExpressionNode =
   | ConditionalExpressionNode
   | TupleExpressionNode
   | IndexExpressionNode
-  | MatrixLiteralNode;
+  | MatrixLiteralNode
+  | SwitchStatementNode;
 
 export type LiteralNode =
   | NumberLiteralNode

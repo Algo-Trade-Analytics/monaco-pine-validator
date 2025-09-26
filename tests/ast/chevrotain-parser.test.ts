@@ -17,6 +17,7 @@ import type {
   ProgramNode,
   ReturnStatementNode,
   ScriptDeclarationNode,
+  SwitchStatementNode,
   ParameterNode,
   UnaryExpressionNode,
   VariableDeclarationNode,
@@ -423,6 +424,51 @@ describe('Chevrotain parser', () => {
     expect(secondUpdate.operator).toBe('+');
     expect((secondUpdate.left as IdentifierNode).name).toBe('j');
     expect(secondUpdate.right.kind).toBe('UnaryExpression');
+  });
+
+  it('parses switch statements with inline and block cases', () => {
+    const source = [
+      'result = switch mode',
+      '    "long" => "buy"',
+      '    "short" =>',
+      '        foo()',
+      '        bar := 1',
+      '    => "flat"',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(1);
+
+    const assignment = program.body[0] as AssignmentStatementNode;
+    expect(assignment.right?.kind).toBe('SwitchStatement');
+
+    const switchStatement = assignment.right as SwitchStatementNode;
+    expect(switchStatement.cases).toHaveLength(3);
+
+    const [firstCase, secondCase, defaultCase] = switchStatement.cases;
+
+    expect(firstCase.test?.kind).toBe('StringLiteral');
+    expect(firstCase.consequent).toHaveLength(1);
+    const firstExpression = firstCase.consequent[0] as ExpressionStatementNode;
+    expect(firstExpression.expression.kind).toBe('StringLiteral');
+
+    expect(secondCase.test?.kind).toBe('StringLiteral');
+    expect(secondCase.consequent).toHaveLength(2);
+    const nestedCall = secondCase.consequent[0] as ExpressionStatementNode;
+    expect(nestedCall.expression.kind).toBe('CallExpression');
+    const nestedAssignment = secondCase.consequent[1] as AssignmentStatementNode;
+    expect((nestedAssignment.left as IdentifierNode).name).toBe('bar');
+
+    expect(defaultCase.test).toBeNull();
+    expect(defaultCase.consequent).toHaveLength(1);
+    const defaultExpression = defaultCase.consequent[0] as ExpressionStatementNode;
+    expect(defaultExpression.expression.kind).toBe('StringLiteral');
   });
 
   it('parses typed function declarations with implicit return bodies', () => {

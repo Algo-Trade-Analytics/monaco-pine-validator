@@ -26,6 +26,8 @@ import {
   type ScriptDeclarationNode,
   type SourceLocation,
   type StatementNode,
+  type SwitchCaseNode,
+  type SwitchStatementNode,
   type StringLiteralNode,
   type TypeReferenceNode,
   type UnaryExpressionNode,
@@ -48,6 +50,7 @@ import {
   Library,
   If,
   Else,
+  Switch,
   Identifier as IdentifierToken,
   StringLiteral as StringToken,
   NumberLiteral as NumberToken,
@@ -588,6 +591,53 @@ function createForStatementNode(
   };
 }
 
+function createSwitchStatementNode(
+  discriminant: ExpressionNode | undefined,
+  cases: SwitchCaseNode[],
+  startToken: IToken,
+  endToken: IToken | undefined,
+): SwitchStatementNode {
+  const safeDiscriminant = discriminant ?? createPlaceholderExpression();
+  const span = spanFromTokens(startToken, endToken ?? startToken);
+  return {
+    kind: 'SwitchStatement',
+    discriminant: safeDiscriminant,
+    cases,
+    ...span,
+  };
+}
+
+function createSwitchCaseNode(
+  test: ExpressionNode | null,
+  consequent: StatementNode[],
+  startToken: IToken | undefined,
+  arrowToken: IToken,
+  endToken: IToken | undefined,
+): SwitchCaseNode {
+  const safeStartToken = ensureToken(startToken, arrowToken);
+  const startPosition = test && test.loc ? test.loc.start : tokenStart(safeStartToken);
+  const startOffset = test && test.range ? test.range[0] : safeStartToken.startOffset ?? 0;
+  if (consequent.length > 0) {
+    const last = consequent[consequent.length - 1];
+    return {
+      kind: 'SwitchCase',
+      test,
+      consequent,
+      loc: createLocation(startPosition, last.loc.end),
+      range: createRange(startOffset, last.range[1]),
+    };
+  }
+
+  const safeEnd = ensureToken(endToken, arrowToken);
+  return {
+    kind: 'SwitchCase',
+    test,
+    consequent,
+    loc: createLocation(startPosition, tokenEnd(safeEnd)),
+    range: createRange(startOffset, (safeEnd.endOffset ?? safeEnd.startOffset ?? 0) + 1),
+  };
+}
+
 function createReturnStatementNode(
   token: IToken,
   argument: ExpressionNode | null,
@@ -879,6 +929,10 @@ class PineParser extends EmbeddedActionsParser {
       {
         GATE: () => this.LA(1).tokenType === While,
         ALT: () => this.SUBRULE(this.whileStatement),
+      },
+      {
+        GATE: () => this.LA(1).tokenType === Switch,
+        ALT: () => this.SUBRULE(this.switchStatement),
       },
       {
         GATE: () => this.LA(1).tokenType === Return,
@@ -1417,6 +1471,29 @@ class PineParser extends EmbeddedActionsParser {
     return createForStatementNode(initializer, test, update, body, forToken, endToken);
   });
 
+  private switchStatement = this.RULE('switchStatement', () => this.SUBRULE(this.switchExpression));
+
+  private switchExpression = this.RULE('switchExpression', () => {
+    const switchToken = this.CONSUME(Switch);
+    return this.parseSwitchStructure(switchToken);
+  });
+
+  private switchCase = this.RULE('switchCase', () => {
+    const startToken = this.LA(1);
+    let test: ExpressionNode | null = null;
+
+    if (startToken.tokenType === FatArrow) {
+      const arrowToken = this.CONSUME(FatArrow);
+      const { statements, endToken } = this.parseSwitchCaseConsequent(tokenIndent(startToken));
+      return createSwitchCaseNode(test, statements, startToken, arrowToken, endToken);
+    }
+
+    test = this.SUBRULE(this.expression);
+    const arrowToken = this.CONSUME(FatArrow);
+    const { statements, endToken } = this.parseSwitchCaseConsequent(tokenIndent(startToken));
+    return createSwitchCaseNode(test, statements, startToken, arrowToken, endToken);
+  });
+
   private whileStatement = this.RULE('whileStatement', () => {
     const whileToken = this.CONSUME(While);
     const test = this.SUBRULE(this.expression) ?? createPlaceholderExpression();
@@ -1445,6 +1522,97 @@ class PineParser extends EmbeddedActionsParser {
     const token = this.CONSUME(Continue);
     return createContinueStatementNode(token);
   });
+
+  private parseSwitchCaseConsequent(caseIndent: number): { statements: StatementNode[]; endToken: IToken | undefined } {
+    const statements: StatementNode[] = [];
+
+    const nextTokenType = this.LA(1).tokenType;
+
+    if (nextTokenType === Newline) {
+      const block = this.parseIndentedBlock(caseIndent);
+      statements.push(...block.body);
+      return { statements, endToken: this.LA(0) };
+    }
+
+    if (this.isStatementTerminator(nextTokenType)) {
+      return { statements, endToken: this.LA(0) };
+    }
+
+    const expression = this.SUBRULE(this.expression);
+    statements.push(createExpressionStatementNode(expression));
+    return { statements, endToken: this.LA(0) };
+  }
+
+  private parseSwitchStructure(switchToken: IToken): SwitchStatementNode {
+    const discriminant = this.SUBRULE(this.expression) ?? createPlaceholderExpression();
+    let indent = tokenIndent(switchToken);
+    const cases: SwitchCaseNode[] = [];
+
+    let lastToken: IToken | undefined;
+
+    if (this.LA(1).tokenType === Newline) {
+      lastToken = this.CONSUME(Newline);
+    }
+
+    let lookaheadOffset = 1;
+    let lookahead = this.LA(lookaheadOffset);
+    while (lookahead.tokenType === Newline) {
+      lookaheadOffset += 1;
+      lookahead = this.LA(lookaheadOffset);
+    }
+    if (lookahead.tokenType !== EOF_TOKEN) {
+      const lookaheadIndent = tokenIndent(lookahead);
+      if (lookaheadIndent <= indent) {
+        indent = Math.max(0, lookaheadIndent - 1);
+      }
+    }
+
+    let shouldBreak = false;
+    while (!shouldBreak) {
+      let next = this.LA(1);
+
+      while (next.tokenType === Newline) {
+        let innerOffset = 2;
+        let innerLookahead = this.LA(innerOffset);
+        while (innerLookahead.tokenType === Newline) {
+          innerOffset += 1;
+          innerLookahead = this.LA(innerOffset);
+        }
+
+        if (innerLookahead.tokenType === EOF_TOKEN) {
+          const newlineToken = this.CONSUME(Newline);
+          lastToken = newlineToken;
+          next = this.LA(1);
+          continue;
+        }
+
+        if (tokenIndent(innerLookahead) <= indent) {
+          shouldBreak = true;
+          break;
+        }
+
+        const newlineToken = this.CONSUME(Newline);
+        lastToken = newlineToken;
+        next = this.LA(1);
+      }
+
+      if (shouldBreak) {
+        break;
+      }
+
+      next = this.LA(1);
+      if (next.tokenType === EOF_TOKEN || tokenIndent(next) <= indent) {
+        break;
+      }
+
+      const caseNode = this.SUBRULE(this.switchCase);
+      cases.push(caseNode);
+      lastToken = this.LA(0);
+    }
+
+    const endToken = this.LA(0) ?? lastToken ?? switchToken;
+    return createSwitchStatementNode(discriminant, cases, switchToken, endToken);
+  }
 
   private parseIndentedBlock(indent: number): BlockStatementNode {
     const statements: StatementNode[] = [];
@@ -1718,6 +1886,8 @@ class PineParser extends EmbeddedActionsParser {
         return this.createLiteralFromToken(this.CONSUME(False));
       case NaToken:
         return this.createLiteralFromToken(this.CONSUME(NaToken));
+      case Switch:
+        return this.SUBRULE(this.switchExpression);
       case LParen: {
         this.CONSUME(LParen);
         const expression = this.SUBRULE(this.expression);

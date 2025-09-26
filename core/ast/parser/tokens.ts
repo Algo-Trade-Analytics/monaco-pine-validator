@@ -138,6 +138,12 @@ export const Return = createToken({
   longer_alt: Identifier,
 });
 
+export const Switch = createToken({
+  name: 'Switch',
+  pattern: /switch/,
+  longer_alt: Identifier,
+});
+
 export const To = createToken({
   name: 'To',
   pattern: /to/,
@@ -162,6 +168,7 @@ export const AllTokens = [
   Library,
   If,
   Else,
+  Switch,
   While,
   For,
   Break,
