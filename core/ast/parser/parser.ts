@@ -16,6 +16,7 @@ import {
   type ExpressionStatementNode,
   type IfStatementNode,
   type IdentifierNode,
+  type IndexExpressionNode,
   type MemberExpressionNode,
   type NullLiteralNode,
   type NumberLiteralNode,
@@ -59,6 +60,8 @@ import {
   NaToken,
   LParen,
   RParen,
+  LBracket,
+  RBracket,
   Comma,
   Dot,
   Equal,
@@ -713,6 +716,21 @@ function createMemberExpressionNode(
   };
 }
 
+function createIndexExpressionNode(
+  object: ExpressionNode | undefined,
+  index: ExpressionNode | undefined,
+  closingToken: IToken | undefined,
+): IndexExpressionNode {
+  const safeObject = object ?? createPlaceholderExpression();
+  const safeIndex = index ?? createPlaceholderExpression();
+  return {
+    kind: 'IndexExpression',
+    object: safeObject,
+    index: safeIndex,
+    ...spanFromNodes(safeObject, closingToken),
+  };
+}
+
 function createBinaryExpressionNode(
   left: ExpressionNode | undefined,
   operatorToken: IToken | undefined,
@@ -1171,6 +1189,26 @@ class PineParser extends EmbeddedActionsParser {
           return false;
         }
         offset += 1;
+        continue;
+      }
+
+      if (tokenType === LBracket) {
+        offset += 1;
+        let bracketDepth = 1;
+        while (bracketDepth > 0) {
+          const inner = this.LA(offset);
+          const innerType = inner.tokenType;
+
+          if (innerType === LBracket) {
+            bracketDepth += 1;
+          } else if (innerType === RBracket) {
+            bracketDepth -= 1;
+          } else if (innerType === EOF_TOKEN || innerType === Newline) {
+            return false;
+          }
+
+          offset += 1;
+        }
         continue;
       }
 
@@ -1824,6 +1862,17 @@ class PineParser extends EmbeddedActionsParser {
             expression = createMemberExpressionNode(expression, property, propertyToken);
           },
         },
+        {
+          ALT: () => {
+            const lBracket = this.CONSUME(LBracket);
+            let indexExpression: ExpressionNode | undefined;
+            if (this.LA(1).tokenType !== RBracket) {
+              indexExpression = this.SUBRULE2(this.expression);
+            }
+            const rBracket = this.CONSUME(RBracket);
+            expression = createIndexExpressionNode(expression, indexExpression, rBracket ?? lBracket);
+          },
+        },
       ]);
     });
 
@@ -1833,10 +1882,27 @@ class PineParser extends EmbeddedActionsParser {
   private memberExpression = this.RULE('memberExpression', () => {
     let expression = this.SUBRULE(this.primaryExpression);
     this.MANY(() => {
-      this.CONSUME(Dot);
-      const propertyToken = this.CONSUME(IdentifierToken);
-      const property = createIdentifierNode(propertyToken);
-      expression = createMemberExpressionNode(expression, property, propertyToken);
+      this.OR([
+        {
+          ALT: () => {
+            this.CONSUME(Dot);
+            const propertyToken = this.CONSUME(IdentifierToken);
+            const property = createIdentifierNode(propertyToken);
+            expression = createMemberExpressionNode(expression, property, propertyToken);
+          },
+        },
+        {
+          ALT: () => {
+            const lBracket = this.CONSUME(LBracket);
+            let indexExpression: ExpressionNode | undefined;
+            if (this.LA(1).tokenType !== RBracket) {
+              indexExpression = this.SUBRULE2(this.expression);
+            }
+            const rBracket = this.CONSUME(RBracket);
+            expression = createIndexExpressionNode(expression, indexExpression, rBracket ?? lBracket);
+          },
+        },
+      ]);
     });
     return expression;
   });

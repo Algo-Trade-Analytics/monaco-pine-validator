@@ -28,6 +28,8 @@ export const LineComment = createToken({
 
 export const LParen = createToken({ name: 'LParen', pattern: /\(/ });
 export const RParen = createToken({ name: 'RParen', pattern: /\)/ });
+export const LBracket = createToken({ name: 'LBracket', pattern: /\[/ });
+export const RBracket = createToken({ name: 'RBracket', pattern: /\]/ });
 export const Comma = createToken({ name: 'Comma', pattern: /,/ });
 export const Dot = createToken({ name: 'Dot', pattern: /\./ });
 
@@ -181,6 +183,8 @@ export const AllTokens = [
   NaToken,
   LParen,
   RParen,
+  LBracket,
+  RBracket,
   Comma,
   Dot,
   LessEqual,

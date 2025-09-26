@@ -8,12 +8,14 @@ import type {
   ForStatementNode,
   FunctionDeclarationNode,
   IdentifierNode,
+  IndexExpressionNode,
   BinaryExpressionNode,
   CallExpressionNode,
   ConditionalExpressionNode,
   ExpressionStatementNode,
   IfStatementNode,
   MemberExpressionNode,
+  NumberLiteralNode,
   ProgramNode,
   ReturnStatementNode,
   ScriptDeclarationNode,
@@ -171,6 +173,44 @@ describe('Chevrotain parser', () => {
     expect(sixth.left.kind).toBe('Identifier');
     expect((sixth.left as IdentifierNode).name).toBe('quux');
     expect(sixth.right?.kind).toBe('NumberLiteral');
+  });
+
+  it('parses index expressions in assignment targets and nested chains', () => {
+    const source = [
+      'close[1] := 0',
+      'result = foo[bar[2]]',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(2);
+
+    const first = program.body[0] as AssignmentStatementNode;
+    expect(first.kind).toBe('AssignmentStatement');
+    const indexedLeft = first.left as IndexExpressionNode;
+    expect(indexedLeft.kind).toBe('IndexExpression');
+    expect((indexedLeft.object as IdentifierNode).name).toBe('close');
+    const leftIndex = indexedLeft.index as NumberLiteralNode;
+    expect(leftIndex.kind).toBe('NumberLiteral');
+    expect(leftIndex.value).toBe(1);
+    expect((first.right as NumberLiteralNode).value).toBe(0);
+
+    const second = program.body[1] as AssignmentStatementNode;
+    expect((second.left as IdentifierNode).name).toBe('result');
+    const outerIndex = second.right as IndexExpressionNode;
+    expect(outerIndex.kind).toBe('IndexExpression');
+    expect((outerIndex.object as IdentifierNode).name).toBe('foo');
+    const nestedIndex = outerIndex.index as IndexExpressionNode;
+    expect(nestedIndex.kind).toBe('IndexExpression');
+    expect((nestedIndex.object as IdentifierNode).name).toBe('bar');
+    const nestedLiteral = nestedIndex.index as NumberLiteralNode;
+    expect(nestedLiteral.kind).toBe('NumberLiteral');
+    expect(nestedLiteral.value).toBe(2);
   });
 
   it('parses conditional expressions with nested ternaries', () => {
