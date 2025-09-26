@@ -22,6 +22,7 @@ import {
   type NullLiteralNode,
   type NumberLiteralNode,
   type ParameterNode,
+  type CompilerAnnotationNode,
   type ProgramNode,
   type Range,
   type RepeatStatementNode,
@@ -53,6 +54,7 @@ import {
   AllTokens,
   PineLexer,
   VersionDirective,
+  CompilerAnnotation,
   Newline,
   Indicator,
   Strategy,
@@ -112,6 +114,39 @@ import {
 } from './tokens';
 
 const EOF_TOKEN = EOF;
+
+type AnnotatableStatementNode =
+  | ScriptDeclarationNode
+  | FunctionDeclarationNode
+  | TypeDeclarationNode
+  | EnumDeclarationNode
+  | VariableDeclarationNode;
+
+function isAnnotatableStatement(node: StatementNode): node is AnnotatableStatementNode {
+  switch (node.kind) {
+    case 'ScriptDeclaration':
+    case 'FunctionDeclaration':
+    case 'TypeDeclaration':
+    case 'EnumDeclaration':
+    case 'VariableDeclaration':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function attachCompilerAnnotations(
+  node: StatementNode,
+  annotations: CompilerAnnotationNode[],
+): void {
+  if (annotations.length === 0) {
+    return;
+  }
+
+  if (isAnnotatableStatement(node)) {
+    node.annotations.push(...annotations);
+  }
+}
 
 function isDeclarationKeywordToken(token: IToken | undefined): boolean {
   if (!token) {
@@ -444,6 +479,7 @@ function createFunctionDeclarationNode(
     body,
     export: isExported,
     returnType,
+    annotations: [],
     loc: createLocation(startPosition, body.loc.end),
     range: createRange(startOffset, body.range[1]),
   };
@@ -872,6 +908,7 @@ function createVariableDeclarationNode(
     identifier,
     typeAnnotation,
     initializer: initializer ?? null,
+    annotations: [],
     loc: createLocation(tokenStart(safeStart), endNode.loc.end),
     range: createRange(safeStart.startOffset ?? 0, endNode.range[1]),
   };
@@ -914,6 +951,7 @@ function createScriptDeclarationNode(
     scriptType: type,
     identifier: null,
     arguments: args,
+    annotations: [],
     ...spanFromTokens(start, end),
   };
 }
@@ -965,6 +1003,7 @@ function createEnumDeclarationNode(
       identifier,
       members,
       export: isExported,
+      annotations: [],
       loc: createLocation(startPosition, last.loc.end),
       range: createRange(startOffset, last.range[1]),
     };
@@ -982,6 +1021,7 @@ function createEnumDeclarationNode(
     identifier,
     members,
     export: isExported,
+    annotations: [],
     loc: createLocation(startPosition, endPosition),
     range: createRange(startOffset, endOffset),
   };
@@ -1038,6 +1078,7 @@ function createTypeDeclarationNode(
       identifier,
       fields,
       export: isExported,
+      annotations: [],
       loc: createLocation(startPosition, last.loc.end),
       range: createRange(startOffset, last.range[1]),
     };
@@ -1055,6 +1096,7 @@ function createTypeDeclarationNode(
     identifier,
     fields,
     export: isExported,
+    annotations: [],
     loc: createLocation(startPosition, endPosition),
     range: createRange(startOffset, endOffset),
   };
@@ -1067,6 +1109,20 @@ function createVersionDirectiveNode(token?: IToken): VersionDirectiveNode {
   return {
     kind: 'VersionDirective',
     version,
+    ...spanFromTokens(safeToken, safeToken),
+  };
+}
+
+function createCompilerAnnotationNode(token?: IToken): CompilerAnnotationNode {
+  const safeToken = ensureToken(token);
+  const image = safeToken.image ?? '';
+  const match = image.match(/^\/\/\s*@([A-Za-z_][A-Za-z0-9_]*)(.*)$/);
+  const name = match?.[1] ?? '';
+  const value = match?.[2]?.trim() ?? '';
+  return {
+    kind: 'CompilerAnnotation',
+    name,
+    value,
     ...spanFromTokens(safeToken, safeToken),
   };
 }
@@ -1114,7 +1170,17 @@ class PineParser extends EmbeddedActionsParser {
     this.MANY4(() => this.CONSUME3(Newline));
 
     this.MANY5(() => {
-      body.push(this.SUBRULE(this.statement));
+      const annotations: CompilerAnnotationNode[] = [];
+
+      this.MANY7(() => {
+        const annotationToken = this.CONSUME(CompilerAnnotation);
+        annotations.push(createCompilerAnnotationNode(annotationToken));
+        this.MANY8(() => this.CONSUME5(Newline));
+      });
+
+      const statementNode = this.SUBRULE(this.statement);
+      attachCompilerAnnotations(statementNode, annotations);
+      body.push(statementNode);
       this.MANY6(() => this.CONSUME4(Newline));
     });
 
@@ -1232,7 +1298,7 @@ class PineParser extends EmbeddedActionsParser {
       if (token.tokenType === EOF_TOKEN) {
         return token;
       }
-      if (token.tokenType !== Newline) {
+      if (token.tokenType !== Newline && token.tokenType !== CompilerAnnotation) {
         return token;
       }
       offset += 1;
@@ -2186,15 +2252,42 @@ class PineParser extends EmbeddedActionsParser {
         break;
       }
 
+      const annotations: CompilerAnnotationNode[] = [];
+      while (this.LA(1).tokenType === CompilerAnnotation) {
+        const annotationToken = this.CONSUME(CompilerAnnotation);
+        annotations.push(createCompilerAnnotationNode(annotationToken));
+        lastToken = annotationToken;
+
+        while (this.LA(1).tokenType === Newline) {
+          const newlineToken = this.CONSUME(Newline);
+          lastToken = newlineToken;
+          const lookahead = this.LA(1);
+          if (lookahead.tokenType === EOF_TOKEN || tokenIndent(lookahead) <= indent) {
+            shouldBreak = true;
+            break;
+          }
+        }
+
+        if (shouldBreak) {
+          break;
+        }
+      }
+
+      if (shouldBreak) {
+        break;
+      }
+
       next = this.LA(1);
       if (next.tokenType === EOF_TOKEN || tokenIndent(next) <= indent) {
         break;
       }
 
+      const statementStartToken = this.LA(1);
       const statement = this.SUBRULE(this.statement);
       statements.push(statement);
-      firstStatementToken = firstStatementToken ?? next;
+      firstStatementToken = firstStatementToken ?? statementStartToken;
       lastToken = this.LA(0);
+      attachCompilerAnnotations(statement, annotations);
     }
 
     return createBlockStatementNode(

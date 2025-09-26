@@ -17,7 +17,15 @@ export const VersionDirective = createToken({
   // Matches //@version=5 style directives. We intentionally keep this token
   // distinct from general comments so the parser can promote it to a dedicated
   // AST node without re-tokenising.
-  pattern: /\/\/\s*@version\s*=\s*\d+/, 
+  pattern: /\/\/\s*@version\s*=\s*\d+/,
+});
+
+export const CompilerAnnotation = createToken({
+  name: 'CompilerAnnotation',
+  // Captures Pine compiler annotations such as //@function, //@param, etc. The
+  // version directive is handled by a dedicated token above, so we exclude it
+  // here via a negative lookahead.
+  pattern: /\/\/\s*@(?!(?:version)\b)[A-Za-z_][A-Za-z0-9_]*(?:[^\n]*)?/,
 });
 
 export const LineComment = createToken({
@@ -198,6 +206,7 @@ export const AllTokens = [
   WhiteSpace,
   Newline,
   VersionDirective,
+  CompilerAnnotation,
   LineComment,
   StringLiteral,
   NumberLiteral,

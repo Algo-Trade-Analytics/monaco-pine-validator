@@ -844,7 +844,7 @@ describe('Chevrotain parser', () => {
       expect(test.name).toBe('bar');
     });
 
-    it.skip('parses compiler annotations preceding declarations', () => {
+    it('parses compiler annotations preceding declarations', () => {
       const source = [
         '//@function foo',
         '//@param value The input value.',
@@ -856,6 +856,22 @@ describe('Chevrotain parser', () => {
 
       expect(diagnostics.syntaxErrors).toHaveLength(0);
       expect(ast).not.toBeNull();
+
+      const program = ast as ProgramNode;
+      expect(program.body).toHaveLength(1);
+
+      const declaration = program.body[0] as FunctionDeclarationNode;
+      expect(declaration.kind).toBe('FunctionDeclaration');
+      expect(declaration.annotations).toHaveLength(2);
+
+      const [functionAnnotation, paramAnnotation] = declaration.annotations;
+      expect(functionAnnotation.kind).toBe('CompilerAnnotation');
+      expect(functionAnnotation.name).toBe('function');
+      expect(functionAnnotation.value).toBe('foo');
+
+      expect(paramAnnotation.kind).toBe('CompilerAnnotation');
+      expect(paramAnnotation.name).toBe('param');
+      expect(paramAnnotation.value).toBe('value The input value.');
     });
 
     it.skip('parses null-coalescing ternary sugar once syntax is confirmed', () => {

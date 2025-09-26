@@ -48,6 +48,7 @@ export type NodeKind =
   | 'TupleExpression'
   | 'IndexExpression'
   | 'MatrixLiteral'
+  | 'CompilerAnnotation'
   | 'Identifier'
   | 'NumberLiteral'
   | 'StringLiteral'
@@ -89,6 +90,7 @@ export type Node =
   | TupleExpressionNode
   | IndexExpressionNode
   | MatrixLiteralNode
+  | CompilerAnnotationNode
   | IdentifierNode
   | NumberLiteralNode
   | StringLiteralNode
@@ -156,6 +158,7 @@ export interface ScriptDeclarationNode extends BaseNode {
   scriptType: 'indicator' | 'strategy' | 'library';
   identifier: IdentifierNode | null;
   arguments: ArgumentNode[];
+  annotations: CompilerAnnotationNode[];
 }
 
 export interface ImportDeclarationNode extends BaseNode {
@@ -187,6 +190,7 @@ export interface VariableDeclarationNode extends BaseNode {
   identifier: IdentifierNode;
   typeAnnotation: TypeReferenceNode | null;
   initializer: ExpressionNode | null;
+  annotations: CompilerAnnotationNode[];
 }
 
 export interface AssignmentStatementNode extends BaseNode {
@@ -211,6 +215,7 @@ export interface EnumDeclarationNode extends BaseNode {
   identifier: IdentifierNode;
   members: EnumMemberNode[];
   export: boolean;
+  annotations: CompilerAnnotationNode[];
 }
 
 export interface TypeDeclarationNode extends BaseNode {
@@ -218,6 +223,7 @@ export interface TypeDeclarationNode extends BaseNode {
   identifier: IdentifierNode;
   fields: TypeFieldNode[];
   export: boolean;
+  annotations: CompilerAnnotationNode[];
 }
 
 export interface TypeFieldNode extends BaseNode {
@@ -233,6 +239,7 @@ export interface FunctionDeclarationNode extends BaseNode {
   body: BlockStatementNode;
   export: boolean;
   returnType: TypeReferenceNode | null;
+  annotations: CompilerAnnotationNode[];
 }
 
 export interface ParameterNode extends BaseNode {
@@ -376,6 +383,12 @@ export interface CommentNode extends BaseNode {
   kind: 'Comment';
   value: string;
   style: 'line' | 'block';
+}
+
+export interface CompilerAnnotationNode extends BaseNode {
+  kind: 'CompilerAnnotation';
+  name: string;
+  value: string;
 }
 
 export function createPosition(line = 1, column = 1, offset = 0): Position {

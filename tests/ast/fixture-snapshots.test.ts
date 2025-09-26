@@ -14,6 +14,7 @@ describe('AST fixtures', () => {
       {
         "body": [
           {
+            "annotations": [],
             "arguments": [
               {
                 "kind": "Argument",
@@ -116,6 +117,7 @@ describe('AST fixtures', () => {
             "scriptType": "indicator",
           },
           {
+            "annotations": [],
             "body": {
               "body": [
                 {
@@ -410,6 +412,7 @@ describe('AST fixtures', () => {
       {
         "body": [
           {
+            "annotations": [],
             "declarationKind": "var",
             "identifier": {
               "kind": "Identifier",
@@ -511,6 +514,7 @@ describe('AST fixtures', () => {
             "typeAnnotation": null,
           },
           {
+            "annotations": [],
             "declarationKind": "var",
             "identifier": {
               "kind": "Identifier",
@@ -802,6 +806,7 @@ describe('AST fixtures', () => {
             "body": {
               "body": [
                 {
+                  "annotations": [],
                   "declarationKind": "var",
                   "identifier": {
                     "kind": "Identifier",
@@ -981,6 +986,7 @@ describe('AST fixtures', () => {
               ],
             },
             "initializer": {
+              "annotations": [],
               "declarationKind": "var",
               "identifier": {
                 "kind": "Identifier",
