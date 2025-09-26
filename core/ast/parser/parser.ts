@@ -17,6 +17,7 @@ import {
   type IfStatementNode,
   type IdentifierNode,
   type IndexExpressionNode,
+  type MatrixLiteralNode,
   type MemberExpressionNode,
   type NullLiteralNode,
   type NumberLiteralNode,
@@ -30,6 +31,7 @@ import {
   type SwitchCaseNode,
   type SwitchStatementNode,
   type StringLiteralNode,
+  type TupleExpressionNode,
   type ImportDeclarationNode,
   type EnumDeclarationNode,
   type EnumMemberNode,
@@ -744,6 +746,34 @@ function createIndexExpressionNode(
   };
 }
 
+function createTupleExpressionNode(
+  elements: (ExpressionNode | null)[],
+  startToken: IToken | undefined,
+  endToken: IToken | undefined,
+): TupleExpressionNode {
+  const safeStart = ensureToken(startToken);
+  const safeEnd = ensureToken(endToken, safeStart);
+  return {
+    kind: 'TupleExpression',
+    elements,
+    ...spanFromTokens(safeStart, safeEnd),
+  };
+}
+
+function createMatrixLiteralNode(
+  rows: ExpressionNode[][],
+  startToken: IToken | undefined,
+  endToken: IToken | undefined,
+): MatrixLiteralNode {
+  const safeStart = ensureToken(startToken);
+  const safeEnd = ensureToken(endToken, safeStart);
+  return {
+    kind: 'MatrixLiteral',
+    rows,
+    ...spanFromTokens(safeStart, safeEnd),
+  };
+}
+
 function createBinaryExpressionNode(
   left: ExpressionNode | undefined,
   operatorToken: IToken | undefined,
@@ -1162,6 +1192,10 @@ class PineParser extends EmbeddedActionsParser {
         ALT: () => this.SUBRULE(this.variableDeclaration),
       },
       {
+        GATE: () => this.LA(1).tokenType === LBracket && this.isTupleAssignmentStart(),
+        ALT: () => this.SUBRULE(this.tupleAssignmentStatement),
+      },
+      {
         GATE: () => this.isAssignmentStart(),
         ALT: () => this.SUBRULE(this.assignmentStatement),
       },
@@ -1366,8 +1400,81 @@ class PineParser extends EmbeddedActionsParser {
     return identifierCount >= 2;
   }
 
+  private isTupleAssignmentStart(): boolean {
+    if (this.LA(1).tokenType !== LBracket) {
+      return false;
+    }
+
+    let offset = 2;
+    let depth = 1;
+
+    while (depth > 0) {
+      const token = this.LA(offset);
+      const tokenType = token.tokenType;
+
+      if (tokenType === LBracket) {
+        depth += 1;
+      } else if (tokenType === RBracket) {
+        depth -= 1;
+      } else if (tokenType === EOF_TOKEN) {
+        return false;
+      }
+
+      offset += 1;
+    }
+
+    while (this.LA(offset).tokenType === Newline) {
+      offset += 1;
+    }
+
+    const terminator = this.LA(offset).tokenType;
+    return (
+      terminator === Equal ||
+      terminator === ColonEqual ||
+      terminator === PlusEqual ||
+      terminator === MinusEqual ||
+      terminator === StarEqual ||
+      terminator === SlashEqual ||
+      terminator === PercentEqual
+    );
+  }
+
   private isAssignmentStart(): boolean {
     const first = this.LA(1);
+    if (first.tokenType === LBracket) {
+      let offset = 2;
+      let depth = 1;
+      while (depth > 0) {
+        const token = this.LA(offset);
+        const tokenType = token.tokenType;
+
+        if (tokenType === LBracket) {
+          depth += 1;
+        } else if (tokenType === RBracket) {
+          depth -= 1;
+        } else if (tokenType === EOF_TOKEN) {
+          return false;
+        }
+
+        offset += 1;
+      }
+
+    while (this.LA(offset).tokenType === Newline) {
+      offset += 1;
+    }
+
+    const terminator = this.LA(offset).tokenType;
+    return (
+      terminator === Equal ||
+      terminator === ColonEqual ||
+      terminator === PlusEqual ||
+        terminator === MinusEqual ||
+        terminator === StarEqual ||
+        terminator === SlashEqual ||
+        terminator === PercentEqual
+      );
+    }
+
     if (first.tokenType !== IdentifierToken) {
       return false;
     }
@@ -1736,6 +1843,22 @@ class PineParser extends EmbeddedActionsParser {
     return createExpressionStatementNode(expression);
   });
 
+  private tupleAssignmentStatement = this.RULE('tupleAssignmentStatement', () => {
+    const left = this.SUBRULE(this.bracketExpression);
+    const operator = this.OR([
+      { ALT: () => this.CONSUME(Equal) },
+      { ALT: () => this.CONSUME(ColonEqual) },
+      { ALT: () => this.CONSUME(PlusEqual) },
+      { ALT: () => this.CONSUME(MinusEqual) },
+      { ALT: () => this.CONSUME(StarEqual) },
+      { ALT: () => this.CONSUME(SlashEqual) },
+      { ALT: () => this.CONSUME(PercentEqual) },
+    ]);
+    const right = this.SUBRULE(this.expression);
+    const endToken = this.LA(0);
+    return createAssignmentStatementNode(left, right, operator, endToken);
+  });
+
   private assignmentStatement = this.RULE('assignmentStatement', () => {
     const left = this.SUBRULE(this.assignmentTarget);
     const operator = this.OR([
@@ -2053,7 +2176,12 @@ class PineParser extends EmbeddedActionsParser {
     return tokenType === Newline || tokenType === EOF_TOKEN || tokenType === Else;
   }
 
-  private assignmentTarget = this.RULE('assignmentTarget', () => this.SUBRULE(this.memberExpression));
+  private assignmentTarget = this.RULE('assignmentTarget', () => {
+    if (this.LA(1).tokenType === LBracket) {
+      return this.SUBRULE(this.bracketExpression);
+    }
+    return this.SUBRULE(this.memberExpression);
+  });
 
   private expression = this.RULE('expression', () => this.SUBRULE(this.conditionalExpression));
 
@@ -2272,6 +2400,82 @@ class PineParser extends EmbeddedActionsParser {
     return createArgumentNode(null, value, start, end);
   });
 
+  private bracketExpression = this.RULE('bracketExpression', (): ExpressionNode => {
+    const lBracket = this.CONSUME(LBracket);
+    const elements: (ExpressionNode | null)[] = [];
+    let expectElement = true;
+    let hasParsedElement = false;
+
+    while (true) {
+      const next = this.LA(1);
+      const tokenType = next.tokenType;
+
+      if (tokenType === RBracket || tokenType === EOF_TOKEN) {
+        break;
+      }
+
+      if (tokenType === Newline) {
+        this.CONSUME(Newline);
+        continue;
+      }
+
+      if (tokenType === Comma) {
+        this.CONSUME(Comma);
+        if (expectElement) {
+          elements.push(null);
+        }
+        expectElement = true;
+        continue;
+      }
+
+      let element: ExpressionNode | undefined;
+      if (!hasParsedElement) {
+        element = this.SUBRULE(this.expression);
+        hasParsedElement = true;
+      } else {
+        element = this.SUBRULE2(this.expression);
+      }
+      elements.push(element);
+      expectElement = false;
+
+      if (this.LA(1).tokenType === Comma) {
+        this.CONSUME(Comma);
+        expectElement = true;
+      } else {
+        expectElement = false;
+        break;
+      }
+    }
+
+    if (expectElement && elements.length > 0 && this.LA(1).tokenType === RBracket) {
+      elements.push(null);
+    }
+
+    const rBracket = this.CONSUME(RBracket);
+
+    if (elements.length === 0) {
+      return createTupleExpressionNode(elements, lBracket, rBracket);
+    }
+
+    const tuple = createTupleExpressionNode(elements, lBracket, rBracket);
+    const hasNull = elements.some((element) => element === null);
+
+    if (!hasNull) {
+      const tupleRows = elements.filter((element): element is TupleExpressionNode => element?.kind === 'TupleExpression');
+      if (
+        tupleRows.length === elements.length &&
+        tupleRows.every((row) => row.elements.every((child) => child !== null))
+      ) {
+        const rows = tupleRows.map((row) =>
+          row.elements.map((child) => child ?? createPlaceholderExpression()),
+        );
+        return createMatrixLiteralNode(rows, lBracket, rBracket);
+      }
+    }
+
+    return tuple;
+  });
+
   private primaryExpression = this.RULE('primaryExpression', (): ExpressionNode => {
     const token = this.LA(1);
     switch (token.tokenType) {
@@ -2289,6 +2493,8 @@ class PineParser extends EmbeddedActionsParser {
         return this.createLiteralFromToken(this.CONSUME(NaToken));
       case Switch:
         return this.SUBRULE(this.switchExpression);
+      case LBracket:
+        return this.SUBRULE(this.bracketExpression);
       case LParen: {
         this.CONSUME(LParen);
         const expression = this.SUBRULE(this.expression);

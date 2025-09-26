@@ -12,6 +12,7 @@ import type {
   IdentifierNode,
   ImportDeclarationNode,
   IndexExpressionNode,
+  MatrixLiteralNode,
   BinaryExpressionNode,
   CallExpressionNode,
   ConditionalExpressionNode,
@@ -26,6 +27,7 @@ import type {
   TypeDeclarationNode,
   TypeFieldNode,
   ParameterNode,
+  TupleExpressionNode,
   UnaryExpressionNode,
   VariableDeclarationNode,
   WhileStatementNode,
@@ -204,6 +206,58 @@ describe('Chevrotain parser', () => {
     expect(sixth.left.kind).toBe('Identifier');
     expect((sixth.left as IdentifierNode).name).toBe('quux');
     expect(sixth.right?.kind).toBe('NumberLiteral');
+  });
+
+  it('parses tuple destructuring assignments with holes', () => {
+    const source = [
+      '//@version=5',
+      'indicator("Tuple parse")',
+      '[fast,, slow] = ta.macd(close, 12, 26, 9)',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(2);
+
+    const assignment = program.body[1] as AssignmentStatementNode;
+    expect(assignment.kind).toBe('AssignmentStatement');
+
+    const tuple = assignment.left as TupleExpressionNode;
+    expect(tuple.kind).toBe('TupleExpression');
+    expect(tuple.elements).toHaveLength(3);
+    expect(tuple.elements[0]?.kind).toBe('Identifier');
+    expect(tuple.elements[1]).toBeNull();
+    expect(tuple.elements[2]?.kind).toBe('Identifier');
+  });
+
+  it('parses matrix literals constructed from tuple rows', () => {
+    const source = [
+      'weights = [[1, 2],',
+      '  [3, 4]]',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(1);
+
+    const assignment = program.body[0] as AssignmentStatementNode;
+    const matrix = assignment.right as MatrixLiteralNode;
+
+    expect(matrix.kind).toBe('MatrixLiteral');
+    expect(matrix.rows).toHaveLength(2);
+    expect(matrix.rows[0]).toHaveLength(2);
+    expect(matrix.rows[0][0]?.kind).toBe('NumberLiteral');
+    expect(matrix.rows[1][1]?.kind).toBe('NumberLiteral');
   });
 
   it('parses index expressions in assignment targets and nested chains', () => {

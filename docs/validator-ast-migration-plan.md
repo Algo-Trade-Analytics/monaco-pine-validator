@@ -39,6 +39,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - The Chevrotain parser now recognises function declarations with typed parameters, dotted identifiers, and both implicit-expression and indented block bodies, emitting synthetic return statements where needed alongside dedicated regression coverage.
 - The Chevrotain parser now recognises ternary conditional expressions, producing nested `ConditionalExpression` nodes so complex inline tests preserve operator precedence in the AST regression suite.
 - The Chevrotain parser now recognises import declarations, enum blocks (including optional values and exports), and user-defined type declarations with typed fields, backed by regression tests to lock in alias spans and field metadata.
+- The Chevrotain parser now recognises tuple destructuring assignments and matrix literals, emitting `TupleExpression`/`MatrixLiteral` nodes with regression coverage for bracketed targets and row-based literals.
 - Core validator AST analysis now inspects call expressions to flag `strategy.*` usage in indicators, recognise plotting/drawing activity for PS014 guardrails, and enforce library restrictions without relying on regex fallbacks.
 - Core validator AST analysis now inspects member expressions so strategy namespace usage in indicators is flagged even when no call expression is present, ensuring parity with the legacy scanner.
 - Core validator AST analysis now inspects index expressions so negative history references on series data trigger PS024 errors without the legacy line scanner.
