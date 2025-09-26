@@ -343,6 +343,7 @@ describe('AST fixtures', () => {
                 91,
                 102,
               ],
+              "typeArguments": [],
             },
             "kind": "ExpressionStatement",
             "loc": {

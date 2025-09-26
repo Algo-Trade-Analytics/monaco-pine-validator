@@ -483,6 +483,10 @@ export class StyleValidator implements ValidationModule {
       return expression.elements.some((element) => this.expressionContainsOperation(element ?? null, kind));
     }
 
+    if (expression.kind === 'ArrayLiteral') {
+      return expression.elements.some((element) => this.expressionContainsOperation(element ?? null, kind));
+    }
+
     if (expression.kind === 'IndexExpression') {
       return this.expressionContainsOperation(expression.object, kind) ||
         this.expressionContainsOperation(expression.index, kind);

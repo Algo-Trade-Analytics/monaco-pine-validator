@@ -38,6 +38,7 @@ import {
   type MemberExpressionNode,
   type VersionDirectiveNode,
   type TupleExpressionNode,
+  type ArrayLiteralNode,
   createLocation,
   createPosition,
   createRange,
@@ -170,11 +171,13 @@ export function createCallExpression(
   start: number,
   end: number,
   line = 1,
+  typeArguments: TypeReferenceNode[] = [],
 ): CallExpressionNode {
   return {
     kind: 'CallExpression',
     callee,
     args,
+    typeArguments,
     ...createSpan({ start, end, lineStart: line }),
   };
 }
@@ -463,6 +466,20 @@ export function createIndexExpression(
     object,
     index,
     ...createSpan({ start, end, lineStart: line }),
+  };
+}
+
+export function createArrayLiteral(
+  elements: (ExpressionNode | null)[],
+  start: number,
+  end: number,
+  lineStart = 1,
+  lineEnd = lineStart,
+): ArrayLiteralNode {
+  return {
+    kind: 'ArrayLiteral',
+    elements,
+    ...createSpan({ start, end, lineStart, lineEnd }),
   };
 }
 

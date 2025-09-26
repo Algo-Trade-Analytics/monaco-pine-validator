@@ -16,6 +16,7 @@ import {
   type MatrixLiteralNode,
   type MemberExpressionNode,
   type ParameterNode,
+  type TypeReferenceNode,
   type TupleExpressionNode,
   type UnaryExpressionNode,
 } from '../../nodes';
@@ -30,12 +31,14 @@ export function createCallExpressionNode(
   callee: ExpressionNode | undefined,
   args: ArgumentNode[],
   closingToken: IToken | undefined,
+  typeArguments: TypeReferenceNode[] = [],
 ): CallExpressionNode {
   const safeCallee = callee ?? createPlaceholderExpression();
   return {
     kind: 'CallExpression',
     callee: safeCallee,
     args,
+    typeArguments,
     ...spanFromNodes(safeCallee, closingToken),
   };
 }

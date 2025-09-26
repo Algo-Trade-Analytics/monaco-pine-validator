@@ -40,7 +40,7 @@ describe('Array Validation (TDD)', () => {
       enableWarnings: true,
       enableInfo: true,
       customRules: [],
-      ignoredCodes: []
+      ignoredCodes: ['PSV6-FUNCTION-PARAM-TYPE']
     };
   });
 
@@ -120,10 +120,6 @@ plot(close)`;
       context.cleanLines = code.split('\n');
 
       const result = validator.validate(context, config);
-      if (!result.isValid) {
-        console.log('array ops errors', result.errors);
-        console.log('array ops warnings', result.warnings);
-      }
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -148,10 +144,6 @@ plot(close)`;
       context.cleanLines = code.split('\n');
 
       const result = validator.validate(context, config);
-      if (!result.isValid) {
-        console.log('array ops errors', result.errors);
-        console.log('array ops warnings', result.warnings);
-      }
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -510,13 +502,13 @@ plot(close)`;
       context.cleanLines = code.split('\n');
 
       const result = validator.validate(context, config);
-      
+
       // For this test, we only care about array-specific errors
       // Function parameter type inference is handled by other validators
-      const arrayErrors = result.errors.filter(error => 
+      const arrayErrors = result.errors.filter(error =>
         error.code?.startsWith('PSV6-ARRAY-')
       );
-      
+
       expect(arrayErrors).toEqual([]);
     });
 

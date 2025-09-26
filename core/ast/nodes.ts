@@ -282,6 +282,7 @@ export interface CallExpressionNode extends BaseNode {
   kind: 'CallExpression';
   callee: ExpressionNode;
   args: ArgumentNode[];
+  typeArguments: TypeReferenceNode[];
 }
 
 export interface ArgumentNode extends BaseNode {

@@ -113,6 +113,7 @@ export class ArrayValidator implements ValidationModule {
   private arrayDeclarations = new Map<string, { type: string; size: number; line: number; column: number; elementType: string }>();
   private arrayAllocations = 0;
   private arrayUsage = new Map<string, { pushes: number[]; sets: number[]; clears: number[] }>();
+  private attemptedFallbackDeclarations = new Set<string>();
 
   getDependencies(): string[] {
     return ['FunctionValidator'];
@@ -127,18 +128,11 @@ export class ArrayValidator implements ValidationModule {
     this.context = context;
 
     this.astContext = this.getAstContext(config);
-    if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+    if (this.astContext?.ast) {
+      this.collectArrayDataAst(this.astContext.ast);
+    } else {
+      this.collectArrayDeclarationsFromSource();
     }
-
-    this.collectArrayDataAst(this.astContext.ast);
     this.validateArrayPerformanceAst();
     this.validateArrayBestPracticesAst();
 
@@ -160,6 +154,7 @@ export class ArrayValidator implements ValidationModule {
     this.arrayDeclarations.clear();
     this.arrayAllocations = 0;
     this.arrayUsage.clear();
+    this.attemptedFallbackDeclarations.clear();
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
@@ -223,6 +218,206 @@ export class ArrayValidator implements ValidationModule {
         },
       },
     });
+
+    this.collectArrayDeclarationsFromSource();
+  }
+
+  private collectArrayDeclarationsFromSource(targetName?: string): void {
+    const lines = this.context.cleanLines?.length ? this.context.cleanLines : this.context.lines ?? [];
+    const callPattern = /^(?<indent>\s*)(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<ctor>array\.new(?:_[A-Za-z0-9_]+)?)\s*(?<generic><[^>]*>)?\s*\((?<args>[^)]*)\)/;
+
+    lines.forEach((rawLine, index) => {
+      const lineNumber = index + 1;
+      const match = rawLine.match(callPattern);
+      if (!match) {
+        return;
+      }
+
+      const { name, ctor, generic, args: argsText } = match.groups ?? {};
+      if (!name || !ctor) {
+        return;
+      }
+
+      if (targetName && name !== targetName) {
+        return;
+      }
+
+      if (this.arrayDeclarations.has(name)) {
+        return;
+      }
+
+      const column = rawLine.indexOf(name) + 1;
+
+      const args = this.splitArguments(argsText ?? '');
+      const typedConstructor = ARRAY_TYPED_CONSTRUCTORS[ctor] ?? null;
+      const genericType = generic ? generic.replace(/[<>]/g, '').trim() : null;
+
+      let elementType = 'unknown';
+      let sizeValue: number | null = null;
+      let syntaxError = false;
+
+      if (typedConstructor) {
+        elementType = typedConstructor;
+        if (args.length > 0) {
+          sizeValue = this.parseNumericArgument(args[0]);
+        }
+      } else if (ctor === 'array.new' && genericType) {
+        elementType = genericType;
+        if (args.length > 0) {
+          sizeValue = this.parseNumericArgument(args[0]);
+        }
+      } else if (ctor === 'array.new' && args.length >= 2) {
+        elementType = this.normaliseTypeIdentifier(args[0]);
+        sizeValue = this.parseNumericArgument(args[1]);
+      } else {
+        syntaxError = true;
+      }
+
+      if (!elementType || elementType === 'unknown') {
+        syntaxError = true;
+      }
+
+      if (typedConstructor && args.length === 0) {
+        syntaxError = true;
+      }
+
+      if (!typedConstructor && genericType && args.length === 0) {
+        syntaxError = true;
+      }
+
+      if (!typedConstructor && ctor === 'array.new' && !genericType && args.length < 2) {
+        syntaxError = true;
+      }
+
+      const typeInfoElement = elementType;
+
+      if (syntaxError) {
+        this.addError(lineNumber, column, `Invalid array declaration syntax for '${name}'.`, 'PSV6-ARRAY-INVALID-SYNTAX');
+      }
+
+      const typeValid = elementType !== 'unknown' ? this.validateArrayType(elementType, lineNumber, column) : false;
+
+      if (typeof sizeValue === 'number') {
+        this.validateArraySize(sizeValue, lineNumber, column);
+      }
+
+      const size = typeof sizeValue === 'number' && Number.isFinite(sizeValue) ? sizeValue : 0;
+
+      this.arrayDeclarations.set(name, {
+        type: elementType,
+        elementType,
+        size,
+        line: lineNumber,
+        column,
+      });
+
+      this.arrayAllocations += 1;
+
+      this.context.typeMap.set(name, {
+        type: 'array',
+        isConst: false,
+        isSeries: false,
+        declaredAt: { line: lineNumber, column },
+        usages: [],
+        elementType: typeInfoElement,
+      });
+
+      if (!typeValid && !syntaxError && elementType !== 'unknown') {
+        this.addError(
+          lineNumber,
+          column,
+          `Invalid array declaration syntax for '${name}'.`,
+          'PSV6-ARRAY-INVALID-SYNTAX',
+        );
+      }
+    });
+  }
+
+  private ensureArrayDeclarationFromSource(name: string): void {
+    if (this.arrayDeclarations.has(name) || this.attemptedFallbackDeclarations.has(name)) {
+      return;
+    }
+    this.attemptedFallbackDeclarations.add(name);
+    this.collectArrayDeclarationsFromSource(name);
+  }
+
+  private splitArguments(argsText: string): string[] {
+    const result: string[] = [];
+    if (!argsText.trim()) {
+      return result;
+    }
+
+    let current = '';
+    let parenDepth = 0;
+    let bracketDepth = 0;
+    let braceDepth = 0;
+    let inString: '"' | "'" | null = null;
+    let escape = false;
+
+    for (const char of argsText) {
+      if (inString) {
+        current += char;
+        if (escape) {
+          escape = false;
+        } else if (char === '\\') {
+          escape = true;
+        } else if (char === inString) {
+          inString = null;
+        }
+        continue;
+      }
+
+      if (char === '"' || char === "'") {
+        inString = char as '"' | "'";
+        current += char;
+        continue;
+      }
+
+      switch (char) {
+        case '(': parenDepth += 1; break;
+        case ')': parenDepth = Math.max(0, parenDepth - 1); break;
+        case '[': bracketDepth += 1; break;
+        case ']': bracketDepth = Math.max(0, bracketDepth - 1); break;
+        case '{': braceDepth += 1; break;
+        case '}': braceDepth = Math.max(0, braceDepth - 1); break;
+        default:
+          break;
+      }
+
+      if (char === ',' && parenDepth === 0 && bracketDepth === 0 && braceDepth === 0) {
+        result.push(current.trim());
+        current = '';
+        continue;
+      }
+
+      current += char;
+    }
+
+    if (current.trim()) {
+      result.push(current.trim());
+    }
+
+    return result;
+  }
+
+  private parseNumericArgument(value: string | undefined): number | null {
+    if (!value) {
+      return null;
+    }
+    const trimmed = value.trim();
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+    return null;
+  }
+
+  private normaliseTypeIdentifier(raw: string | undefined): string {
+    if (!raw) {
+      return 'unknown';
+    }
+    const trimmed = raw.trim().replace(/^['"]|['"]$/g, '');
+    return trimmed;
   }
 
   private registerArrayTypeAnnotation(declaration: VariableDeclarationNode): void {
@@ -273,13 +468,53 @@ export class ArrayValidator implements ValidationModule {
     const column = call.loc.start.column;
 
     const elementType = this.inferArrayElementTypeFromCall(qualifiedName, call);
-    if (elementType && elementType !== 'unknown') {
-      this.validateArrayType(elementType, line, column);
-    }
+    const typeValid = elementType && elementType !== 'unknown'
+      ? this.validateArrayType(elementType, line, column)
+      : false;
 
     const size = this.extractArraySizeFromCall(qualifiedName, call);
     if (typeof size === 'number') {
       this.validateArraySize(size, line, column);
+    }
+
+    const genericType = this.extractCallGenericElementType(call);
+    const usesTypedConstructor = qualifiedName in ARRAY_TYPED_CONSTRUCTORS;
+    const usesGenerics = Boolean(genericType);
+    const usesLegacySyntax = !usesTypedConstructor && !usesGenerics;
+
+    let hasSyntaxError = false;
+
+    if (!usesTypedConstructor && !usesGenerics && call.args.length === 0) {
+      hasSyntaxError = true;
+    }
+
+    if (!usesTypedConstructor && usesGenerics && call.args.length === 0) {
+      hasSyntaxError = true;
+    }
+
+    if (usesTypedConstructor && call.args.length === 0) {
+      hasSyntaxError = true;
+    }
+
+    if (usesLegacySyntax) {
+      if (call.args.length === 0) {
+        hasSyntaxError = true;
+      } else if (call.args.length === 1) {
+        const firstArgType = this.resolveTypeIdentifier(call.args[0].value);
+        if (!firstArgType) {
+          hasSyntaxError = true;
+        } else {
+          hasSyntaxError = true;
+        }
+      }
+    }
+
+    if (!typeValid && elementType && elementType !== 'unknown') {
+      hasSyntaxError = true;
+    }
+
+    if (!elementType || elementType === 'unknown') {
+      hasSyntaxError = true;
     }
 
     if (target) {
@@ -309,6 +544,16 @@ export class ArrayValidator implements ValidationModule {
         usages: [],
         elementType,
       });
+    }
+
+    if (hasSyntaxError) {
+      const name = target?.name ?? this.getExpressionText(call.callee);
+      this.addError(
+        line,
+        column,
+        `Invalid array declaration syntax for '${name}'.`,
+        'PSV6-ARRAY-INVALID-SYNTAX',
+      );
     }
   }
 
@@ -417,7 +662,7 @@ export class ArrayValidator implements ValidationModule {
       return typedConstructor;
     }
 
-    const genericType = this.extractGenericElementType(call.callee);
+    const genericType = this.extractCallGenericElementType(call);
     if (genericType) {
       return genericType;
     }
@@ -439,7 +684,7 @@ export class ArrayValidator implements ValidationModule {
       return firstArgument ? this.extractNumericLiteral(firstArgument) ?? 0 : 0;
     }
 
-    const genericType = this.extractGenericElementType(call.callee);
+    const genericType = this.extractCallGenericElementType(call);
     if (qualifiedName === 'array.new' && genericType) {
       const sizeArgument = call.args[0]?.value;
       return sizeArgument ? this.extractNumericLiteral(sizeArgument) ?? 0 : 0;
@@ -463,6 +708,11 @@ export class ArrayValidator implements ValidationModule {
       return name;
     }
 
+    this.ensureArrayDeclarationFromSource(name);
+    if (this.isArrayIdentifier(name)) {
+      return name;
+    }
+
     if (this.isFunctionParameter(name)) {
       return name;
     }
@@ -472,6 +722,7 @@ export class ArrayValidator implements ValidationModule {
   }
 
   private validateArrayIndexAst(arrayName: string, argument: ArgumentNode, line: number, column: number): void {
+    this.ensureArrayDeclarationFromSource(arrayName);
     const arrayInfo = this.arrayDeclarations.get(arrayName);
     if (!arrayInfo) {
       return;
@@ -509,6 +760,7 @@ export class ArrayValidator implements ValidationModule {
     column: number,
     operation: 'push' | 'set',
   ): void {
+    this.ensureArrayDeclarationFromSource(arrayName);
     const arrayInfo = this.arrayDeclarations.get(arrayName);
     if (!arrayInfo) {
       return;
@@ -542,12 +794,21 @@ export class ArrayValidator implements ValidationModule {
     this.arrayUsage.set(name, usage);
   }
 
-  private extractGenericElementType(callee: ExpressionNode): string | null {
-    const source = this.getExpressionText(callee);
-    const match = source.match(/array\.new\s*<\s*([^>]+)\s*>/i);
+  private extractCallGenericElementType(call: CallExpressionNode): string | null {
+    if (Array.isArray(call.typeArguments) && call.typeArguments.length > 0) {
+      const first = call.typeArguments[0];
+      const source = this.getNodeSource(first).trim();
+      if (source) {
+        return source;
+      }
+    }
+
+    const callSource = this.getNodeSource(call).trim();
+    const match = callSource.match(/array\.new\s*<\s*([^>]+)\s*>/i);
     if (match) {
       return match[1].trim();
     }
+
     return null;
   }
 
@@ -867,12 +1128,17 @@ export class ArrayValidator implements ValidationModule {
   }
 
 
-  private validateArrayType(type: string, lineNum: number, column = 1): void {
+  private validateArrayType(type: string, lineNum: number, column = 1): boolean {
+    if (!type || type === 'unknown') {
+      return false;
+    }
+
     const validTypes = [...VALID_ARRAY_ELEMENT_TYPES];
     const typeInfo = this.context.typeMap.get(type);
     const isUDT = typeInfo?.type === 'udt';
+    const isValid = validTypes.includes(type) || isUDT;
 
-    if (!validTypes.includes(type) && !isUDT) {
+    if (!isValid) {
       this.addError(
         lineNum,
         column,
@@ -880,6 +1146,8 @@ export class ArrayValidator implements ValidationModule {
         'PSV6-ARRAY-INVALID-TYPE',
       );
     }
+
+    return isValid;
   }
 
   private validateArraySize(size: number, lineNum: number, column = 1): void {
