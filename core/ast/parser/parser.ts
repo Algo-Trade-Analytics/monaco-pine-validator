@@ -2683,7 +2683,7 @@ class PineParser extends EmbeddedActionsParser {
     const token = this.LA(1);
     switch (token.tokenType) {
       case IdentifierToken:
-        return createIdentifierNode(this.CONSUME(IdentifierToken));
+        return this.SUBRULE(this.identifierExpression);
       case StringToken:
         return this.createLiteralFromToken(this.CONSUME(StringToken));
       case NumberToken:
@@ -2707,6 +2707,20 @@ class PineParser extends EmbeddedActionsParser {
       default:
         return createIdentifierNode(this.CONSUME(IdentifierToken));
     }
+  });
+
+  private identifierExpression = this.RULE('identifierExpression', () => {
+    const first = this.CONSUME(IdentifierToken);
+    let expression: ExpressionNode = createIdentifierNode(first);
+
+    this.MANY(() => {
+      this.CONSUME(Dot);
+      const propertyToken = this.CONSUME2(IdentifierToken);
+      const property = createIdentifierNode(propertyToken);
+      expression = createMemberExpressionNode(expression, property, propertyToken);
+    });
+
+    return expression;
   });
 
   private createLiteralFromToken(token: IToken): ExpressionNode {
