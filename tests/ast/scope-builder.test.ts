@@ -58,6 +58,7 @@ describe('buildScopeGraph', () => {
       identifier: fooIdentifier,
       typeAnnotation: null,
       initializer: fooInitializer,
+      annotations: [],
       loc: locFrom(10, 17),
       range: createRange(10, 17),
     };
@@ -85,6 +86,7 @@ describe('buildScopeGraph', () => {
       identifier: identifier('y', 45),
       typeAnnotation: null,
       initializer: identifier('foo', 50),
+      annotations: [],
       loc: locFrom(45, 53),
       range: createRange(45, 53),
     };
@@ -105,6 +107,7 @@ describe('buildScopeGraph', () => {
       body: block,
       export: false,
       returnType: null,
+      annotations: [],
       loc: locFrom(30, 70),
       range: createRange(30, 70),
     };
@@ -246,6 +249,7 @@ describe('buildScopeGraph', () => {
       identifier: identifier('loopResult', 165),
       typeAnnotation: null,
       initializer: identifier('loopGuard', 170),
+      annotations: [],
       loc: locFrom(165, 175),
       range: createRange(165, 175),
     };
@@ -273,6 +277,7 @@ describe('buildScopeGraph', () => {
       identifier: loopIndex,
       typeAnnotation: null,
       initializer: numberLiteral(0, 210),
+      annotations: [],
       loc: locFrom(205, 215),
       range: createRange(205, 215),
     };

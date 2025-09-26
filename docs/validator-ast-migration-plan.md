@@ -31,7 +31,20 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - Type inference heuristics recognise namespaced TA and strategy helpers, applying return-type overrides and boosting series certainty when fed series arguments so downstream validators can rely on richer call metadata.
 - The core validator consumes AST version directives and script declarations to pre-populate script metadata, emitting Monaco-aligned diagnostics for misplaced directives, missing titles, and duplicate script declarations without re-scanning raw lines.
 - The TypeScript parser now produces the validator's structured AST format directly inside the pipeline, removing the temporary Python bridge while still returning rich syntax diagnostics when parsing fails.
+- The Chevrotain parser now recognises assignment statements, compound operators, and variable declarations (including keyword modifiers, type annotations, and generic array types) while emitting range-accurate AST nodes backed by targeted regression tests.
+- The Chevrotain parser now recognises indentation-based `if`/`else` statements and emits block statement nodes for nested branches, keeping ranges accurate while extending the regression coverage with control-flow fixtures.
+- The Chevrotain parser now recognises indentation-based `while` loops alongside `return`, `break`, and `continue` statements, producing structured AST nodes and regression coverage for block-scoped flow control.
+- The Chevrotain parser now recognises range-based `for` loops, synthesising comparison and step expressions (including default steps) while extending the regression suite to cover explicit `by` clauses.
+- The Chevrotain parser now recognises collection iteration `for … in` loops, capturing iterator patterns (identifiers or tuples) alongside iterable expressions so scope/type inference can track loop-scoped bindings.
+- The Chevrotain parser now recognises indentation-based `switch` statements, supporting inline and block case bodies while emitting structured `SwitchStatement` nodes with dedicated regression coverage.
+- The Chevrotain parser now recognises function declarations with typed parameters, dotted identifiers, and both implicit-expression and indented block bodies, emitting synthetic return statements where needed alongside dedicated regression coverage.
+- The Chevrotain parser now recognises ternary conditional expressions, producing nested `ConditionalExpression` nodes so complex inline tests preserve operator precedence in the AST regression suite.
+- The Chevrotain parser now recognises import declarations, enum blocks (including optional values and exports), and user-defined type declarations with typed fields, backed by regression tests to lock in alias spans and field metadata.
+- The Chevrotain parser now recognises tuple destructuring assignments and matrix literals, emitting `TupleExpression`/`MatrixLiteral` nodes with regression coverage for bracketed targets and row-based literals.
 - Core validator AST analysis now inspects call expressions to flag `strategy.*` usage in indicators, recognise plotting/drawing activity for PS014 guardrails, and enforce library restrictions without relying on regex fallbacks.
+- The Chevrotain parser now recognises `repeat ... until` loops, emitting do-while style control-flow nodes with regression coverage for both successful parses and recovery from missing `until` guards.
+- Compiler annotations now tokenise as dedicated nodes, attach to subsequent script/type/enum/function/variable declarations, and feed regression coverage so Monaco metadata and validator modules can consume structured documentation strings.
+- ✅ Post-merge verification re-ran the Chevrotain regression suite after reconciling annotation and identifier handling conflicts, ensuring lexer tokens (including compiler annotations) and parser rules remain stable.
 - Core validator AST analysis now inspects member expressions so strategy namespace usage in indicators is flagged even when no call expression is present, ensuring parity with the legacy scanner.
 - Core validator AST analysis now inspects index expressions so negative history references on series data trigger PS024 errors without the legacy line scanner.
 - A Monaco worker harness now exercises the AST-backed validator in a simulated worker environment, translating semantic output and syntax errors into Monaco-compatible markers for upcoming editor integration work.
@@ -292,6 +305,14 @@ Suggested migration order:
 - ✅ UDT validator gathers type declarations, methods, and usage diagnostics from AST traversal after retiring the legacy regex fallback path.
 - ✅ History referencing validator now short-circuits when AST execution is disabled and surfaces negative-index, loop, and varip diagnostics exclusively from structured traversal after retiring the legacy regex fallback path.
 - ✅ Retired the legacy `core/scanner.ts` helpers now that all validators rely on AST traversal for diagnostics.
+- Added Chevrotain recovery regression coverage for unterminated `else` clauses, truncated deeply nested expressions, and mixed indentation inside blocks so partial ASTs remain consumable for Monaco diagnostics.
+
+### Outstanding Chevrotain Grammar Coverage
+
+| Construct | Current Status | Action Items |
+| --- | --- | --- |
+| Compiler annotations (`//@function`, `//@param`, `//@returns`, `//@strategy_alert_message`, etc.) | ✅ Implemented | Dedicated lexer tokens and AST nodes attach annotations to declarations with regression coverage validating stacked metadata. |
+| Null-coalescing / ternary sugar | ✅ Implemented | Dedicated lexer token, precedence-aware binary rules, and regression coverage exercise chained/co-mingled `??` usage alongside logical and conditional expressions. |
 
 ## 10. Immediate Next Steps (Post-Review)
 
@@ -300,19 +321,38 @@ The initial AST plumbing is already landing (feature-flagged parsing in `BaseVal
 capitalise on this progress, align the next iteration around the following workstream
 plan:
 
-1. **Flip the AST Pipeline on by Default**
-   - ✅ Finalised the TypeScript parser bridge that returns validator-shaped AST data and syntax diagnostics without relying on the external Python runner; future work will expand node coverage and performance.
+1. **Chevrotain Parser Hardening**
+   - ✅ Assignment statements, unary/binary expressions, compound operators, control-flow statements, and function declarations now normalise into Pine AST nodes with location metadata and regression coverage.
+   - Backfill remaining expression coverage (array/map constructors, anonymous functions, namespace literals) and ensure tuple patterns work in nested assignment/return positions.
+   - ✅ Recovery fixtures now cover indentation edge cases, dangling `else` branches, newline-separated expressions, and unterminated constructs so Monaco parsing remains resilient.
+   - ✅ Implemented the staged `repeat ... until` loops, compiler annotations, and null-coalescing helpers; continue with iterable literals and inline function expressions so the Chevrotain grammar matches the outstanding fixtures and Monaco feature backlog.
+   - Profile large scripts under the shared parser instance to confirm the recovery configuration does not introduce unacceptable overhead or memory growth.
+
+2. **Flip the AST Pipeline on by Default**
+   - Audit module-level feature flags and ensure any lingering legacy fallbacks short-circuit cleanly once Chevrotain is the primary parser.
+   - Capture before/after timings for the validator suites and the Monaco worker harness to ensure Chevrotain parity does not regress latency budgets.
+   - Stage the rollout behind a configuration toggle, document rollback steps, and add release checklist items for monitoring diagnostics deltas in production.
+
+3. **Monaco Integration Enablement**
+   - Exercise the worker harness against representative IDE workflows (hover, diagnostics refresh, semantic tokens) to confirm Chevrotain ASTs flow through without additional shims.
+   - Document the editor-facing API contracts that rely on AST metadata so downstream feature work (quick fixes, go-to definition) can build atop the validated structures.
+   - Plan incremental editor release gates (internal dogfood, beta channel, general availability) with success metrics tied to AST-backed diagnostics quality.
+
+4. **Validator Operational Hardening**
+   - Re-run the out-of-memory Vitest validator suite with focused sharding or memory flags and capture the configuration needed for CI stability.
+   - Expand the semantic golden tests with scripts that stress tuple destructuring, matrix literals, and flow control to guard against regressions while the parser hardening work proceeds.
+   - Establish alerting for critical diagnostics regressions when the AST pipeline is enabled by default (e.g., compare against previous release baselines).
    - Update packaging and integration samples so validators execute in AST `primary` mode without additional configuration.
 
-2. **Phase 4 – Monaco Worker Integration**
+3. **Phase 4 – Monaco Worker Integration**
    - Follow `docs/monaco-integration-plan.md` to expose AST diagnostics through the worker, including syntax error streaming and incremental validation hooks.
    - Port hover, completion, and quick-fix experiments to consume the AST scope/type metadata now available in the worker context.
 
-3. **Phase 5 – Configuration & Cleanup**
+4. **Phase 5 – Configuration & Cleanup**
    - Remove the dual-run/shadow toggles that are now redundant, simplify validator configuration, and collapse AST-disabled test harnesses.
    - Audit any remaining textual hygiene helpers to confirm they behave correctly alongside the AST-first modules and document any exceptions.
 
-4. **Operational Hardening**
+5. **Operational Hardening**
    - Profile validation throughput with large scripts to capture AST construction and traversal costs and feed the results into Monaco performance budgets.
    - Document rollout steps for enabling the AST pipeline in staged environments, including feature flags and regression monitoring.
 

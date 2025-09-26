@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { EnhancedModularValidator } from '../../EnhancedModularValidator';
+import { ChevrotainAstService } from '../../core/ast/service';
 
-const createValidator = () => new EnhancedModularValidator({ targetVersion: 6, strictMode: true });
+const createValidator = () =>
+  new EnhancedModularValidator({
+    targetVersion: 6,
+    strictMode: true,
+    ast: { mode: 'primary', service: new ChevrotainAstService() },
+  });
 
 describe('Specialized strategy risk/commission enums (advanced)', () => {
   it('detects advanced strategy.risk constants', () => {

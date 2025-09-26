@@ -29,6 +29,7 @@ import {
   type TupleExpressionNode,
   type UnaryExpressionNode,
   type VariableDeclarationNode,
+  type RepeatStatementNode,
   type WhileStatementNode,
   type BreakStatementNode,
 } from './nodes';
@@ -242,6 +243,12 @@ function collectChildren(path: NodePath): ChildEntry[] {
       push(ifStatement.alternate, 'alternate');
       break;
     }
+    case 'RepeatStatement': {
+      const repeatStatement = node as RepeatStatementNode;
+      push(repeatStatement.body, 'body');
+      push(repeatStatement.test, 'test');
+      break;
+    }
     case 'WhileStatement': {
       const whileStatement = node as WhileStatementNode;
       push(whileStatement.test, 'test');
@@ -257,6 +264,8 @@ function collectChildren(path: NodePath): ChildEntry[] {
     case 'ForStatement': {
       const forStatement = node as ForStatementNode;
       push(forStatement.initializer, 'initializer');
+      push(forStatement.iterator, 'iterator');
+      push(forStatement.iterable, 'iterable');
       push(forStatement.test, 'test');
       push(forStatement.update, 'update');
       push(forStatement.body, 'body');

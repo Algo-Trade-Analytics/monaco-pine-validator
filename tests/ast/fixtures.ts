@@ -29,6 +29,7 @@ import {
   type TypeDeclarationNode,
   type TypeFieldNode,
   type TypeReferenceNode,
+  type CompilerAnnotationNode,
   type SwitchCaseNode,
   type SwitchStatementNode,
   type UnaryExpressionNode,
@@ -186,9 +187,13 @@ export function createFunctionDeclaration(
   end: number,
   lineStart = 1,
   lineEnd = lineStart,
-  options: { export?: boolean; returnType?: TypeReferenceNode | null } = {},
+  options: {
+    export?: boolean;
+    returnType?: TypeReferenceNode | null;
+    annotations?: CompilerAnnotationNode[];
+  } = {},
 ): FunctionDeclarationNode {
-  const { export: isExport = false, returnType = null } = options;
+  const { export: isExport = false, returnType = null, annotations = [] } = options;
   return {
     kind: 'FunctionDeclaration',
     identifier,
@@ -196,6 +201,7 @@ export function createFunctionDeclaration(
     body,
     export: isExport,
     returnType,
+    annotations,
     ...createSpan({ start, end, lineStart, lineEnd }),
   };
 }
@@ -207,12 +213,14 @@ export function createScriptDeclaration(
   start: number,
   end: number,
   line = 1,
+  annotations: CompilerAnnotationNode[] = [],
 ): ScriptDeclarationNode {
   return {
     kind: 'ScriptDeclaration',
     scriptType,
     identifier,
     arguments: args,
+    annotations,
     ...createSpan({ start, end, lineStart: line }),
   };
 }
@@ -293,10 +301,14 @@ export function createForStatement(
   start: number,
   end: number,
   line = 1,
+  options: { iterator?: ExpressionNode | null; iterable?: ExpressionNode | null } = {},
 ): ForStatementNode {
+  const { iterator = null, iterable = null } = options;
   return {
     kind: 'ForStatement',
     initializer,
+    iterator,
+    iterable,
     test,
     update,
     body,
@@ -313,15 +325,22 @@ export function createVariableDeclaration(
     declarationKind?: VariableDeclarationNode['declarationKind'];
     initializer?: ExpressionNode | null;
     typeAnnotation?: TypeReferenceNode | null;
+    annotations?: CompilerAnnotationNode[];
   } = {},
 ): VariableDeclarationNode {
-  const { declarationKind = 'simple', initializer = null, typeAnnotation = null } = options;
+  const {
+    declarationKind = 'simple',
+    initializer = null,
+    typeAnnotation = null,
+    annotations = [],
+  } = options;
   return {
     kind: 'VariableDeclaration',
     declarationKind,
     identifier,
     typeAnnotation,
     initializer,
+    annotations,
     ...createSpan({ start, end, lineStart: line }),
   };
 }
@@ -491,12 +510,14 @@ export function createEnumDeclaration(
   lineStart = 1,
   lineEnd = lineStart,
   exported = false,
+  annotations: CompilerAnnotationNode[] = [],
 ): EnumDeclarationNode {
   return {
     kind: 'EnumDeclaration',
     identifier,
     members,
     export: exported,
+    annotations,
     ...createSpan({ start, end, lineStart, lineEnd }),
   };
 }
@@ -508,11 +529,15 @@ export function createTypeDeclaration(
   end: number,
   lineStart = 1,
   lineEnd = lineStart,
+  isExported = false,
+  annotations: CompilerAnnotationNode[] = [],
 ): TypeDeclarationNode {
   return {
     kind: 'TypeDeclaration',
     identifier,
     fields,
+    export: isExported,
+    annotations,
     ...createSpan({ start, end, lineStart, lineEnd }),
   };
 }
@@ -1026,6 +1051,7 @@ export function createHistoryReferencingProgram(): ProgramNode {
     identifier: createIdentifier('prevClose', 8, 9),
     typeAnnotation,
     initializer: typedInitializer,
+    annotations: [],
     ...createSpan({ start: 4, end: 28, lineStart: 9 }),
   };
 

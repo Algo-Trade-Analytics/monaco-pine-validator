@@ -34,6 +34,7 @@ import {
   type TypeDeclarationNode,
   type StatementNode,
   type SwitchStatementNode,
+  type RepeatStatementNode,
   type WhileStatementNode,
   type BreakStatementNode,
   type VariableDeclarationNode,
@@ -170,6 +171,29 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
     const record = createSymbolRecord(identifier.name, 'unknown');
     record.references.push(location);
     symbolTable.set(identifier.name, record);
+  };
+
+  const declareForIterator = (target: ExpressionNode | null): void => {
+    if (!target) {
+      return;
+    }
+
+    if (target.kind === 'Identifier') {
+      declare(target as IdentifierNode, 'variable');
+      return;
+    }
+
+    if (target.kind === 'TupleExpression') {
+      const tuple = target as TupleExpressionNode;
+      tuple.elements.forEach((element) => {
+        if (element && element.kind === 'Identifier') {
+          declare(element as IdentifierNode, 'variable');
+        }
+      });
+      return;
+    }
+
+    visitExpression(target);
   };
 
   const visitExpression = (expression: ExpressionNode | null | undefined): void => {
@@ -330,12 +354,22 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         popScope();
         break;
       }
+      case 'RepeatStatement': {
+        const repeatStatement = statement as RepeatStatementNode;
+        pushScope('loop', repeatStatement.body, { loopType: 'repeat' });
+        visitStatement(repeatStatement.body);
+        visitExpression(repeatStatement.test);
+        popScope();
+        break;
+      }
       case 'ForStatement': {
         const forStatement = statement as ForStatementNode;
         pushScope('loop', forStatement.body, { loopType: 'for' });
         if (forStatement.initializer) {
           visitStatement(forStatement.initializer);
         }
+        declareForIterator(forStatement.iterator);
+        visitExpression(forStatement.iterable);
         visitExpression(forStatement.test);
         visitExpression(forStatement.update);
         visitStatement(forStatement.body);
