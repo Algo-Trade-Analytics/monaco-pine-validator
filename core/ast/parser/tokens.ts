@@ -208,7 +208,6 @@ export const In = createToken({
   pattern: /in/,
   longer_alt: Identifier,
 });
-
 export const AllTokens = [
   WhiteSpace,
   Newline,

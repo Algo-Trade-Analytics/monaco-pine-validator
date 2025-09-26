@@ -399,30 +399,7 @@ function createPlaceholderExpression(): ExpressionNode {
 function createStringNode(token?: IToken): StringLiteralNode {
   const safeToken = ensureToken(token);
   const raw = safeToken.image;
-  const body = raw.slice(1, -1);
-  const value = body.replace(/\\([\\'"nrtbf])/g, (match, ch) => {
-    switch (ch) {
-      case 'n':
-        return '\n';
-      case 'r':
-        return '\r';
-      case 't':
-        return '\t';
-      case 'b':
-        return '\b';
-      case 'f':
-        return '\f';
-      case '\\':
-        return '\\';
-      case '"':
-        return '"';
-      case "'":
-        return "'";
-      default:
-        return ch;
-    }
-  });
-
+  const value = raw.slice(1, -1);
   return {
     kind: 'StringLiteral',
     value,
@@ -441,6 +418,7 @@ function createNumberNode(token?: IToken): NumberLiteralNode {
     ...spanFromTokens(safeToken, safeToken),
   };
 }
+
 
 function createParameterNode(
   identifier: IdentifierNode,
@@ -1803,7 +1781,6 @@ class PineParser extends EmbeddedActionsParser {
     return createScriptDeclarationNode(scriptType, args, token, endToken);
   });
 
-
   private importDeclaration = this.RULE('importDeclaration', () => {
     const importToken = this.CONSUME(Import);
     const pathToken = this.CONSUME(StringToken);
@@ -2501,8 +2478,9 @@ class PineParser extends EmbeddedActionsParser {
       return createUnaryExpressionNode(operator, argument);
     }
 
-    return this.SUBRULE(this.callExpression);
+    return this.SUBRULE(this.primaryExpression);
   });
+
 
   private callExpression = this.RULE('callExpression', () => {
     let expression = this.SUBRULE(this.primaryExpression) ?? createPlaceholderExpression();
@@ -2572,7 +2550,6 @@ class PineParser extends EmbeddedActionsParser {
     });
     return expression;
   });
-
   private argumentList = this.RULE('argumentList', (): ArgumentNode[] => {
     const args: ArgumentNode[] = [];
 
@@ -2678,7 +2655,6 @@ class PineParser extends EmbeddedActionsParser {
 
     return tuple;
   });
-
   private primaryExpression = this.RULE('primaryExpression', (): ExpressionNode => {
     const token = this.LA(1);
     switch (token.tokenType) {
@@ -2794,7 +2770,6 @@ export function parseWithChevrotain(source: string, options: AstParseOptions = {
   }
 
   sharedParser.reset();
-
   const hasErrors = syntaxErrors.length > 0;
   if (hasErrors && options.allowErrors !== true) {
     return {
