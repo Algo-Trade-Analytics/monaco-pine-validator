@@ -3,35 +3,21 @@
 ## Data sources
 - Pine Script® v6 language reference manual (local snapshot) documents control-flow constructs, including expression-returning `if` statements and loops with optional result bindings.【F:PineScriptContext/pine-script-refrence.txt†L16779-L16841】【F:PineScriptContext/pine-script-refrence.txt†L16925-L16959】【F:PineScriptContext/pine-script-refrence.txt†L17232-L17246】
 - The generated Pine Script structures mirror the reference syntax and highlight optional `for … in` iterator forms that return values and support tuple destructuring targets.【F:PineScriptContext/structures/keywords.ts†L20-L68】
-- The current Chevrotain grammar and AST node definitions reveal which constructs are emitted today and which metadata is absent from the resulting tree.【F:core/ast/parser/parser.ts†L2013-L2104】【F:core/ast/parser/parser.ts†L2682-L2709】【F:core/ast/nodes.ts†L271-L298】
+- The current Chevrotain grammar and AST node definitions reveal which constructs are emitted today and which metadata is absent from the resulting tree.【F:core/ast/parser/rules/control-flow.ts†L190-L446】【F:core/ast/parser/rules/expressions.ts†L440-L531】【F:core/ast/nodes.ts†L148-L314】
 
 ## Confirmed coverage
-- The parser recognises statement-oriented `if`, `for`, `while`, `repeat`, and `switch` constructs, emitting the corresponding AST nodes with indentation-aware bodies and optional loop initialisers.【F:core/ast/parser/parser.ts†L2013-L2104】【F:core/ast/nodes.ts†L271-L298】
-- `for … in` headers now accept iterator targets that include tuple destructuring, matching the array iteration forms captured in the Pine structures.【F:core/ast/parser/parser.ts†L2044-L2054】【F:PineScriptContext/structures/keywords.ts†L20-L68】
+- The parser recognises statement-oriented `if`, `for`, `while`, `repeat`, and `switch` constructs, emitting the corresponding AST nodes with indentation-aware bodies and optional loop initialisers.【F:core/ast/parser/rules/control-flow.ts†L190-L446】【F:core/ast/nodes.ts†L271-L314】
+- `for … in` headers now accept iterator targets that include tuple destructuring, matching the array iteration forms captured in the Pine structures.【F:core/ast/parser/rules/control-flow.ts†L223-L322】【F:PineScriptContext/structures/keywords.ts†L20-L68】
+- Inline `if … else` chains now parse as `IfExpression` nodes, allowing assignments, declarations, and arguments to consume expression-form conditionals while preserving branch blocks for downstream analysis.【F:core/ast/parser/rules/expressions.ts†L480-L509】【F:core/ast/nodes.ts†L281-L286】【F:core/ast/traversal.ts†L240-L279】【F:core/ast/scope.ts†L200-L278】【F:core/ast/type-inference.ts†L424-L485】
+- Parenthesised arrow functions emit `ArrowFunctionExpression` nodes that share the declaration helpers for parameters and block parsing, with traversal, scope, and inference plumbing matching the behaviour of named functions.【F:core/ast/parser/rules/expressions.ts†L90-L188】【F:core/ast/nodes.ts†L40-L120】【F:core/ast/traversal.ts†L60-L140】【F:core/ast/scope.ts†L200-L360】【F:core/ast/type-inference.ts†L360-L520】
+- `for`/`for … in` and `while` constructs now parse in expression positions and expose their trailing result expression so downstream passes can analyse loop-returned values alongside the block body.【F:core/ast/parser/rules/control-flow.ts†L223-L434】【F:core/ast/parser/rules/expressions.ts†L512-L524】【F:core/ast/nodes.ts†L300-L316】【F:core/ast/traversal.ts†L260-L278】【F:core/ast/scope.ts†L369-L403】【F:core/ast/type-inference.ts†L488-L540】
+- `repeat ... until` loops promote their trailing expression or return argument to a `result` field, aligning semantics with `for`/`while` expressions and removing the last loop-return blind spot.【F:core/ast/parser/rules/control-flow.ts†L223-L446】【F:core/ast/nodes.ts†L290-L316】【F:core/ast/traversal.ts†L248-L269】【F:core/ast/scope.ts†L360-L403】【F:core/ast/type-inference.ts†L440-L536】
 
 ## Identified gaps
 
-### 1. Expression-form `if` statements are not parsed
-The reference manual allows `if` chains to return a value directly (e.g., `x = if condition … else …`), but the Chevrotain expression grammar does not accept `if` as a primary expression. `If` nodes are only constructed inside the statement dispatcher, so any assignment or variable declaration whose right-hand side begins with `if` fails to parse today.【F:PineScriptContext/pine-script-refrence.txt†L16925-L16959】【F:core/ast/parser/parser.ts†L2013-L2041】【F:core/ast/parser/parser.ts†L2682-L2709】
-
-*Action*: Introduce an expression rule for `if`/`else` chains (or allow the statement rule to surface an `IfExpression` node) so assignments, declarations, and call arguments can consume inline `if` expressions with consistent range data.
-
-### 2. Loop result bindings cannot be expressed
-Both counter-based and collection-based loops support optional result bindings—`[variables =|:=] for …` and `[var_declaration =] for … in …`—yet the grammar insists on `for` being the leading token. As a result, `sum = for i = 0 to length` or tuple bindings in front of `for … in` are rejected, even though they are legal per the reference manual.【F:PineScriptContext/pine-script-refrence.txt†L16779-L16841】【F:core/ast/parser/parser.ts†L2044-L2104】
-
-*Action*: Add a loop-expression production that can appear wherever an expression is expected, returning a `ForStatement`-compatible node while capturing the optional assignment target before the `for` keyword.
-
-### 3. While loops lack optional declaration/return expression support
-`while` statements in Pine Script may begin with a binding (`variable_declaration = while condition`) and can yield a final `return_expression`. The parser only matches bare `while` statements and does not expose any field for the trailing expression, so downstream passes cannot recover the loop’s result value or bound variable metadata.【F:PineScriptContext/pine-script-refrence.txt†L17232-L17246】【F:core/ast/parser/parser.ts†L2145-L2156】【F:core/ast/nodes.ts†L284-L287】
-
-*Action*: Mirror the range-loop treatment by supporting expression-form `while` constructs and extending the AST node to carry the bound declaration and optional return expression.
-
-### 4. Loop return expressions are dropped from the AST
-The specification emphasises that `for`, `for … in`, and `while` bodies return the value of their final expression when used with a binding, yet the AST node shapes only retain the block body without a dedicated `returnExpression` slot. Consumers must currently re-scan the block to guess the last expression, which is brittle for diagnostics and type inference.【F:PineScriptContext/pine-script-refrence.txt†L16779-L16841】【F:PineScriptContext/pine-script-refrence.txt†L17232-L17246】【F:core/ast/nodes.ts†L278-L298】
-
-*Action*: Extend `ForStatementNode`, `WhileStatementNode`, and `RepeatStatementNode` with an explicit `result` (or similar) field populated during parsing so loop return semantics match the reference manual.
+No outstanding structural parser gaps have been identified after capturing repeat loop results. Focus now shifts to hardening the new metadata across the toolchain.
 
 ## Recommended next steps
-1. **Design expression-form AST nodes** covering `if`, `for`, and `while` so result-binding syntax can be parsed without duplicating statement logic.
-2. **Update fixtures and regression tests** with assignments such as `sum = for ...` and `x = if ...` to lock in the newly supported grammar.
-3. **Propagate new loop metadata** through control-flow, scope, and type-inference builders to ensure loop results are analysed consistently once the parser emits them.
+1. **Audit downstream passes** (diagnostics, optimisation, etc.) that consume loop nodes to ensure they respect the new `result` metadata and can reason about loop expressions when used in nested positions.
+2. **Add fixtures covering nested loop expressions** (e.g., `array.map(for value in source …)`) and repeat-loop blends to exercise the new expression support under richer syntactic compositions.
+3. **Track module-level regressions** once AST-backed validation is enabled by default, confirming repeat loop results flow into linting, performance, and control-flow diagnostics without manual block inspection.

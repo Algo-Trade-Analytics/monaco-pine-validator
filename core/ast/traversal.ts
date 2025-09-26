@@ -4,6 +4,7 @@ import {
   type AssignmentStatementNode,
   type BinaryExpressionNode,
   type BlockStatementNode,
+  type ArrowFunctionExpressionNode,
   type ImportDeclarationNode,
   type CallExpressionNode,
   type ConditionalExpressionNode,
@@ -13,6 +14,7 @@ import {
   type ForStatementNode,
   type FunctionDeclarationNode,
   type IfStatementNode,
+  type IfExpressionNode,
   type IndexExpressionNode,
   type MatrixLiteralNode,
   type ParameterNode,
@@ -174,6 +176,14 @@ function collectChildren(path: NodePath): ChildEntry[] {
       push(expression.expression, 'expression');
       break;
     }
+    case 'ArrowFunctionExpression': {
+      const arrow = node as ArrowFunctionExpressionNode;
+      arrow.params.forEach((param, paramIndex) => {
+        push(param, 'params', paramIndex);
+      });
+      push(arrow.body, 'body');
+      break;
+    }
     case 'ReturnStatement': {
       const returnStmt = node as ReturnStatementNode;
       push(returnStmt.argument, 'argument');
@@ -243,16 +253,25 @@ function collectChildren(path: NodePath): ChildEntry[] {
       push(ifStatement.alternate, 'alternate');
       break;
     }
+    case 'IfExpression': {
+      const ifExpression = node as IfExpressionNode;
+      push(ifExpression.test, 'test');
+      push(ifExpression.consequent, 'consequent');
+      push(ifExpression.alternate, 'alternate');
+      break;
+    }
     case 'RepeatStatement': {
       const repeatStatement = node as RepeatStatementNode;
       push(repeatStatement.body, 'body');
       push(repeatStatement.test, 'test');
+      push(repeatStatement.result, 'result');
       break;
     }
     case 'WhileStatement': {
       const whileStatement = node as WhileStatementNode;
       push(whileStatement.test, 'test');
       push(whileStatement.body, 'body');
+      push(whileStatement.result, 'result');
       break;
     }
     case 'MemberExpression': {
@@ -269,6 +288,7 @@ function collectChildren(path: NodePath): ChildEntry[] {
       push(forStatement.test, 'test');
       push(forStatement.update, 'update');
       push(forStatement.body, 'body');
+      push(forStatement.result, 'result');
       break;
     }
     case 'SwitchStatement': {

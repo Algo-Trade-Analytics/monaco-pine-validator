@@ -13,6 +13,7 @@ import {
   type AssignmentStatementNode,
   type BlockStatementNode,
   type CallExpressionNode,
+  type ArrowFunctionExpressionNode,
   type ConditionalExpressionNode,
   type ContinueStatementNode,
   type ExpressionNode,
@@ -23,6 +24,7 @@ import {
   type MemberExpressionNode,
   type ImportDeclarationNode,
   type FunctionDeclarationNode,
+  type IfExpressionNode,
   type IfStatementNode,
   type IdentifierNode,
   type ParameterNode,
@@ -216,6 +218,17 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         });
         break;
       }
+      case 'ArrowFunctionExpression': {
+        const arrow = expression as ArrowFunctionExpressionNode;
+        pushScope('function', arrow.body, { functionName: null, expression: true });
+        arrow.params.forEach((param) => {
+          declare(param.identifier, 'parameter');
+          visitExpression(param.defaultValue);
+        });
+        arrow.body.body.forEach(visitStatement);
+        popScope();
+        break;
+      }
       case 'BinaryExpression': {
         const binary = expression;
         visitExpression(binary.left);
@@ -260,6 +273,19 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         visitExpression(conditional.test);
         visitExpression(conditional.consequent);
         visitExpression(conditional.alternate);
+        break;
+      }
+      case 'IfExpression': {
+        const ifExpression = expression as IfExpressionNode;
+        visitExpression(ifExpression.test);
+        visitStatement(ifExpression.consequent);
+        if (ifExpression.alternate) {
+          if (ifExpression.alternate.kind === 'IfExpression') {
+            visitExpression(ifExpression.alternate);
+          } else {
+            visitStatement(ifExpression.alternate);
+          }
+        }
         break;
       }
       default:
@@ -351,6 +377,7 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         visitExpression(whileStatement.test);
         pushScope('loop', whileStatement.body, { loopType: 'while' });
         visitStatement(whileStatement.body);
+        visitExpression(whileStatement.result);
         popScope();
         break;
       }
@@ -358,6 +385,7 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         const repeatStatement = statement as RepeatStatementNode;
         pushScope('loop', repeatStatement.body, { loopType: 'repeat' });
         visitStatement(repeatStatement.body);
+        visitExpression(repeatStatement.result);
         visitExpression(repeatStatement.test);
         popScope();
         break;
@@ -373,6 +401,7 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         visitExpression(forStatement.test);
         visitExpression(forStatement.update);
         visitStatement(forStatement.body);
+        visitExpression(forStatement.result);
         popScope();
         break;
       }

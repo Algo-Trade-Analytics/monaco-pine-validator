@@ -16,8 +16,10 @@ import type {
   BinaryExpressionNode,
   CallExpressionNode,
   ConditionalExpressionNode,
+  ArrowFunctionExpressionNode,
   ExpressionStatementNode,
   IfStatementNode,
+  IfExpressionNode,
   MemberExpressionNode,
   NumberLiteralNode,
   ProgramNode,
@@ -210,7 +212,7 @@ describe('Chevrotain parser', () => {
       '',
     ].join('\n');
 
-    const { ast, diagnostics } = parseWithChevrotain(source);
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
 
     expect(diagnostics.syntaxErrors).toHaveLength(0);
     expect(ast).not.toBeNull();
@@ -380,6 +382,58 @@ describe('Chevrotain parser', () => {
     const nestedConsequent = nestedConditional.consequent as CallExpressionNode;
     expect((nestedConsequent.callee as IdentifierNode).name).toBe('bar');
     expect((nestedConditional.alternate as IdentifierNode).name).toBe('baz');
+  });
+
+  it('parses expression-form if statements with else-if chains', () => {
+    const source = [
+      'result = if close > open',
+      '    close',
+      'else if close < open',
+      '    open',
+      'else',
+      '    close[1]',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(1);
+
+    const assignment = program.body[0] as AssignmentStatementNode;
+    expect(assignment.kind).toBe('AssignmentStatement');
+
+    const ifExpression = assignment.right as IfExpressionNode;
+    expect(ifExpression.kind).toBe('IfExpression');
+    const firstComparison = ifExpression.test as BinaryExpressionNode;
+    expect(firstComparison.operator).toBe('>');
+
+    const consequentBlock = ifExpression.consequent;
+    expect(consequentBlock.kind).toBe('BlockStatement');
+    expect(consequentBlock.body).toHaveLength(1);
+    const consequentStatement = consequentBlock.body[0] as ExpressionStatementNode;
+    expect((consequentStatement.expression as IdentifierNode).name).toBe('close');
+
+    const elseIfExpression = ifExpression.alternate as IfExpressionNode;
+    expect(elseIfExpression.kind).toBe('IfExpression');
+    const elseComparison = elseIfExpression.test as BinaryExpressionNode;
+    expect(elseComparison.operator).toBe('<');
+    const elseConsequent = elseIfExpression.consequent.body[0] as ExpressionStatementNode;
+    expect((elseConsequent.expression as IdentifierNode).name).toBe('open');
+
+    const finalElse = elseIfExpression.alternate as BlockStatementNode;
+    expect(finalElse.kind).toBe('BlockStatement');
+    expect(finalElse.body).toHaveLength(1);
+    const finalStatement = finalElse.body[0] as ExpressionStatementNode;
+    const finalExpression = finalStatement.expression as IndexExpressionNode;
+    expect(finalExpression.kind).toBe('IndexExpression');
+    expect((finalExpression.object as IdentifierNode).name).toBe('close');
+    const finalIndex = finalExpression.index as NumberLiteralNode;
+    expect(finalIndex.kind).toBe('NumberLiteral');
+    expect(finalIndex.value).toBe(1);
   });
 
   it('parses variable declarations with optional types and declaration keywords', () => {
@@ -732,6 +786,105 @@ describe('Chevrotain parser', () => {
     expect((secondLoop.iterable as IdentifierNode).name).toBe('array');
   });
 
+  it('parses loop expressions with trailing result values', () => {
+    const source = [
+      'sum = for i = 0 to 3',
+      '        running := running + i',
+      '        running',
+      '',
+      'var nextValue = while running < 10',
+      '                    running += 1',
+      '                    running',
+      '',
+      'result = for value in values',
+      '            value * 2',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(3);
+
+    const assignment = program.body[0] as AssignmentStatementNode;
+    expect(assignment.kind).toBe('AssignmentStatement');
+    const forExpression = assignment.right as ForStatementNode;
+    expect(forExpression.kind).toBe('ForStatement');
+    expect(forExpression.result?.kind).toBe('Identifier');
+    const bodyStatements = forExpression.body.body;
+    const lastStatement = bodyStatements[bodyStatements.length - 1] as ExpressionStatementNode;
+    expect(forExpression.result).toBe(lastStatement.expression);
+
+    const declaration = program.body[1] as VariableDeclarationNode;
+    expect(declaration.initializer?.kind).toBe('WhileStatement');
+    const whileExpression = declaration.initializer as WhileStatementNode;
+    expect(whileExpression.result?.kind).toBe('Identifier');
+    const whileBody = whileExpression.body.body;
+    const whileResultStatement = whileBody[whileBody.length - 1] as ExpressionStatementNode;
+    expect(whileExpression.result).toBe(whileResultStatement.expression);
+
+    const forInAssignment = program.body[2] as AssignmentStatementNode;
+    expect(forInAssignment.right?.kind).toBe('ForStatement');
+    const inlineFor = forInAssignment.right as ForStatementNode;
+    expect(inlineFor.iterator?.kind).toBe('Identifier');
+    expect(inlineFor.result?.kind).toBe('BinaryExpression');
+  });
+
+  it('parses arrow function expressions with expression and block bodies', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Arrow Expressions")',
+      'var transformer = (float value) => value * 2',
+      'result = (series float input, float scale = 1) =>',
+      '    scaled := input * scale',
+      '    scaled',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+
+    const declaration = program.body.find(
+      (node): node is VariableDeclarationNode => node.kind === 'VariableDeclaration',
+    );
+    expect(declaration).toBeDefined();
+    if (!declaration) {
+      throw new Error('Expected variable declaration for transformer');
+    }
+    expect(declaration.kind).toBe('VariableDeclaration');
+    expect(declaration.initializer?.kind).toBe('ArrowFunctionExpression');
+    const expressionArrow = declaration.initializer as ArrowFunctionExpressionNode;
+    expect(expressionArrow.params).toHaveLength(1);
+    expect(expressionArrow.params[0].identifier.name).toBe('value');
+    const expressionReturn = expressionArrow.body.body[0] as ReturnStatementNode;
+    expect(expressionReturn.argument?.kind).toBe('BinaryExpression');
+
+    const assignment = program.body.find(
+      (node): node is AssignmentStatementNode => node.kind === 'AssignmentStatement',
+    );
+    expect(assignment).toBeDefined();
+    if (!assignment) {
+      throw new Error('Expected assignment for result binding');
+    }
+    expect(assignment.kind).toBe('AssignmentStatement');
+    expect(assignment.right?.kind).toBe('ArrowFunctionExpression');
+    const blockArrow = assignment.right as ArrowFunctionExpressionNode;
+    expect(blockArrow.params).toHaveLength(2);
+    expect(blockArrow.params[0].identifier.name).toBe('input');
+    expect(blockArrow.params[1].defaultValue?.kind).toBe('NumberLiteral');
+    expect(blockArrow.body.body).toHaveLength(2);
+    const [loopAssignment, finalExpression] = blockArrow.body.body;
+    expect(loopAssignment.kind).toBe('AssignmentStatement');
+    expect(finalExpression.kind).toBe('ExpressionStatement');
+  });
+
   it('parses switch statements with inline and block cases', () => {
     const source = [
       'result = switch mode',
@@ -881,9 +1034,35 @@ describe('Chevrotain parser', () => {
       expect(repeat.body.body).toHaveLength(1);
       const callStatement = repeat.body.body[0] as ExpressionStatementNode;
       expect(callStatement.expression.kind).toBe('CallExpression');
+      expect(repeat.result).toBe(callStatement.expression);
       const test = repeat.test as IdentifierNode;
       expect(test.kind).toBe('Identifier');
       expect(test.name).toBe('bar');
+    });
+
+    it('captures trailing return values as repeat loop results', () => {
+      const source = [
+        'repeat',
+        '    foo()',
+        '    return value',
+        'until condition',
+        '',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+      expect(ast).not.toBeNull();
+
+      const program = ast as ProgramNode;
+      expect(program.body).toHaveLength(1);
+      const repeat = program.body[0] as RepeatStatementNode;
+      expect(repeat.kind).toBe('RepeatStatement');
+      const returnStatement = repeat.body.body[1] as ReturnStatementNode;
+      expect(returnStatement.kind).toBe('ReturnStatement');
+      expect(repeat.result).toBe(returnStatement.argument);
+      const test = repeat.test as IdentifierNode;
+      expect(test.name).toBe('condition');
     });
 
     it('parses compiler annotations preceding declarations', () => {
