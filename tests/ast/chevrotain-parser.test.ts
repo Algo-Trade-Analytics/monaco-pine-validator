@@ -5,6 +5,7 @@ import type {
   BlockStatementNode,
   BreakStatementNode,
   ContinueStatementNode,
+  ForStatementNode,
   IdentifierNode,
   BinaryExpressionNode,
   CallExpressionNode,
@@ -341,5 +342,49 @@ describe('Chevrotain parser', () => {
     const valueReturn = program.body[3] as ReturnStatementNode;
     expect(valueReturn.kind).toBe('ReturnStatement');
     expect(valueReturn.argument?.kind).toBe('Identifier');
+  });
+
+  it('parses for loops with implicit and explicit steps', () => {
+    const source = [
+      'for i = 0 to 10',
+      '    sum := sum + i',
+      '',
+      'for j := 10 to 0 by -1',
+      '    foo(j)',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(2);
+
+    const firstLoop = program.body[0] as ForStatementNode;
+    expect(firstLoop.kind).toBe('ForStatement');
+    expect(firstLoop.initializer?.kind).toBe('AssignmentStatement');
+    const firstTest = firstLoop.test as BinaryExpressionNode;
+    expect(firstTest.operator).toBe('<=');
+    expect(firstTest.left.kind).toBe('Identifier');
+    expect((firstTest.left as IdentifierNode).name).toBe('i');
+    expect(firstTest.right.kind).toBe('NumberLiteral');
+    const firstUpdate = firstLoop.update as BinaryExpressionNode;
+    expect(firstUpdate.operator).toBe('+');
+    expect((firstUpdate.left as IdentifierNode).name).toBe('i');
+    expect(firstUpdate.right.kind).toBe('NumberLiteral');
+
+    const secondLoop = program.body[1] as ForStatementNode;
+    expect(secondLoop.kind).toBe('ForStatement');
+    expect(secondLoop.initializer?.kind).toBe('AssignmentStatement');
+    const secondTest = secondLoop.test as BinaryExpressionNode;
+    expect(secondTest.operator).toBe('<=');
+    expect((secondTest.left as IdentifierNode).name).toBe('j');
+    expect(secondTest.right.kind).toBe('NumberLiteral');
+    const secondUpdate = secondLoop.update as BinaryExpressionNode;
+    expect(secondUpdate.operator).toBe('+');
+    expect((secondUpdate.left as IdentifierNode).name).toBe('j');
+    expect(secondUpdate.right.kind).toBe('UnaryExpression');
   });
 });

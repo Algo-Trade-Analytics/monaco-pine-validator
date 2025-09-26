@@ -111,6 +111,12 @@ export const While = createToken({
   longer_alt: Identifier,
 });
 
+export const For = createToken({
+  name: 'For',
+  pattern: /for/,
+  longer_alt: Identifier,
+});
+
 export const Break = createToken({
   name: 'Break',
   pattern: /break/,
@@ -129,6 +135,18 @@ export const Return = createToken({
   longer_alt: Identifier,
 });
 
+export const To = createToken({
+  name: 'To',
+  pattern: /to/,
+  longer_alt: Identifier,
+});
+
+export const By = createToken({
+  name: 'By',
+  pattern: /by/,
+  longer_alt: Identifier,
+});
+
 export const AllTokens = [
   WhiteSpace,
   Newline,
@@ -142,9 +160,12 @@ export const AllTokens = [
   If,
   Else,
   While,
+  For,
   Break,
   Continue,
   Return,
+  To,
+  By,
   True,
   False,
   NaToken,

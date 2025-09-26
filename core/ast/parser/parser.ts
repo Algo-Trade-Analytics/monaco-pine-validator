@@ -9,6 +9,7 @@ import {
   type BooleanLiteralNode,
   type CallExpressionNode,
   type ContinueStatementNode,
+  type ForStatementNode,
   type ExpressionNode,
   type ExpressionStatementNode,
   type IfStatementNode,
@@ -76,9 +77,12 @@ import {
   Or,
   Not,
   While,
+  For,
   Break,
   Continue,
   Return,
+  To,
+  By,
 } from './tokens';
 
 const EOF_TOKEN = EOF;
@@ -295,6 +299,57 @@ function createNumberNode(token?: IToken): NumberLiteralNode {
   };
 }
 
+function cloneIdentifierNode(source: IdentifierNode | null): IdentifierNode | null {
+  if (!source) {
+    return null;
+  }
+
+  const {
+    name,
+    loc: {
+      start: { line: startLine, column: startColumn, offset: startOffset },
+      end: { line: endLine, column: endColumn, offset: endOffset },
+    },
+    range,
+  } = source;
+
+  return {
+    kind: 'Identifier',
+    name,
+    loc: createLocation(
+      createPosition(startLine, startColumn, startOffset),
+      createPosition(endLine, endColumn, endOffset),
+    ),
+    range: createRange(range[0], range[1]),
+  };
+}
+
+function createSyntheticToken(
+  image: string,
+  tokenType: typeof IdentifierToken,
+  reference?: IToken,
+): IToken {
+  const base = ensureToken(reference);
+  const length = image.length;
+  const startLine = base.startLine ?? 1;
+  const startColumn = base.startColumn ?? 1;
+  const startOffset = base.startOffset ?? 0;
+  const endLine = base.endLine ?? startLine;
+  const endColumn = startColumn + length;
+  const endOffset = startOffset + length;
+
+  return {
+    image,
+    startLine,
+    startColumn,
+    startOffset,
+    endLine,
+    endColumn,
+    endOffset,
+    tokenType,
+  } as IToken;
+}
+
 function createBooleanNode(token: IToken | undefined, value: boolean): BooleanLiteralNode {
   const safeToken = ensureToken(token);
   return {
@@ -367,6 +422,25 @@ function createWhileStatementNode(
   return {
     kind: 'WhileStatement',
     test,
+    body,
+    ...span,
+  };
+}
+
+function createForStatementNode(
+  initializer: VariableDeclarationNode | AssignmentStatementNode | null,
+  test: ExpressionNode | null,
+  update: ExpressionNode | null,
+  body: BlockStatementNode,
+  startToken: IToken,
+  endToken: IToken | undefined,
+): ForStatementNode {
+  const span = spanFromTokens(startToken, endToken ?? startToken);
+  return {
+    kind: 'ForStatement',
+    initializer,
+    test,
+    update,
     body,
     ...span,
   };
@@ -625,6 +699,10 @@ class PineParser extends EmbeddedActionsParser {
         ALT: () => this.SUBRULE(this.ifStatement),
       },
       {
+        GATE: () => this.LA(1).tokenType === For,
+        ALT: () => this.SUBRULE(this.forStatement),
+      },
+      {
         GATE: () => this.LA(1).tokenType === While,
         ALT: () => this.SUBRULE(this.whileStatement),
       },
@@ -868,6 +946,67 @@ class PineParser extends EmbeddedActionsParser {
 
     const endToken = this.LA(0);
     return createIfStatementNode(test, consequent, alternate, ifToken, endToken);
+  });
+
+  private forStatement = this.RULE('forStatement', () => {
+    const forToken = this.CONSUME(For);
+
+    let initializer: VariableDeclarationNode | AssignmentStatementNode | null = null;
+    if (this.isVariableDeclarationStart()) {
+      initializer = this.SUBRULE(this.variableDeclaration);
+    } else if (this.isAssignmentStart()) {
+      initializer = this.SUBRULE(this.assignmentStatement);
+    }
+
+    const loopIdentifier: IdentifierNode | null = initializer
+      ? initializer.kind === 'VariableDeclaration'
+        ? initializer.identifier
+        : initializer.kind === 'AssignmentStatement' && initializer.left.kind === 'Identifier'
+          ? (initializer.left as IdentifierNode)
+          : null
+      : null;
+
+    let test: ExpressionNode | null = null;
+    let update: ExpressionNode | null = null;
+
+    if (this.LA(1).tokenType === To) {
+      const toToken = this.CONSUME(To);
+      const endExpression = this.SUBRULE(this.expression) ?? createPlaceholderExpression();
+      const endToken = this.LA(0);
+
+      const testIdentifier = cloneIdentifierNode(loopIdentifier);
+      if (testIdentifier) {
+        const operatorToken = createSyntheticToken('<=', LessEqual, toToken);
+        test = createBinaryExpressionNode(testIdentifier, operatorToken, endExpression, endToken);
+      } else {
+        test = endExpression;
+      }
+
+      if (this.LA(1).tokenType === By) {
+        const byToken = this.CONSUME(By);
+        const stepExpression = this.SUBRULE2(this.expression) ?? createPlaceholderExpression();
+        const updateEndToken = this.LA(0);
+        const updateIdentifier = cloneIdentifierNode(loopIdentifier);
+        if (updateIdentifier) {
+          const operatorToken = createSyntheticToken('+', Plus, byToken);
+          update = createBinaryExpressionNode(updateIdentifier, operatorToken, stepExpression, updateEndToken);
+        } else {
+          update = stepExpression;
+        }
+      } else {
+        const updateIdentifier = cloneIdentifierNode(loopIdentifier);
+        if (updateIdentifier) {
+          const defaultStepToken = createSyntheticToken('1', NumberToken, toToken);
+          const defaultStep = createNumberNode(defaultStepToken);
+          const operatorToken = createSyntheticToken('+', Plus, toToken);
+          update = createBinaryExpressionNode(updateIdentifier, operatorToken, defaultStep, defaultStepToken);
+        }
+      }
+    }
+
+    const body = this.parseIndentedBlock(tokenIndent(forToken));
+    const endToken = this.LA(0);
+    return createForStatementNode(initializer, test, update, body, forToken, endToken);
   });
 
   private whileStatement = this.RULE('whileStatement', () => {

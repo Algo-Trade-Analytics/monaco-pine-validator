@@ -34,6 +34,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - The Chevrotain parser now recognises assignment statements, compound operators, and variable declarations (including keyword modifiers, type annotations, and generic array types) while emitting range-accurate AST nodes backed by targeted regression tests.
 - The Chevrotain parser now recognises indentation-based `if`/`else` statements and emits block statement nodes for nested branches, keeping ranges accurate while extending the regression coverage with control-flow fixtures.
 - The Chevrotain parser now recognises indentation-based `while` loops alongside `return`, `break`, and `continue` statements, producing structured AST nodes and regression coverage for block-scoped flow control.
+- The Chevrotain parser now recognises range-based `for` loops, synthesising comparison and step expressions (including default steps) while extending the regression suite to cover explicit `by` clauses.
 - Core validator AST analysis now inspects call expressions to flag `strategy.*` usage in indicators, recognise plotting/drawing activity for PS014 guardrails, and enforce library restrictions without relying on regex fallbacks.
 - Core validator AST analysis now inspects member expressions so strategy namespace usage in indicators is flagged even when no call expression is present, ensuring parity with the legacy scanner.
 - Core validator AST analysis now inspects index expressions so negative history references on series data trigger PS024 errors without the legacy line scanner.
