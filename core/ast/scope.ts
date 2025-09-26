@@ -41,6 +41,7 @@ import {
   type BreakStatementNode,
   type VariableDeclarationNode,
   type TupleExpressionNode,
+  type ArrayLiteralNode,
 } from './nodes';
 
 export interface ScopeBuildResult {
@@ -264,6 +265,13 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
       case 'TupleExpression': {
         const tuple = expression as TupleExpressionNode;
         tuple.elements.forEach((element) => {
+          visitExpression(element);
+        });
+        break;
+      }
+      case 'ArrayLiteral': {
+        const arrayLiteral = expression as ArrayLiteralNode;
+        arrayLiteral.elements.forEach((element) => {
           visitExpression(element);
         });
         break;

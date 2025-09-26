@@ -31,6 +31,7 @@ import {
   type NumberLiteralNode,
   type ProgramNode,
   type TupleExpressionNode,
+  type ArrayLiteralNode,
   type UnaryExpressionNode,
 } from '../core/ast/nodes';
 import type { TypeMetadata } from '../core/ast/types';
@@ -444,6 +445,10 @@ export class EnhancedBooleanValidator implements ValidationModule {
         const tuple = expression as TupleExpressionNode;
         return tuple.elements.some((element) => this.expressionSome(element ?? null, predicate));
       }
+      case 'ArrayLiteral': {
+        const arrayLiteral = expression as ArrayLiteralNode;
+        return arrayLiteral.elements.some((element) => this.expressionSome(element ?? null, predicate));
+      }
       default:
         return false;
     }
@@ -500,6 +505,12 @@ export class EnhancedBooleanValidator implements ValidationModule {
       case 'TupleExpression': {
         const tuple = expression as TupleExpressionNode;
         return `[${tuple.elements.map((element) => (element ? this.getExpressionText(element) : '')).join(', ')}]`;
+      }
+      case 'ArrayLiteral': {
+        const arrayLiteral = expression as ArrayLiteralNode;
+        return `[${arrayLiteral.elements
+          .map((element) => (element ? this.getExpressionText(element) : ''))
+          .join(', ')}]`;
       }
       default:
         return expression.kind;

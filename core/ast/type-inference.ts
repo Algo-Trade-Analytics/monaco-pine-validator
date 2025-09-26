@@ -38,6 +38,7 @@ import {
   type RepeatStatementNode,
   type WhileStatementNode,
   type TupleExpressionNode,
+  type ArrayLiteralNode,
 } from './nodes';
 
 const NUMERIC_BINARY_OPERATORS = new Set(['+', '-', '*', '/', '%', '^']);
@@ -454,6 +455,15 @@ function inferExpression(
         });
       });
       return annotateNode(environment, expression, createTypeMetadata('matrix', `${reason}:matrix`, 'certain'));
+    }
+    case 'ArrayLiteral': {
+      const arrayLiteral = expression as ArrayLiteralNode;
+      arrayLiteral.elements.forEach((element, elementIndex) => {
+        if (element) {
+          inferExpression(environment, element, `${reason}:array[${elementIndex}]`);
+        }
+      });
+      return annotateNode(environment, expression, createTypeMetadata('array', `${reason}:array`, 'certain'));
     }
     case 'TupleExpression': {
       const tuple = expression as TupleExpressionNode;

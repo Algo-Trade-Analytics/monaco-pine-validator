@@ -77,6 +77,7 @@ export function createRepeatStatementNode(
     body,
     test,
     result,
+    resultBinding: null,
     ...span,
   };
 }
@@ -94,6 +95,7 @@ export function createWhileStatementNode(
     test,
     body,
     result,
+    resultBinding: null,
     ...span,
   };
 }
@@ -119,6 +121,7 @@ export function createForStatementNode(
     update,
     body,
     result,
+    resultBinding: null,
     ...span,
   };
 }
@@ -135,6 +138,7 @@ export function createSwitchStatementNode(
     kind: 'SwitchStatement',
     discriminant: safeDiscriminant,
     cases,
+    resultBinding: null,
     ...span,
   };
 }

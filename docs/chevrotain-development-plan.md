@@ -9,6 +9,7 @@
 - Regression tests assert positive parsing, AST shape, and recovery semantics to guard the new feature set while documenting outstanding fixtures for additional syntactic sugar.
 - Collection iteration headers (`for … in`) tokenise the `in` keyword, populate iterator/iterable metadata on `ForStatement` nodes, and support tuple destructuring so validators can reason about loop-scoped bindings.
 - Parenthesised `=>` expressions now build dedicated `ArrowFunctionExpression` nodes with shared parameter helpers, and the traversal, scope, and type-inference pipelines treat the inline functions like standard declarations so downstream modules receive full metadata.【F:core/ast/parser/rules/expressions.ts†L90-L188】【F:core/ast/traversal.ts†L60-L140】【F:core/ast/scope.ts†L200-L360】【F:core/ast/type-inference.ts†L360-L520】
+- Bracketed list expressions now emit `ArrayLiteral` nodes (distinct from tuple destructuring), while nested rows still collapse into `MatrixLiteral` nodes. Traversal, scope, and type inference understand the new literal form.【F:core/ast/parser/rules/expressions.ts†L416-L520】【F:core/ast/traversal.ts†L200-L220】【F:core/ast/type-inference.ts†L440-L520】
 
 ## Parser Feature Backlog
 

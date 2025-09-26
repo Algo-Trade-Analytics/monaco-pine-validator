@@ -14,6 +14,7 @@ export {
   createConditionalExpressionNode,
   createIfExpressionNode,
   createIndexExpressionNode,
+  createArrayLiteralNode,
   createMatrixLiteralNode,
   createMemberExpressionNode,
   createPlaceholderExpression,

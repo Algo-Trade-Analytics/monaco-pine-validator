@@ -172,7 +172,7 @@ export class PineParser extends EmbeddedActionsParser {
 
   public assignmentTarget = this.RULE('assignmentTarget', () => {
     if (this.LA(1).tokenType === LBracket) {
-      return this.SUBRULE(this.bracketExpression);
+      return this.SUBRULE(this.bracketExpression, { ARGS: ['tuple'] });
     }
     return this.SUBRULE(this.memberExpression);
   });
@@ -219,4 +219,3 @@ export class PineParser extends EmbeddedActionsParser {
 
   public switchExpression = createSwitchExpressionRule(this);
 }
-

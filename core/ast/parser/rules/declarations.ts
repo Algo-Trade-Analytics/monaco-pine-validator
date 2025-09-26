@@ -36,6 +36,7 @@ import {
   createEnumMemberNode,
   tokenIndent,
 } from '../node-builders';
+import { attachLoopResultBinding } from '../helpers';
 import type {
   ArgumentNode,
   BlockStatementNode,
@@ -344,17 +345,18 @@ export function createVariableDeclarationRule(parser: PineParser) {
     const identifier = createIdentifierNode(identifierToken);
 
     let initializer: ExpressionNode | undefined;
+    let operatorToken: IToken | undefined;
     const nextTokenType = parser.LA(1).tokenType;
     if (nextTokenType === Equal) {
-      parser.CONSUME(Equal);
+      operatorToken = parser.CONSUME(Equal);
       initializer = parser.SUBRULE(parser.expression);
     } else if (nextTokenType === ColonEqual) {
-      parser.CONSUME(ColonEqual);
+      operatorToken = parser.CONSUME(ColonEqual);
       initializer = parser.SUBRULE2(parser.expression);
     }
 
     const startToken = declarationToken ?? typeTokens[0] ?? identifierToken;
-    return createVariableDeclarationNode(
+    const variableDeclaration = createVariableDeclarationNode(
       declarationKind,
       identifier,
       identifierToken,
@@ -362,5 +364,18 @@ export function createVariableDeclarationRule(parser: PineParser) {
       initializer,
       startToken,
     );
+    if (
+      initializer &&
+      operatorToken &&
+      (operatorToken.image === '=' || operatorToken.image === ':=')
+    ) {
+      attachLoopResultBinding(initializer, {
+        kind: 'variableDeclaration',
+        target: identifier,
+        operator: operatorToken.image,
+        declarationKind,
+      });
+    }
+    return variableDeclaration;
   });
 }

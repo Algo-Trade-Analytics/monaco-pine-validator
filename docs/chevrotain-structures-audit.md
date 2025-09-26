@@ -12,7 +12,7 @@
 
 ## Identified gaps
 - Loop result binding syntax (e.g., `sum = for ...` sugar that binds the final value inline) still lacks dedicated grammar support even though the reference manual permits binding targets ahead of the loop keyword; expression-form `for`/`while` loops and repeat results now flow through the AST, but binding aliases remain to be implemented.【F:PineScriptContext/structures/keywords.ts†L24-L92】【F:PineScriptContext/pine-script-refrence.txt†L16779-L17246】【F:core/ast/parser/rules/control-flow.ts†L223-L446】
-- Literal collection forms described in the structures (e.g., arrays and maps) have not yet been implemented as expression nodes; tuple and matrix literals exist, but general array/map literals remain outstanding for full iterable support.【F:PineScriptContext/structures/types.json†L1-L15】【F:tests/ast/chevrotain-parser.test.ts†L261-L311】
+- Map literal forms described in the structures still lack dedicated expression nodes; tuple, matrix, and array literals now exist, but general map literals remain outstanding for full iterable support.【F:PineScriptContext/structures/types.json†L1-L15】【F:tests/ast/chevrotain-parser.test.ts†L296-L341】
 
 ## Recommended next steps
 1. **Add loop result binding support**

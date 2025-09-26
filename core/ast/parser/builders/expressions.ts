@@ -12,6 +12,7 @@ import {
   type IdentifierNode,
   type IfExpressionNode,
   type IndexExpressionNode,
+  type ArrayLiteralNode,
   type MatrixLiteralNode,
   type MemberExpressionNode,
   type ParameterNode,
@@ -96,6 +97,20 @@ export function createTupleExpressionNode(
   const safeEnd = ensureToken(endToken, safeStart);
   return {
     kind: 'TupleExpression',
+    elements,
+    ...spanFromTokens(safeStart, safeEnd),
+  };
+}
+
+export function createArrayLiteralNode(
+  elements: (ExpressionNode | null)[],
+  startToken: IToken | undefined,
+  endToken: IToken | undefined,
+): ArrayLiteralNode {
+  const safeStart = ensureToken(startToken);
+  const safeEnd = ensureToken(endToken, safeStart);
+  return {
+    kind: 'ArrayLiteral',
     elements,
     ...spanFromTokens(safeStart, safeEnd),
   };

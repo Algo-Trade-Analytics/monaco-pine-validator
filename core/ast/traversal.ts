@@ -29,6 +29,7 @@ import {
   type SwitchStatementNode,
   type TypeReferenceNode,
   type TupleExpressionNode,
+  type ArrayLiteralNode,
   type UnaryExpressionNode,
   type VariableDeclarationNode,
   type RepeatStatementNode,
@@ -205,6 +206,13 @@ function collectChildren(path: NodePath): ChildEntry[] {
     case 'TupleExpression': {
       const tuple = node as TupleExpressionNode;
       tuple.elements.forEach((element, elementIndex) => {
+        push(element, 'elements', elementIndex);
+      });
+      break;
+    }
+    case 'ArrayLiteral': {
+      const arrayLiteral = node as ArrayLiteralNode;
+      arrayLiteral.elements.forEach((element, elementIndex) => {
         push(element, 'elements', elementIndex);
       });
       break;

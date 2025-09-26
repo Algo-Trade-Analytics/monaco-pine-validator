@@ -47,6 +47,7 @@ export type NodeKind =
   | 'UnaryExpression'
   | 'ConditionalExpression'
   | 'ArrowFunctionExpression'
+  | 'ArrayLiteral'
   | 'TupleExpression'
   | 'IndexExpression'
   | 'MatrixLiteral'
@@ -92,6 +93,7 @@ export type Node =
   | UnaryExpressionNode
   | ConditionalExpressionNode
   | TupleExpressionNode
+  | ArrayLiteralNode
   | IndexExpressionNode
   | MatrixLiteralNode
   | CompilerAnnotationNode
@@ -136,6 +138,7 @@ export type ExpressionNode =
   | IfExpressionNode
   | ConditionalExpressionNode
   | TupleExpressionNode
+  | ArrayLiteralNode
   | IndexExpressionNode
   | MatrixLiteralNode
   | SwitchStatementNode
@@ -201,6 +204,13 @@ export interface VariableDeclarationNode extends BaseNode {
   annotations: CompilerAnnotationNode[];
 }
 
+export interface LoopResultBinding {
+  kind: 'assignment' | 'tupleAssignment' | 'variableDeclaration';
+  target: ExpressionNode;
+  operator: '=' | ':=';
+  declarationKind?: VariableDeclarationKind;
+}
+
 export interface AssignmentStatementNode extends BaseNode {
   kind: 'AssignmentStatement';
   left: ExpressionNode;
@@ -209,6 +219,11 @@ export interface AssignmentStatementNode extends BaseNode {
 
 export interface TupleExpressionNode extends BaseNode {
   kind: 'TupleExpression';
+  elements: (ExpressionNode | null)[];
+}
+
+export interface ArrayLiteralNode extends BaseNode {
+  kind: 'ArrayLiteral';
   elements: (ExpressionNode | null)[];
 }
 
@@ -301,6 +316,7 @@ export interface RepeatStatementNode extends BaseNode {
   body: BlockStatementNode;
   test: ExpressionNode;
   result: ExpressionNode | null;
+  resultBinding: LoopResultBinding | null;
 }
 
 export interface WhileStatementNode extends BaseNode {
@@ -308,6 +324,7 @@ export interface WhileStatementNode extends BaseNode {
   test: ExpressionNode;
   body: BlockStatementNode;
   result: ExpressionNode | null;
+  resultBinding: LoopResultBinding | null;
 }
 
 export interface ForStatementNode extends BaseNode {
@@ -319,12 +336,14 @@ export interface ForStatementNode extends BaseNode {
   update: ExpressionNode | null;
   body: BlockStatementNode;
   result: ExpressionNode | null;
+  resultBinding: LoopResultBinding | null;
 }
 
 export interface SwitchStatementNode extends BaseNode {
   kind: 'SwitchStatement';
   discriminant: ExpressionNode;
   cases: SwitchCaseNode[];
+  resultBinding: LoopResultBinding | null;
 }
 
 export interface SwitchCaseNode extends BaseNode {

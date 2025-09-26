@@ -3,6 +3,8 @@ import { EOF, type IToken } from 'chevrotain';
 import {
   type BlockStatementNode,
   type CompilerAnnotationNode,
+  type ExpressionNode,
+  type LoopResultBinding,
   type StatementNode,
 } from '../nodes';
 import {
@@ -531,4 +533,23 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
       lastToken ?? blockStartToken ?? firstStatementToken,
     );
   };
+}
+
+export function attachLoopResultBinding(
+  expression: ExpressionNode | null | undefined,
+  binding: LoopResultBinding,
+): void {
+  if (!expression) {
+    return;
+  }
+
+  switch (expression.kind) {
+    case 'ForStatement':
+    case 'WhileStatement':
+    case 'SwitchStatement':
+      expression.resultBinding = binding;
+      break;
+    default:
+      break;
+  }
 }

@@ -903,6 +903,8 @@ describe('AST fixtures', () => {
               95,
               120,
             ],
+            "result": null,
+            "resultBinding": null,
             "test": {
               "kind": "Identifier",
               "loc": {
@@ -1067,6 +1069,8 @@ describe('AST fixtures', () => {
               130,
               160,
             ],
+            "result": null,
+            "resultBinding": null,
             "test": {
               "kind": "Identifier",
               "loc": {

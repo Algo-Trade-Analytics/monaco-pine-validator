@@ -21,6 +21,7 @@ import {
   type MemberExpressionNode,
   type ProgramNode,
   type TupleExpressionNode,
+  type ArrayLiteralNode,
   type UnaryExpressionNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
@@ -1025,6 +1026,12 @@ export class DynamicDataValidator implements ValidationModule {
       case 'TupleExpression': {
         const tuple = node as TupleExpressionNode;
         return tuple.elements.some((element) => this.expressionIsDynamic(element));
+      }
+      case 'ArrayLiteral': {
+        const arrayLiteral = node as ArrayLiteralNode;
+        return arrayLiteral.elements.some((element) =>
+          element ? this.expressionIsDynamic(element) : false,
+        );
       }
       default:
         return false;

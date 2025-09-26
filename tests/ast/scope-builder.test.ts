@@ -260,6 +260,8 @@ describe('buildScopeGraph', () => {
       kind: 'WhileStatement',
       test: identifier('loopGuard', 160),
       body: whileBody,
+      result: null,
+      resultBinding: null,
       loc: locFrom(160, 190),
       range: createRange(160, 190),
     };
@@ -294,9 +296,13 @@ describe('buildScopeGraph', () => {
     const forStatement: ForStatementNode = {
       kind: 'ForStatement',
       initializer: forInitializer,
+      iterator: null,
+      iterable: null,
       test: identifier('hasNext', 216),
       update: identifier('idx', 218),
       body: forBody,
+      result: null,
+      resultBinding: null,
       loc: locFrom(200, 240),
       range: createRange(200, 240),
     };

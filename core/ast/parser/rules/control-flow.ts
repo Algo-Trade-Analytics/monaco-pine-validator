@@ -29,6 +29,7 @@ import {
   createWhileStatementNode,
   tokenIndent,
 } from '../node-builders';
+import { attachLoopResultBinding } from '../helpers';
 import type { PineParser } from '../parser';
 import {
   Break,
@@ -153,7 +154,7 @@ export function createExpressionStatementRule(parser: PineParser) {
 
 export function createTupleAssignmentStatementRule(parser: PineParser) {
   return parser.RULE('tupleAssignmentStatement', () => {
-    const left = parser.SUBRULE(parser.bracketExpression);
+    const left = parser.SUBRULE(parser.bracketExpression, { ARGS: ['tuple'] });
     const operator = parser.OR([
       { ALT: () => parser.CONSUME(Equal) },
       { ALT: () => parser.CONSUME(ColonEqual) },
@@ -165,7 +166,16 @@ export function createTupleAssignmentStatementRule(parser: PineParser) {
     ]);
     const right = parser.SUBRULE(parser.expression);
     const endToken = parser.LA(0);
-    return createAssignmentStatementNode(left, right, operator, endToken);
+    const assignment = createAssignmentStatementNode(left, right, operator, endToken);
+    const operatorImage = operator.image;
+    if ((operatorImage === '=' || operatorImage === ':=') && right) {
+      attachLoopResultBinding(right, {
+        kind: 'tupleAssignment',
+        target: assignment.left,
+        operator: operatorImage,
+      });
+    }
+    return assignment;
   });
 }
 
@@ -183,7 +193,16 @@ export function createAssignmentStatementRule(parser: PineParser) {
     ]);
     const right = parser.SUBRULE(parser.expression);
     const endToken = parser.LA(0);
-    return createAssignmentStatementNode(left, right, operator, endToken);
+    const assignment = createAssignmentStatementNode(left, right, operator, endToken);
+    const operatorImage = operator.image;
+    if ((operatorImage === '=' || operatorImage === ':=') && right) {
+      attachLoopResultBinding(right, {
+        kind: 'assignment',
+        target: assignment.left,
+        operator: operatorImage,
+      });
+    }
+    return assignment;
   });
 }
 
@@ -312,7 +331,7 @@ export function createForIteratorTargetRule(parser: PineParser) {
   return parser.RULE('forIteratorTarget', (): ExpressionNode => {
     const next = parser.LA(1);
     if (next.tokenType === LBracket) {
-      const tuple = parser.SUBRULE(parser.bracketExpression);
+      const tuple = parser.SUBRULE(parser.bracketExpression, { ARGS: ['tuple'] });
       return tuple ?? createPlaceholderExpression();
     }
 

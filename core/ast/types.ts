@@ -110,7 +110,7 @@ export type TypeCertainty = 'certain' | 'inferred' | 'conflict';
 
 export type PinePrimitiveType = 'int' | 'float' | 'bool' | 'string' | 'void';
 
-export type InferredTypeKind = PinePrimitiveType | 'function' | 'series' | 'matrix' | 'unknown';
+export type InferredTypeKind = PinePrimitiveType | 'function' | 'series' | 'matrix' | 'array' | 'unknown';
 
 export interface TypeMetadata {
   kind: InferredTypeKind;

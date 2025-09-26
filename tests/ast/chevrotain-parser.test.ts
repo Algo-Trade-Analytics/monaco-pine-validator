@@ -13,6 +13,7 @@ import type {
   ImportDeclarationNode,
   IndexExpressionNode,
   MatrixLiteralNode,
+  ArrayLiteralNode,
   BinaryExpressionNode,
   CallExpressionNode,
   ConditionalExpressionNode,
@@ -310,6 +311,30 @@ describe('Chevrotain parser', () => {
     expect(matrix.rows[0]).toHaveLength(2);
     expect(matrix.rows[0][0]?.kind).toBe('NumberLiteral');
     expect(matrix.rows[1][1]?.kind).toBe('NumberLiteral');
+  });
+
+  it('parses array literals as dedicated nodes', () => {
+    const source = [
+      'values = [1, foo, 3]',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(1);
+
+    const assignment = program.body[0] as AssignmentStatementNode;
+    const arrayLiteral = assignment.right as ArrayLiteralNode;
+
+    expect(arrayLiteral.kind).toBe('ArrayLiteral');
+    expect(arrayLiteral.elements).toHaveLength(3);
+    expect(arrayLiteral.elements[0]?.kind).toBe('NumberLiteral');
+    expect(arrayLiteral.elements[1]?.kind).toBe('Identifier');
+    expect(arrayLiteral.elements[2]?.kind).toBe('NumberLiteral');
   });
 
   it('parses index expressions in assignment targets and nested chains', () => {
@@ -831,6 +856,53 @@ describe('Chevrotain parser', () => {
     const inlineFor = forInAssignment.right as ForStatementNode;
     expect(inlineFor.iterator?.kind).toBe('Identifier');
     expect(inlineFor.result?.kind).toBe('BinaryExpression');
+  });
+
+  it('attaches loop result bindings when loops appear on the right-hand side', () => {
+    const source = [
+      'sum = for i = 0 to 2',
+      '        running := nz(running, 0) + i',
+      '        running',
+      '',
+      'var total = while sum < 10',
+      '                sum += 1',
+      '                sum',
+      '',
+      '[even, odd] = switch sum % 2',
+      '    0 => sum',
+      '    => sum + 1',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(3);
+
+    const assignment = program.body[0] as AssignmentStatementNode;
+    const forExpression = assignment.right as ForStatementNode;
+    expect(forExpression.resultBinding).not.toBeNull();
+    expect(forExpression.resultBinding?.kind).toBe('assignment');
+    expect(forExpression.resultBinding?.target).toBe(assignment.left);
+    expect(forExpression.resultBinding?.operator).toBe('=');
+
+    const declaration = program.body[1] as VariableDeclarationNode;
+    const whileExpression = declaration.initializer as WhileStatementNode;
+    expect(whileExpression.resultBinding).not.toBeNull();
+    expect(whileExpression.resultBinding?.kind).toBe('variableDeclaration');
+    expect(whileExpression.resultBinding?.target).toBe(declaration.identifier);
+    expect(whileExpression.resultBinding?.operator).toBe('=');
+    expect(whileExpression.resultBinding?.declarationKind).toBe(declaration.declarationKind);
+
+    const tupleAssignment = program.body[2] as AssignmentStatementNode;
+    const switchExpression = tupleAssignment.right as SwitchStatementNode;
+    expect(switchExpression.resultBinding).not.toBeNull();
+    expect(switchExpression.resultBinding?.kind).toBe('tupleAssignment');
+    expect(switchExpression.resultBinding?.target).toBe(tupleAssignment.left);
+    expect(switchExpression.resultBinding?.operator).toBe('=');
   });
 
   it('parses arrow function expressions with expression and block bodies', () => {

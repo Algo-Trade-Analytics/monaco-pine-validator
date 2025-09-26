@@ -284,11 +284,15 @@ export function createWhileStatement(
   start: number,
   end: number,
   line = 1,
+  options: { result?: ExpressionNode | null } = {},
 ): WhileStatementNode {
+  const { result = null } = options;
   return {
     kind: 'WhileStatement',
     test,
     body,
+    result,
+    resultBinding: null,
     ...createSpan({ start, end, lineStart: line }),
   };
 }
@@ -301,9 +305,13 @@ export function createForStatement(
   start: number,
   end: number,
   line = 1,
-  options: { iterator?: ExpressionNode | null; iterable?: ExpressionNode | null } = {},
+  options: {
+    iterator?: ExpressionNode | null;
+    iterable?: ExpressionNode | null;
+    result?: ExpressionNode | null;
+  } = {},
 ): ForStatementNode {
-  const { iterator = null, iterable = null } = options;
+  const { iterator = null, iterable = null, result = null } = options;
   return {
     kind: 'ForStatement',
     initializer,
@@ -312,6 +320,8 @@ export function createForStatement(
     test,
     update,
     body,
+    result,
+    resultBinding: null,
     ...createSpan({ start, end, lineStart: line }),
   };
 }
@@ -570,6 +580,7 @@ export function createSwitchStatement(
     kind: 'SwitchStatement',
     discriminant,
     cases,
+    resultBinding: null,
     ...createSpan({ start, end, lineStart, lineEnd }),
   };
 }

@@ -296,6 +296,7 @@ export class EnhancedPerformanceValidator implements ValidationModule {
       case 'BinaryExpression':
       case 'ConditionalExpression':
       case 'TupleExpression':
+      case 'ArrayLiteral':
         // Composite expressions expose child nodes on generic properties
         return Object.values(expression).some((value) => {
           if (Array.isArray(value)) {

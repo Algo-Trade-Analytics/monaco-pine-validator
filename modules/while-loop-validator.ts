@@ -25,6 +25,7 @@ import type {
   ReturnStatementNode,
   StatementNode,
   WhileStatementNode,
+  ArrayLiteralNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 
@@ -309,6 +310,13 @@ export class WhileLoopValidator implements ValidationModule {
           break;
         case 'TupleExpression':
           for (const element of node.elements) {
+            if (element) {
+              visitExpression(element);
+            }
+          }
+          break;
+        case 'ArrayLiteral':
+          for (const element of (node as ArrayLiteralNode).elements) {
             if (element) {
               visitExpression(element);
             }

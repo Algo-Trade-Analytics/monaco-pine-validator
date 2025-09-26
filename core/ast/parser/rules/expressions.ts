@@ -7,6 +7,7 @@ import {
   type IfExpressionNode,
   type ParameterNode,
   type TupleExpressionNode,
+  type ArrayLiteralNode,
 } from '../../nodes';
 import {
   And,
@@ -59,6 +60,7 @@ import {
   createIfExpressionNode,
   createImplicitReturnStatementNode,
   createIndexExpressionNode,
+  createArrayLiteralNode,
   createMatrixLiteralNode,
   createMemberExpressionNode,
   createNullNode,
@@ -413,7 +415,7 @@ export function createArgumentRule(parser: PineParser) {
 }
 
 export function createBracketExpressionRule(parser: PineParser) {
-  return parser.RULE('bracketExpression', (): ExpressionNode => {
+  return parser.RULE('bracketExpression', (mode: 'expression' | 'tuple' = 'expression'): ExpressionNode => {
     const lBracket = parser.CONSUME(LBracket);
     const elements: (ExpressionNode | null)[] = [];
     let expectElement = true;
@@ -466,29 +468,32 @@ export function createBracketExpressionRule(parser: PineParser) {
 
     const rBracket = parser.CONSUME(RBracket);
 
-    if (elements.length === 0) {
-      return createTupleExpressionNode(elements, lBracket, rBracket);
+    const tuple = createTupleExpressionNode(elements, lBracket, rBracket);
+    if (mode === 'tuple') {
+      return tuple;
     }
 
-    const tuple = createTupleExpressionNode(elements, lBracket, rBracket);
     const hasNull = elements.some((element) => element === null);
 
     if (!hasNull) {
-      const tupleRows = elements.filter(
-        (element): element is TupleExpressionNode => element?.kind === 'TupleExpression',
+      const rowCandidates = elements.filter(
+        (element): element is TupleExpressionNode | ArrayLiteralNode =>
+          element?.kind === 'TupleExpression' || element?.kind === 'ArrayLiteral',
       );
       if (
-        tupleRows.length === elements.length &&
-        tupleRows.every((row) => row.elements.every((child) => child !== null))
+        rowCandidates.length === elements.length &&
+        rowCandidates.every((row) =>
+          row.elements.every((child) => child !== null),
+        )
       ) {
-        const rows = tupleRows.map((row) =>
+        const rows = rowCandidates.map((row) =>
           row.elements.map((child) => child ?? createPlaceholderExpression()),
         );
         return createMatrixLiteralNode(rows, lBracket, rBracket);
       }
     }
 
-    return tuple;
+    return createArrayLiteralNode(elements, lBracket, rBracket);
   });
 }
 

@@ -22,6 +22,7 @@ import {
   type ProgramNode,
   type StringLiteralNode,
   type TupleExpressionNode,
+  type ArrayLiteralNode,
   type UnaryExpressionNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
@@ -402,6 +403,8 @@ export class MathFunctionsValidator implements ValidationModule {
       }
       case 'TupleExpression':
         return (expression as TupleExpressionNode).elements.filter((element): element is ExpressionNode => element !== null);
+      case 'ArrayLiteral':
+        return (expression as ArrayLiteralNode).elements.filter((element): element is ExpressionNode => element !== null);
       case 'MatrixLiteral':
         return (expression as MatrixLiteralNode).rows.flat();
       default:
