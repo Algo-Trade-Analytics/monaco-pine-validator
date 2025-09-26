@@ -173,6 +173,29 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
     symbolTable.set(identifier.name, record);
   };
 
+  const declareForIterator = (target: ExpressionNode | null): void => {
+    if (!target) {
+      return;
+    }
+
+    if (target.kind === 'Identifier') {
+      declare(target as IdentifierNode, 'variable');
+      return;
+    }
+
+    if (target.kind === 'TupleExpression') {
+      const tuple = target as TupleExpressionNode;
+      tuple.elements.forEach((element) => {
+        if (element && element.kind === 'Identifier') {
+          declare(element as IdentifierNode, 'variable');
+        }
+      });
+      return;
+    }
+
+    visitExpression(target);
+  };
+
   const visitExpression = (expression: ExpressionNode | null | undefined): void => {
     if (!expression) {
       return;
@@ -345,6 +368,8 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         if (forStatement.initializer) {
           visitStatement(forStatement.initializer);
         }
+        declareForIterator(forStatement.iterator);
+        visitExpression(forStatement.iterable);
         visitExpression(forStatement.test);
         visitExpression(forStatement.update);
         visitStatement(forStatement.body);

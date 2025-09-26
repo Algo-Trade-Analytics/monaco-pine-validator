@@ -112,6 +112,7 @@ import {
   FatArrow,
   To,
   By,
+  In,
 } from './tokens';
 
 const EOF_TOKEN = EOF;
@@ -647,6 +648,8 @@ function createWhileStatementNode(
 
 function createForStatementNode(
   initializer: VariableDeclarationNode | AssignmentStatementNode | null,
+  iterator: ExpressionNode | null,
+  iterable: ExpressionNode | null,
   test: ExpressionNode | null,
   update: ExpressionNode | null,
   body: BlockStatementNode,
@@ -657,6 +660,8 @@ function createForStatementNode(
   return {
     kind: 'ForStatement',
     initializer,
+    iterator,
+    iterable,
     test,
     update,
     body,
@@ -1627,6 +1632,47 @@ class PineParser extends EmbeddedActionsParser {
     }
   }
 
+  private isForInLoopHeader(): boolean {
+    let offset = 1;
+    let bracketDepth = 0;
+
+    while (true) {
+      const token = this.LA(offset);
+      const tokenType = token.tokenType;
+
+      if (tokenType === EOF_TOKEN || tokenType === Newline) {
+        return false;
+      }
+
+      if (tokenType === In && bracketDepth === 0) {
+        return true;
+      }
+
+      if (
+        tokenType === Equal ||
+        tokenType === ColonEqual ||
+        tokenType === PlusEqual ||
+        tokenType === MinusEqual ||
+        tokenType === StarEqual ||
+        tokenType === SlashEqual ||
+        tokenType === PercentEqual ||
+        tokenType === To ||
+        tokenType === By ||
+        tokenType === FatArrow
+      ) {
+        return false;
+      }
+
+      if (tokenType === LBracket) {
+        bracketDepth += 1;
+      } else if (tokenType === RBracket && bracketDepth > 0) {
+        bracketDepth -= 1;
+      }
+
+      offset += 1;
+    }
+  }
+
   private parameterList = this.RULE('parameterList', () => {
     const params: ParameterNode[] = [];
     params.push(this.SUBRULE(this.parameter));
@@ -1999,10 +2045,19 @@ class PineParser extends EmbeddedActionsParser {
     const forToken = this.CONSUME(For);
 
     let initializer: VariableDeclarationNode | AssignmentStatementNode | null = null;
-    if (this.isVariableDeclarationStart()) {
-      initializer = this.SUBRULE(this.variableDeclaration);
-    } else if (this.isAssignmentStart()) {
-      initializer = this.SUBRULE(this.assignmentStatement);
+    let iterator: ExpressionNode | null = null;
+    let iterable: ExpressionNode | null = null;
+
+    if (this.isForInLoopHeader()) {
+      iterator = this.SUBRULE(this.forIteratorTarget);
+      this.CONSUME(In);
+      iterable = this.SUBRULE(this.expression) ?? createPlaceholderExpression();
+    } else {
+      if (this.isVariableDeclarationStart()) {
+        initializer = this.SUBRULE(this.variableDeclaration);
+      } else if (this.isAssignmentStart()) {
+        initializer = this.SUBRULE(this.assignmentStatement);
+      }
     }
 
     const loopIdentifier: IdentifierNode | null = initializer
@@ -2016,7 +2071,7 @@ class PineParser extends EmbeddedActionsParser {
     let test: ExpressionNode | null = null;
     let update: ExpressionNode | null = null;
 
-    if (this.LA(1).tokenType === To) {
+    if (!iterable && this.LA(1).tokenType === To) {
       const toToken = this.CONSUME(To);
       const endExpression = this.SUBRULE(this.expression) ?? createPlaceholderExpression();
       const endToken = this.LA(0);
@@ -2053,7 +2108,18 @@ class PineParser extends EmbeddedActionsParser {
 
     const body = this.parseIndentedBlock(tokenIndent(forToken));
     const endToken = this.LA(0);
-    return createForStatementNode(initializer, test, update, body, forToken, endToken);
+    return createForStatementNode(initializer, iterator, iterable, test, update, body, forToken, endToken);
+  });
+
+  private forIteratorTarget = this.RULE('forIteratorTarget', (): ExpressionNode => {
+    const next = this.LA(1);
+    if (next.tokenType === LBracket) {
+      const tuple = this.SUBRULE(this.bracketExpression);
+      return tuple ?? createPlaceholderExpression();
+    }
+
+    const identifierToken = this.CONSUME(IdentifierToken);
+    return createIdentifierNode(identifierToken);
   });
 
   private switchStatement = this.RULE('switchStatement', () => this.SUBRULE(this.switchExpression));

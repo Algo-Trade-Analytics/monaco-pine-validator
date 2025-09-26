@@ -264,6 +264,8 @@ function collectChildren(path: NodePath): ChildEntry[] {
     case 'ForStatement': {
       const forStatement = node as ForStatementNode;
       push(forStatement.initializer, 'initializer');
+      push(forStatement.iterator, 'iterator');
+      push(forStatement.iterable, 'iterable');
       push(forStatement.test, 'test');
       push(forStatement.update, 'update');
       push(forStatement.body, 'body');

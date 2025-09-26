@@ -231,6 +231,7 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
     });
 
     const initializerSegment = statement.initializer ? buildStatement(statement.initializer) : null;
+    const iterableSegment = buildExpressionAsStatement(statement.iterable, 'loop-iterable');
     const updateSegment = buildExpressionAsStatement(statement.update, 'loop-update');
     const continueTarget = updateSegment ? updateSegment.entry : testNode;
 
@@ -238,9 +239,27 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
     const bodySegment = buildBlock(statement.body);
     controlStack.pop();
 
-    if (initializerSegment) {
-      const initExits = initializerSegment.exits.length > 0 ? initializerSegment.exits : [initializerSegment.entry];
-      for (const exit of initExits) {
+    const initializerExits = initializerSegment
+      ? initializerSegment.exits.length > 0
+        ? initializerSegment.exits
+        : [initializerSegment.entry]
+      : null;
+
+    const iterableExits = iterableSegment
+      ? iterableSegment.exits.length > 0
+        ? iterableSegment.exits
+        : [iterableSegment.entry]
+      : null;
+
+    if (initializerSegment && iterableSegment) {
+      for (const exit of initializerExits ?? []) {
+        connect(exit, iterableSegment.entry, 'loop-init');
+      }
+    }
+
+    const preTestExits = iterableSegment ? iterableExits : initializerExits;
+    if (preTestExits) {
+      for (const exit of preTestExits) {
         connect(exit, testNode);
       }
     }
@@ -264,7 +283,11 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
       }
     }
 
-    const entry = initializerSegment ? initializerSegment.entry : testNode;
+    const entry = initializerSegment
+      ? initializerSegment.entry
+      : iterableSegment
+        ? iterableSegment.entry
+        : testNode;
     return { entry, exits: [exitNode] };
   };
 

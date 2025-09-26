@@ -290,6 +290,8 @@ export interface WhileStatementNode extends BaseNode {
 export interface ForStatementNode extends BaseNode {
   kind: 'ForStatement';
   initializer: VariableDeclarationNode | AssignmentStatementNode | null;
+  iterator: ExpressionNode | null;
+  iterable: ExpressionNode | null;
   test: ExpressionNode | null;
   update: ExpressionNode | null;
   body: BlockStatementNode;

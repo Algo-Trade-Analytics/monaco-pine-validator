@@ -489,6 +489,12 @@ function visitForStatement(environment: TypeEnvironment, statement: ForStatement
   if (statement.initializer) {
     visitStatement(environment, statement.initializer);
   }
+  if (statement.iterator) {
+    inferExpression(environment, statement.iterator, 'for:iterator');
+  }
+  if (statement.iterable) {
+    inferExpression(environment, statement.iterable, 'for:iterable');
+  }
   if (statement.test) {
     inferExpression(environment, statement.test, 'for:test');
   }

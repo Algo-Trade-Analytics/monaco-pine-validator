@@ -301,10 +301,14 @@ export function createForStatement(
   start: number,
   end: number,
   line = 1,
+  options: { iterator?: ExpressionNode | null; iterable?: ExpressionNode | null } = {},
 ): ForStatementNode {
+  const { iterator = null, iterable = null } = options;
   return {
     kind: 'ForStatement',
     initializer,
+    iterator,
+    iterable,
     test,
     update,
     body,

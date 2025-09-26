@@ -1048,6 +1048,8 @@ describe('AST fixtures', () => {
               ],
               "typeAnnotation": null,
             },
+            "iterable": null,
+            "iterator": null,
             "kind": "ForStatement",
             "loc": {
               "end": {

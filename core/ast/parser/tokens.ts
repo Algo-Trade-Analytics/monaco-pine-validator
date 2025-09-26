@@ -203,6 +203,12 @@ export const By = createToken({
   longer_alt: Identifier,
 });
 
+export const In = createToken({
+  name: 'In',
+  pattern: /in/,
+  longer_alt: Identifier,
+});
+
 export const AllTokens = [
   WhiteSpace,
   Newline,
@@ -230,6 +236,7 @@ export const AllTokens = [
   Return,
   To,
   By,
+  In,
   True,
   False,
   NaToken,

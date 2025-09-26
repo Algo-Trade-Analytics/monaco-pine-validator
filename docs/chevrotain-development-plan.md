@@ -7,12 +7,13 @@
 - Compiler annotations now tokenise as dedicated nodes and attach to subsequent declarations so library metadata, Monaco hovers, and downstream validators can surface structured documentation strings.
 - Null-coalescing `??` expressions parse as binary nodes that chain correctly and interleave with logical/conditional operator precedence, rounding out the expression coverage required by the staged fixtures.
 - Regression tests assert positive parsing, AST shape, and recovery semantics to guard the new feature set while documenting outstanding fixtures for additional syntactic sugar.
+- Collection iteration headers (`for … in`) tokenise the `in` keyword, populate iterator/iterable metadata on `ForStatement` nodes, and support tuple destructuring so validators can reason about loop-scoped bindings.
 
 ## Parser Feature Backlog
 
-1. **Collection Iteration & Literals**
-   - Tokenise the `in` keyword and add a `for … in` branch so array and map iteration matches the Pine Script structures reference before extending fixtures.【F:PineScriptContext/structures/keywords.ts†L24-L56】
+1. **Iterable Literal Coverage**
    - Implement array/map literal expression nodes to complement existing tuple/matrix parsing and keep iterable coverage aligned with the reference types list.【F:PineScriptContext/structures/types.json†L1-L15】【F:tests/ast/chevrotain-parser.test.ts†L261-L311】
+   - Broaden fixtures for map iteration results (e.g., `[key, value]` destructuring with loop return assignments) to exercise downstream validators once literals are available.【F:PineScriptContext/structures/keywords.ts†L24-L56】
 2. **Inline Arrow Functions & Methods**
    - Introduce an expression-level `=>` rule that reuses the function declaration helpers so method-style and anonymous functions can appear in expression position as documented.【F:PineScriptContext/structures/keywords.ts†L87-L92】【F:core/ast/parser/parser.ts†L1420-L1470】
 3. **Additional Expression Sugar**

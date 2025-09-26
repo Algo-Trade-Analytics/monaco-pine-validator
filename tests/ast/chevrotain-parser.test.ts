@@ -690,6 +690,48 @@ describe('Chevrotain parser', () => {
     expect(secondUpdate.right.kind).toBe('UnaryExpression');
   });
 
+  it('parses collection iteration for-in loops with identifiers and tuples', () => {
+    const source = [
+      'for value in values',
+      '    sum += value',
+      '',
+      'for [index, item] in array',
+      '    process(index, item)',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(2);
+
+    const firstLoop = program.body[0] as ForStatementNode;
+    expect(firstLoop.initializer).toBeNull();
+    expect(firstLoop.test).toBeNull();
+    expect(firstLoop.update).toBeNull();
+    expect(firstLoop.iterator?.kind).toBe('Identifier');
+    expect((firstLoop.iterator as IdentifierNode).name).toBe('value');
+    expect(firstLoop.iterable?.kind).toBe('Identifier');
+    expect((firstLoop.iterable as IdentifierNode).name).toBe('values');
+
+    const secondLoop = program.body[1] as ForStatementNode;
+    expect(secondLoop.initializer).toBeNull();
+    expect(secondLoop.test).toBeNull();
+    expect(secondLoop.update).toBeNull();
+    expect(secondLoop.iterator?.kind).toBe('TupleExpression');
+    const tuple = secondLoop.iterator as TupleExpressionNode;
+    expect(tuple.elements).toHaveLength(2);
+    expect(tuple.elements[0]?.kind).toBe('Identifier');
+    expect((tuple.elements[0] as IdentifierNode).name).toBe('index');
+    expect(tuple.elements[1]?.kind).toBe('Identifier');
+    expect((tuple.elements[1] as IdentifierNode).name).toBe('item');
+    expect(secondLoop.iterable?.kind).toBe('Identifier');
+    expect((secondLoop.iterable as IdentifierNode).name).toBe('array');
+  });
+
   it('parses switch statements with inline and block cases', () => {
     const source = [
       'result = switch mode',
