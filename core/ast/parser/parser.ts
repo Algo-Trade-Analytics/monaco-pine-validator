@@ -1,4 +1,4 @@
-import { EmbeddedActionsParser, type IToken } from 'chevrotain';
+import { EmbeddedActionsParser, EOF, type IToken } from 'chevrotain';
 import { SyntaxError } from '../../../pynescript/ast/error';
 import {
   type ArgumentNode,
@@ -81,7 +81,7 @@ import {
   Return,
 } from './tokens';
 
-const EOF_TOKEN = EmbeddedActionsParser.END_OF_FILE;
+const EOF_TOKEN = EOF;
 
 function isDeclarationKeywordToken(token: IToken | undefined): boolean {
   if (!token) {
@@ -577,7 +577,11 @@ function tokenToSyntaxError(token: IToken, message: string, source: string, file
 
 class PineParser extends EmbeddedActionsParser {
   constructor() {
-    super(AllTokens, { recoveryEnabled: true });
+    super(AllTokens, {
+      recoveryEnabled: true,
+      maxLookahead: 1,
+      skipValidations: true,
+    });
     this.performSelfAnalysis();
   }
 
@@ -607,8 +611,8 @@ class PineParser extends EmbeddedActionsParser {
     return createVersionDirectiveNode(token);
   });
 
-  private statement = this.RULE('statement', () =>
-    this.OR([
+  private statement = this.RULE('statement', () => {
+    return this.OR([
       {
         GATE: () => {
           const next = this.LA(1).tokenType;
@@ -645,8 +649,8 @@ class PineParser extends EmbeddedActionsParser {
         ALT: () => this.SUBRULE(this.assignmentStatement),
       },
       { ALT: () => this.SUBRULE(this.expressionStatement) },
-    ]),
-  );
+    ]);
+  });
 
   private collectDeclarationTokens(startOffset: number): { tokens: IToken[]; terminator: IToken } | null {
     const tokens: IToken[] = [];
@@ -835,10 +839,10 @@ class PineParser extends EmbeddedActionsParser {
     return createAssignmentStatementNode(left, right, operator, endToken);
   });
 
-  private ifStatement = this.RULE('ifStatement', () => {
+  private ifStatement = this.RULE('ifStatement', (indentOverride?: number) => {
     const ifToken = this.CONSUME(If);
     const test = this.SUBRULE(this.expression);
-    const indent = tokenIndent(ifToken);
+    const indent = indentOverride ?? tokenIndent(ifToken);
     const consequent = this.parseIndentedBlock(indent);
 
     let alternate: StatementNode | null = null;
@@ -854,7 +858,7 @@ class PineParser extends EmbeddedActionsParser {
       }
       const elseToken = this.CONSUME(Else);
       if (this.LA(1).tokenType === If) {
-        alternate = this.SUBRULE2(this.ifStatement);
+        alternate = this.SUBRULE2(this.ifStatement, { ARGS: [tokenIndent(elseToken)] });
       } else if (this.LA(1).tokenType === Newline) {
         alternate = this.parseIndentedBlock(tokenIndent(elseToken));
       } else {
@@ -1193,12 +1197,14 @@ function buildProgramNode(
   };
 }
 
+const sharedParser = new PineParser();
+
 export function parseWithChevrotain(source: string, options: AstParseOptions = {}): AstParseResult {
   const lexResult = PineLexer.tokenize(source);
-  const parser = new PineParser();
-  parser.input = lexResult.tokens;
+  sharedParser.reset();
+  sharedParser.input = lexResult.tokens;
 
-  const programResult = parser.program() ?? { directives: [], body: [] };
+  const programResult = sharedParser.program() ?? { directives: [], body: [] };
   const { directives, body } = programResult;
 
   const syntaxErrors: SyntaxError[] = [];
@@ -1221,10 +1227,12 @@ export function parseWithChevrotain(source: string, options: AstParseOptions = {
     );
   }
 
-  for (const error of parser.errors) {
+  for (const error of sharedParser.errors) {
     const token = error.token ?? { startLine: 1, startColumn: 1, image: '', tokenType: EOF_TOKEN };
     syntaxErrors.push(tokenToSyntaxError(token as IToken, error.message, source, filename));
   }
+
+  sharedParser.reset();
 
   const hasErrors = syntaxErrors.length > 0;
   if (hasErrors && options.allowErrors !== true) {
