@@ -24,7 +24,7 @@ import {
   createEmptySymbolTable,
   createEmptyTypeEnvironment,
 } from './ast/types';
-import { createNullAstService } from './ast/service';
+import { ChevrotainAstService, createNullAstService } from './ast/service';
 import { buildScopeGraph } from './ast/scope';
 import { inferTypes } from './ast/type-inference';
 import { buildControlFlowGraph } from './ast/control-flow';
@@ -33,6 +33,11 @@ type ConfigLayer = Partial<ValidatorConfig> | undefined;
 
 const DEFAULT_AST_FILENAME = 'input.pine';
 const AST_PARSE_ERROR_CODE = 'AST-PARSE';
+
+const DEFAULT_AST_CONFIG: AstConfig = {
+  mode: 'primary',
+  service: null,
+};
 
 function mergeValidatorConfig(layers: ConfigLayer[]): { config: ValidatorConfig; ast: AstConfig } {
   const config: ValidatorConfig = {
@@ -45,7 +50,7 @@ function mergeValidatorConfig(layers: ConfigLayer[]): { config: ValidatorConfig;
     customRules: [],
     ignoredCodes: [],
   };
-  const ast: AstConfig = { mode: 'disabled', service: null };
+  const ast: AstConfig = { ...DEFAULT_AST_CONFIG };
 
   for (const layer of layers) {
     if (!layer) {
@@ -61,6 +66,12 @@ function mergeValidatorConfig(layers: ConfigLayer[]): { config: ValidatorConfig;
         ast.service = astLayer.service;
       }
     }
+  }
+
+  if (ast.mode === 'disabled') {
+    ast.service = null;
+  } else if (!ast.service) {
+    ast.service = new ChevrotainAstService();
   }
 
   config.customRules = Array.isArray(config.customRules) ? [...config.customRules] : [];

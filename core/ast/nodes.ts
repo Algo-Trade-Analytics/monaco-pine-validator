@@ -31,6 +31,7 @@ export type NodeKind =
   | 'TypeField'
   | 'FunctionDeclaration'
   | 'IfStatement'
+  | 'IfExpression'
   | 'RepeatStatement'
   | 'WhileStatement'
   | 'ForStatement'
@@ -45,6 +46,7 @@ export type NodeKind =
   | 'BinaryExpression'
   | 'UnaryExpression'
   | 'ConditionalExpression'
+  | 'ArrowFunctionExpression'
   | 'TupleExpression'
   | 'IndexExpression'
   | 'MatrixLiteral'
@@ -73,6 +75,7 @@ export type Node =
   | TypeFieldNode
   | FunctionDeclarationNode
   | IfStatementNode
+  | IfExpressionNode
   | RepeatStatementNode
   | WhileStatementNode
   | ForStatementNode
@@ -82,6 +85,7 @@ export type Node =
   | ContinueStatementNode
   | ParameterNode
   | CallExpressionNode
+  | ArrowFunctionExpressionNode
   | ArgumentNode
   | MemberExpressionNode
   | BinaryExpressionNode
@@ -125,14 +129,18 @@ export type ExpressionNode =
   | IdentifierNode
   | LiteralNode
   | CallExpressionNode
+  | ArrowFunctionExpressionNode
   | BinaryExpressionNode
   | UnaryExpressionNode
   | MemberExpressionNode
+  | IfExpressionNode
   | ConditionalExpressionNode
   | TupleExpressionNode
   | IndexExpressionNode
   | MatrixLiteralNode
-  | SwitchStatementNode;
+  | SwitchStatementNode
+  | ForStatementNode
+  | WhileStatementNode;
 
 export type LiteralNode =
   | NumberLiteralNode
@@ -242,6 +250,12 @@ export interface FunctionDeclarationNode extends BaseNode {
   annotations: CompilerAnnotationNode[];
 }
 
+export interface ArrowFunctionExpressionNode extends BaseNode {
+  kind: 'ArrowFunctionExpression';
+  params: ParameterNode[];
+  body: BlockStatementNode;
+}
+
 export interface ParameterNode extends BaseNode {
   kind: 'Parameter';
   identifier: IdentifierNode;
@@ -275,16 +289,25 @@ export interface IfStatementNode extends BaseNode {
   alternate: StatementNode | null;
 }
 
+export interface IfExpressionNode extends BaseNode {
+  kind: 'IfExpression';
+  test: ExpressionNode;
+  consequent: BlockStatementNode;
+  alternate: IfExpressionNode | BlockStatementNode | null;
+}
+
 export interface RepeatStatementNode extends BaseNode {
   kind: 'RepeatStatement';
   body: BlockStatementNode;
   test: ExpressionNode;
+  result: ExpressionNode | null;
 }
 
 export interface WhileStatementNode extends BaseNode {
   kind: 'WhileStatement';
   test: ExpressionNode;
   body: BlockStatementNode;
+  result: ExpressionNode | null;
 }
 
 export interface ForStatementNode extends BaseNode {
@@ -295,6 +318,7 @@ export interface ForStatementNode extends BaseNode {
   test: ExpressionNode | null;
   update: ExpressionNode | null;
   body: BlockStatementNode;
+  result: ExpressionNode | null;
 }
 
 export interface SwitchStatementNode extends BaseNode {

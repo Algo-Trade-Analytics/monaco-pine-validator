@@ -13,6 +13,7 @@ import {
   type AssignmentStatementNode,
   type BinaryExpressionNode,
   type BlockStatementNode,
+  type ArrowFunctionExpressionNode,
   type CallExpressionNode,
   type ConditionalExpressionNode,
   type ExpressionNode,
@@ -22,6 +23,7 @@ import {
   type IndexExpressionNode,
   type MatrixLiteralNode,
   type MemberExpressionNode,
+  type IfExpressionNode,
   type IfStatementNode,
   type NumberLiteralNode,
   type ProgramNode,
@@ -412,6 +414,8 @@ function inferExpression(
       );
     case 'CallExpression':
       return inferCallExpression(environment, expression as CallExpressionNode);
+    case 'ArrowFunctionExpression':
+      return inferArrowFunctionExpression(environment, expression as ArrowFunctionExpressionNode);
     case 'BinaryExpression':
       return inferBinaryExpression(environment, expression as BinaryExpressionNode);
     case 'MemberExpression':
@@ -420,6 +424,8 @@ function inferExpression(
       return inferUnaryExpression(environment, expression as UnaryExpressionNode);
     case 'ConditionalExpression':
       return inferConditionalExpression(environment, expression as ConditionalExpressionNode);
+    case 'IfExpression':
+      return inferIfExpression(environment, expression as IfExpressionNode);
     case 'IndexExpression': {
       const indexExpression = expression as IndexExpressionNode;
       const objectType = inferExpression(environment, indexExpression.object, `${reason}:object`);
@@ -458,6 +464,21 @@ function inferExpression(
       });
       return annotateNode(environment, expression, createUnknown(`${reason}:tuple`));
     }
+    case 'ForStatement': {
+      const forExpression = expression as ForStatementNode;
+      const resultType = analyzeForStatement(environment, forExpression) ?? createUnknown('for:result');
+      return annotateNode(environment, expression, resultType);
+    }
+    case 'WhileStatement': {
+      const whileExpression = expression as WhileStatementNode;
+      const resultType = analyzeWhileStatement(environment, whileExpression) ?? createUnknown('while:result');
+      return annotateNode(environment, expression, resultType);
+    }
+    case 'RepeatStatement': {
+      const repeatExpression = expression as RepeatStatementNode;
+      const resultType = analyzeRepeatStatement(environment, repeatExpression) ?? createUnknown('repeat:result');
+      return annotateNode(environment, expression, resultType);
+    }
     default:
       return annotateNode(environment, expression, createUnknown(reason));
   }
@@ -465,6 +486,20 @@ function inferExpression(
 
 function visitBlock(environment: TypeEnvironment, block: BlockStatementNode): void {
   block.body.forEach((statement) => visitStatement(environment, statement));
+}
+
+function inferIfExpression(environment: TypeEnvironment, expression: IfExpressionNode): TypeMetadata {
+  inferExpression(environment, expression.test, 'if-expression:test');
+  visitStatement(environment, expression.consequent);
+  if (expression.alternate) {
+    if (expression.alternate.kind === 'IfExpression') {
+      inferIfExpression(environment, expression.alternate as IfExpressionNode);
+    } else {
+      visitStatement(environment, expression.alternate);
+    }
+  }
+
+  return annotateNode(environment, expression, createUnknown('if-expression'));
 }
 
 function visitIfStatement(environment: TypeEnvironment, statement: IfStatementNode): void {
@@ -475,17 +510,43 @@ function visitIfStatement(environment: TypeEnvironment, statement: IfStatementNo
   }
 }
 
-function visitWhileStatement(environment: TypeEnvironment, statement: WhileStatementNode): void {
+function analyzeWhileStatement(
+  environment: TypeEnvironment,
+  statement: WhileStatementNode,
+): TypeMetadata | null {
   inferExpression(environment, statement.test, 'while:test');
   visitStatement(environment, statement.body);
+  if (statement.result) {
+    return inferExpression(environment, statement.result, 'while:result');
+  }
+  return null;
+}
+
+function visitWhileStatement(environment: TypeEnvironment, statement: WhileStatementNode): void {
+  analyzeWhileStatement(environment, statement);
+}
+
+function analyzeRepeatStatement(
+  environment: TypeEnvironment,
+  statement: RepeatStatementNode,
+): TypeMetadata | null {
+  visitStatement(environment, statement.body);
+  let resultType: TypeMetadata | null = null;
+  if (statement.result) {
+    resultType = inferExpression(environment, statement.result, 'repeat:result');
+  }
+  inferExpression(environment, statement.test, 'repeat:test');
+  return resultType;
 }
 
 function visitRepeatStatement(environment: TypeEnvironment, statement: RepeatStatementNode): void {
-  visitStatement(environment, statement.body);
-  inferExpression(environment, statement.test, 'repeat:test');
+  analyzeRepeatStatement(environment, statement);
 }
 
-function visitForStatement(environment: TypeEnvironment, statement: ForStatementNode): void {
+function analyzeForStatement(
+  environment: TypeEnvironment,
+  statement: ForStatementNode,
+): TypeMetadata | null {
   if (statement.initializer) {
     visitStatement(environment, statement.initializer);
   }
@@ -502,6 +563,14 @@ function visitForStatement(environment: TypeEnvironment, statement: ForStatement
     inferExpression(environment, statement.update, 'for:update');
   }
   visitStatement(environment, statement.body);
+  if (statement.result) {
+    return inferExpression(environment, statement.result, 'for:result');
+  }
+  return null;
+}
+
+function visitForStatement(environment: TypeEnvironment, statement: ForStatementNode): void {
+  analyzeForStatement(environment, statement);
 }
 
 function visitSwitchStatement(environment: TypeEnvironment, statement: SwitchStatementNode): void {
@@ -537,6 +606,31 @@ function visitFunctionDeclaration(
   });
 
   visitBlock(environment, statement.body);
+}
+
+function inferArrowFunctionExpression(
+  environment: TypeEnvironment,
+  expression: ArrowFunctionExpressionNode,
+): TypeMetadata {
+  expression.params.forEach((param) => {
+    assignIdentifier(
+      environment,
+      param.identifier,
+      createUnknown(`arrow:param:${param.identifier.name}`),
+      'arrow:param',
+    );
+    if (param.defaultValue) {
+      inferExpression(environment, param.defaultValue, 'arrow:param:default');
+    }
+  });
+
+  visitBlock(environment, expression.body);
+
+  return annotateNode(
+    environment,
+    expression,
+    createTypeMetadata('function', 'arrow:function', 'certain'),
+  );
 }
 
 function visitVariableDeclaration(

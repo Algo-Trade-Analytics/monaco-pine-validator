@@ -5,6 +5,7 @@ import {
   type ArgumentNode,
   type BlockStatementNode,
   type CallExpressionNode,
+  type ArrowFunctionExpressionNode,
   type ConditionalExpressionNode,
   type ExpressionStatementNode,
   type ForStatementNode,
@@ -345,5 +346,69 @@ describe('buildScopeGraph', () => {
 
     const signalRecord = symbolTable.get('signal');
     expect(signalRecord?.references).toHaveLength(3);
+  });
+
+  it('creates function scopes for arrow function expressions', () => {
+    const paramIdentifier = identifier('value', 20);
+    const parameter: ParameterNode = {
+      kind: 'Parameter',
+      identifier: paramIdentifier,
+      typeAnnotation: null,
+      defaultValue: null,
+      loc: locFrom(20, 25),
+      range: createRange(20, 25),
+    };
+
+    const returnStatement: ReturnStatementNode = {
+      kind: 'ReturnStatement',
+      argument: identifier('value', 40),
+      loc: locFrom(38, 45),
+      range: createRange(38, 45),
+    };
+
+    const arrowBody: BlockStatementNode = {
+      kind: 'BlockStatement',
+      body: [returnStatement],
+      loc: locFrom(30, 50),
+      range: createRange(30, 50),
+    };
+
+    const arrowExpression: ArrowFunctionExpressionNode = {
+      kind: 'ArrowFunctionExpression',
+      params: [parameter],
+      body: arrowBody,
+      loc: locFrom(15, 50),
+      range: createRange(15, 50),
+    };
+
+    const declaration: VariableDeclarationNode = {
+      kind: 'VariableDeclaration',
+      declarationKind: 'var',
+      identifier: identifier('handler', 5),
+      typeAnnotation: null,
+      initializer: arrowExpression,
+      annotations: [],
+      loc: locFrom(5, 50),
+      range: createRange(5, 50),
+    };
+
+    const program: ProgramNode = {
+      kind: 'Program',
+      directives: [],
+      body: [declaration],
+      loc: createLocation(createPosition(1, 1, 0), createPosition(1, 60, 59)),
+      range: createRange(0, 59),
+    };
+
+    const { scopeGraph } = buildScopeGraph(program);
+
+    expect(scopeGraph.root).toBeDefined();
+    const rootScope = scopeGraph.root ? scopeGraph.nodes.get(scopeGraph.root) : null;
+    expect(rootScope?.symbols.has('handler')).toBe(true);
+    const childScopes = rootScope ? Array.from(rootScope.children) : [];
+    expect(childScopes).toHaveLength(1);
+    const arrowScope = childScopes[0] ? scopeGraph.nodes.get(childScopes[0]) : null;
+    expect(arrowScope?.kind).toBe('function');
+    expect(Array.from(arrowScope?.symbols ?? [])).toContain('value');
   });
 });

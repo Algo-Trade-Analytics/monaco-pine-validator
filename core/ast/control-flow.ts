@@ -8,6 +8,7 @@ import {
   type BlockStatementNode,
   type ExpressionNode,
   type ForStatementNode,
+  type IfExpressionNode,
   type IfStatementNode,
   type Node,
   type ProgramNode,
@@ -121,8 +122,52 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
     if (!expression) {
       return null;
     }
+    if (expression.kind === 'IfExpression') {
+      return buildIfExpression(expression as IfExpressionNode, role);
+    }
     const node = createNode('statement', expression, { role, expression: true });
     return { entry: node, exits: [node] };
+  };
+
+  const buildIfExpression = (expression: IfExpressionNode, role: string): GraphSegment => {
+    const branchNode = createNode('branch', expression, {
+      statementKind: expression.kind,
+      expression: true,
+      role,
+    });
+
+    const consequentSegment = buildBlock(expression.consequent);
+    connect(branchNode, consequentSegment.entry, 'true');
+
+    const mergeNode = createNode('merge', null, {
+      sourceKind: expression.kind,
+      role,
+    });
+
+    const connectExits = (segment: GraphSegment): void => {
+      const exits = segment.exits.length > 0 ? segment.exits : [segment.entry];
+      exits.forEach((exit) => {
+        connect(exit, mergeNode);
+      });
+    };
+
+    connectExits(consequentSegment);
+
+    if (expression.alternate) {
+      if (expression.alternate.kind === 'IfExpression') {
+        const alternateSegment = buildIfExpression(expression.alternate as IfExpressionNode, role);
+        connect(branchNode, alternateSegment.entry, 'false');
+        connectExits(alternateSegment);
+      } else {
+        const alternateBlock = buildBlock(expression.alternate);
+        connect(branchNode, alternateBlock.entry, 'false');
+        connectExits(alternateBlock);
+      }
+    } else {
+      connect(branchNode, mergeNode, 'false');
+    }
+
+    return { entry: branchNode, exits: [mergeNode] };
   };
 
   const wrapStatement = (statement: StatementNode): GraphSegment => {

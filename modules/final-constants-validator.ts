@@ -1,7 +1,8 @@
 /**
  * Final Constants Validator for Pine Script v6
  * 
- * Validates the final 1% of specialized constants for 100% specification coverage:
+ * Validates the remaining specialized constants that are easy to miss during manual
+ * spot checks:
  * - Math constants (math.e, math.pi, math.phi, math.rphi)
  * - Plot style constants (plot.style_* for all plot types)
  * - Line style constants (line.style_* for all line styles)
@@ -10,9 +11,12 @@
  * - Order constants (order.ascending, order.descending)
  * - Position constants (position.* for all table positions)
  * - Additional specialized constants
- * 
- * Final Implementation: Achieving True 100% Pine Script v6 Coverage
- */
+ *
+ * This module was introduced during the final audit pass for the legacy validator to
+ * ensure these constants were exercised.  The surrounding documentation used to claim
+ * it unlocked "true 100% coverage", but the broader suite now depends on AST data and
+ * currently fails when the validator runs without it.
+*/
 
 import {
   type AstValidationContext,

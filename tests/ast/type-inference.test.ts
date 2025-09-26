@@ -16,8 +16,12 @@ import {
   createUnaryExpression,
   createVariableDeclaration,
   createMemberExpression,
+  createParameter,
+  createBlock,
+  createReturn,
 } from './fixtures';
 import {
+  type ArrowFunctionExpressionNode,
   type ConditionalExpressionNode,
   type ExpressionStatementNode,
   type ProgramNode,
@@ -112,6 +116,39 @@ describe('inferTypes', () => {
     expect(memberMetadata).toBeDefined();
     expect(memberMetadata?.kind).toBe(propertyMetadata?.kind);
     expect(memberMetadata?.sources).toContain('variable:initializer:member');
+  });
+
+  it('infers function metadata for arrow function expressions', () => {
+    const parameter = createParameter('input', 10, 1);
+    const returnStatement = createReturn(createIdentifier('input', 20, 1), 18, 26, 1);
+    const arrowBody = createBlock([returnStatement], 15, 30, 1, 1);
+    const arrowExpression: ArrowFunctionExpressionNode = {
+      kind: 'ArrowFunctionExpression',
+      params: [parameter],
+      body: arrowBody,
+      loc: createLocation(createPosition(1, 1, 0), createPosition(1, 30, 29)),
+      range: createRange(0, 29),
+    };
+
+    const declaration = createVariableDeclaration(createIdentifier('handler', 0, 1), 0, 30, 1, {
+      declarationKind: 'var',
+      initializer: arrowExpression,
+    });
+
+    const program = createProgram([declaration]);
+    const environment = inferTypes(program);
+
+    const handlerType = environment.identifiers.get('handler');
+    expect(handlerType?.kind).toBe('function');
+    expect(handlerType?.sources).toContain('variable:declaration');
+
+    const parameterType = environment.identifiers.get('input');
+    expect(parameterType?.kind).toBe('unknown');
+    expect(parameterType?.sources).toContain('arrow:param');
+
+    const arrowMetadata = environment.nodeTypes.get(arrowExpression);
+    expect(arrowMetadata?.kind).toBe('function');
+    expect(arrowMetadata?.sources).toContain('arrow:function');
   });
 
   it('marks conditional expressions with conflicting branch types as conflicts', () => {
