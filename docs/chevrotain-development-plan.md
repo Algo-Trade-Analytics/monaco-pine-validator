@@ -10,11 +10,13 @@
 
 ## Parser Feature Backlog
 
-1. **Iterable Literals & Inline Functions**
-   - Parse array/map literals and anonymous `=>` functions in expression positions to unlock remaining validator migrations.
-   - Ensure tuple destructuring and inline function expressions co-exist with the new repeat loop semantics.
-2. **Additional Expression Sugar**
-   - Audit remaining Pine syntactic sugar (e.g., ternary shorthand, range literals) and extend the grammar plus fixtures so the Chevrotain pipeline mirrors production coverage.
+1. **Collection Iteration & Literals**
+   - Tokenise the `in` keyword and add a `for … in` branch so array and map iteration matches the Pine Script structures reference before extending fixtures.【F:PineScriptContext/structures/keywords.ts†L24-L56】
+   - Implement array/map literal expression nodes to complement existing tuple/matrix parsing and keep iterable coverage aligned with the reference types list.【F:PineScriptContext/structures/types.json†L1-L15】【F:tests/ast/chevrotain-parser.test.ts†L261-L311】
+2. **Inline Arrow Functions & Methods**
+   - Introduce an expression-level `=>` rule that reuses the function declaration helpers so method-style and anonymous functions can appear in expression position as documented.【F:PineScriptContext/structures/keywords.ts†L87-L92】【F:core/ast/parser/parser.ts†L1420-L1470】
+3. **Additional Expression Sugar**
+   - Audit remaining Pine syntactic sugar (e.g., range literals, pipeline helpers) and extend the grammar plus fixtures so the Chevrotain pipeline mirrors production coverage.
 
 ## Recovery & Resilience Enhancements
 
