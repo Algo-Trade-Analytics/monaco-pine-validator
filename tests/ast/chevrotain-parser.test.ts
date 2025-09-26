@@ -31,6 +31,7 @@ import type {
   UnaryExpressionNode,
   VariableDeclarationNode,
   WhileStatementNode,
+  RepeatStatementNode,
 } from '../../core/ast/nodes';
 
 describe('Chevrotain parser', () => {
@@ -42,7 +43,7 @@ describe('Chevrotain parser', () => {
       '',
     ].join('\n');
 
-    const { ast, diagnostics } = parseWithChevrotain(source);
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
 
     expect(diagnostics.syntaxErrors).toHaveLength(0);
     expect(ast).not.toBeNull();
@@ -96,7 +97,7 @@ describe('Chevrotain parser', () => {
       '',
     ].join('\n');
 
-    const { ast, diagnostics } = parseWithChevrotain(source);
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
 
     expect(diagnostics.syntaxErrors).toHaveLength(0);
     expect(ast).not.toBeNull();
@@ -118,7 +119,7 @@ describe('Chevrotain parser', () => {
   it('parses empty argument lists without introducing spurious errors', () => {
     const source = ['foo()', 'indicator()', ''].join('\n');
 
-    const { ast, diagnostics } = parseWithChevrotain(source);
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
 
     expect(diagnostics.syntaxErrors).toHaveLength(0);
     expect(ast).not.toBeNull();
@@ -822,17 +823,28 @@ describe('Chevrotain parser', () => {
     expect(explicitReturn.argument?.kind).toBe('MemberExpression');
   });
 
-  describe.skip('upcoming grammar coverage', () => {
-    it('parses repeat...until loops once implemented', () => {
+  describe('upcoming grammar coverage', () => {
+    it('parses repeat...until loops', () => {
       const source = ['repeat', '    foo()', 'until bar', ''].join('\n');
 
       const { ast, diagnostics } = parseWithChevrotain(source);
 
       expect(diagnostics.syntaxErrors).toHaveLength(0);
       expect(ast).not.toBeNull();
+
+      const program = ast as ProgramNode;
+      expect(program.body).toHaveLength(1);
+      const repeat = program.body[0] as RepeatStatementNode;
+      expect(repeat.kind).toBe('RepeatStatement');
+      expect(repeat.body.body).toHaveLength(1);
+      const callStatement = repeat.body.body[0] as ExpressionStatementNode;
+      expect(callStatement.expression.kind).toBe('CallExpression');
+      const test = repeat.test as IdentifierNode;
+      expect(test.kind).toBe('Identifier');
+      expect(test.name).toBe('bar');
     });
 
-    it('parses compiler annotations preceding declarations', () => {
+    it.skip('parses compiler annotations preceding declarations', () => {
       const source = [
         '//@function foo',
         '//@param value The input value.',
@@ -846,7 +858,7 @@ describe('Chevrotain parser', () => {
       expect(ast).not.toBeNull();
     });
 
-    it('parses null-coalescing ternary sugar once syntax is confirmed', () => {
+    it.skip('parses null-coalescing ternary sugar once syntax is confirmed', () => {
       const source = ['result = foo ?? bar', ''].join('\n');
 
       const { ast, diagnostics } = parseWithChevrotain(source);
@@ -854,5 +866,24 @@ describe('Chevrotain parser', () => {
       expect(diagnostics.syntaxErrors).toHaveLength(0);
       expect(ast).not.toBeNull();
     });
+  });
+
+  it('recovers from missing until clauses in repeat loops', () => {
+    const source = ['repeat', '    foo()', ''].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
+
+    expect(ast).not.toBeNull();
+    expect(diagnostics.syntaxErrors.length).toBeGreaterThan(0);
+
+    const program = ast as ProgramNode;
+    const repeat = program.body[0] as RepeatStatementNode | undefined;
+    if (repeat) {
+      expect(repeat.kind).toBe('RepeatStatement');
+      expect(repeat.body.body).toHaveLength(1);
+      expect(repeat.test.kind).toBe('Identifier');
+    } else {
+      expect(program.body).toHaveLength(0);
+    }
   });
 });

@@ -34,6 +34,7 @@ import {
   type TypeDeclarationNode,
   type StatementNode,
   type SwitchStatementNode,
+  type RepeatStatementNode,
   type WhileStatementNode,
   type BreakStatementNode,
   type VariableDeclarationNode,
@@ -327,6 +328,14 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
         visitExpression(whileStatement.test);
         pushScope('loop', whileStatement.body, { loopType: 'while' });
         visitStatement(whileStatement.body);
+        popScope();
+        break;
+      }
+      case 'RepeatStatement': {
+        const repeatStatement = statement as RepeatStatementNode;
+        pushScope('loop', repeatStatement.body, { loopType: 'repeat' });
+        visitStatement(repeatStatement.body);
+        visitExpression(repeatStatement.test);
         popScope();
         break;
       }

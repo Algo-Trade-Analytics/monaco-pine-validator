@@ -157,7 +157,9 @@ export class AlertFunctionsValidator implements ValidationModule {
       arguments: call.args.map((argument) => this.formatExpression(argument.value)),
       inConditional: !!findAncestor(path, (ancestor) => ancestor.node.kind === 'IfStatement'),
       inLoop: !!findAncestor(path, (ancestor) =>
-        ancestor.node.kind === 'ForStatement' || ancestor.node.kind === 'WhileStatement'),
+        ancestor.node.kind === 'ForStatement' ||
+        ancestor.node.kind === 'WhileStatement' ||
+        ancestor.node.kind === 'RepeatStatement'),
     };
 
     if (callee === 'alert') {

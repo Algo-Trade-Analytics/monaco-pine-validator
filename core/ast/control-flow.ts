@@ -13,6 +13,7 @@ import {
   type ProgramNode,
   type StatementNode,
   type SwitchStatementNode,
+  type RepeatStatementNode,
   type WhileStatementNode,
 } from './nodes';
 
@@ -196,6 +197,32 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
     return { entry: testNode, exits: [exitNode] };
   };
 
+  const buildRepeatStatement = (statement: RepeatStatementNode): GraphSegment => {
+    const testNode = createNode('branch', statement, {
+      statementKind: statement.kind,
+      role: 'loop-test',
+    });
+    const exitNode = createNode('merge', null, {
+      sourceKind: statement.kind,
+      role: 'loop-exit',
+    });
+
+    controlStack.push({ continueTarget: testNode, breakTarget: exitNode });
+    const bodySegment = buildBlock(statement.body);
+    controlStack.pop();
+
+    const bodyEntry = bodySegment.entry;
+    const bodyExits = bodySegment.exits.length > 0 ? bodySegment.exits : [bodyEntry];
+    for (const exit of bodyExits) {
+      connect(exit, testNode, 'loop');
+    }
+
+    connect(testNode, exitNode, 'true');
+    connect(testNode, bodyEntry, 'false');
+
+    return { entry: bodyEntry, exits: [exitNode] };
+  };
+
   const buildForStatement = (statement: ForStatementNode): GraphSegment => {
     const exitNode = createNode('merge', null, { sourceKind: statement.kind, role: 'loop-exit' });
     const testNode = createNode('branch', statement, {
@@ -304,6 +331,8 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
       }
       case 'IfStatement':
         return buildIfStatement(statement);
+      case 'RepeatStatement':
+        return buildRepeatStatement(statement);
       case 'WhileStatement':
         return buildWhileStatement(statement);
       case 'ForStatement':

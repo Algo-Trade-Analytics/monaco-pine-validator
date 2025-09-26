@@ -122,9 +122,21 @@ export const Else = createToken({
   longer_alt: Identifier,
 });
 
+export const Repeat = createToken({
+  name: 'Repeat',
+  pattern: /repeat/,
+  longer_alt: Identifier,
+});
+
 export const While = createToken({
   name: 'While',
   pattern: /while/,
+  longer_alt: Identifier,
+});
+
+export const Until = createToken({
+  name: 'Until',
+  pattern: /until/,
   longer_alt: Identifier,
 });
 
@@ -199,7 +211,9 @@ export const AllTokens = [
   Switch,
   Enum,
   Type,
+  Repeat,
   While,
+  Until,
   For,
   Break,
   Continue,

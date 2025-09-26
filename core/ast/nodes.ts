@@ -31,6 +31,7 @@ export type NodeKind =
   | 'TypeField'
   | 'FunctionDeclaration'
   | 'IfStatement'
+  | 'RepeatStatement'
   | 'WhileStatement'
   | 'ForStatement'
   | 'SwitchStatement'
@@ -71,6 +72,7 @@ export type Node =
   | TypeFieldNode
   | FunctionDeclarationNode
   | IfStatementNode
+  | RepeatStatementNode
   | WhileStatementNode
   | ForStatementNode
   | SwitchStatementNode
@@ -109,6 +111,7 @@ export type StatementNode =
   | TypeDeclarationNode
   | FunctionDeclarationNode
   | IfStatementNode
+  | RepeatStatementNode
   | WhileStatementNode
   | ForStatementNode
   | SwitchStatementNode
@@ -263,6 +266,12 @@ export interface IfStatementNode extends BaseNode {
   test: ExpressionNode;
   consequent: StatementNode;
   alternate: StatementNode | null;
+}
+
+export interface RepeatStatementNode extends BaseNode {
+  kind: 'RepeatStatement';
+  body: BlockStatementNode;
+  test: ExpressionNode;
 }
 
 export interface WhileStatementNode extends BaseNode {

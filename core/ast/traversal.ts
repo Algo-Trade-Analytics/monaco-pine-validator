@@ -29,6 +29,7 @@ import {
   type TupleExpressionNode,
   type UnaryExpressionNode,
   type VariableDeclarationNode,
+  type RepeatStatementNode,
   type WhileStatementNode,
   type BreakStatementNode,
 } from './nodes';
@@ -240,6 +241,12 @@ function collectChildren(path: NodePath): ChildEntry[] {
       push(ifStatement.test, 'test');
       push(ifStatement.consequent, 'consequent');
       push(ifStatement.alternate, 'alternate');
+      break;
+    }
+    case 'RepeatStatement': {
+      const repeatStatement = node as RepeatStatementNode;
+      push(repeatStatement.body, 'body');
+      push(repeatStatement.test, 'test');
       break;
     }
     case 'WhileStatement': {

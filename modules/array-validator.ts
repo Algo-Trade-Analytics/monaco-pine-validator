@@ -194,6 +194,14 @@ export class ArrayValidator implements ValidationModule {
           loopStack.pop();
         },
       },
+      RepeatStatement: {
+        enter: (path) => {
+          loopStack.push(path);
+        },
+        exit: () => {
+          loopStack.pop();
+        },
+      },
       VariableDeclaration: {
         enter: (path) => {
           this.registerArrayTypeAnnotation(path.node);

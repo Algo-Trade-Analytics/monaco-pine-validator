@@ -24,6 +24,7 @@ import {
   type ParameterNode,
   type ProgramNode,
   type Range,
+  type RepeatStatementNode,
   type ReturnStatementNode,
   type ScriptDeclarationNode,
   type SourceLocation,
@@ -60,9 +61,11 @@ import {
   As,
   If,
   Else,
+  Repeat,
   Switch,
   Enum,
   Type,
+  Until,
   Identifier as IdentifierToken,
   StringLiteral as StringToken,
   NumberLiteral as NumberToken,
@@ -571,6 +574,21 @@ function createIfStatementNode(
     test,
     consequent,
     alternate,
+    ...span,
+  };
+}
+
+function createRepeatStatementNode(
+  body: BlockStatementNode,
+  test: ExpressionNode,
+  startToken: IToken,
+  endToken: IToken | undefined,
+): RepeatStatementNode {
+  const span = spanFromTokens(startToken, endToken ?? startToken);
+  return {
+    kind: 'RepeatStatement',
+    body,
+    test,
     ...span,
   };
 }
@@ -1162,6 +1180,10 @@ class PineParser extends EmbeddedActionsParser {
       {
         GATE: () => this.LA(1).tokenType === If,
         ALT: () => this.SUBRULE(this.ifStatement),
+      },
+      {
+        GATE: () => this.LA(1).tokenType === Repeat,
+        ALT: () => this.SUBRULE(this.repeatStatement),
       },
       {
         GATE: () => this.LA(1).tokenType === For,
@@ -1996,6 +2018,16 @@ class PineParser extends EmbeddedActionsParser {
     const body = this.parseIndentedBlock(tokenIndent(whileToken));
     const endToken = this.LA(0);
     return createWhileStatementNode(test, body, whileToken, endToken);
+  });
+
+  private repeatStatement = this.RULE('repeatStatement', () => {
+    const repeatToken = this.CONSUME(Repeat);
+    const body = this.parseIndentedBlock(tokenIndent(repeatToken));
+    this.MANY(() => this.CONSUME(Newline));
+    const untilToken = this.CONSUME(Until);
+    const test = this.SUBRULE(this.expression) ?? createPlaceholderExpression();
+    const endToken = this.LA(0);
+    return createRepeatStatementNode(body, test, repeatToken, endToken ?? untilToken);
   });
 
   private returnStatement = this.RULE('returnStatement', () => {

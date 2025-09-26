@@ -33,6 +33,7 @@ import {
   type SwitchStatementNode,
   type UnaryExpressionNode,
   type VariableDeclarationNode,
+  type RepeatStatementNode,
   type WhileStatementNode,
   type TupleExpressionNode,
 } from './nodes';
@@ -479,6 +480,11 @@ function visitWhileStatement(environment: TypeEnvironment, statement: WhileState
   visitStatement(environment, statement.body);
 }
 
+function visitRepeatStatement(environment: TypeEnvironment, statement: RepeatStatementNode): void {
+  visitStatement(environment, statement.body);
+  inferExpression(environment, statement.test, 'repeat:test');
+}
+
 function visitForStatement(environment: TypeEnvironment, statement: ForStatementNode): void {
   if (statement.initializer) {
     visitStatement(environment, statement.initializer);
@@ -603,6 +609,9 @@ function visitStatement(environment: TypeEnvironment, statement: StatementNode):
       break;
     case 'IfStatement':
       visitIfStatement(environment, statement as IfStatementNode);
+      break;
+    case 'RepeatStatement':
+      visitRepeatStatement(environment, statement as RepeatStatementNode);
       break;
     case 'WhileStatement':
       visitWhileStatement(environment, statement as WhileStatementNode);

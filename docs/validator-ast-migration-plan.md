@@ -41,6 +41,7 @@ The lack of a shared parse tree means every module re-derives syntactic structur
 - The Chevrotain parser now recognises import declarations, enum blocks (including optional values and exports), and user-defined type declarations with typed fields, backed by regression tests to lock in alias spans and field metadata.
 - The Chevrotain parser now recognises tuple destructuring assignments and matrix literals, emitting `TupleExpression`/`MatrixLiteral` nodes with regression coverage for bracketed targets and row-based literals.
 - Core validator AST analysis now inspects call expressions to flag `strategy.*` usage in indicators, recognise plotting/drawing activity for PS014 guardrails, and enforce library restrictions without relying on regex fallbacks.
+- The Chevrotain parser now recognises `repeat ... until` loops, emitting do-while style control-flow nodes with regression coverage for both successful parses and recovery from missing `until` guards.
 - Core validator AST analysis now inspects member expressions so strategy namespace usage in indicators is flagged even when no call expression is present, ensuring parity with the legacy scanner.
 - Core validator AST analysis now inspects index expressions so negative history references on series data trigger PS024 errors without the legacy line scanner.
 - A Monaco worker harness now exercises the AST-backed validator in a simulated worker environment, translating semantic output and syntax errors into Monaco-compatible markers for upcoming editor integration work.
@@ -307,7 +308,6 @@ Suggested migration order:
 
 | Construct | Current Status | Action Items |
 | --- | --- | --- |
-| `repeat ... until` loops | Not yet tokenised or parsed; Vitest fixture staged via skipped coverage in `tests/ast/chevrotain-parser.test.ts`. | Add lexer tokens, AST node support, and positive/negative regression suites before enabling Monaco consumption. |
 | Compiler annotations (`//@function`, `//@param`, `//@returns`, `//@strategy_alert_message`, etc.) | Currently treated as comments; skip test added to capture a representative declaration prelude. | Introduce directive tokens, AST node builders, and parser wiring so annotations attach to downstream declarations. |
 | Null-coalescing / ternary sugar | Syntax requires confirmation; skip test seeded with `foo ?? bar` anchors follow-up grammar work once specification lands. | Confirm official syntax, extend the expression grammar, and layer precedence tests alongside Monaco diagnostics expectations. |
 
@@ -322,7 +322,7 @@ plan:
    - ✅ Assignment statements, unary/binary expressions, compound operators, control-flow statements, and function declarations now normalise into Pine AST nodes with location metadata and regression coverage.
    - Backfill remaining expression coverage (array/map constructors, anonymous functions, namespace literals) and ensure tuple patterns work in nested assignment/return positions.
    - ✅ Recovery fixtures now cover indentation edge cases, dangling `else` branches, newline-separated expressions, and unterminated constructs so Monaco parsing remains resilient.
-   - Implement the staged `repeat ... until` loops, compiler annotations, and null-coalescing helper syntax so the Chevrotain grammar matches the outstanding fixtures and Monaco feature backlog.
+   - ✅ Implemented the staged `repeat ... until` loops; continue with compiler annotations and null-coalescing helper syntax so the Chevrotain grammar matches the outstanding fixtures and Monaco feature backlog.
    - Profile large scripts under the shared parser instance to confirm the recovery configuration does not introduce unacceptable overhead or memory growth.
 
 2. **Flip the AST Pipeline on by Default**
