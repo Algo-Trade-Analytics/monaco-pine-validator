@@ -2505,7 +2505,7 @@ class PineParser extends EmbeddedActionsParser {
   });
 
   private callExpression = this.RULE('callExpression', () => {
-    let expression = this.SUBRULE(this.primaryExpression);
+    let expression = this.SUBRULE(this.primaryExpression) ?? createPlaceholderExpression();
 
     this.MANY(() => {
       this.OR([
@@ -2546,7 +2546,7 @@ class PineParser extends EmbeddedActionsParser {
   });
 
   private memberExpression = this.RULE('memberExpression', () => {
-    let expression = this.SUBRULE(this.primaryExpression);
+    let expression = this.SUBRULE(this.primaryExpression) ?? createPlaceholderExpression();
     this.MANY(() => {
       this.OR([
         {
