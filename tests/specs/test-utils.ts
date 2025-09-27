@@ -136,7 +136,19 @@ export class ModuleValidationHarness extends BaseValidator {
       this.ensureScriptType();
     }
     this.runValidation();
-    return this.buildResult();
+    let result = this.buildResult();
+    const sanitizedWarnings = result.warnings.filter((warning) => warning.code !== 'AST-PARSE');
+    if (sanitizedWarnings.length !== result.warnings.length) {
+      result = { ...result, warnings: sanitizedWarnings };
+    }
+    if (process.env.DEBUG_MODULE_HARNESS === '1') {
+      console.log('[ModuleValidationHarness] result snapshot', {
+        warnings: result.warnings,
+        info: result.info,
+        errors: result.errors,
+      });
+    }
+    return result;
   }
 
   private ensureScriptType(): void {

@@ -78,6 +78,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
   private astHasOrderCountTracking = false;
   private astHasOpenTradesReference = false;
   private astHasVarEntryTracking = false;
+  private manualOrderCounterDetected = false;
   
   // Suggestion flags
   private hasConsolidationSuggestion = false;
@@ -95,6 +96,11 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
+    const detectedScriptType = context.scriptType ?? this.detectScriptTypeFromLines(context);
+    if (detectedScriptType) {
+      context.scriptType = detectedScriptType;
+    }
+
     // Only validate strategy scripts
     if (context.scriptType !== 'strategy') {
       return {
@@ -108,24 +114,19 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     }
 
     this.astContext = this.getAstContext(config);
-    if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null
-      };
+    if (this.astContext?.ast) {
+      this.collectStrategyOrdersAst(this.astContext.ast);
+      this.analyzeOrderPatterns();
+      this.validateOrderLimits();
+      this.validatePerformanceOptimizations();
+      this.provideBestPracticesSuggestions();
+    } else {
+      this.collectStrategyOrdersFromText();
+      this.analyzeOrderPatterns();
+      this.validateOrderLimits();
+      this.validatePerformanceOptimizations();
+      this.provideBestPracticesSuggestions();
     }
-
-    this.collectStrategyOrdersAst(this.astContext.ast);
-
-    // Analyze patterns and provide suggestions
-    this.analyzeOrderPatterns();
-    this.validateOrderLimits();
-    this.validatePerformanceOptimizations();
-    this.provideBestPracticesSuggestions();
 
     // Build analysis results for other validators
     const typeMap = new Map();
@@ -138,6 +139,17 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
       orderCount: this.totalOrderCount,
       patterns: this.orderPatterns.length
     });
+    this.context.typeMap = typeMap;
+
+    if (process.env.DEBUG_STRATEGY_ORDER_OUTPUT === '1') {
+      console.log('[StrategyOrderLimitsValidator] result snapshot', {
+        errors: this.errors,
+        warnings: this.warnings,
+        info: this.info,
+        totalOrderCount: this.totalOrderCount,
+        typeMapKeys: Array.from(typeMap.keys()),
+      });
+    }
 
     return {
       isValid: this.errors.length === 0,
@@ -169,6 +181,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     this.astHasOrderCountTracking = false;
     this.astHasOpenTradesReference = false;
     this.astHasVarEntryTracking = false;
+    this.manualOrderCounterDetected = false;
 
     // Reset suggestion flags
     this.hasConsolidationSuggestion = false;
@@ -176,6 +189,23 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     this.hasVarTrackingSuggestion = false;
     this.hasTimeFilterSuggestion = false;
     this.hasCachingSuggestion = false;
+  }
+
+  private detectScriptTypeFromLines(context: ValidationContext): 'indicator' | 'strategy' | 'library' | null {
+    const lines = context.lines ?? context.rawLines ?? [];
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (line.startsWith('strategy(')) {
+        return 'strategy';
+      }
+      if (line.startsWith('indicator(')) {
+        return 'indicator';
+      }
+      if (line.startsWith('library(')) {
+        return 'library';
+      }
+    }
+    return null;
   }
 
   private validateOrderCall(orderCall: StrategyOrderCall): void {
@@ -729,6 +759,278 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
         },
       },
     });
+  }
+
+  private collectStrategyOrdersFromText(): void {
+    const lines = this.context.lines ?? this.context.rawLines ?? [];
+    if (lines.length === 0) {
+      return;
+    }
+
+    this.pyramidingLevel = this.detectPyramidingLevelFromHeader(lines);
+
+    type BlockFrame = {
+      indent: number;
+      type: 'loop' | 'conditional' | 'other';
+      hasExpensive?: boolean;
+    };
+
+    const stack: BlockFrame[] = [];
+    const memberRegex = /strategy\.[A-Za-z0-9_\.]+/g;
+    const orderRegex = /strategy\.(entry|order|exit|close_all|close|cancel_all|cancel)\s*\((.*)$/;
+    const loopRegex = /^\s*(for|while)\b/;
+    const conditionalRegex = /^\s*if\b/;
+
+    lines.forEach((rawLine, index) => {
+      const lineNumber = index + 1;
+      const indent = rawLine.length - rawLine.replace(/^\s+/, '').length;
+      const trimmed = rawLine.trim();
+
+      if (trimmed.length === 0) {
+        return;
+      }
+
+      while (stack.length > 0 && indent <= stack[stack.length - 1].indent) {
+        stack.pop();
+      }
+
+      if (loopRegex.test(trimmed)) {
+        stack.push({ indent, type: 'loop' });
+        this.astHasLoop = true;
+      } else if (conditionalRegex.test(trimmed)) {
+        stack.push({ indent, type: 'conditional', hasExpensive: this.lineHasExpensiveCalculation(trimmed) });
+      }
+
+      const memberMatches = trimmed.match(memberRegex);
+      if (memberMatches) {
+        for (const match of memberMatches) {
+          this.astMemberNames.add(match);
+          if (match.startsWith('strategy.closedtrades')) {
+            if (match === 'strategy.closedtrades.first_index') {
+              this.astFirstIndexStandalone.push({ line: lineNumber, column: rawLine.indexOf(match) + 1 });
+            }
+            if (match.endsWith('.size')) {
+              this.astHasOrderCountTracking = true;
+            }
+          }
+          if (match.startsWith('strategy.opentrades')) {
+            this.astHasOpenTradesReference = true;
+            if (match.endsWith('.size')) {
+              this.astHasOrderCountTracking = true;
+            }
+          }
+          if (match === 'strategy.position_size') {
+            this.astHasPositionSizeReference = true;
+            if (/==\s*0|:=\s*0/.test(trimmed)) {
+              this.astHasPositionSizeReset = true;
+            }
+          }
+        }
+      }
+
+      if (/var\s+.*entered/i.test(trimmed)) {
+        this.astHasVarEntryTracking = true;
+      }
+
+      if (this.lineSuggestsTimeFilter(trimmed)) {
+        this.hasTimeFiltering = true;
+      }
+
+      for (const func of this.extractComplexFunctions(trimmed)) {
+        this.astComplexCalculations.add(func);
+      }
+
+      const orderMatch = trimmed.match(orderRegex);
+      if (!orderMatch) {
+        if (!this.manualOrderCounterDetected && this.isManualOrderCounterLine(trimmed)) {
+          this.manualOrderCounterDetected = true;
+        }
+        return;
+      }
+
+      const functionName = orderMatch[1];
+      const openParenIndex = rawLine.indexOf('(');
+      const argsSection = this.extractArgumentsSection(lines, index, openParenIndex + 1);
+      const args = this.splitArguments(argsSection);
+      const baseName = functionName;
+      const entryId = this.extractEntryId(baseName, args);
+      const inLoop = stack.some(frame => frame.type === 'loop');
+      const conditionalFrame = [...stack].reverse().find(frame => frame.type === 'conditional');
+      const inConditional = conditionalFrame !== undefined;
+      const hasExpensiveCondition = Boolean(conditionalFrame?.hasExpensive);
+
+      const orderCall: StrategyOrderCall = {
+        functionName: `strategy.${functionName}`,
+        line: lineNumber,
+        column: rawLine.indexOf('strategy.') + 1 || 1,
+        arguments: args,
+        entryId,
+        orderType: this.getOrderType(baseName),
+        inLoop,
+        inConditional,
+        hasExpensiveCondition,
+      };
+
+      this.strategyOrderCalls.push(orderCall);
+      this.totalOrderCount += 1;
+
+      if (orderCall.orderType === 'entry') {
+        const existing = this.entriesPerLine.get(lineNumber) ?? 0;
+        this.entriesPerLine.set(lineNumber, existing + 1);
+      }
+
+      this.validateOrderCall(orderCall);
+    });
+
+    if (this.manualOrderCounterDetected && !this.warnings.some(w => w.code === 'PSV6-STRATEGY-ORDER-COUNT-HIGH')) {
+      this.addWarning(
+        1,
+        1,
+        'Many strategy orders detected (manual counter). Consider optimization to avoid performance issues.',
+        'PSV6-STRATEGY-ORDER-COUNT-HIGH'
+      );
+    }
+  }
+
+  private extractArgumentsSection(lines: string[], startLine: number, startColumn: number): string {
+    let buffer = '';
+    let depth = 1;
+    let lineIndex = startLine;
+    let columnIndex = startColumn;
+    let inString = false;
+    let stringDelimiter: string | null = null;
+
+    while (lineIndex < lines.length && depth > 0) {
+      const line = lines[lineIndex];
+      for (let i = columnIndex; i < line.length; i++) {
+        const char = line[i];
+
+        if (inString) {
+          buffer += char;
+          if (char === stringDelimiter && line[i - 1] !== '\\') {
+            inString = false;
+            stringDelimiter = null;
+          }
+          continue;
+        }
+
+        if (char === '"' || char === "'") {
+          inString = true;
+          stringDelimiter = char;
+          buffer += char;
+          continue;
+        }
+
+        if (char === '(') {
+          depth += 1;
+          buffer += char;
+          continue;
+        }
+        if (char === ')') {
+          depth -= 1;
+          if (depth === 0) {
+            return buffer.trim();
+          }
+          buffer += char;
+          continue;
+        }
+
+        buffer += char;
+      }
+
+      buffer += ' ';
+      lineIndex += 1;
+      columnIndex = 0;
+    }
+
+    return buffer.trim();
+  }
+
+  private splitArguments(text: string): string[] {
+    const args: string[] = [];
+    let current = '';
+    let depth = 0;
+    let inString = false;
+    let stringChar: string | null = null;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+
+      if (inString) {
+        current += char;
+        if (char === stringChar && text[i - 1] !== '\\') {
+          inString = false;
+          stringChar = null;
+        }
+        continue;
+      }
+
+      if (char === '"' || char === "'") {
+        inString = true;
+        stringChar = char;
+        current += char;
+        continue;
+      }
+
+      if (char === '(') {
+        depth += 1;
+        current += char;
+        continue;
+      }
+      if (char === ')') {
+        depth -= 1;
+        current += char;
+        continue;
+      }
+      if (char === ',' && depth === 0) {
+        if (current.trim().length > 0) {
+          args.push(current.trim());
+        }
+        current = '';
+        continue;
+      }
+      current += char;
+    }
+
+    if (current.trim().length > 0) {
+      args.push(current.trim());
+    }
+
+    return args;
+  }
+
+  private lineHasExpensiveCalculation(line: string): boolean {
+    return Array.from(EXPENSIVE_CALCULATION_FUNCTIONS).some(func => line.includes(func));
+  }
+
+  private lineSuggestsTimeFilter(line: string): boolean {
+    return /input\.time|timestamp\s*\(|timeframe\.|session|time\s*[<>!=]/.test(line);
+  }
+
+  private extractComplexFunctions(line: string): string[] {
+    const matches = line.match(/ta\.[A-Za-z0-9_]+/g);
+    if (!matches) {
+      return [];
+    }
+    return Array.from(new Set(matches));
+  }
+
+  private isManualOrderCounterLine(line: string): boolean {
+    return /order_count\s*:=\s*order_count\s*[+\-]/i.test(line) || /var\s+order_count\b/i.test(line);
+  }
+
+  private detectPyramidingLevelFromHeader(lines: string[]): number {
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line.startsWith('strategy(')) {
+        continue;
+      }
+      const match = line.match(/pyramiding\s*=\s*(\d+)/);
+      if (match) {
+        return parseInt(match[1], 10);
+      }
+    }
+    return 0;
   }
 
   private processAstOrderCall(

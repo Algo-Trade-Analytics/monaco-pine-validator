@@ -95,20 +95,20 @@ export class EnhancedTextboxValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
-    this.astContext = this.getAstContext(config);
-
-    if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+    if ((!this.context.lines || this.context.lines.length === 0) && this.context.cleanLines && this.context.cleanLines.length > 0) {
+      this.context.lines = [...this.context.cleanLines];
+    }
+    if ((!this.context.rawLines || this.context.rawLines.length === 0) && this.context.cleanLines && this.context.cleanLines.length > 0) {
+      this.context.rawLines = [...this.context.cleanLines];
     }
 
-    this.collectTextboxDataAst(this.astContext.ast);
+    this.astContext = this.getAstContext(config);
+
+    if (this.astContext?.ast) {
+      this.collectTextboxDataAst(this.astContext.ast);
+    } else {
+      this.collectTextboxDataFromText();
+    }
 
     // Post-process validations
     this.validateTextboxPerformance();
@@ -126,6 +126,8 @@ export class EnhancedTextboxValidator implements ValidationModule {
       textboxCount: this.textboxCount,
       hasTextContent: this.textContents.size > 0
     });
+
+    this.context.typeMap = typeMap;
 
     return {
       isValid: this.errors.length === 0,
@@ -213,14 +215,6 @@ export class EnhancedTextboxValidator implements ValidationModule {
       if (hasTextParameters) {
         this.textboxCount++;
         this.validateBoxNewWithText(textboxCall);
-
-        if (textParam) {
-          if (this.hasUnbalancedQuotes(textParam)) {
-            this.addError(line, column, 'Malformed text parameter: unbalanced quotes', 'PSV6-TEXTBOX-MALFORMED-TEXT');
-          } else {
-            this.analyzeTextContent(textParam, line, column);
-          }
-        }
       }
 
       if (inLoop && hasTextParameters) {
@@ -245,18 +239,226 @@ export class EnhancedTextboxValidator implements ValidationModule {
     this.textboxCalls.push(textboxCall);
     this.validateBoxTextFunction(textboxCall);
 
-    if (qualifiedName === 'box.set_text' && args.length > 1) {
-      const textArgument = args[1];
-      if (this.hasUnbalancedQuotes(textArgument)) {
-        this.addError(line, column, 'Malformed text parameter: unbalanced quotes', 'PSV6-TEXTBOX-MALFORMED-TEXT');
-      } else {
-        this.analyzeTextContent(textArgument, line, column);
-      }
-    }
-
     if (inLoop) {
       this.warnTextboxInLoop(line, column);
     }
+  }
+
+  private collectTextboxDataFromText(): void {
+    const lines = (this.context.cleanLines && this.context.cleanLines.length > 0)
+      ? this.context.cleanLines
+      : (this.context.lines && this.context.lines.length > 0)
+        ? this.context.lines
+        : this.context.rawLines ?? [];
+
+    if (lines.length === 0) {
+      return;
+    }
+
+    type Frame = { indent: number; type: 'loop' | 'conditional'; hasExpensive?: boolean };
+    const stack: Frame[] = [];
+    const loopRegex = /^\s*(for|while)\b/;
+    const conditionalRegex = /^\s*if\b/;
+    const drawingRegex = /\b(?:label|linefill|line|polyline|table)\./;
+    const callRegex = /(box\.(?:new|set_text|set_text_color|set_text_size|set_text_halign|set_text_valign|set_text_wrap|set_text_style))\s*\(/g;
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const rawLine = lines[lineIndex];
+      const indent = rawLine.length - rawLine.replace(/^\s+/, '').length;
+      const trimmed = rawLine.trim();
+
+      if (process.env.DEBUG_ENH_TEXTBOX === '1') {
+        console.log('[EnhancedTextboxValidator] line', lineIndex + 1, trimmed);
+      }
+
+      while (stack.length > 0 && indent <= stack[stack.length - 1].indent) {
+        stack.pop();
+      }
+
+      if (loopRegex.test(trimmed)) {
+        stack.push({ indent, type: 'loop' });
+      } else if (conditionalRegex.test(trimmed)) {
+        stack.push({ indent, type: 'conditional', hasExpensive: this.lineHasExpensiveCalculation(trimmed) });
+      }
+
+      if (drawingRegex.test(trimmed)) {
+        this.hasDrawingObjects = true;
+      }
+
+      callRegex.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = callRegex.exec(trimmed)) !== null) {
+        const qualifiedName = match[1];
+        const openParenGlobalIndex = rawLine.indexOf('(', match.index >= 0 ? match.index : 0);
+        const argsSection = this.extractArgumentsSection(lines, lineIndex, openParenGlobalIndex + 1);
+        const args = this.splitArguments(argsSection);
+
+        const inLoop = stack.some(frame => frame.type === 'loop');
+        const conditionalFrame = [...stack].reverse().find(frame => frame.type === 'conditional');
+        const hasExpensiveCondition = Boolean(conditionalFrame?.hasExpensive);
+
+        if (qualifiedName === 'box.new') {
+          const textParam = this.findParameter(args, 'text');
+          const hasTextParameters = textParam !== undefined || this.hasTextRelatedParameters(args);
+
+       const textboxCall: TextboxCall = {
+          functionName: 'box.new',
+          line: lineIndex + 1,
+          column: openParenGlobalIndex >= 0 ? openParenGlobalIndex + 1 : 1,
+          arguments: args,
+          textContent: textParam,
+          hasTextParameters,
+        };
+
+        if (process.env.DEBUG_ENH_TEXTBOX === '1') {
+          console.log('[EnhancedTextboxValidator] parsed call', textboxCall);
+        }
+
+        this.textboxCalls.push(textboxCall);
+
+        if (hasTextParameters) {
+          this.textboxCount++;
+          this.validateBoxNewWithText(textboxCall);
+        }
+
+        if (inLoop && hasTextParameters) {
+          this.warnTextboxInLoop(textboxCall.line, textboxCall.column);
+        }
+
+          continue;
+        }
+
+        if (!BOX_TEXT_FUNCTIONS.has(qualifiedName)) {
+          continue;
+        }
+
+        const textboxCall: TextboxCall = {
+          functionName: qualifiedName,
+          line: lineIndex + 1,
+          column: openParenGlobalIndex >= 0 ? openParenGlobalIndex + 1 : 1,
+          arguments: args,
+          hasTextParameters: true,
+        };
+
+        if (process.env.DEBUG_ENH_TEXTBOX === '1') {
+          console.log('[EnhancedTextboxValidator] parsed call', textboxCall);
+        }
+
+        this.textboxCalls.push(textboxCall);
+        this.validateBoxTextFunction(textboxCall);
+
+        if (inLoop) {
+          this.warnTextboxInLoop(textboxCall.line, textboxCall.column);
+        }
+      }
+    }
+  }
+
+  private extractArgumentsSection(lines: string[], startLine: number, startColumn: number): string {
+    let buffer = '';
+    let depth = 1;
+    let lineIndex = startLine;
+    let columnIndex = startColumn;
+    let inString = false;
+    let stringDelimiter: string | null = null;
+
+    while (lineIndex < lines.length && depth > 0) {
+      const line = lines[lineIndex];
+      for (let i = columnIndex; i < line.length; i++) {
+        const char = line[i];
+
+        if (inString) {
+          buffer += char;
+          if (char === stringDelimiter && line[i - 1] !== '\\') {
+            inString = false;
+            stringDelimiter = null;
+          }
+          continue;
+        }
+
+        if (char === '"' || char === "'") {
+          inString = true;
+          stringDelimiter = char;
+          buffer += char;
+          continue;
+        }
+
+        if (char === '(') {
+          depth += 1;
+          buffer += char;
+          continue;
+        }
+        if (char === ')') {
+          depth -= 1;
+          if (depth === 0) {
+            return buffer.trim();
+          }
+          buffer += char;
+          continue;
+        }
+
+        buffer += char;
+      }
+
+      buffer += ' ';
+      lineIndex += 1;
+      columnIndex = 0;
+    }
+
+    return buffer.trim();
+  }
+
+  private splitArguments(text: string): string[] {
+    const args: string[] = [];
+    let current = '';
+    let depth = 0;
+    let inString = false;
+    let stringChar: string | null = null;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+
+      if (inString) {
+        current += char;
+        if (char === stringChar && text[i - 1] !== '\\') {
+          inString = false;
+          stringChar = null;
+        }
+        continue;
+      }
+
+      if (char === '"' || char === "'") {
+        inString = true;
+        stringChar = char;
+        current += char;
+        continue;
+      }
+
+      if (char === '(') {
+        depth += 1;
+        current += char;
+        continue;
+      }
+      if (char === ')') {
+        depth -= 1;
+        current += char;
+        continue;
+      }
+      if (char === ',' && depth === 0) {
+        if (current.trim().length > 0) {
+          args.push(current.trim());
+        }
+        current = '';
+        continue;
+      }
+      current += char;
+    }
+
+    if (current.trim().length > 0) {
+      args.push(current.trim());
+    }
+
+    return args;
   }
 
   private validateBoxNewWithText(textboxCall: TextboxCall): void {
@@ -264,13 +466,33 @@ export class EnhancedTextboxValidator implements ValidationModule {
     
     // Validate text parameter type
     const textParam = this.findParameter(args, 'text');
-    if (textParam && !this.isStringExpression(textParam)) {
-      this.addError(
-        textboxCall.line,
-        textboxCall.column,
-        'text parameter must be a string expression',
-        'PSV6-TEXTBOX-TEXT-TYPE'
-      );
+    if (textParam) {
+      const looksString = this.isStringExpression(textParam);
+      if (!looksString) {
+        this.addError(
+          textboxCall.line,
+          textboxCall.column,
+          'text parameter must be a string expression',
+          'PSV6-TEXTBOX-TEXT-TYPE'
+        );
+        if (this.hasDanglingQuote(textParam) || this.hasUnbalancedQuotes(textParam)) {
+          this.addError(
+            textboxCall.line,
+            textboxCall.column,
+            'Malformed text parameter: unbalanced quotes',
+            'PSV6-TEXTBOX-MALFORMED-TEXT'
+          );
+        }
+      } else if (this.hasDanglingQuote(textParam) || this.hasUnbalancedQuotes(textParam)) {
+        this.addError(
+          textboxCall.line,
+          textboxCall.column,
+          'Malformed text parameter: unbalanced quotes',
+          'PSV6-TEXTBOX-MALFORMED-TEXT'
+        );
+      } else {
+        this.analyzeTextContent(textParam, textboxCall.line, textboxCall.column);
+      }
     }
 
     // Validate text_color parameter
@@ -363,6 +585,36 @@ export class EnhancedTextboxValidator implements ValidationModule {
     return (rawDbl % 2 === 1) || (rawSgl % 2 === 1);
   }
 
+  private hasDanglingQuote(value: string): boolean {
+    const trimmed = value.trim();
+    // Quick exits for clean literals and identifiers
+    if (trimmed.length === 0) return false;
+    if (/^"[^"\\]*(?:\\.[^"\\]*)*"$/.test(trimmed) || /^'[^'\\]*(?:\\.[^'\\]*)*'$/.test(trimmed)) {
+      return false;
+    }
+
+    const unescapedDouble = trimmed.replace(/\\"/g, '').split('"').length - 1;
+    const unescapedSingle = trimmed.replace(/\\'/g, '').split("'").length - 1;
+
+    // Lone quote or trailing/leading quote without its pair
+    if (unescapedDouble === 1 || unescapedSingle === 1) {
+      return true;
+    }
+
+    const endsWithQuote = trimmed.endsWith('"') || trimmed.endsWith("'");
+    const startsWithQuote = trimmed.startsWith('"') || trimmed.startsWith("'");
+    if (endsWithQuote !== startsWithQuote) {
+      return true;
+    }
+
+    // Mixed usage like foo"bar or "bar)" should still flag
+    if (/^[^"']+["']$/.test(trimmed) || /^["'][^"']+[)\]\}]?$/.test(trimmed)) {
+      return true;
+    }
+
+    return false;
+  }
+
   private validateBoxTextFunction(textboxCall: TextboxCall): void {
     const funcName = textboxCall.functionName;
     const args = textboxCall.arguments;
@@ -395,7 +647,18 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     if (!this.isStringExpression(args[1])) {
       this.addError(lineNum, column, 'text parameter must be a string expression', 'PSV6-TEXTBOX-TEXT-TYPE');
+      if (this.hasDanglingQuote(args[1]) || this.hasUnbalancedQuotes(args[1])) {
+        this.addError(lineNum, column, 'Malformed text parameter: unbalanced quotes', 'PSV6-TEXTBOX-MALFORMED-TEXT');
+      }
+      return;
     }
+
+    if (this.hasDanglingQuote(args[1]) || this.hasUnbalancedQuotes(args[1])) {
+      this.addError(lineNum, column, 'Malformed text parameter: unbalanced quotes', 'PSV6-TEXTBOX-MALFORMED-TEXT');
+      return;
+    }
+
+    this.analyzeTextContent(args[1], lineNum, column);
   }
 
   private validateBoxSetTextColor(args: string[], lineNum: number, column: number): void {
@@ -628,11 +891,17 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
   // Helper methods
   private findParameter(args: string[], paramName: string): string | undefined {
-    for (const arg of args) {
-      if (arg.includes(`${paramName}=`)) {
-        const match = arg.match(new RegExp(`${paramName}\\s*=\\s*([^,]+)`));
-        return match ? match[1].trim() : undefined;
+    for (const rawArg of args) {
+      const arg = rawArg.trim();
+      const equalsIndex = arg.indexOf('=');
+      if (equalsIndex === -1) {
+        continue;
       }
+      const name = arg.slice(0, equalsIndex).trim();
+      if (name !== paramName) {
+        continue;
+      }
+      return arg.slice(equalsIndex + 1).trim();
     }
     return undefined;
   }
