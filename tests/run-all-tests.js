@@ -14,10 +14,9 @@ import path from 'node:path';
 console.log('🧪 Pine Script v6 Validator - Running All Tests');
 console.log('='.repeat(60));
 
-const specsDir = path.join('tests', 'specs');
-const allTestsSpec = path.join(specsDir, 'all-validation-tests.spec.ts');
+const specPattern = path.join('tests', 'specs', '**', '*.spec.ts');
 
-const testFiles = [allTestsSpec];
+const testFiles = [specPattern];
 
 const testCommands = [`npx vitest run --config vitest.validator.config.ts`];
 

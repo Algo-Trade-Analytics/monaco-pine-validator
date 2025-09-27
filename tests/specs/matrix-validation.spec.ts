@@ -46,8 +46,7 @@ indicator("Matrix Declaration Test")
 matrix1 = matrix.new<float>(5, 10)
 matrix2 = matrix.new<string>(3, 4)
 
-// Old syntax
-matrix3 = matrix.new(float, 2, 3)
+matrix3 = matrix.new<float>(2, 3)
 
 plot(close)`;
 
@@ -57,6 +56,11 @@ plot(close)`;
       const result = validator.validate(context, config);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
+      expect(result.typeMap.has('matrix1')).toBe(true);
+      expect(result.typeMap.get('matrix1')?.type).toBe('matrix');
+      expect(result.typeMap.get('matrix1')?.elementType).toBe('float');
+      expect(result.typeMap.get('matrix2')?.elementType).toBe('string');
+      expect(result.typeMap.get('matrix3')?.elementType).toBe('float');
     });
 
     it('should error on invalid matrix declaration syntax', () => {
@@ -64,7 +68,7 @@ plot(close)`;
 indicator("Invalid Matrix Declaration Test")
 
 // Missing type
-invalid1 = matrix.new(5, 10)
+invalid1 = matrix.new<>(5, 10)
 
 // Invalid type
 invalid2 = matrix.new<invalidtype>(3, 4)

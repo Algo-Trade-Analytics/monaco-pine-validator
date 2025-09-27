@@ -39,6 +39,8 @@ export interface TypeInfo {
   usages: Array<{ line: number; column: number }>;
   enumType?: string; // For enum variables to store their enum type
   elementType?: string; // For arrays and matrices to store their element type
+  keyType?: string; // For maps to store the key type
+  valueType?: string; // For maps to store the value type
   udtName?: string; // Preserve the specific UDT identifier when type === 'udt'
 }
 

@@ -53,8 +53,7 @@ indicator("Array Declaration Test")
 prices = array.new<float>(10)
 names = array.new<string>(5, "default")
 
-// Old syntax
-values = array.new(float, 20)
+values = array.new<float>(20)
 
 plot(close)`;
 
@@ -64,6 +63,13 @@ plot(close)`;
       const result = validator.validate(context, config);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
+      expect(result.typeMap.has('prices')).toBe(true);
+      expect(result.typeMap.get('prices')?.type).toBe('array');
+      expect(result.typeMap.get('prices')?.elementType).toBe('float');
+      expect(result.typeMap.has('names')).toBe(true);
+      expect(result.typeMap.get('names')?.elementType).toBe('string');
+      expect(result.typeMap.has('values')).toBe(true);
+      expect(result.typeMap.get('values')?.elementType).toBe('float');
     });
 
     it('should error on invalid array declaration syntax', () => {
@@ -71,7 +77,7 @@ plot(close)`;
 indicator("Invalid Array Declaration Test")
 
 // Missing type
-invalid1 = array.new(10)
+invalid1 = array.new<>(10)
 
 // Invalid type
 invalid2 = array.new<invalidtype>(5)

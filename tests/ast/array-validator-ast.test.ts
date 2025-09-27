@@ -14,6 +14,7 @@ import {
   createNumberLiteral,
   createProgram,
   createStringLiteral,
+  createTypeReference,
   createVariableDeclaration,
 } from './fixtures';
 
@@ -48,12 +49,13 @@ describe('ArrayValidator (AST)', () => {
 
   it('reports type mismatches when pushing incompatible values', () => {
     const arrayIdentifier = createIdentifier('array', 8, 1);
-    const newFloatIdentifier = createIdentifier('new_float', 14, 1);
-    const arrayNewCallee = createMemberExpression(arrayIdentifier, newFloatIdentifier, 8, 23, 1);
+    const newIdentifier = createIdentifier('new', 13, 1);
+    const arrayNewCallee = createMemberExpression(arrayIdentifier, newIdentifier, 8, 21, 1);
 
-    const sizeLiteral = createNumberLiteral(5, '5', 24, 1);
-    const sizeArgument = createArgument(sizeLiteral, 24, 25, 1);
-    const newCall = createCallExpression(arrayNewCallee, [sizeArgument], 8, 26, 1);
+    const sizeLiteral = createNumberLiteral(5, '5', 22, 1);
+    const sizeArgument = createArgument(sizeLiteral, 22, 23, 1);
+    const floatType = createTypeReference('float', 18, 1);
+    const newCall = createCallExpression(arrayNewCallee, [sizeArgument], 8, 24, 1, [floatType]);
 
     const arrIdentifier = createIdentifier('arr', 4, 1);
     const declaration = createVariableDeclaration(arrIdentifier, 0, 26, 1, {
@@ -157,4 +159,3 @@ describe('ArrayValidator (AST)', () => {
     expect(warningCodes).toContain('PSV6-ARRAY-PERF-LOOP');
   });
 });
-

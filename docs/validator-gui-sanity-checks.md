@@ -69,7 +69,7 @@ Use this lightweight checklist to verify that the inspector embedded in the Pine
 
 ## Optional Extras
 - Trigger an alert warning by creating two `alertcondition` calls and verifying the readable message.
-- Drop a malformed array constructor (e.g., `array.new(10)`) to ensure the GUI surfaces the same error codes as the CLI tests.
+- Drop a malformed array constructor (e.g., `array.new<>(10)`) to ensure the GUI surfaces the same error codes as the CLI tests.
 
 ## Reporting
 If any scenario fails, capture the validator panel output and the snippet that triggered it, then:

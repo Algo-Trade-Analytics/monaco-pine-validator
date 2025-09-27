@@ -2196,7 +2196,8 @@ export class CoreValidator implements ValidationModule {
       const innerParts = inner.split(',').map(p => p.trim()).filter(Boolean);
       baseType = 'map';
       if (innerParts.length) {
-        valueType = innerParts[innerParts.length - 1];
+        const trimmed = innerParts[innerParts.length - 1];
+        valueType = trimmed;
       }
     } else if (/^series\b/i.test(typeToken)) {
       baseType = 'series';

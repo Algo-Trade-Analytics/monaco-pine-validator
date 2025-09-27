@@ -8,6 +8,7 @@ import {
   type ParameterNode,
   type TupleExpressionNode,
   type ArrayLiteralNode,
+  type TypeReferenceNode,
 } from '../../nodes';
 import {
   And,
@@ -69,6 +70,7 @@ import {
   createStringNode,
   createTupleExpressionNode,
   createUnaryExpressionNode,
+  buildTypeReferenceFromTokens,
   tokenIndent,
 } from '../node-builders';
 
@@ -307,44 +309,141 @@ export function createUnaryExpressionRule(parser: PineParser) {
   });
 }
 
+export function createCallTypeReferenceRule(parser: PineParser) {
+  return parser.RULE('callTypeReference', (): IToken[] => {
+    const tokens: IToken[] = [];
+
+    const identifier = parser.CONSUME(IdentifierToken);
+    parser.ACTION(() => {
+      tokens.push(identifier);
+    });
+
+    parser.MANY(() => {
+      const dotToken = parser.CONSUME(Dot);
+      const segmentToken = parser.CONSUME2(IdentifierToken);
+      parser.ACTION(() => {
+        tokens.push(dotToken);
+        tokens.push(segmentToken);
+      });
+    });
+
+    parser.OPTION(() => {
+      const lessToken = parser.CONSUME(Less);
+      parser.ACTION(() => {
+        tokens.push(lessToken);
+      });
+
+      const firstTokens = parser.SUBRULE(parser.callTypeReference);
+      parser.ACTION(() => {
+        tokens.push(...firstTokens);
+      });
+
+      parser.MANY2(() => {
+        const commaToken = parser.CONSUME(Comma);
+        const additionalTokens = parser.SUBRULE2(parser.callTypeReference);
+        parser.ACTION(() => {
+          tokens.push(commaToken);
+          tokens.push(...additionalTokens);
+        });
+      });
+
+      const greaterToken = parser.CONSUME(Greater);
+      parser.ACTION(() => {
+        tokens.push(greaterToken);
+      });
+    });
+
+    return tokens;
+  });
+}
+
 export function createCallExpressionRule(parser: PineParser) {
   return parser.RULE('callExpression', () => {
     let expression = parser.SUBRULE(parser.primaryExpression) ?? createPlaceholderExpression();
 
-    parser.MANY(() => {
-      parser.OR([
-        {
-          ALT: () => {
-            parser.CONSUME(LParen);
-            let args: ArgumentNode[] = [];
-            if (parser.LA(1).tokenType !== RParen) {
-              args = parser.SUBRULE(parser.argumentList);
-            }
-            const rParen = parser.CONSUME(RParen);
-            expression = createCallExpressionNode(expression, args, rParen);
-          },
-        },
-        {
-          ALT: () => {
-            parser.CONSUME(Dot);
-            const propertyToken = parser.CONSUME(IdentifierToken);
-            const property = createIdentifierNode(propertyToken);
-            expression = createMemberExpressionNode(expression, property, propertyToken);
-          },
-        },
-        {
-          ALT: () => {
-            const lBracket = parser.CONSUME(LBracket);
-            let indexExpression: ExpressionNode | undefined;
-            if (parser.LA(1).tokenType !== RBracket) {
-              indexExpression = parser.SUBRULE2(parser.expression);
-            }
-            const rBracket = parser.CONSUME(RBracket);
-            expression = createIndexExpressionNode(expression, indexExpression, rBracket ?? lBracket);
-          },
-        },
-      ]);
-    });
+    while (true) {
+      const lookahead = parser.LA(1);
+      const tokenType = lookahead.tokenType;
+
+      if (tokenType === Less) {
+        const canParseGenericCall = parser.BACKTRACK(() => {
+          parser.CONSUME(Less);
+          parser.SUBRULE(parser.callTypeReference);
+          while (parser.LA(1).tokenType === Comma) {
+            parser.CONSUME(Comma);
+            parser.SUBRULE2(parser.callTypeReference);
+          }
+          parser.CONSUME(Greater);
+          while (parser.LA(1).tokenType === Newline) {
+            parser.CONSUME(Newline);
+          }
+          parser.CONSUME(LParen);
+          return true;
+        });
+
+        if (!canParseGenericCall.call(parser)) {
+          break;
+        }
+
+        const typeArgumentTokenGroups: IToken[][] = [];
+
+        parser.CONSUME(Less);
+        typeArgumentTokenGroups.push(parser.SUBRULE(parser.callTypeReference));
+        while (parser.LA(1).tokenType === Comma) {
+          parser.CONSUME(Comma);
+          typeArgumentTokenGroups.push(parser.SUBRULE2(parser.callTypeReference));
+        }
+        parser.CONSUME(Greater);
+
+        while (parser.LA(1).tokenType === Newline) {
+          parser.CONSUME(Newline);
+        }
+
+        parser.CONSUME(LParen);
+        let args: ArgumentNode[] = [];
+        if (parser.LA(1).tokenType !== RParen) {
+          args = parser.SUBRULE(parser.argumentList);
+        }
+        const rParen = parser.CONSUME(RParen);
+        const typeArguments = typeArgumentTokenGroups
+          .map((group) => buildTypeReferenceFromTokens(group))
+          .filter((node): node is TypeReferenceNode => node !== null);
+        expression = createCallExpressionNode(expression, args, rParen, typeArguments);
+        continue;
+      }
+
+      if (tokenType === LParen) {
+        parser.CONSUME(LParen);
+        let args: ArgumentNode[] = [];
+        if (parser.LA(1).tokenType !== RParen) {
+          args = parser.SUBRULE(parser.argumentList);
+        }
+        const rParen = parser.CONSUME(RParen);
+        expression = createCallExpressionNode(expression, args, rParen, []);
+        continue;
+      }
+
+      if (tokenType === Dot) {
+        parser.CONSUME(Dot);
+        const propertyToken = parser.CONSUME(IdentifierToken);
+        const property = createIdentifierNode(propertyToken);
+        expression = createMemberExpressionNode(expression, property, propertyToken);
+        continue;
+      }
+
+      if (tokenType === LBracket) {
+        const lBracket = parser.CONSUME(LBracket);
+        let indexExpression: ExpressionNode | undefined;
+        if (parser.LA(1).tokenType !== RBracket) {
+          indexExpression = parser.SUBRULE2(parser.expression);
+        }
+        const rBracket = parser.CONSUME(RBracket);
+        expression = createIndexExpressionNode(expression, indexExpression, rBracket ?? lBracket);
+        continue;
+      }
+
+      break;
+    }
 
     return expression;
   });

@@ -23,6 +23,7 @@ import {
   createBracketExpressionRule,
   createCallExpressionRule,
   createArrowFunctionExpressionRule,
+  createCallTypeReferenceRule,
   createConditionalExpressionRule,
   createEqualityExpressionRule,
   createExpressionRule,
@@ -196,6 +197,8 @@ export class PineParser extends EmbeddedActionsParser {
   public multiplicativeExpression = createMultiplicativeExpressionRule(this);
 
   public unaryExpression = createUnaryExpressionRule(this);
+
+  public callTypeReference = createCallTypeReferenceRule(this);
 
   public callExpression = createCallExpressionRule(this);
 

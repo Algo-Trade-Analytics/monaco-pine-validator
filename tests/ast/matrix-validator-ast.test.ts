@@ -14,6 +14,7 @@ import {
   createNumberLiteral,
   createProgram,
   createStringLiteral,
+  createTypeReference,
   createVariableDeclaration,
 } from './fixtures';
 
@@ -51,13 +52,12 @@ describe('MatrixValidator (AST)', () => {
     const newIdentifier = createIdentifier('new', 17, 1);
     const matrixNewCallee = createMemberExpression(matrixIdentifier, newIdentifier, 10, 20, 1);
 
-    const typeLiteral = createStringLiteral('float', '"float"', 21, 1);
-    const typeArgument = createArgument(typeLiteral, 21, 28, 1);
     const rowLiteral = createNumberLiteral(2, '2', 30, 1);
     const rowArgument = createArgument(rowLiteral, 30, 31, 1);
     const colLiteral = createNumberLiteral(2, '2', 33, 1);
     const colArgument = createArgument(colLiteral, 33, 34, 1);
-    const newCall = createCallExpression(matrixNewCallee, [typeArgument, rowArgument, colArgument], 10, 35, 1);
+    const floatType = createTypeReference('float', 21, 1);
+    const newCall = createCallExpression(matrixNewCallee, [rowArgument, colArgument], 10, 35, 1, [floatType]);
 
     const matIdentifier = createIdentifier('mat', 4, 1);
     const declaration = createVariableDeclaration(matIdentifier, 0, 35, 1, {
@@ -96,13 +96,12 @@ describe('MatrixValidator (AST)', () => {
     const newIdentifier = createIdentifier('new', 17, 1);
     const matrixNewCallee = createMemberExpression(matrixIdentifier, newIdentifier, 10, 20, 1);
 
-    const typeLiteral = createStringLiteral('float', '"float"', 21, 1);
-    const typeArgument = createArgument(typeLiteral, 21, 28, 1);
     const rowLiteral = createNumberLiteral(2, '2', 30, 1);
     const rowArgument = createArgument(rowLiteral, 30, 31, 1);
     const colLiteral = createNumberLiteral(2, '2', 33, 1);
     const colArgument = createArgument(colLiteral, 33, 34, 1);
-    const newCall = createCallExpression(matrixNewCallee, [typeArgument, rowArgument, colArgument], 10, 35, 1);
+    const floatType = createTypeReference('float', 21, 1);
+    const newCall = createCallExpression(matrixNewCallee, [rowArgument, colArgument], 10, 35, 1, [floatType]);
 
     const matIdentifier = createIdentifier('mat', 4, 1);
     const declaration = createVariableDeclaration(matIdentifier, 0, 35, 1, {

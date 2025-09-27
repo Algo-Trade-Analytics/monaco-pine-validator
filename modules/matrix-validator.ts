@@ -339,7 +339,7 @@ export class MatrixValidator implements ValidationModule {
   }
 
   private inferMatrixElementTypeFromCall(call: CallExpressionNode): string | null {
-    const genericType = this.extractGenericElementType(call.callee);
+    const genericType = this.extractGenericElementType(call);
     if (genericType) {
       return genericType;
     }
@@ -358,7 +358,7 @@ export class MatrixValidator implements ValidationModule {
 
   private extractMatrixDimensionsFromCall(call: CallExpressionNode): { rows: number | null; cols: number | null } {
     const args = call.args;
-    const genericType = this.extractGenericElementType(call.callee);
+    const genericType = this.extractGenericElementType(call);
 
     const rowIndex = genericType ? 0 : 1;
     const colIndex = genericType ? 1 : 2;
@@ -583,8 +583,15 @@ export class MatrixValidator implements ValidationModule {
     return 'ast' in this.context ? (this.context as AstValidationContext) : null;
   }
 
-  private extractGenericElementType(callee: ExpressionNode): string | null {
-    const source = this.getExpressionText(callee);
+  private extractGenericElementType(call: CallExpressionNode): string | null {
+    if (Array.isArray(call.typeArguments) && call.typeArguments.length > 0) {
+      const formatted = this.formatTypeReference(call.typeArguments[0]);
+      if (formatted) {
+        return formatted;
+      }
+    }
+
+    const source = this.getExpressionText(call.callee);
     const match = source.match(/matrix\.new\s*<\s*([^>]+)\s*>/i);
     if (match) {
       return match[1].trim();
@@ -608,7 +615,7 @@ export class MatrixValidator implements ValidationModule {
   private extractMatrixAnnotationElement(type: TypeReferenceNode): string | null {
     if (type.name.name === 'matrix' && type.generics.length > 0) {
       const generic = type.generics[0];
-      return generic.name.name;
+      return this.formatTypeReference(generic);
     }
 
     const source = this.getNodeSource(type).trim();
@@ -618,6 +625,27 @@ export class MatrixValidator implements ValidationModule {
     }
 
     return null;
+  }
+
+  private formatTypeReference(type: TypeReferenceNode): string {
+    const base = type.name.name;
+    if (!base) {
+      return '';
+    }
+
+    if (!Array.isArray(type.generics) || type.generics.length === 0) {
+      return base;
+    }
+
+    const generics = type.generics
+      .map((generic) => this.formatTypeReference(generic))
+      .filter((name) => name.length > 0);
+
+    if (generics.length === 0) {
+      return base;
+    }
+
+    return `${base}<${generics.join(', ')}>`;
   }
 
   private isFunctionParameter(name: string): boolean {

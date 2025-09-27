@@ -39,6 +39,7 @@ import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
 
 interface MapDeclarationInfo {
   name: string;
+  keyType: string;
   valueType: string;
   line: number;
   column: number;
@@ -111,6 +112,7 @@ export class MapValidator implements ValidationModule {
         type: 'map',
         isConst: false,
         isSeries: false,
+        keyType: mapInfo.keyType,
         valueType: mapInfo.valueType,
       });
     }
@@ -171,12 +173,15 @@ export class MapValidator implements ValidationModule {
               return;
             }
 
-            const callValueType = this.inferMapValueTypeFromCall(call);
+            const callTypes = this.inferMapTypesFromCall(call);
+            const targetKeyType = target.annotationKeyType ?? null;
             const targetValueType = target.annotationValueType ?? null;
-            const valueType = this.normalizeValueType(callValueType ?? targetValueType);
+            const keyType = this.normalizeKeyType(callTypes.keyType ?? targetKeyType);
+            const valueType = this.normalizeValueType(callTypes.valueType ?? targetValueType);
 
             this.mapDeclarations.set(target.name, {
               name: target.name,
+              keyType,
               valueType,
               line: target.line,
               column: target.column,
@@ -467,18 +472,25 @@ export class MapValidator implements ValidationModule {
     return null;
   }
 
-  private extractMapAssignmentTarget(path: NodePath<CallExpressionNode>): { name: string; line: number; column: number; annotationValueType?: string | null } | null {
+  private extractMapAssignmentTarget(path: NodePath<CallExpressionNode>): {
+    name: string;
+    line: number;
+    column: number;
+    annotationKeyType?: string | null;
+    annotationValueType?: string | null;
+  } | null {
     const declarationPath = findAncestor(path, (ancestor): ancestor is NodePath<VariableDeclarationNode> => ancestor.node.kind === 'VariableDeclaration');
     if (declarationPath) {
       const declaration = declarationPath.node as VariableDeclarationNode;
       if (declaration.initializer === path.node) {
         const identifier = declaration.identifier;
-        const annotationValueType = this.extractValueTypeFromAnnotation(declaration.typeAnnotation);
+        const annotationTypes = this.extractMapAnnotationTypes(declaration.typeAnnotation);
         return {
           name: identifier.name,
           line: identifier.loc.start.line,
           column: identifier.loc.start.column,
-          annotationValueType,
+          annotationKeyType: annotationTypes.keyType,
+          annotationValueType: annotationTypes.valueType,
         };
       }
     }
@@ -493,6 +505,7 @@ export class MapValidator implements ValidationModule {
           name: identifier.name,
           line: identifier.loc.start.line,
           column: identifier.loc.start.column,
+          annotationKeyType: existing?.keyType ?? null,
           annotationValueType: existing?.valueType ?? null,
         };
       }
@@ -501,15 +514,20 @@ export class MapValidator implements ValidationModule {
     return null;
   }
 
-  private extractValueTypeFromAnnotation(type: TypeReferenceNode | null): string | null {
+  private extractMapAnnotationTypes(type: TypeReferenceNode | null): { keyType: string | null; valueType: string | null } {
     if (!type) {
-      return null;
+      return { keyType: null, valueType: null };
     }
     if (type.name.name === 'map' && type.generics.length > 0) {
-      const valueTypeNode = type.generics[type.generics.length - 1];
-      return this.describeTypeReference(valueTypeNode);
+      const generics = type.generics.map((node) => this.describeTypeReference(node));
+      const valueType = generics[generics.length - 1] ?? null;
+      const keyType = generics.length > 1 ? generics[0] : 'string';
+      return {
+        keyType,
+        valueType,
+      };
     }
-    return null;
+    return { keyType: null, valueType: null };
   }
 
   private describeTypeReference(type: TypeReferenceNode): string {
@@ -520,16 +538,24 @@ export class MapValidator implements ValidationModule {
     return `${type.name.name}<${generics.join(', ')}>`;
   }
 
-  private inferMapValueTypeFromCall(call: CallExpressionNode): string | null {
-    const callSource = this.getNodeSource(call);
-    const calleeGenerics = this.extractMapGenericTypesFromSource(this.getExpressionText(call.callee));
-    const generics = calleeGenerics.length > 0
-      ? calleeGenerics
-      : this.extractMapGenericTypesFromSource(callSource);
-    if (generics.length > 0) {
-      return generics[generics.length - 1];
+  private inferMapTypesFromCall(call: CallExpressionNode): { keyType?: string; valueType?: string } {
+    if (Array.isArray(call.typeArguments) && call.typeArguments.length > 0) {
+      const generics = call.typeArguments.map((arg) => this.describeTypeReference(arg)).filter(Boolean);
+      return {
+        keyType: generics.length > 1 ? generics[0] : 'string',
+        valueType: generics[generics.length - 1],
+      };
     }
-    return null;
+
+    return { keyType: 'string' };
+  }
+
+  private normalizeKeyType(keyType: string | null | undefined): string {
+    if (!keyType || keyType === 'unknown') {
+      return 'string';
+    }
+    const trimmed = keyType.trim();
+    return trimmed.length > 0 ? trimmed : 'string';
   }
 
   private normalizeValueType(valueType: string | null): string {
@@ -537,39 +563,7 @@ export class MapValidator implements ValidationModule {
       return 'unknown';
     }
     const trimmed = valueType.trim();
-    if (/^map<.+>$/.test(trimmed)) {
-      return 'map';
-    }
-    return trimmed;
-  }
-
-  private extractMapGenericTypesFromSource(source: string): string[] {
-    const match = source.match(/map\.new\s*<\s*([^>]+)\s*>/i);
-    if (!match) {
-      return [];
-    }
-    const generics = match[1];
-    const parts: string[] = [];
-    let current = '';
-    let depth = 0;
-    for (const char of generics) {
-      if (char === '<') {
-        depth += 1;
-        current += char;
-      } else if (char === '>') {
-        depth = Math.max(0, depth - 1);
-        current += char;
-      } else if (char === ',' && depth === 0) {
-        parts.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    if (current.trim()) {
-      parts.push(current.trim());
-    }
-    return parts;
+    return trimmed.length > 0 ? trimmed : 'unknown';
   }
 
   private inferExpressionValueType(expression: ExpressionNode): string {
@@ -724,6 +718,10 @@ export class MapValidator implements ValidationModule {
 
   getMapValueType(varName: string): string | null {
     return this.mapDeclarations.get(varName)?.valueType || null;
+  }
+
+  getMapKeyType(varName: string): string | null {
+    return this.mapDeclarations.get(varName)?.keyType || null;
   }
 }
 

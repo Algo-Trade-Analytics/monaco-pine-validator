@@ -14,6 +14,7 @@ import {
   createNumberLiteral,
   createProgram,
   createStringLiteral,
+  createTypeReference,
   createVariableDeclaration,
 } from './fixtures';
 
@@ -40,12 +41,16 @@ describe('MapValidator (AST)', () => {
     const mapNamespace = createIdentifier('map', 12, 1);
     const newIdentifier = createIdentifier('new', 16, 1);
     const mapNewCallee = createMemberExpression(mapNamespace, newIdentifier, 12, 19, 1);
-    const mapNewCall = createCallExpression(mapNewCallee, [], 12, 33, 1);
+    const stringType = createTypeReference('string', 20, 1);
+    const mapNewCall = createCallExpression(mapNewCallee, [], 12, 33, 1, [stringType]);
+    const mapTypeAnnotation = createTypeReference('map', 0, 1);
+    mapTypeAnnotation.generics.push(createTypeReference('string', 0, 1));
 
     const mapIdentifier = createIdentifier('myMap', 5, 1);
     const declaration = createVariableDeclaration(mapIdentifier, 0, 33, 1, {
       declarationKind: 'var',
       initializer: mapNewCall,
+      typeAnnotation: mapTypeAnnotation,
     });
 
     const mapPutNamespace = createIdentifier('map', 1, 2);
@@ -94,12 +99,16 @@ describe('MapValidator (AST)', () => {
     const mapNamespace = createIdentifier('map', 12, 1);
     const newIdentifier = createIdentifier('new', 16, 1);
     const mapNewCallee = createMemberExpression(mapNamespace, newIdentifier, 12, 19, 1);
-    const mapNewCall = createCallExpression(mapNewCallee, [], 12, 33, 1);
+    const stringType = createTypeReference('string', 20, 1);
+    const mapNewCall = createCallExpression(mapNewCallee, [], 12, 33, 1, [stringType]);
+    const mapTypeAnnotation = createTypeReference('map', 0, 1);
+    mapTypeAnnotation.generics.push(createTypeReference('string', 0, 1));
 
     const mapIdentifier = createIdentifier('myMap', 5, 1);
     const declaration = createVariableDeclaration(mapIdentifier, 0, 33, 1, {
       declarationKind: 'var',
       initializer: mapNewCall,
+      typeAnnotation: mapTypeAnnotation,
     });
 
     const mapPutNamespace = createIdentifier('map', 6, 3);

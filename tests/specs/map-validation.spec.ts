@@ -35,6 +35,13 @@ colorMap = map.new<color>()
       const result = createValidator().validate(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
+      expect(result.typeMap.get('myMap')?.type).toBe('map');
+      expect(result.typeMap.get('myMap')?.keyType).toBe('string');
+      expect(result.typeMap.get('myMap')?.valueType).toBe('string');
+      expect(result.typeMap.get('intMap')?.valueType).toBe('int');
+      expect(result.typeMap.get('floatMap')?.valueType).toBe('float');
+      expect(result.typeMap.get('boolMap')?.valueType).toBe('bool');
+      expect(result.typeMap.get('colorMap')?.valueType).toBe('color');
     });
 
     it('should error on invalid map declaration syntax', () => {
@@ -44,7 +51,7 @@ indicator("Map Test")
 
 // Invalid map declarations
 invalidMap = map.new<string, int>()  // Multiple type parameters
-badMap = map.new()                   // Missing type parameter
+badMap = map.new<>()                 // Missing type parameter
       `;
 
       const result = createValidator().validate(code);
@@ -66,6 +73,10 @@ floatMap: map<float> = map.new<float>()
       const result = createValidator().validate(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
+      expect(result.typeMap.get('stringMap')?.keyType).toBe('string');
+      expect(result.typeMap.get('stringMap')?.valueType).toBe('string');
+      expect(result.typeMap.get('intMap')?.valueType).toBe('int');
+      expect(result.typeMap.get('floatMap')?.valueType).toBe('float');
     });
 
     it('should error on map type mismatch', () => {

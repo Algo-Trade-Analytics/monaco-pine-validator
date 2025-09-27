@@ -36,6 +36,19 @@ const SERIES_IDENTIFIERS = new Set(['open', 'high', 'low', 'close', 'volume']);
 const ARITHMETIC_OPERATORS = new Set(['+', '-', '*', '/', '%', '^']);
 const COMPARISON_OPERATORS = new Set(['==', '!=', '>', '<', '>=', '<=']);
 
+const ARRAY_TYPED_CONSTRUCTORS: Record<string, string> = {
+  'array.new_bool': 'bool',
+  'array.new_box': 'box',
+  'array.new_color': 'color',
+  'array.new_float': 'float',
+  'array.new_int': 'int',
+  'array.new_label': 'label',
+  'array.new_line': 'line',
+  'array.new_linefill': 'linefill',
+  'array.new_string': 'string',
+  'array.new_table': 'table',
+};
+
 export class TypeInferenceValidator implements ValidationModule {
   name = 'TypeInferenceValidator';
   priority = 90; // Run before FunctionValidator to ensure type inference is complete
@@ -121,8 +134,12 @@ export class TypeInferenceValidator implements ValidationModule {
       return;
     }
 
-    const declaredType = node.typeAnnotation ? this.resolveTypeReference(node.typeAnnotation) : null;
+    const declaredInfo = node.typeAnnotation ? this.parseTypeReference(node.typeAnnotation) : null;
+    const declaredType = declaredInfo?.type ?? null;
+    const declaredElementType = declaredInfo?.elementType;
+    const declaredValueType = declaredInfo?.valueType;
     const initializerType = this.getExpressionType(initializer);
+    const collectionInfo = this.inferCollectionTypeFromExpression(initializer);
     const { line, column } = node.loc.start;
 
     if (this.isNaExpression(initializer)) {
@@ -134,7 +151,7 @@ export class TypeInferenceValidator implements ValidationModule {
       );
     }
 
-    if (!declaredType) {
+    if (!declaredType || declaredType === 'unknown') {
       if (!initializerType || initializerType === 'unknown') {
         this.addWarning(
           line,
@@ -150,6 +167,19 @@ export class TypeInferenceValidator implements ValidationModule {
           column,
           `Consider annotating '${node.identifier.name}' with its literal type for readability.`,
           'PSV6-TYPE-ANNOTATION-SUGGESTION',
+        );
+      }
+
+      if (collectionInfo) {
+        this.registerVariableTypeInfo(
+          node.identifier.name,
+          collectionInfo.type,
+          collectionInfo.elementType,
+          collectionInfo.keyType,
+          collectionInfo.valueType,
+          line,
+          column,
+          node.declarationKind === 'const',
         );
       }
 
@@ -200,6 +230,17 @@ export class TypeInferenceValidator implements ValidationModule {
         'PSV6-TYPE-ANNOTATION-REDUNDANT',
       );
     }
+
+    this.registerVariableTypeInfo(
+      node.identifier.name,
+      declaredType,
+      declaredElementType ?? collectionInfo?.elementType,
+      declaredInfo?.keyType ?? collectionInfo?.keyType,
+      declaredValueType ?? collectionInfo?.valueType,
+      line,
+      column,
+      node.declarationKind === 'const',
+    );
   }
 
   private handleAssignment(node: AssignmentStatementNode): void {
@@ -227,6 +268,23 @@ export class TypeInferenceValidator implements ValidationModule {
         'Unable to determine assignment type. The resulting value will be treated as series.',
         'PSV6-TYPE-INFERENCE-AMBIGUOUS',
       );
+    }
+
+    if (node.left.kind === 'Identifier') {
+      const identifier = node.left as IdentifierNode;
+      const inferredCollection = this.inferCollectionTypeFromExpression(right);
+      if (inferredCollection) {
+        this.registerVariableTypeInfo(
+          identifier.name,
+          inferredCollection.type,
+          inferredCollection.elementType,
+          inferredCollection.keyType,
+          inferredCollection.valueType,
+          identifier.loc.start.line,
+          identifier.loc.start.column,
+          false,
+        );
+      }
     }
   }
 
@@ -451,10 +509,6 @@ export class TypeInferenceValidator implements ValidationModule {
     }
   }
 
-  private resolveTypeReference(reference: TypeReferenceNode): string | null {
-    return reference.name.name;
-  }
-
   private isLiteralExpression(expression: ExpressionNode): boolean {
     return expression.kind === 'NumberLiteral' || expression.kind === 'BooleanLiteral' || expression.kind === 'StringLiteral';
   }
@@ -511,6 +565,217 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     return null;
+  }
+
+  private parseTypeReference(reference: TypeReferenceNode): { type: TypeInfo['type']; elementType?: string; keyType?: string; valueType?: string } {
+    const baseType = this.normalizeType(reference.name.name);
+    if (baseType === 'array' || baseType === 'matrix') {
+      const generic = reference.generics[0];
+      const elementType = generic ? this.formatTypeReference(generic) : undefined;
+      return elementType ? { type: baseType, elementType } : { type: baseType };
+    }
+
+    if (baseType === 'map') {
+      const generics = reference.generics.map((generic) => this.formatTypeReference(generic)).filter(Boolean);
+      const keyType = generics.length > 1 ? generics[0] : 'string';
+      const valueType = generics.length > 0 ? generics[generics.length - 1] : undefined;
+      return {
+        type: baseType,
+        keyType,
+        valueType,
+      };
+    }
+
+    return { type: baseType };
+  }
+
+  private formatTypeReference(reference: TypeReferenceNode): string {
+    const base = reference.name.name;
+    if (!reference.generics.length) {
+      return base;
+    }
+
+    const generics = reference.generics
+      .map((generic) => this.formatTypeReference(generic))
+      .filter((value) => value.length > 0);
+
+    if (!generics.length) {
+      return base;
+    }
+
+    return `${base}<${generics.join(', ')}>`;
+  }
+
+  private inferCollectionTypeFromExpression(
+    expression: ExpressionNode,
+  ): { type: TypeInfo['type']; elementType?: string; keyType?: string; valueType?: string } | null {
+    if (expression.kind !== 'CallExpression') {
+      return null;
+    }
+
+    const call = expression as CallExpressionNode;
+    const calleeName = this.resolveCalleeName(call.callee);
+    if (!calleeName) {
+      return null;
+    }
+
+    if (calleeName.startsWith('array.new')) {
+      const elementType = this.extractArrayElementType(call, calleeName);
+      return elementType ? { type: 'array', elementType } : { type: 'array' };
+    }
+
+    if (calleeName === 'matrix.new') {
+      const elementType = this.extractMatrixElementType(call);
+      return elementType ? { type: 'matrix', elementType } : { type: 'matrix' };
+    }
+
+    if (calleeName === 'map.new') {
+      const { keyType, valueType } = this.extractMapTypes(call);
+      return {
+        type: 'map',
+        keyType,
+        valueType,
+      };
+    }
+
+    return null;
+  }
+
+  private extractArrayElementType(call: CallExpressionNode, calleeName: string): string | undefined {
+    if (Array.isArray(call.typeArguments) && call.typeArguments.length > 0) {
+      const formatted = this.formatTypeReference(call.typeArguments[0]);
+      if (formatted) {
+        return formatted;
+      }
+    }
+
+    const typedConstructor = ARRAY_TYPED_CONSTRUCTORS[calleeName];
+    if (typedConstructor) {
+      return typedConstructor;
+    }
+
+    if (calleeName === 'array.new' && call.args.length >= 2) {
+      const resolved = this.resolveTypeIdentifier(call.args[0].value);
+      if (resolved) {
+        return resolved;
+      }
+    }
+
+    return undefined;
+  }
+
+  private extractMatrixElementType(call: CallExpressionNode): string | undefined {
+    if (Array.isArray(call.typeArguments) && call.typeArguments.length > 0) {
+      const formatted = this.formatTypeReference(call.typeArguments[0]);
+      if (formatted) {
+        return formatted;
+      }
+    }
+
+    if (call.args.length >= 3) {
+      const resolved = this.resolveTypeIdentifier(call.args[0].value);
+      if (resolved) {
+        return resolved;
+      }
+    }
+
+    return undefined;
+  }
+
+  private extractMapTypes(call: CallExpressionNode): { keyType?: string; valueType?: string } {
+    if (Array.isArray(call.typeArguments) && call.typeArguments.length > 0) {
+      const generics = call.typeArguments.map((arg) => this.formatTypeReference(arg)).filter(Boolean);
+      const keyType = generics.length > 1 ? generics[0] : 'string';
+      const valueType = generics.length > 0 ? generics[generics.length - 1] : undefined;
+      return { keyType, valueType };
+    }
+
+    return { keyType: 'string' };
+  }
+
+  private resolveTypeIdentifier(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+
+    if (expression.kind === 'StringLiteral') {
+      return (expression as StringLiteralNode).value;
+    }
+
+    return null;
+  }
+
+  private registerVariableTypeInfo(
+    name: string,
+    type: TypeInfo['type'],
+    elementType: string | undefined,
+    keyType: string | undefined,
+    valueType: string | undefined,
+    line: number,
+    column: number,
+    isConst: boolean,
+  ): void {
+    if (!type || type === 'unknown') {
+      return;
+    }
+
+    const normalizedElement = elementType && elementType !== 'unknown' ? elementType : undefined;
+    const normalizedValue = valueType && valueType !== 'unknown' ? valueType : undefined;
+    const normalizedKey = keyType && keyType !== 'unknown' ? keyType : type === 'map' ? 'string' : undefined;
+    const existing = this.context.typeMap.get(name) as TypeInfo | undefined;
+
+    if (existing) {
+      const updated: TypeInfo = { ...existing };
+      let changed = false;
+
+      if (updated.type === 'unknown' && type !== 'unknown') {
+        updated.type = type;
+        updated.isSeries = type === 'series' || updated.isSeries;
+        changed = true;
+      }
+
+      if (normalizedElement && (!updated.elementType || updated.elementType === 'unknown')) {
+        updated.elementType = normalizedElement;
+        changed = true;
+      }
+
+      if (normalizedKey && (!updated.keyType || updated.keyType === 'unknown')) {
+        updated.keyType = normalizedKey;
+        changed = true;
+      }
+
+      if (normalizedValue && (!updated.valueType || updated.valueType === 'unknown')) {
+        updated.valueType = normalizedValue;
+        changed = true;
+      }
+
+      if (changed) {
+        this.context.typeMap.set(name, updated);
+      }
+      return;
+    }
+
+    const info: TypeInfo = {
+      type,
+      isConst,
+      isSeries: type === 'series',
+      declaredAt: { line, column },
+      usages: [],
+    };
+
+    if (normalizedElement) {
+      info.elementType = normalizedElement;
+    }
+
+    if (normalizedKey) {
+      info.keyType = normalizedKey;
+    }
+
+    if (normalizedValue) {
+      info.valueType = normalizedValue;
+    }
+
+    this.context.typeMap.set(name, info);
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {

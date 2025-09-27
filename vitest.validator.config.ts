@@ -2,10 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: [
-      'tests/specs/all-validation-tests.spec.ts',
-      'tests/specs/array-validation.spec.ts',
-    ],
+    include: ['tests/specs/**/*.spec.ts'],
     environment: 'node',
     globals: true
   }

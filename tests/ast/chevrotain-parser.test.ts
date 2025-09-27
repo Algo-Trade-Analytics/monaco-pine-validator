@@ -271,6 +271,9 @@ describe('Chevrotain parser', () => {
 
     const { ast, diagnostics } = parseWithChevrotain(source);
 
+    if (diagnostics.syntaxErrors.length > 0) {
+      throw new Error(JSON.stringify(diagnostics.syntaxErrors, null, 2));
+    }
     expect(diagnostics.syntaxErrors).toHaveLength(0);
     expect(ast).not.toBeNull();
 
@@ -297,6 +300,9 @@ describe('Chevrotain parser', () => {
 
     const { ast, diagnostics } = parseWithChevrotain(source);
 
+    if (diagnostics.syntaxErrors.length > 0) {
+      throw new Error(JSON.stringify(diagnostics.syntaxErrors, null, 2));
+    }
     expect(diagnostics.syntaxErrors).toHaveLength(0);
     expect(ast).not.toBeNull();
 
@@ -321,6 +327,9 @@ describe('Chevrotain parser', () => {
 
     const { ast, diagnostics } = parseWithChevrotain(source);
 
+    if (diagnostics.syntaxErrors.length > 0) {
+      throw new Error(JSON.stringify(diagnostics.syntaxErrors, null, 2));
+    }
     expect(diagnostics.syntaxErrors).toHaveLength(0);
     expect(ast).not.toBeNull();
 
@@ -346,6 +355,9 @@ describe('Chevrotain parser', () => {
 
     const { ast, diagnostics } = parseWithChevrotain(source);
 
+    if (diagnostics.syntaxErrors.length > 0) {
+      throw new Error(JSON.stringify(diagnostics.syntaxErrors, null, 2));
+    }
     expect(diagnostics.syntaxErrors).toHaveLength(0);
     expect(ast).not.toBeNull();
 
@@ -383,6 +395,9 @@ describe('Chevrotain parser', () => {
 
     const { ast, diagnostics } = parseWithChevrotain(source);
 
+    if (diagnostics.syntaxErrors.length > 0) {
+      throw new Error(JSON.stringify(diagnostics.syntaxErrors, null, 2));
+    }
     expect(diagnostics.syntaxErrors).toHaveLength(0);
     expect(ast).not.toBeNull();
 
@@ -526,6 +541,42 @@ describe('Chevrotain parser', () => {
     expect(seventh.declarationKind).toBe('let');
     expect(seventh.identifier.name).toBe('qux');
     expect(seventh.initializer?.kind).toBe('Identifier');
+  });
+
+  it('captures call expression generic type arguments', () => {
+    const source = [
+      'prices = array.new<float>(10)',
+      'nested = array.new<array<float>>(5)',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    if (diagnostics.syntaxErrors.length > 0) {
+      throw new Error(JSON.stringify(diagnostics.syntaxErrors, null, 2));
+    }
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(2);
+
+    const firstAssignment = program.body[0] as AssignmentStatementNode;
+    expect(firstAssignment.kind).toBe('AssignmentStatement');
+    const firstCall = firstAssignment.right as CallExpressionNode;
+    expect(firstCall.kind).toBe('CallExpression');
+    expect(firstCall.typeArguments).toHaveLength(1);
+    expect(firstCall.typeArguments[0]?.name.name).toBe('float');
+
+    const secondAssignment = program.body[1] as AssignmentStatementNode;
+    expect(secondAssignment.kind).toBe('AssignmentStatement');
+    const secondCall = secondAssignment.right as CallExpressionNode;
+    expect(secondCall.kind).toBe('CallExpression');
+    expect(secondCall.typeArguments).toHaveLength(1);
+    const nestedType = secondCall.typeArguments[0];
+    expect(nestedType?.name.name).toBe('array');
+    expect(nestedType?.generics).toHaveLength(1);
+    expect(nestedType?.generics[0]?.name.name).toBe('float');
   });
 
   it('parses enum declarations with optional values and export modifiers', () => {

@@ -797,16 +797,10 @@ export class ArrayValidator implements ValidationModule {
   private extractCallGenericElementType(call: CallExpressionNode): string | null {
     if (Array.isArray(call.typeArguments) && call.typeArguments.length > 0) {
       const first = call.typeArguments[0];
-      const source = this.getNodeSource(first).trim();
-      if (source) {
-        return source;
+      const formatted = this.formatTypeReference(first);
+      if (formatted) {
+        return formatted;
       }
-    }
-
-    const callSource = this.getNodeSource(call).trim();
-    const match = callSource.match(/array\.new\s*<\s*([^>]+)\s*>/i);
-    if (match) {
-      return match[1].trim();
     }
 
     return null;
@@ -828,16 +822,31 @@ export class ArrayValidator implements ValidationModule {
   private extractArrayAnnotationElement(type: TypeReferenceNode): string | null {
     if (type.name.name === 'array' && type.generics.length > 0) {
       const generic = type.generics[0];
-      return generic.name.name;
-    }
-
-    const source = this.getNodeSource(type).trim();
-    const match = source.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s*\[\s*\]\s*$/);
-    if (match) {
-      return match[1];
+      return this.formatTypeReference(generic);
     }
 
     return null;
+  }
+
+  private formatTypeReference(type: TypeReferenceNode): string {
+    const base = type.name.name;
+    if (!base) {
+      return '';
+    }
+
+    if (!Array.isArray(type.generics) || type.generics.length === 0) {
+      return base;
+    }
+
+    const generics = type.generics
+      .map((generic) => this.formatTypeReference(generic))
+      .filter((name) => name.length > 0);
+
+    if (generics.length === 0) {
+      return base;
+    }
+
+    return `${base}<${generics.join(', ')}>`;
   }
 
   private isArrayIdentifier(name: string): boolean {
