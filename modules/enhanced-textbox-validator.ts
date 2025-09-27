@@ -28,7 +28,8 @@ import {
   TEXT_FONT_CONSTANTS,
   TEXT_WRAP_CONSTANTS,
   TEXT_STYLE_CONSTANTS,
-  BOX_TEXT_FUNCTIONS
+  BOX_TEXT_FUNCTIONS,
+  EXPENSIVE_CALCULATION_FUNCTIONS,
 } from '../core/constants';
 import {
   type ArgumentNode,
@@ -459,6 +460,10 @@ export class EnhancedTextboxValidator implements ValidationModule {
     }
 
     return args;
+  }
+
+  private lineHasExpensiveCalculation(line: string): boolean {
+    return Array.from(EXPENSIVE_CALCULATION_FUNCTIONS).some((func) => line.includes(func));
   }
 
   private validateBoxNewWithText(textboxCall: TextboxCall): void {

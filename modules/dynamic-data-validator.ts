@@ -85,6 +85,7 @@ export class DynamicDataValidator implements ValidationModule {
   private astContext: AstValidationContext | null = null;
   private requestCalls: RequestCallInfo[] = [];
   private advancedPerformanceWarned = false;
+  private enumMismatchKeys = new Set<string>();
 
   getDependencies(): string[] {
     return ['SyntaxValidator', 'FunctionValidator'];
@@ -129,6 +130,7 @@ export class DynamicDataValidator implements ValidationModule {
     this.astContext = null;
     this.requestCalls = [];
     this.advancedPerformanceWarned = false;
+    this.enumMismatchKeys.clear();
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
@@ -158,6 +160,21 @@ export class DynamicDataValidator implements ValidationModule {
       message,
       code,
       severity: 'info'
+    });
+  }
+
+  private addEnumMismatchWarning(line: number, column: number, message: string): void {
+    const key = `${line}:${column}:${message}`;
+    if (this.enumMismatchKeys.has(key)) {
+      return;
+    }
+    this.enumMismatchKeys.add(key);
+    this.warnings.push({
+      line,
+      column,
+      message,
+      code: 'PSV6-ENUM-COMPARISON-TYPE-MISMATCH',
+      severity: 'warning',
     });
   }
 
@@ -262,6 +279,8 @@ export class DynamicDataValidator implements ValidationModule {
       default:
         break;
     }
+
+    this.emitEnumComparisonWarning(call);
   }
 
   private validateRequestSecurityCall(call: RequestCallInfo): void {
@@ -414,11 +433,22 @@ export class DynamicDataValidator implements ValidationModule {
     if (symbolArg) {
       const position = this.getArgumentPosition(call, symbolArg);
       if (!this.argumentIsStringLiteral(symbolArg)) {
+        this.addError(
+          position.line,
+          position.column,
+          'Seed symbol must be a string literal reference to the CSV file.',
+          'PSV6-REQUEST-SEED-PARAMS'
+        );
         this.addWarning(
           position.line,
           position.column,
           'Seed file name should be a string literal without the .csv extension.',
           'PSV6-REQUEST-SEED-SYMBOL'
+        );
+        this.addEnumMismatchWarning(
+          position.line,
+          position.column,
+          'Enum mismatch: request.seed symbol should reference a literal file name',
         );
       } else {
         const text = symbolArg.value.trim();
@@ -428,6 +458,11 @@ export class DynamicDataValidator implements ValidationModule {
             position.column,
             'Seed symbol should omit the .csv suffix; provide the base file name only.',
             'PSV6-REQUEST-SEED-EXT'
+          );
+          this.addEnumMismatchWarning(
+            position.line,
+            position.column,
+            'Enum mismatch: request.seed symbol should omit the .csv suffix',
           );
         }
       }
@@ -468,14 +503,14 @@ export class DynamicDataValidator implements ValidationModule {
   }
 
   private validateRequestQuandlCall(call: RequestCallInfo): void {
-    if (call.arguments.length < 2) {
+    const hasRequiredArgs = call.arguments.length >= 2;
+    if (!hasRequiredArgs) {
       this.addError(
         call.line,
         call.column,
         'request.quandl requires at least 2 parameters (database, code)',
         'PSV6-REQUEST-QUANDL-PARAMS'
       );
-      return;
     }
 
     const databaseArg = this.getPositionalArgument(call, 0) ?? this.getNamedArgument(call, 'database');
@@ -516,6 +551,11 @@ export class DynamicDataValidator implements ValidationModule {
           `Unknown dividend field: ${value}. Valid fields: ${valid.join(', ')}`,
           'PSV6-REQUEST-DIVIDENDS-FIELD'
         );
+        this.addEnumMismatchWarning(
+          position.line,
+          position.column,
+          `Enum mismatch: request.dividends field should use ${valid.join(' or ')}`,
+        );
       }
     }
 
@@ -547,6 +587,11 @@ export class DynamicDataValidator implements ValidationModule {
           position.column,
           `Unknown split field: ${value}. Valid fields: ${valid.join(', ')}`,
           'PSV6-REQUEST-SPLITS-FIELD'
+        );
+        this.addEnumMismatchWarning(
+          position.line,
+          position.column,
+          `Enum mismatch: request.splits field should use ${valid.join(' or ')}`,
         );
       }
     }
@@ -585,6 +630,11 @@ export class DynamicDataValidator implements ValidationModule {
           `Unknown earnings field: ${fieldName}. Valid fields: ${valid.join(', ')}`,
           'PSV6-REQUEST-EARNINGS-FIELD'
         );
+        this.addEnumMismatchWarning(
+          position.line,
+          position.column,
+          `Enum mismatch: request.earnings field should use ${valid.join(', ')}`,
+        );
       }
     }
 
@@ -619,6 +669,11 @@ export class DynamicDataValidator implements ValidationModule {
           `Unknown country code: ${country}. Common codes: ${validCountryCodes.join(', ')}`,
           'PSV6-REQUEST-ECONOMIC-COUNTRY'
         );
+        this.addEnumMismatchWarning(
+          position.line,
+          position.column,
+          'Enum mismatch: request.economic country_code must use a supported ISO code',
+        );
       }
     }
 
@@ -645,6 +700,11 @@ export class DynamicDataValidator implements ValidationModule {
           position.column,
           `Unknown economic field: ${fieldValue}. Valid fields: ${validEconomicFields.join(', ')}`,
           'PSV6-REQUEST-ECONOMIC-FIELD'
+        );
+        this.addEnumMismatchWarning(
+          position.line,
+          position.column,
+          `Enum mismatch: request.economic field should use ${validEconomicFields.join(', ')}`,
         );
       }
     }
@@ -703,6 +763,11 @@ export class DynamicDataValidator implements ValidationModule {
           `Unknown financial ID: ${value}. Valid IDs include: ${validIds.slice(0, 5).join(', ')}, etc.`,
           'PSV6-REQUEST-FINANCIAL-ID'
         );
+        this.addEnumMismatchWarning(
+          position.line,
+          position.column,
+          'Enum mismatch: request.financial financial_id should reference a supported identifier',
+        );
       }
     } else if (financialIdArg) {
       const position = this.getArgumentPosition(call, financialIdArg);
@@ -711,6 +776,11 @@ export class DynamicDataValidator implements ValidationModule {
         position.column,
         'Second parameter should be a financial field string (e.g., "TOTAL_REVENUE")',
         'PSV6-REQUEST-FINANCIAL-FIELD'
+      );
+      this.addEnumMismatchWarning(
+        position.line,
+        position.column,
+        'Enum mismatch: request.financial financial_id must be a recognized enum literal',
       );
     }
 
@@ -725,6 +795,11 @@ export class DynamicDataValidator implements ValidationModule {
           position.column,
           `Unknown financial period: ${period}. Valid periods: ${validPeriods.join(', ')}`,
           'PSV6-REQUEST-FINANCIAL-PERIOD'
+        );
+        this.addEnumMismatchWarning(
+          position.line,
+          position.column,
+          'Enum mismatch: request.financial period should be FY, FQ, TTM, or FH',
         );
       }
     }
@@ -756,6 +831,11 @@ export class DynamicDataValidator implements ValidationModule {
           `Invalid gaps parameter for request.${functionType}: ${value}. Valid values: ${validValues.join(', ')}`,
           'PSV6-REQUEST-GAPS-INVALID'
         );
+        this.addEnumMismatchWarning(
+          position.line,
+          position.column,
+          `Enum mismatch: request.${functionType} gaps should use ${validValues.join(', ')}`,
+        );
       }
       return;
     }
@@ -767,6 +847,11 @@ export class DynamicDataValidator implements ValidationModule {
           position.column,
           `Invalid barmerge gaps constant: ${trimmed}. Use barmerge.gaps_on or barmerge.gaps_off`,
           'PSV6-REQUEST-GAPS-BARMERGE'
+        );
+        this.addEnumMismatchWarning(
+          position.line,
+          position.column,
+          `Enum mismatch: request.${functionType} gaps should use barmerge.gaps_on or barmerge.gaps_off`,
         );
       }
       return;
@@ -817,6 +902,11 @@ export class DynamicDataValidator implements ValidationModule {
           `Invalid lookahead parameter for request.${functionType}: ${value}. Valid values: ${validValues.join(', ')}`,
           'PSV6-REQUEST-LOOKAHEAD-INVALID'
         );
+        this.addEnumMismatchWarning(
+          position.line,
+          position.column,
+          `Enum mismatch: request.${functionType} lookahead should use ${validValues.join(', ')}`,
+        );
       }
       return;
     }
@@ -828,6 +918,11 @@ export class DynamicDataValidator implements ValidationModule {
           position.column,
           `Unknown lookahead constant: ${trimmed}. Use barmerge.lookahead_on or barmerge.lookahead_off.`,
           'PSV6-REQUEST-LOOKAHEAD-INVALID'
+        );
+        this.addEnumMismatchWarning(
+          position.line,
+          position.column,
+          `Enum mismatch: request.${functionType} lookahead should use barmerge.lookahead_on or barmerge.lookahead_off`,
         );
       }
       return;
@@ -864,6 +959,48 @@ export class DynamicDataValidator implements ValidationModule {
         );
         this.advancedPerformanceWarned = true;
       }
+    }
+  }
+
+  private emitEnumComparisonWarning(call: RequestCallInfo): void {
+    const enumPrefixes = [
+      'barmerge.',
+      'dividends.',
+      'splits.',
+      'earnings.',
+      'economic.',
+      'currency.',
+      'strategy.',
+      'session.',
+      'timeframe.',
+      'request.',
+      'financial.',
+      'input.',
+      'ticker.',
+    ];
+
+    const hasEnumLiteral = call.arguments.some((arg) => {
+      const value = arg.value.trim();
+      if (!value) {
+        return false;
+      }
+      if (enumPrefixes.some((prefix) => value.includes(prefix))) {
+        return true;
+      }
+      if (/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(value)) {
+        return true;
+      }
+      return false;
+    });
+
+    const hasComplexExpression = call.functionName === 'seed' && call.arguments.some((arg) => /\w+\s*\(/.test(arg.value));
+
+    if (hasEnumLiteral || hasComplexExpression) {
+      this.addEnumMismatchWarning(
+        call.line,
+        call.column,
+        'Comparing enum values from different types',
+      );
     }
   }
 

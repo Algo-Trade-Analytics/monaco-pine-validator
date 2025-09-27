@@ -55,13 +55,15 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.config = config;
 
     if (!config.ast || config.ast.mode === 'disabled') {
-      return this.createEmptyResult();
+      this.collectStrategyDataText();
+      return this.buildResult();
     }
 
     this.astContext = this.getAstContext(config);
 
     if (!this.astContext?.ast) {
-      return this.createEmptyResult();
+      this.collectStrategyDataText();
+      return this.buildResult();
     }
 
     this.collectStrategyDataAst(this.astContext.ast);
@@ -93,14 +95,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
       });
     }
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap,
-      scriptType: null
-    };
+    return this.buildResult(typeMap);
   }
 
   private reset(): void {
@@ -114,14 +109,69 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.complexStrategyExpressions = 0;
   }
 
-  private createEmptyResult(): ValidationResult {
+  private collectStrategyDataText(): void {
+    const lines = this.getSourceLines();
+    if (lines.length === 0) {
+      return;
+    }
+
+    for (let index = 0; index < lines.length; index++) {
+      const rawLine = lines[index];
+      const lineWithoutComment = this.stripInlineComment(rawLine);
+      if (!/\bstrategy\b/.test(lineWithoutComment)) {
+        continue;
+      }
+
+      const column = this.lineContainsNestedStrategyCall(lineWithoutComment);
+      if (column !== null) {
+        this.addWarning(
+          index + 1,
+          column,
+          'PSV6-STRATEGY-PERF-NESTED',
+          'Nested strategy operations detected',
+        );
+      }
+    }
+  }
+
+  private lineContainsNestedStrategyCall(line: string): number | null {
+    const callRegex = /strategy\.[A-Za-z_]+\s*\(([^)]*)/g;
+    let match: RegExpExecArray | null;
+    while ((match = callRegex.exec(line)) !== null) {
+      const argsSection = match[1] ?? '';
+      if (argsSection.includes('strategy.')) {
+        return match.index + 1;
+      }
+    }
+    return null;
+  }
+
+  private getSourceLines(): string[] {
+    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
+      return [...this.context.cleanLines];
+    }
+    if (Array.isArray(this.context.lines) && this.context.lines.length > 0) {
+      return [...this.context.lines];
+    }
+    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length > 0) {
+      return [...this.context.rawLines];
+    }
+    return [];
+  }
+
+  private stripInlineComment(line: string): string {
+    const idx = line.indexOf('//');
+    return idx >= 0 ? line.slice(0, idx) : line;
+  }
+
+  private buildResult(typeMap: Map<string, unknown> = new Map()): ValidationResult {
     return {
-      isValid: true,
-      errors: [],
-      warnings: [],
-      info: [],
-      typeMap: new Map(),
-      scriptType: null
+      isValid: this.errors.length === 0,
+      errors: this.errors,
+      warnings: this.warnings,
+      info: this.info,
+      typeMap,
+      scriptType: null,
     };
   }
 

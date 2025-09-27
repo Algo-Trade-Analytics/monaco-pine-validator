@@ -65,6 +65,9 @@ export class UDTValidator implements ValidationModule {
   private astMethodMetadataMap: WeakMap<FunctionDeclarationNode, AstMethodMetadata> = new WeakMap();
   private udtTypes = new Map<string, UDTInfo>();
   private udtDeclarations: UDTDeclaration[] = [];
+  private errorKeys = new Set<string>();
+  private warningKeys = new Set<string>();
+  private infoKeys = new Set<string>();
   private readonly allowedInstanceMethods = new Set([
     'push','pop','get','set','size','clear','reverse','sort','sort_indices','copy','slice','concat','fill','from','from_example',
     'indexof','lastindexof','includes','binary_search','binary_search_leftmost','binary_search_rightmost','range','remove','insert',
@@ -81,18 +84,11 @@ export class UDTValidator implements ValidationModule {
     this.context = context;
 
     const astContext = this.getAstContext(config);
-    if (!astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: context.typeMap ?? new Map(),
-        scriptType: context.scriptType ?? null,
-      };
+    if (astContext?.ast) {
+      this.validateWithAst(astContext.ast);
     }
 
-    this.validateWithAst(astContext.ast);
+    this.validateWithText();
 
     return {
       isValid: this.errors.length === 0,
@@ -112,17 +108,35 @@ export class UDTValidator implements ValidationModule {
     this.astMethodMetadataMap = new WeakMap();
     this.udtTypes.clear();
     this.udtDeclarations = [];
+    this.errorKeys.clear();
+    this.warningKeys.clear();
+    this.infoKeys.clear();
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
+    const key = `${line}:${column}:${code}`;
+    if (this.errorKeys.has(key)) {
+      return;
+    }
+    this.errorKeys.add(key);
     this.errors.push({ line, column, message, code, severity: 'error' });
   }
 
   private addWarning(line: number, column: number, message: string, code: string): void {
+    const key = `${line}:${column}:${code}`;
+    if (this.warningKeys.has(key)) {
+      return;
+    }
+    this.warningKeys.add(key);
     this.warnings.push({ line, column, message, code, severity: 'warning' });
   }
 
   private addInfo(line: number, column: number, message: string, code: string): void {
+    const key = `${line}:${column}:${code}`;
+    if (this.infoKeys.has(key)) {
+      return;
+    }
+    this.infoKeys.add(key);
     this.info.push({
       line,
       column,
@@ -137,6 +151,15 @@ export class UDTValidator implements ValidationModule {
     this.validateUDTDeclarations();
     this.validateMethodDeclarationsAst();
     this.validateMethodCallsAndFieldsAst(program);
+  }
+
+  private validateWithText(): void {
+    const lines = this.getSourceLines();
+    if (lines.length === 0) {
+      return;
+    }
+
+    this.collectUdtDataFromText(lines);
   }
 
   private collectUdtDataFromAst(program: ProgramNode): void {
@@ -157,6 +180,107 @@ export class UDTValidator implements ValidationModule {
         },
       },
     });
+  }
+
+  private collectUdtDataFromText(lines: string[]): void {
+    interface TextTypeContext {
+      name: string;
+      indent: number;
+      fields: Map<string, number>;
+    }
+
+    let currentType: TextTypeContext | null = null;
+
+    const typeRegex = /^type\s+([A-Za-z_][A-Za-z0-9_]*)/;
+    const methodRegex = /^method\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/;
+    const fieldRegex = /^([A-Za-z_][A-Za-z0-9_<>,]*)\s+([A-Za-z_][A-Za-z0-9_]*)\b/;
+
+    for (let index = 0; index < lines.length; index++) {
+      const rawLine = lines[index];
+      const withoutComment = this.stripInlineComment(rawLine);
+      const trimmed = withoutComment.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const indent = withoutComment.length - withoutComment.trimStart().length;
+
+      const typeMatch = trimmed.match(typeRegex);
+      if (typeMatch) {
+        currentType = {
+          name: typeMatch[1],
+          indent,
+          fields: new Map(),
+        };
+        continue;
+      }
+
+      if (currentType && indent <= currentType.indent && !trimmed.startsWith('method ')) {
+        currentType = null;
+      }
+
+      const methodMatch = trimmed.match(methodRegex);
+      if (methodMatch) {
+        const methodName = methodMatch[1];
+        const params = methodMatch[2] ?? '';
+        const lineNumber = index + 1;
+        const columnNumber = indent + 1;
+
+        const thisMatch = params.match(/this\s*<\s*([A-Za-z_][A-Za-z0-9_]*)\s*>/);
+        const thisType = thisMatch?.[1] ?? null;
+        const expectedType = currentType?.name ?? null;
+
+        if (!thisMatch || (expectedType && thisType !== expectedType)) {
+          this.addError(lineNumber, columnNumber, `Method '${methodName}' must declare this parameter referencing its UDT type`, 'PSV6-METHOD-THIS');
+          this.addError(lineNumber, columnNumber, `Method '${methodName}' is missing a valid this parameter`, 'PS016');
+          this.addWarning(lineNumber, columnNumber, `Method '${methodName}' declared without explicit type context`, 'PSU03');
+        }
+
+        continue;
+      }
+
+      if (currentType) {
+        const fieldMatch = trimmed.match(fieldRegex);
+        if (fieldMatch) {
+          const fieldName = fieldMatch[2];
+          const existingLine = currentType.fields.get(fieldName);
+          if (existingLine !== undefined) {
+            this.addError(
+              index + 1,
+              indent + 1,
+              `Duplicate field '${fieldName}' in type ${currentType.name}`,
+              'PSV6-UDT-DUPLICATE-FIELD',
+            );
+          } else {
+            currentType.fields.set(fieldName, index + 1);
+          }
+        }
+      } else if (trimmed.startsWith('method ')) {
+        const lineNumber = index + 1;
+        const columnNumber = indent + 1;
+        this.addError(lineNumber, columnNumber, 'Method declarations outside type blocks must include this<T> parameter', 'PSV6-METHOD-THIS');
+        this.addError(lineNumber, columnNumber, 'Method declaration missing this parameter', 'PS016');
+        this.addWarning(lineNumber, columnNumber, 'Method declared without UDT context', 'PSU03');
+      }
+    }
+  }
+
+  private getSourceLines(): string[] {
+    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
+      return [...this.context.cleanLines];
+    }
+    if (Array.isArray(this.context.lines) && this.context.lines.length > 0) {
+      return [...this.context.lines];
+    }
+    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length > 0) {
+      return [...this.context.rawLines];
+    }
+    return [];
+  }
+
+  private stripInlineComment(line: string): string {
+    const idx = line.indexOf('//');
+    return idx >= 0 ? line.slice(0, idx) : line;
   }
 
   private handleAstTypeDeclaration(node: TypeDeclarationNode): void {

@@ -69,6 +69,7 @@ export class StringFunctionsValidator implements ValidationModule {
     this.context = context;
 
     this.astContext = this.getAstContext(config);
+
     if (!this.astContext?.ast) {
       return {
         isValid: true,
@@ -150,6 +151,136 @@ export class StringFunctionsValidator implements ValidationModule {
         },
       },
     });
+  }
+
+  private collectStringDataFromText(): void {
+    // Text parsing disabled; rely on Chevrotain AST.
+  }
+
+  private extractArgumentsSection(lines: string[], startLine: number, startColumn: number): string {
+    let buffer = '';
+    let depth = 1;
+    let lineIndex = startLine;
+    let columnIndex = startColumn;
+    let inString = false;
+    let stringDelimiter: string | null = null;
+
+    while (lineIndex < lines.length && depth > 0) {
+      const line = (lines[lineIndex] ?? '').replace(/\/\/.*$/, '');
+      for (let i = columnIndex; i < line.length; i++) {
+        const char = line[i];
+
+        if (inString) {
+          buffer += char;
+          if (char === stringDelimiter && line[i - 1] !== '\\') {
+            inString = false;
+            stringDelimiter = null;
+          }
+          continue;
+        }
+
+        if (char === '"' || char === "'") {
+          inString = true;
+          stringDelimiter = char;
+          buffer += char;
+          continue;
+        }
+
+        if (char === '(') {
+          depth += 1;
+          buffer += char;
+          continue;
+        }
+
+        if (char === ')') {
+          depth -= 1;
+          if (depth === 0) {
+            return buffer.trim();
+          }
+          buffer += char;
+          continue;
+        }
+
+        buffer += char;
+      }
+
+      buffer += ' ';
+      lineIndex += 1;
+      columnIndex = 0;
+    }
+
+    return buffer.trim();
+  }
+
+  private splitArguments(argumentSection: string): string[] {
+    const args: string[] = [];
+    let current = '';
+    let depth = 0;
+    let inString = false;
+    let stringDelimiter: string | null = null;
+
+    for (let i = 0; i < argumentSection.length; i++) {
+      const char = argumentSection[i];
+
+      if (inString) {
+        current += char;
+        if (char === stringDelimiter && argumentSection[i - 1] !== '\\') {
+          inString = false;
+          stringDelimiter = null;
+        }
+        continue;
+      }
+
+      if (char === '"' || char === "'") {
+        inString = true;
+        stringDelimiter = char;
+        current += char;
+        continue;
+      }
+
+      if (char === '(') {
+        depth += 1;
+        current += char;
+        continue;
+      }
+
+      if (char === ')') {
+        depth -= 1;
+        current += char;
+        continue;
+      }
+
+      if (char === ',' && depth === 0) {
+        if (current.trim().length > 0) {
+          args.push(current.trim());
+        }
+        current = '';
+        continue;
+      }
+
+      current += char;
+    }
+
+    if (current.trim().length > 0) {
+      args.push(current.trim());
+    }
+
+    return args;
+  }
+
+  private countStringConcatenations(line: string): number {
+    const withoutComment = (line ?? '').replace(/\/\/.*$/, '');
+    if (!withoutComment) {
+      return 0;
+    }
+
+    const hasStringIndicator = withoutComment.includes('"') || withoutComment.includes("'") || withoutComment.includes('str.');
+    if (!hasStringIndicator) {
+      return 0;
+    }
+
+    const matches = withoutComment.match(/\+/g);
+    return matches ? matches.length : 0;
   }
 
   private processAstStringCall(path: NodePath<CallExpressionNode>, inLoop: boolean): void {
@@ -761,6 +892,13 @@ export class StringFunctionsValidator implements ValidationModule {
       const identifier = expression as IdentifierNode;
       const identifierType = this.astContext.typeEnvironment.identifiers.get(identifier.name);
       if (identifierType?.kind === 'string' || identifierType?.kind === 'series') {
+        return true;
+      }
+    }
+    if (expression.kind === 'CallExpression') {
+      const call = expression as CallExpressionNode;
+      const calleeName = this.getExpressionQualifiedName(call.callee);
+      if (calleeName && calleeName.startsWith('str.')) {
         return true;
       }
     }

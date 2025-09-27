@@ -66,6 +66,9 @@ export class FunctionValidator implements ValidationModule {
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
+  private errorKeys = new Set<string>();
+  private warningKeys = new Set<string>();
+  private infoKeys = new Set<string>();
 
   // Function tracking (extracted from EnhancedPineScriptValidator)
   private functionNames = new Set<string>();
@@ -217,14 +220,11 @@ export class FunctionValidator implements ValidationModule {
     const program = this.astContext?.ast;
 
     if (!program) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      if (process.env.DEBUG_FUNC === '1') {
+        console.log('[FunctionValidator] text fallback scriptType', this.context.scriptType);
+      }
+      this.validateWithText();
+      return this.buildResult();
     }
 
     // Extract comprehensive function validation logic from EnhancedPineScriptValidator
@@ -256,14 +256,7 @@ export class FunctionValidator implements ValidationModule {
     // Update the shared context with function information
     // Function metadata already shared before validation
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null
-    };
+    return this.buildResult();
   }
 
   private reset(): void {
@@ -278,18 +271,105 @@ export class FunctionValidator implements ValidationModule {
     this.userFunctions.clear();
     this.functionCalls = [];
     this.astContext = null;
+    this.errorKeys.clear();
+    this.warningKeys.clear();
+    this.infoKeys.clear();
   }
 
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
+    const key = `${line}:${column}:${code ?? message}`;
+    if (this.errorKeys.has(key)) {
+      return;
+    }
+    this.errorKeys.add(key);
     this.errors.push({ line, column, message, severity: 'error', code, suggestion });
   }
 
   private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
+    const key = `${line}:${column}:${code ?? message}`;
+    if (this.warningKeys.has(key)) {
+      return;
+    }
+    this.warningKeys.add(key);
     this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
   }
 
   private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
+    const key = `${line}:${column}:${code ?? message}`;
+    if (this.infoKeys.has(key)) {
+      return;
+    }
+    this.infoKeys.add(key);
     this.info.push({ line, column, message, severity: 'info', code, suggestion });
+  }
+
+  private buildResult(): ValidationResult {
+    return {
+      isValid: this.errors.length === 0,
+      errors: this.errors,
+      warnings: this.warnings,
+      info: this.info,
+      typeMap: new Map(),
+      scriptType: null,
+    };
+  }
+
+  private validateWithText(): void {
+    const lines = this.getSourceLines();
+    if (lines.length === 0) {
+      return;
+    }
+
+    let isLibrary = this.context.scriptType === 'library';
+    if (!isLibrary) {
+      for (const line of lines) {
+        const trimmed = this.stripInlineComment(line).trim();
+        if (!trimmed) {
+          continue;
+        }
+        if (trimmed.startsWith('library(')) {
+          isLibrary = true;
+          break;
+        }
+        if (!trimmed.startsWith('//@')) {
+          break;
+        }
+      }
+    }
+    const callRegex = /([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
+
+    for (let index = 0; index < lines.length; index++) {
+      const rawLine = lines[index];
+      const lineWithoutComment = this.stripInlineComment(rawLine);
+      callRegex.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = callRegex.exec(lineWithoutComment)) !== null) {
+        const fullName = match[1];
+        const column = match.index + 1;
+
+        if (isLibrary && fullName.startsWith('strategy.')) {
+          this.addError(index + 1, column, `Unknown function: ${fullName}`, 'PSV6-FUNCTION-UNKNOWN');
+        }
+      }
+    }
+  }
+
+  private getSourceLines(): string[] {
+    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
+      return [...this.context.cleanLines];
+    }
+    if (Array.isArray(this.context.lines) && this.context.lines.length > 0) {
+      return [...this.context.lines];
+    }
+    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length > 0) {
+      return [...this.context.rawLines];
+    }
+    return [];
+  }
+
+  private stripInlineComment(line: string): string {
+    const idx = line.indexOf('//');
+    return idx >= 0 ? line.slice(0, idx) : line;
   }
 
   private collectFunctionsFromAst(program: ProgramNode): void {

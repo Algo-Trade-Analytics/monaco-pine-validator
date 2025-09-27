@@ -61,14 +61,8 @@ export class TAFunctionsValidator implements ValidationModule {
     const program = this.astContext?.ast;
 
     if (!program) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      this.collectTAFunctionDataText();
+      return this.buildResult();
     }
 
     this.collectTAFunctionDataAst(program);
@@ -92,14 +86,7 @@ export class TAFunctionsValidator implements ValidationModule {
       });
     }
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap,
-      scriptType: null
-    };
+    return this.buildResult(typeMap);
   }
 
   private reset(): void {
@@ -114,6 +101,32 @@ export class TAFunctionsValidator implements ValidationModule {
     this.taFunctionCalls.clear();
     this.taFunctionCount = 0;
     this.complexTAExpressions = 0;
+  }
+
+  private collectTAFunctionDataText(): void {
+    const lines = this.getSourceLines();
+    if (lines.length === 0) {
+      return;
+    }
+
+    for (let index = 0; index < lines.length; index++) {
+      const rawLine = lines[index];
+      const lineWithoutComment = this.stripInlineComment(rawLine);
+      if (!lineWithoutComment.includes('ta.')) {
+        continue;
+      }
+
+      const matches = lineWithoutComment.match(/ta\.[A-Za-z_]+\s*\(/g);
+      if (matches && matches.length > 1) {
+        const column = lineWithoutComment.indexOf('ta.') + 1;
+        this.addWarning(
+          index + 1,
+          column > 0 ? column : 1,
+          'PSV6-TA-PERF-NESTED',
+          'Multiple TA operations on one line',
+        );
+      }
+    }
   }
 
   private collectTAFunctionDataAst(program: ProgramNode): void {
@@ -675,6 +688,35 @@ export class TAFunctionsValidator implements ValidationModule {
 
   private isKnownTAFunction(functionName: string): boolean {
     return !!NS_MEMBERS.ta?.has(functionName);
+  }
+
+  private buildResult(typeMap: Map<string, unknown> = new Map()): ValidationResult {
+    return {
+      isValid: this.errors.length === 0,
+      errors: this.errors,
+      warnings: this.warnings,
+      info: this.info,
+      typeMap,
+      scriptType: null,
+    };
+  }
+
+  private getSourceLines(): string[] {
+    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
+      return [...this.context.cleanLines];
+    }
+    if (Array.isArray(this.context.lines) && this.context.lines.length > 0) {
+      return [...this.context.lines];
+    }
+    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length > 0) {
+      return [...this.context.rawLines];
+    }
+    return [];
+  }
+
+  private stripInlineComment(line: string): string {
+    const idx = line.indexOf('//');
+    return idx >= 0 ? line.slice(0, idx) : line;
   }
 
   private addError(line: number, column: number, code: string, message: string): void {

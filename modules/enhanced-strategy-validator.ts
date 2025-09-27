@@ -42,6 +42,22 @@ interface StrategyAstData {
   hasRiskIdentifier: boolean;
 }
 
+interface StrategyTextCall {
+  line: number;
+  column: number;
+  args: string[];
+  namedArgs: Map<string, string>;
+}
+
+interface StrategyTextData {
+  strategyCalls: StrategyTextCall[];
+  entryCalls: StrategyTextCall[];
+  exitCalls: StrategyTextCall[];
+  closeCalls: StrategyTextCall[];
+  cancelCalls: StrategyTextCall[];
+  hasRiskIdentifier: boolean;
+}
+
 const POSITION_SIZE_THRESHOLD = 100_000;
 const RISK_IDENTIFIER_NAMES = new Set(['stop_loss', 'take_profit', 'trail_stop']);
 
@@ -53,6 +69,13 @@ export class EnhancedStrategyValidator implements ValidationModule {
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
   private astContext: AstValidationContext | null = null;
+  private context: ValidationContext | null = null;
+
+  private debug(payload: unknown): void {
+    if (process.env.DEBUG_ENH_STRATEGY === '1') {
+      console.log('[EnhancedStrategyValidator]', payload);
+    }
+  }
 
   getDependencies(): string[] {
     return ['CoreValidator', 'SyntaxValidator'];
@@ -61,20 +84,15 @@ export class EnhancedStrategyValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
 
+    this.context = context;
+
     this.astContext = ensureAstContext(context, config);
 
-    if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+    if (this.astContext?.ast) {
+      this.validateWithAst(this.astContext.ast);
     }
 
-    this.validateWithAst(this.astContext.ast);
+    this.validateWithText();
 
     return {
       isValid: this.errors.length === 0,
@@ -92,6 +110,7 @@ export class EnhancedStrategyValidator implements ValidationModule {
 
   private validateWithAst(program: ProgramNode): void {
     const data = this.collectAstStrategyData(program);
+    this.debug({ phase: 'ast', data });
 
     this.validateAstStrategyRealism(data);
     this.validateAstRiskManagement(data);
@@ -242,6 +261,334 @@ export class EnhancedStrategyValidator implements ValidationModule {
     }
   }
 
+  private validateWithText(): void {
+    const lines = this.getSourceLines();
+    if (lines.length === 0) {
+      return;
+    }
+
+    const data = this.collectStrategyDataText(lines);
+    this.debug({ phase: 'text-data', data });
+    this.validateTextStrategyRealism(data);
+    this.validateTextRiskManagement(data);
+    this.validateTextPositionSize(data);
+    this.validateTextExitStrategy(data);
+  }
+
+  private collectStrategyDataText(lines: string[]): StrategyTextData {
+    const data: StrategyTextData = {
+      strategyCalls: [],
+      entryCalls: [],
+      exitCalls: [],
+      closeCalls: [],
+      cancelCalls: [],
+      hasRiskIdentifier: false,
+    };
+
+    const callRegex = /strategy(?:\.[A-Za-z_]+)?\s*\(/g;
+
+    for (let index = 0; index < lines.length; index++) {
+      const rawLine = lines[index];
+      const lineWithoutComment = this.stripInlineComment(rawLine);
+      const trimmed = lineWithoutComment.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      if (!data.hasRiskIdentifier && /\b(stop_loss|take_profit|trail_stop)\b/.test(trimmed)) {
+        data.hasRiskIdentifier = true;
+      }
+
+      callRegex.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = callRegex.exec(lineWithoutComment)) !== null) {
+        const parenIndexInMatch = match[0].indexOf('(');
+        if (parenIndexInMatch === -1) {
+          continue;
+        }
+
+        const qualifiedNameRaw = lineWithoutComment
+          .slice(match.index, match.index + parenIndexInMatch)
+          .trim();
+        const qualifiedName = qualifiedNameRaw.length > 0 ? qualifiedNameRaw : 'strategy';
+        const openParenIndex = match.index + parenIndexInMatch;
+        const argsSection = this.extractArgumentsSectionFromText(lines, index, openParenIndex + 1);
+        const args = this.splitArgumentsText(argsSection);
+        const namedArgs = this.parseNamedArguments(args);
+
+        const call: StrategyTextCall = {
+          line: index + 1,
+          column: openParenIndex + 1,
+          args,
+          namedArgs,
+        };
+
+        if (qualifiedName === 'strategy') {
+          data.strategyCalls.push(call);
+        } else if (qualifiedName === 'strategy.entry') {
+          data.entryCalls.push(call);
+        } else if (qualifiedName === 'strategy.exit') {
+          data.exitCalls.push(call);
+        } else if (qualifiedName === 'strategy.close') {
+          data.closeCalls.push(call);
+        } else if (qualifiedName === 'strategy.cancel') {
+          data.cancelCalls.push(call);
+        }
+      }
+    }
+
+    return data;
+  }
+
+  private validateTextStrategyRealism(data: StrategyTextData): void {
+    if (data.strategyCalls.length === 0) {
+      return;
+    }
+
+    const hasCommission = data.strategyCalls.some((call) =>
+      call.namedArgs.has('commission_type') || call.namedArgs.has('commission_value'),
+    );
+
+    if (!hasCommission && !this.hasWarning('PSV6-STRATEGY-REALISM')) {
+      const location = data.strategyCalls[0];
+      this.addWarning(
+        location.line,
+        location.column,
+        'Strategy lacks commission settings for realistic backtesting',
+        'PSV6-STRATEGY-REALISM',
+        'Add commission_type and commission_value parameters to strategy()',
+      );
+    }
+  }
+
+  private validateTextRiskManagement(data: StrategyTextData): void {
+    if (data.strategyCalls.length === 0) {
+      return;
+    }
+
+    const hasRiskManagement =
+      data.exitCalls.length > 0 || data.closeCalls.length > 0 || data.hasRiskIdentifier;
+
+    if (!hasRiskManagement && data.strategyCalls.length > 0 && !this.hasInfo('PSV6-STRATEGY-RISK')) {
+      const location = data.strategyCalls[0];
+      this.addInfo(
+        location.line,
+        location.column,
+        'Consider adding risk management features to your strategy',
+        'PSV6-STRATEGY-RISK',
+        'Add stop loss, take profit, or trailing stop orders',
+      );
+    }
+  }
+
+  private validateTextPositionSize(data: StrategyTextData): void {
+    for (const call of data.entryCalls) {
+      const qtyArg = call.namedArgs.get('qty');
+      if (!qtyArg) {
+        continue;
+      }
+
+      const numericMatch = qtyArg.match(/^-?\d+(?:\.\d+)?$/);
+      if (numericMatch) {
+        const value = Number(numericMatch[0]);
+        if (!Number.isNaN(value) && value > POSITION_SIZE_THRESHOLD && !this.hasWarning('PSV6-STRATEGY-POSITION-SIZE')) {
+          this.addWarning(
+            call.line,
+            call.column,
+            'Excessive position size may not be realistic',
+            'PSV6-STRATEGY-POSITION-SIZE',
+            'Consider using a more realistic position size',
+          );
+        }
+      }
+    }
+  }
+
+  private validateTextExitStrategy(data: StrategyTextData): void {
+    if (data.strategyCalls.length === 0 || data.entryCalls.length === 0) {
+      return;
+    }
+
+    const hasExit =
+      data.exitCalls.length > 0 || data.closeCalls.length > 0 || data.cancelCalls.length > 0;
+
+    if (!hasExit && !this.hasWarning('PSV6-STRATEGY-NO-EXIT')) {
+      const location = data.entryCalls[0];
+      this.addWarning(
+        location.line,
+        location.column,
+        'Strategy has entry conditions but no exit strategy',
+        'PSV6-STRATEGY-NO-EXIT',
+        'Add strategy.exit() or strategy.close() calls',
+      );
+    }
+  }
+
+  private extractArgumentsSectionFromText(
+    lines: string[],
+    startLine: number,
+    startColumn: number,
+  ): string {
+    let buffer = '';
+    let depth = 1;
+    let lineIndex = startLine;
+    let columnIndex = startColumn;
+    let inString = false;
+    let stringDelimiter: string | null = null;
+
+    while (lineIndex < lines.length && depth > 0) {
+      const line = lines[lineIndex];
+      for (let i = columnIndex; i < line.length; i++) {
+        const char = line[i];
+
+        if (inString) {
+          buffer += char;
+          if (char === stringDelimiter && line[i - 1] !== '\\') {
+            inString = false;
+            stringDelimiter = null;
+          }
+          continue;
+        }
+
+        if (char === '"' || char === "'") {
+          inString = true;
+          stringDelimiter = char;
+          buffer += char;
+          continue;
+        }
+
+        if (char === '(') {
+          depth += 1;
+          buffer += char;
+          continue;
+        }
+
+        if (char === ')') {
+          depth -= 1;
+          if (depth === 0) {
+            return buffer.trim();
+          }
+          buffer += char;
+          continue;
+        }
+
+        buffer += char;
+      }
+
+      buffer += ' ';
+      lineIndex += 1;
+      columnIndex = 0;
+    }
+
+    return buffer.trim();
+  }
+
+  private splitArgumentsText(text: string): string[] {
+    const args: string[] = [];
+    let current = '';
+    let depth = 0;
+    let inString = false;
+    let stringChar: string | null = null;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+
+      if (inString) {
+        current += char;
+        if (char === stringChar && text[i - 1] !== '\\') {
+          inString = false;
+          stringChar = null;
+        }
+        continue;
+      }
+
+      if (char === '"' || char === "'") {
+        inString = true;
+        stringChar = char;
+        current += char;
+        continue;
+      }
+
+      if (char === '(') {
+        depth += 1;
+        current += char;
+        continue;
+      }
+
+      if (char === ')') {
+        depth -= 1;
+        current += char;
+        continue;
+      }
+
+      if (char === ',' && depth === 0) {
+        if (current.trim().length > 0) {
+          args.push(current.trim());
+        }
+        current = '';
+        continue;
+      }
+
+      current += char;
+    }
+
+    if (current.trim().length > 0) {
+      args.push(current.trim());
+    }
+
+    return args;
+  }
+
+  private parseNamedArguments(args: string[]): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const arg of args) {
+      const equalsIndex = arg.indexOf('=');
+      if (equalsIndex === -1) {
+        continue;
+      }
+      const name = arg.slice(0, equalsIndex).trim();
+      if (!name) {
+        continue;
+      }
+      const value = arg.slice(equalsIndex + 1).trim();
+      map.set(name, value);
+    }
+    return map;
+  }
+
+  private getSourceLines(): string[] {
+    if (!this.context) {
+      return [];
+    }
+
+    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
+      return [...this.context.cleanLines];
+    }
+
+    if (Array.isArray(this.context.lines) && this.context.lines.length > 0) {
+      return [...this.context.lines];
+    }
+
+    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length > 0) {
+      return [...this.context.rawLines];
+    }
+
+    return [];
+  }
+
+  private stripInlineComment(line: string): string {
+    const commentIndex = line.indexOf('//');
+    return commentIndex >= 0 ? line.slice(0, commentIndex) : line;
+  }
+
+  private hasWarning(code: string): boolean {
+    return this.warnings.some((warning) => warning.code === code);
+  }
+
+  private hasInfo(code: string): boolean {
+    return this.info.some((info) => info.code === code);
+  }
+
   private collectNamedArguments(args: ArgumentNode[]): Map<string, ArgumentNode> {
     const map = new Map<string, ArgumentNode>();
     for (const arg of args) {
@@ -297,6 +644,7 @@ export class EnhancedStrategyValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
+    this.context = null;
   }
 
   private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {

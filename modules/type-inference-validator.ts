@@ -74,18 +74,18 @@ export class TypeInferenceValidator implements ValidationModule {
     this.astContext = this.getAstContext(config);
     this.astTypeEnvironment = this.astContext?.typeEnvironment ?? null;
 
-    if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null
-      };
+    const ast = this.astContext?.ast;
+    if (ast) {
+      this.validateWithAst(ast);
     }
 
-    this.validateWithAst(this.astContext.ast);
+    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
+      this.validateTypeCompatibility();
+      this.validateTypeInference();
+      this.validateTypeSafety();
+      this.validateImplicitConversions();
+      this.validateTypeAnnotations();
+    }
 
     return {
       isValid: this.errors.length === 0,
@@ -476,23 +476,64 @@ export class TypeInferenceValidator implements ValidationModule {
   }
 
   private getExpressionType(expression: ExpressionNode): string | null {
+    let resolved: string | null = null;
+
     if (this.astTypeEnvironment) {
       const metadata = this.astTypeEnvironment.nodeTypes.get(expression);
       const described = this.describeTypeMetadata(metadata);
       if (described && described !== 'unknown') {
-        return described;
+        resolved = described;
       }
 
       if (expression.kind === 'Identifier') {
-        const identifierMetadata = this.astTypeEnvironment.identifiers.get((expression as IdentifierNode).name);
+        const name = (expression as IdentifierNode).name;
+        const identifierMetadata = this.astTypeEnvironment.identifiers.get(name);
         const identifierType = this.describeTypeMetadata(identifierMetadata ?? null);
-        if (identifierType) {
-          return identifierType;
+        if (identifierType && identifierType !== 'unknown') {
+          resolved = resolved ? this.mergeIdentifierTypes(resolved, identifierType) : identifierType;
+        }
+
+        const mappedType = this.context.typeMap?.get(name);
+        if (mappedType) {
+          const normalized = mappedType.type === 'series' ? 'series' : mappedType.type;
+          if (normalized && normalized !== 'unknown') {
+            resolved = resolved ? this.mergeIdentifierTypes(resolved, normalized) : normalized;
+          }
         }
       }
     }
 
+    if ((!resolved || resolved === 'unknown') && expression.kind === 'Identifier') {
+      const mappedType = this.context.typeMap?.get((expression as IdentifierNode).name);
+      if (mappedType) {
+        const normalized = mappedType.type === 'series' ? 'series' : mappedType.type;
+        if (normalized && normalized !== 'unknown') {
+          resolved = normalized;
+        }
+      }
+    }
+
+    if (resolved && resolved !== 'unknown') {
+      return resolved;
+    }
+
     return this.inferLiteralType(expression);
+  }
+
+  private mergeIdentifierTypes(existing: string, candidate: string): string {
+    if (existing === candidate) {
+      return existing;
+    }
+    if (existing === 'float' && candidate === 'int') {
+      return 'int';
+    }
+    if (candidate === 'float' && existing === 'int') {
+      return 'int';
+    }
+    if (existing === 'series' || candidate === 'series') {
+      return 'series';
+    }
+    return existing;
   }
 
   private describeTypeMetadata(metadata: TypeMetadata | null | undefined): string | null {

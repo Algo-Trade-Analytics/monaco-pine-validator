@@ -18,6 +18,7 @@ import {
   type ValidatorConfig,
   type ValidationError,
   type ValidationResult,
+  type TypeInfo,
 } from '../core/types';
 import { IDENT } from '../core/constants';
 import {
@@ -40,6 +41,19 @@ interface InputFunctionCall {
   parameters: Map<string, string>;
   assignedName?: string | null;
 }
+
+const INPUT_RETURN_TYPES: Record<string, { type: TypeInfo['type']; isSeries?: boolean }> = {
+  int: { type: 'int' },
+  float: { type: 'float' },
+  bool: { type: 'bool' },
+  string: { type: 'string' },
+  color: { type: 'color' },
+  source: { type: 'series', isSeries: true },
+  timeframe: { type: 'string' },
+  session: { type: 'string' },
+  symbol: { type: 'string' },
+  resolution: { type: 'string' },
+};
 
 export class InputFunctionsValidator implements ValidationModule {
   name = 'InputFunctionsValidator';
@@ -242,7 +256,41 @@ export class InputFunctionsValidator implements ValidationModule {
       arguments: [...call.arguments],
       parameters: new Map(call.parameters),
     });
+    this.registerInputVariableType(assignedName, call.name, call.line, call.column);
     this.inputCount++;
+  }
+
+  private registerInputVariableType(name: string | null | undefined, functionName: string, line: number, column: number): void {
+    if (!name) {
+      return;
+    }
+
+    const returnSpec = INPUT_RETURN_TYPES[functionName];
+    if (!returnSpec) {
+      return;
+    }
+
+    if (!this.context.typeMap) {
+      this.context.typeMap = new Map();
+    }
+
+    const existing = this.context.typeMap.get(name);
+    const typeInfo: TypeInfo = existing ?? {
+      type: returnSpec.type,
+      isConst: false,
+      isSeries: Boolean(returnSpec.isSeries),
+      declaredAt: { line, column },
+      usages: [],
+    };
+
+    if (existing) {
+      typeInfo.type = returnSpec.type;
+      typeInfo.isSeries = Boolean(returnSpec.isSeries);
+      typeInfo.declaredAt = typeInfo.declaredAt ?? { line, column };
+    }
+
+    this.context.typeMap.set(name, typeInfo);
+    this.context.declaredVars?.set?.(name, line);
   }
 
   private validateInputInt(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
