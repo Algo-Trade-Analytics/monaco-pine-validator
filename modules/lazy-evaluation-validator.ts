@@ -37,6 +37,7 @@ import {
   type WhileStatementNode,
 } from '../core/ast/nodes';
 import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
+import { ensureAstContext } from '../core/ast/context-utils';
 
 interface ConditionalHistoricalCall {
   functionName: string;
@@ -98,19 +99,7 @@ export class LazyEvaluationValidator implements ValidationModule {
     this.reset();
     this.config = config;
 
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
-    }
-
-    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
-
+    this.astContext = ensureAstContext(context, config);
     if (!this.astContext?.ast) {
       return {
         isValid: true,
@@ -670,8 +659,4 @@ export class LazyEvaluationValidator implements ValidationModule {
     return this.conditionalHistoricalCount;
   }
 
-}
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
 }

@@ -26,6 +26,7 @@ import {
   type UnaryExpressionNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
+import { ensureAstContext } from '../core/ast/context-utils';
 
 interface StrategyCallRecord {
   node: CallExpressionNode;
@@ -57,10 +58,10 @@ export class EnhancedStrategyValidator implements ValidationModule {
     return ['CoreValidator', 'SyntaxValidator'];
   }
 
-  validate(context: ValidationContext, _config: ValidatorConfig): ValidationResult {
+  validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
 
-    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
+    this.astContext = ensureAstContext(context, config);
 
     if (!this.astContext?.ast) {
       return {
@@ -305,8 +306,4 @@ export class EnhancedStrategyValidator implements ValidationModule {
   private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
     this.info.push({ line, column, message, severity: 'info', code, suggestion });
   }
-}
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
 }

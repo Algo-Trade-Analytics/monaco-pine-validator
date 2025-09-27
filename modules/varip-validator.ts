@@ -15,6 +15,7 @@ import {
   type VariableDeclarationNode,
 } from '../core/ast/nodes';
 import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
+import { ensureAstContext } from '../core/ast/context-utils';
 
 type AssignmentOperator = '=' | ':=' | '+=' | '-=' | '*=' | '/=' | '%=';
 
@@ -464,10 +465,6 @@ export class VaripValidator implements ValidationModule {
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-
-    return 'ast' in this.context ? (this.context as AstValidationContext) : null;
+    return ensureAstContext(this.context, config);
   }
 }

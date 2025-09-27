@@ -34,6 +34,7 @@ import {
 } from '../core/ast/nodes';
 import { visit } from '../core/ast/traversal';
 import { NS_MEMBERS } from '../core/constants';
+import { ensureAstContext } from '../core/ast/context-utils';
 
 interface LinefillFunctionCall {
   name: string;
@@ -653,13 +654,6 @@ export class LinefillValidator implements ValidationModule {
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+    return ensureAstContext(this.context, config);
   }
-}
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
 }

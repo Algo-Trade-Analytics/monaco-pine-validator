@@ -24,10 +24,7 @@ import {
   type VariableDeclarationNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
-}
+import { ensureAstContext } from '../core/ast/context-utils';
 
 const SECURITY_ALLOWED_PREFIXES = new Set([
   'request',
@@ -123,11 +120,9 @@ export class EnhancedMigrationValidator implements ValidationModule {
     return ['CoreValidator', 'SyntaxValidator'];
   }
 
-  validate(context: ValidationContext, _config: ValidatorConfig): ValidationResult {
+  validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
-    void _config;
-
-    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
+    this.astContext = ensureAstContext(context, config);
 
     if (!this.astContext?.ast) {
       return {

@@ -1,6 +1,7 @@
 import { BaseValidator } from '../../core/base-validator';
 import { FunctionAstService } from '../../core/ast/service';
 import { parseWithChevrotain } from '../../core/ast/parser';
+import { ensureAstContext } from '../../core/ast/context-utils';
 import type { ValidationModule, ValidationResult, ValidatorConfig } from '../../core/types';
 import type { ProgramNode, ScriptDeclarationNode } from '../../core/ast/nodes';
 
@@ -127,10 +128,13 @@ export class ModuleValidationHarness extends BaseValidator {
 
     this.reset();
     this.prepareContext(code);
-    if (!this.context.ast) {
-      return;
+
+    const astContext = ensureAstContext(this.context, this.config);
+
+    if (astContext?.ast) {
+      this.context = astContext;
+      this.ensureScriptType();
     }
-    this.ensureScriptType();
     this.runValidation();
     return this.buildResult();
   }

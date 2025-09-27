@@ -39,6 +39,7 @@ import {
   type ProgramNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
+import { ensureAstContext } from '../core/ast/context-utils';
 
 interface TextboxCall {
   functionName: string;
@@ -813,13 +814,6 @@ export class EnhancedTextboxValidator implements ValidationModule {
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+    return ensureAstContext(this.context, config);
   }
-}
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
 }

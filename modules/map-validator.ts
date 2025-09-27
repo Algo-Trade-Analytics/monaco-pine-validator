@@ -36,6 +36,7 @@ import {
   type VariableDeclarationNode,
 } from '../core/ast/nodes';
 import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
+import { ensureAstContext } from '../core/ast/context-utils';
 
 interface MapDeclarationInfo {
   name: string;
@@ -697,10 +698,7 @@ export class MapValidator implements ValidationModule {
     context: ValidationContext,
     config: ValidatorConfig,
   ): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-    return isAstValidationContext(context) ? (context as AstValidationContext) : null;
+    return ensureAstContext(context, config);
   }
 
   // Getter methods for other modules
@@ -723,8 +721,4 @@ export class MapValidator implements ValidationModule {
   getMapKeyType(varName: string): string | null {
     return this.mapDeclarations.get(varName)?.keyType || null;
   }
-}
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
 }

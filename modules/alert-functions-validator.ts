@@ -28,6 +28,7 @@ import {
   type ProgramNode,
 } from '../core/ast/nodes';
 import { findAncestor, type NodePath, visit } from '../core/ast/traversal';
+import { ensureAstContext } from '../core/ast/context-utils';
 
 interface AlertFunctionCall {
   functionName: string;
@@ -76,18 +77,7 @@ export class AlertFunctionsValidator implements ValidationModule {
     this.context = context;
     this.reset();
 
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
-    }
-
-    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
+    this.astContext = ensureAstContext(context, config);
 
     if (!this.astContext?.ast) {
       return {
@@ -448,8 +438,4 @@ export class AlertFunctionsValidator implements ValidationModule {
     }
   }
 
-}
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
 }

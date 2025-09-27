@@ -23,10 +23,7 @@ import type {
 } from '../core/ast/nodes';
 import { visit } from '../core/ast/traversal';
 import type { TypeMetadata } from '../core/ast/types';
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
-}
+import { ensureAstContext } from '../core/ast/context-utils';
 
 export class SwitchValidator implements ValidationModule {
   name = 'SwitchValidator';
@@ -42,13 +39,11 @@ export class SwitchValidator implements ValidationModule {
     return ['SyntaxValidator', 'TypeValidator'];
   }
 
-  validate(context: ValidationContext, _config: ValidatorConfig): ValidationResult {
+  validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
 
-    void _config;
-
-    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
+    this.astContext = ensureAstContext(context, config);
     const ast = this.astContext?.ast;
 
     if (!ast) {

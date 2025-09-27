@@ -30,6 +30,7 @@ import {
   type ProgramNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
+import { ensureAstContext } from '../core/ast/context-utils';
 
 interface StrategyOrderCall {
   functionName: string;
@@ -976,10 +977,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+    return ensureAstContext(this.context, config);
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
@@ -1032,8 +1030,4 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
   hasTimeBasedFiltering(): boolean {
     return this.hasTimeFiltering;
   }
-}
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
 }

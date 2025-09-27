@@ -25,6 +25,7 @@ import {
   type UnaryExpressionNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
+import { ensureAstContext } from '../core/ast/context-utils';
 
 const VALID_REQUEST_FUNCTIONS = new Set([
   'security',
@@ -72,10 +73,6 @@ interface RequestCallInfo {
   inConditional: boolean;
   hasDynamicExpression: boolean;
   callNode?: CallExpressionNode;
-}
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
 }
 
 export class DynamicDataValidator implements ValidationModule {
@@ -943,10 +940,7 @@ export class DynamicDataValidator implements ValidationModule {
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+    return ensureAstContext(this.context, config);
   }
 
   private createArgumentInfoFromAst(argument: ArgumentNode): RequestArgumentInfo {

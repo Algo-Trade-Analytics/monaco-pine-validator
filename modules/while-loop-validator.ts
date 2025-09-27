@@ -28,6 +28,7 @@ import type {
   ArrayLiteralNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
+import { ensureAstContext } from '../core/ast/context-utils';
 
 export class WhileLoopValidator implements ValidationModule {
   name = 'WhileLoopValidator';
@@ -537,14 +538,6 @@ export class WhileLoopValidator implements ValidationModule {
     context: ValidationContext,
     config: ValidatorConfig,
   ): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-
-    return isAstValidationContext(context) ? (context as AstValidationContext) : null;
+    return ensureAstContext(context, config);
   }
-}
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
 }

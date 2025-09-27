@@ -30,6 +30,7 @@ import {
   type BooleanLiteralNode,
 } from '../core/ast/nodes';
 import { visit } from '../core/ast/traversal';
+import { ensureAstContext } from '../core/ast/context-utils';
 import type { TypeEnvironment, TypeMetadata } from '../core/ast/types';
 
 const SERIES_IDENTIFIERS = new Set(['open', 'high', 'low', 'close', 'volume']);
@@ -786,10 +787,7 @@ export class TypeInferenceValidator implements ValidationModule {
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
-    }
-    return isAstValidationContext(this.context) && this.context.ast ? (this.context as AstValidationContext) : null;
+    return ensureAstContext(this.context, config);
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
@@ -2017,8 +2015,4 @@ export class TypeInferenceValidator implements ValidationModule {
 
     return result;
   }
-}
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
 }
