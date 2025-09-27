@@ -100,14 +100,10 @@ export class MapValidator implements ValidationModule {
 
     const ast = this.astContext?.ast;
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: context.scriptType,
-      };
+      this.collectMapDataText();
+      this.validateMapPerformanceAst();
+      this.validateMapBestPracticesAst();
+      return this.buildModuleResult(context.scriptType);
     }
 
     this.collectMapDataAst(ast);
@@ -130,32 +126,7 @@ export class MapValidator implements ValidationModule {
     this.validateMapPerformanceAst();
     this.validateMapBestPracticesAst();
 
-    const typeMap = new Map();
-    for (const [mapName, mapInfo] of this.mapDeclarations) {
-      typeMap.set(mapName, {
-        type: 'map',
-        isConst: false,
-        isSeries: false,
-        keyType: mapInfo.keyType,
-        valueType: mapInfo.valueType,
-      });
-    }
-
-    if (!this.context.typeMap) {
-      this.context.typeMap = new Map();
-    }
-    for (const [mapName, mapInfo] of typeMap) {
-      this.context.typeMap.set(mapName, mapInfo as any);
-    }
-
-    return {
-      isValid: true, // Always return true to avoid breaking tests
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap,
-      scriptType: context.scriptType,
-    };
+    return this.buildModuleResult(context.scriptType);
   }
 
   private reset(): void {
@@ -245,6 +216,11 @@ export class MapValidator implements ValidationModule {
               isInitialized: false,
             });
             this.mapAllocations += 1;
+            this.setVariableType(target.name, target.line, target.column, {
+              type: 'map',
+              keyType,
+              valueType,
+            });
             return;
           }
 
@@ -356,10 +332,55 @@ export class MapValidator implements ValidationModule {
         isInitialized: false,
       });
       this.mapAllocations += 1;
+      this.setVariableType(name, lineNumber, column, {
+        type: 'map',
+        keyType,
+        valueType,
+      });
     }
   }
 
-  private handleMapPutAst(call: CallExpressionNode): void {
+  private parseAnnotationTypes(raw: string | undefined | null): { keyType: string | null; valueType: string | null } {
+    if (!raw) {
+      return { keyType: null, valueType: null };
+    }
+
+    const tokens = this.splitTopLevelCsv(raw.trim());
+    if (tokens.length === 0) {
+      return { keyType: null, valueType: null };
+    }
+
+    if (tokens.length === 1) {
+      return { keyType: 'string', valueType: tokens[0] ?? null };
+    }
+
+    return {
+      keyType: tokens[0] ?? null,
+      valueType: tokens[tokens.length - 1] ?? null,
+    };
+  }
+
+  private parseMapNewGenericsText(raw: string | undefined | null): { keyType?: string; valueType?: string; error?: string } {
+    const content = (raw ?? '').trim();
+    if (!content) {
+      return { error: 'map.new<valueType>() requires a value type parameter' };
+    }
+
+    const tokens = this.splitTopLevelCsv(content);
+    if (tokens.length > 1) {
+      return {
+        valueType: tokens[tokens.length - 1],
+        error: 'map.new<valueType>() accepts exactly one type parameter',
+      };
+    }
+
+    return {
+      valueType: tokens[0],
+    };
+  }
+
+  private handleMapPutAst(path: NodePath<CallExpressionNode>, loopMultiplier: number): void {
+    const call = path.node;
     if (call.args.length < 1) {
       this.addError(
         call.loc.start.line,
@@ -375,7 +396,7 @@ export class MapValidator implements ValidationModule {
       return;
     }
 
-    this.trackMapOperation(mapName, call.loc.start.line);
+    this.trackMapOperation(mapName, call.loc.start.line, false, loopMultiplier);
 
     const mapInfo = this.mapDeclarations.get(mapName);
     if (!mapInfo) {
@@ -415,9 +436,36 @@ export class MapValidator implements ValidationModule {
 
     mapInfo.isInitialized = true;
     this.recordMapUsage(mapName, 'put', call.loc.start.line);
+
+    if (mapInfo.valueType === 'unknown' && valueType !== 'unknown') {
+      mapInfo.valueType = valueType;
+    }
+
+    const assignmentTarget = this.findAssignmentTarget(path);
+    if (assignmentTarget && valueType.startsWith('map<')) {
+      const nestedValueType = this.unwrapMapValueType(valueType) ?? 'unknown';
+      this.mapDeclarations.set(assignmentTarget.name, {
+        name: assignmentTarget.name,
+        keyType: 'string',
+        valueType: nestedValueType,
+        line: assignmentTarget.line,
+        column: assignmentTarget.column,
+        isInitialized: true,
+      });
+      this.setVariableType(assignmentTarget.name, assignmentTarget.line, assignmentTarget.column, {
+        type: 'map',
+        keyType: 'string',
+        valueType: nestedValueType,
+      });
+    }
   }
 
-  private handleMapLookupAst(call: CallExpressionNode, qualifiedName: string): void {
+  private handleMapLookupAst(
+    path: NodePath<CallExpressionNode>,
+    qualifiedName: string,
+    loopMultiplier: number,
+  ): void {
+    const call = path.node;
     if (call.args.length < 1) {
       this.addError(
         call.loc.start.line,
@@ -433,7 +481,7 @@ export class MapValidator implements ValidationModule {
       return;
     }
 
-    this.trackMapOperation(mapName, call.loc.start.line);
+    this.trackMapOperation(mapName, call.loc.start.line, qualifiedName === 'map.clear', loopMultiplier);
 
     if (!this.mapDeclarations.has(mapName) && this.isKnownNonMapVariable(mapName)) {
       this.addError(
@@ -443,10 +491,24 @@ export class MapValidator implements ValidationModule {
         'PSV6-MAP-OPERATION-NON-MAP',
         `Use a map variable: ${qualifiedName}(myMap, ...)`,
       );
+      return;
+    }
+
+    if (qualifiedName === 'map.get') {
+      this.handleMapGetResult(path, mapName);
+    } else if (qualifiedName === 'map.contains' || qualifiedName === 'map.includes') {
+      this.assignCallResult(path, {
+        type: 'bool',
+      });
     }
   }
 
-  private handleMapUtilityAst(call: CallExpressionNode, qualifiedName: string): void {
+  private handleMapUtilityAst(
+    path: NodePath<CallExpressionNode>,
+    qualifiedName: string,
+    loopMultiplier: number,
+  ): void {
+    const call = path.node;
     if (!this.validateUtilityArgumentCount(call, qualifiedName)) {
       return;
     }
@@ -456,7 +518,7 @@ export class MapValidator implements ValidationModule {
       return;
     }
 
-    this.trackMapOperation(mapName, call.loc.start.line, qualifiedName === 'map.clear');
+    this.trackMapOperation(mapName, call.loc.start.line, qualifiedName === 'map.clear', loopMultiplier);
 
     if (!this.mapDeclarations.has(mapName) && this.isKnownNonMapVariable(mapName)) {
       this.addError(
@@ -466,6 +528,59 @@ export class MapValidator implements ValidationModule {
         'PSV6-MAP-OPERATION-NON-MAP',
         `Use a map variable: ${qualifiedName}(myMap)`,
       );
+      return;
+    }
+
+    const assignmentTarget = this.findAssignmentTarget(path);
+    if (!assignmentTarget) {
+      return;
+    }
+
+    const mapInfo = this.mapDeclarations.get(mapName ?? '');
+
+    switch (qualifiedName) {
+      case 'map.keys': {
+        this.assignCallResult(path, {
+          type: 'array',
+          elementType: 'string',
+        });
+        break;
+      }
+      case 'map.values': {
+        const elementType = this.normalizeValueType(mapInfo?.valueType ?? 'unknown');
+        this.assignCallResult(path, {
+          type: 'array',
+          elementType,
+        });
+        break;
+      }
+      case 'map.size': {
+        this.assignCallResult(path, { type: 'int' });
+        break;
+      }
+      case 'map.clear': {
+        // clear returns void; nothing to assign
+        break;
+      }
+      case 'map.copy': {
+        if (!mapInfo) {
+          break;
+        }
+        this.mapDeclarations.set(assignmentTarget.name, {
+          name: assignmentTarget.name,
+          keyType: mapInfo.keyType,
+          valueType: mapInfo.valueType,
+          line: assignmentTarget.line,
+          column: assignmentTarget.column,
+          isInitialized: mapInfo.isInitialized,
+        });
+        this.assignCallResult(path, {
+          type: 'map',
+          keyType: mapInfo.keyType,
+          valueType: mapInfo.valueType,
+        });
+        break;
+      }
     }
   }
 
@@ -562,6 +677,51 @@ export class MapValidator implements ValidationModule {
     }
   }
 
+  private buildModuleResult(scriptType: ValidationContext['scriptType']): ValidationResult {
+    const typeMap = new Map<string, TypeInfo>();
+
+    if (!this.context.typeMap) {
+      this.context.typeMap = new Map();
+    }
+
+    for (const [mapName, mapInfo] of this.mapDeclarations) {
+      const existing = this.context.typeMap.get(mapName);
+      const typeInfo: TypeInfo = existing
+        ? {
+            ...existing,
+            usages: Array.isArray(existing.usages) ? [...existing.usages] : [],
+          }
+        : {
+            type: 'map',
+            isConst: false,
+            isSeries: false,
+            declaredAt: { line: mapInfo.line, column: mapInfo.column },
+            usages: [],
+          };
+
+      typeInfo.type = 'map';
+      typeInfo.isConst = typeInfo.isConst ?? false;
+      typeInfo.isSeries = false;
+      if (!typeInfo.declaredAt) {
+        typeInfo.declaredAt = { line: mapInfo.line, column: mapInfo.column };
+      }
+      typeInfo.keyType = mapInfo.keyType;
+      typeInfo.valueType = mapInfo.valueType;
+
+      this.context.typeMap.set(mapName, typeInfo);
+      typeMap.set(mapName, typeInfo);
+    }
+
+    return {
+      isValid: this.errors.length === 0,
+      errors: this.errors,
+      warnings: this.warnings,
+      info: this.info,
+      typeMap,
+      scriptType,
+    };
+  }
+
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
     const key = `${line}:${column}:${code ?? 'error'}:${message}`;
     if (this.errorKeys.has(key)) {
@@ -655,6 +815,40 @@ export class MapValidator implements ValidationModule {
     return null;
   }
 
+  private findAssignmentTarget(path: NodePath<CallExpressionNode>): {
+    name: string;
+    line: number;
+    column: number;
+  } | null {
+    const declarationPath = findAncestor(path, (ancestor): ancestor is NodePath<VariableDeclarationNode> => ancestor.node.kind === 'VariableDeclaration');
+    if (declarationPath) {
+      const declaration = declarationPath.node as VariableDeclarationNode;
+      if (declaration.initializer === path.node) {
+        const identifier = declaration.identifier;
+        return {
+          name: identifier.name,
+          line: identifier.loc.start.line,
+          column: identifier.loc.start.column,
+        };
+      }
+    }
+
+    const assignmentPath = findAncestor(path, (ancestor): ancestor is NodePath<AssignmentStatementNode> => ancestor.node.kind === 'AssignmentStatement');
+    if (assignmentPath) {
+      const assignment = assignmentPath.node as AssignmentStatementNode;
+      if (assignment.right === path.node && assignment.left.kind === 'Identifier') {
+        const identifier = assignment.left as IdentifierNode;
+        return {
+          name: identifier.name,
+          line: identifier.loc.start.line,
+          column: identifier.loc.start.column,
+        };
+      }
+    }
+
+    return null;
+  }
+
   private extractMapAnnotationTypes(type: TypeReferenceNode | null): { keyType: string | null; valueType: string | null } {
     if (!type) {
       return { keyType: null, valueType: null };
@@ -677,6 +871,118 @@ export class MapValidator implements ValidationModule {
     }
     const generics = type.generics.map((generic) => this.describeTypeReference(generic));
     return `${type.name.name}<${generics.join(', ')}>`;
+  }
+
+  private assignCallResult(
+    path: NodePath<CallExpressionNode>,
+    info: { type: TypeInfo['type']; elementType?: string; keyType?: string; valueType?: string },
+  ): void {
+    const target = this.findAssignmentTarget(path);
+    if (!target) {
+      return;
+    }
+
+    if (!this.context.typeMap) {
+      this.context.typeMap = new Map();
+    }
+
+    const existing = this.context.typeMap.get(target.name);
+    const typeInfo: TypeInfo = existing ?? {
+      type: info.type,
+      isConst: false,
+      isSeries: info.type === 'series',
+      declaredAt: { line: target.line, column: target.column },
+      usages: [],
+    };
+
+    typeInfo.type = info.type;
+    typeInfo.isConst = typeInfo.isConst ?? false;
+    typeInfo.isSeries = info.type === 'series' ? true : (typeInfo.isSeries ?? false);
+
+    if (info.elementType) {
+      typeInfo.elementType = info.elementType;
+    }
+    if (info.keyType) {
+      typeInfo.keyType = info.keyType;
+    }
+    if (info.valueType) {
+      typeInfo.valueType = info.valueType;
+    }
+
+    this.context.typeMap.set(target.name, typeInfo);
+  }
+
+  private handleMapGetResult(path: NodePath<CallExpressionNode>, mapName: string): void {
+    const mapInfo = this.mapDeclarations.get(mapName);
+    if (!mapInfo) {
+      return;
+    }
+
+    const target = this.findAssignmentTarget(path);
+    if (!target) {
+      return;
+    }
+
+    const valueType = this.normalizeValueType(mapInfo.valueType);
+    const nestedValueType = this.unwrapMapValueType(valueType);
+
+    if (valueType.startsWith('map<') && nestedValueType) {
+      this.mapDeclarations.set(target.name, {
+        name: target.name,
+        keyType: 'string',
+        valueType: nestedValueType,
+        line: target.line,
+        column: target.column,
+        isInitialized: mapInfo.isInitialized,
+      });
+      this.assignCallResult(path, {
+        type: 'map',
+        keyType: 'string',
+        valueType: nestedValueType,
+      });
+      return;
+    }
+
+    const scalarType = valueType === 'na' ? 'float' : valueType;
+    if (scalarType !== 'unknown') {
+      this.assignCallResult(path, { type: scalarType });
+    }
+  }
+
+  private setVariableType(
+    name: string,
+    line: number,
+    column: number,
+    options: { type: TypeInfo['type']; keyType?: string; valueType?: string; elementType?: string },
+  ): void {
+    if (!this.context.typeMap) {
+      this.context.typeMap = new Map();
+    }
+
+    const existing = this.context.typeMap.get(name);
+    const typeInfo: TypeInfo = existing ?? {
+      type: options.type,
+      isConst: false,
+      isSeries: options.type === 'series',
+      declaredAt: { line, column },
+      usages: [],
+    };
+
+    typeInfo.type = options.type;
+    typeInfo.isConst = typeInfo.isConst ?? false;
+    typeInfo.isSeries = options.type === 'series' ? true : (typeInfo.isSeries ?? false);
+
+    if (options.keyType) {
+      typeInfo.keyType = options.keyType;
+    }
+    if (options.valueType) {
+      typeInfo.valueType = options.valueType;
+    }
+    if (options.elementType) {
+      typeInfo.elementType = options.elementType;
+    }
+
+    this.context.typeMap.set(name, typeInfo);
   }
 
   private inferMapTypesFromCall(call: CallExpressionNode): { keyType?: string; valueType?: string } {
@@ -820,6 +1126,118 @@ export class MapValidator implements ValidationModule {
     if (isClear) {
       this.recordMapUsage(mapName, 'clear', lineNum ?? 1);
     }
+  }
+
+  private computeLoopMultiplier(loopStack: NodePath[]): number {
+    if (loopStack.length === 0) {
+      return 1;
+    }
+
+    let multiplier = 1;
+
+    for (const loopPath of loopStack) {
+      const node = loopPath.node;
+      if (node.kind === 'ForStatement') {
+        const estimate = this.estimateForLoopIterations(node as ForStatementNode);
+        multiplier *= estimate ?? 25;
+      } else if (node.kind === 'RepeatStatement') {
+        const estimate = this.estimateRepeatIterations(node as RepeatStatementNode);
+        multiplier *= estimate ?? 25;
+      } else if (node.kind === 'WhileStatement') {
+        multiplier *= 50;
+      }
+
+      if (multiplier >= 1000) {
+        return 1000;
+      }
+    }
+
+    return Math.max(1, Math.min(multiplier, 1000));
+  }
+
+  private estimateForLoopIterations(loop: ForStatementNode): number | null {
+    const loopSource = this.getNodeSource(loop);
+    const rangeMatch = /for\s+\w+\s*=\s*(-?\d+(?:\.\d+)?)\s+to\s+(-?\d+(?:\.\d+)?)/i.exec(loopSource);
+    if (rangeMatch) {
+      const start = Number(rangeMatch[1]);
+      const end = Number(rangeMatch[2]);
+      if (Number.isFinite(start) && Number.isFinite(end)) {
+        const span = Math.abs(end - start);
+        if (span === 0) {
+          return 1;
+        }
+        return Math.max(1, Math.min(1000, Math.round(span) + 1));
+      }
+    }
+
+    const inMatch = /for\s+\w+\s+in\s+/i.exec(loopSource);
+    if (inMatch) {
+      return 25;
+    }
+
+    return null;
+  }
+
+  private estimateRepeatIterations(loop: RepeatStatementNode): number | null {
+    const loopSource = this.getNodeSource(loop);
+    const match = /repeat\s+(-?\d+(?:\.\d+)?)/i.exec(loopSource);
+    if (match) {
+      const iterations = Number(match[1]);
+      if (Number.isFinite(iterations) && iterations > 0) {
+        return Math.max(1, Math.min(1000, Math.round(iterations)));
+      }
+    }
+    return null;
+  }
+
+  private splitTopLevelCsv(content: string): string[] {
+    const parts: string[] = [];
+    let depth = 0;
+    let current = '';
+
+    for (const char of content) {
+      if (char === '<') {
+        depth += 1;
+        current += char;
+        continue;
+      }
+
+      if (char === '>') {
+        depth = Math.max(0, depth - 1);
+        current += char;
+        continue;
+      }
+
+      if (char === ',' && depth === 0) {
+        if (current.trim().length > 0) {
+          parts.push(current.trim());
+        }
+        current = '';
+        continue;
+      }
+
+      current += char;
+    }
+
+    if (current.trim().length > 0) {
+      parts.push(current.trim());
+    }
+
+    return parts;
+  }
+
+  private unwrapMapValueType(valueType: string | null | undefined): string | null {
+    if (!valueType) {
+      return null;
+    }
+
+    const trimmed = valueType.trim();
+    const match = /^map<(.+)>$/i.exec(trimmed);
+    if (!match) {
+      return null;
+    }
+
+    return match[1]?.trim() ?? null;
   }
 
   private isKnownNonMapVariable(varName: string): boolean {
