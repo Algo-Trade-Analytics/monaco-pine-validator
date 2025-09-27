@@ -135,6 +135,7 @@ export const Repeat = createToken({
   name: 'Repeat',
   pattern: /repeat/,
   longer_alt: Identifier,
+  categories: [Identifier],
 });
 
 export const While = createToken({

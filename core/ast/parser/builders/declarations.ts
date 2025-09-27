@@ -34,6 +34,7 @@ import { createPlaceholderExpression } from './expressions';
 import { createIdentifierNode } from './identifiers';
 import { createStringNode } from './literals';
 import { Comma, Greater, Identifier as IdentifierToken, Less, Return } from '../tokens';
+import { isIdentifierLikeToken } from '../parser-utils';
 
 export function createParameterNode(
   identifier: IdentifierNode,
@@ -341,7 +342,7 @@ export function buildTypeReferenceFromTokens(tokens: IToken[]): TypeReferenceNod
       }
     }
 
-    while (index < tokens.length && tokens[index]?.tokenType === IdentifierToken) {
+    while (index < tokens.length && isIdentifierLikeToken(tokens[index])) {
       const child = parseType();
       generics.push(child.node);
       endToken = child.endToken;

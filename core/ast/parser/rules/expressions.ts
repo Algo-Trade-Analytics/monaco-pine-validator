@@ -1,5 +1,6 @@
 import { EOF, type IToken } from 'chevrotain';
 import type { PineParser } from '../parser';
+import { isIdentifierLikeToken } from '../parser-utils';
 import {
   type ArgumentNode,
   type BlockStatementNode,
@@ -497,7 +498,7 @@ export function createArgumentListRule(parser: PineParser) {
 export function createArgumentRule(parser: PineParser) {
   return parser.RULE('argument', () => {
     const lookahead = parser.LA(1);
-    if (lookahead.tokenType === IdentifierToken && parser.LA(2).tokenType === Equal) {
+    if (isIdentifierLikeToken(lookahead) && parser.LA(2).tokenType === Equal) {
       const nameToken = parser.CONSUME(IdentifierToken);
       parser.CONSUME(Equal);
       const value = parser.SUBRULE(parser.expression);

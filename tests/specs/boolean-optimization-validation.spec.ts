@@ -36,10 +36,22 @@ describe('EnhancedBooleanValidator - Short-Circuit Optimization', () => {
     };
   });
 
-  it('warns when expensive calc precedes cheap checks in AND chain', () => {
-    context.cleanLines = [
-      'if ta.linreg(close, 200) > close and close > open and barstate.isconfirmed'
+  const setScript = (body: string[]) => {
+    const script = [
+      '//@version=6',
+      'indicator("Boolean Validator")',
+      '',
+      ...body,
     ];
+    context.lines = [...script];
+    context.cleanLines = [...script];
+    context.rawLines = [...script];
+  };
+
+  it('warns when expensive calc precedes cheap checks in AND chain', () => {
+    setScript([
+      'if ta.linreg(close, 200) > close and close > open and barstate.isconfirmed'
+    ]);
     const result = validator.validate(context, config);
     const orderWarn = result.warnings.find(w => w.code === 'PSV6-BOOL-AND-ORDER');
     expect(orderWarn).toBeDefined();
@@ -47,9 +59,9 @@ describe('EnhancedBooleanValidator - Short-Circuit Optimization', () => {
   });
 
   it('warns when constant false precedes expensive calc in OR chain', () => {
-    context.cleanLines = [
+    setScript([
       'result = false or ta.sma(close, 20) > close'
-    ];
+    ]);
     const result = validator.validate(context, config);
     const orWarn = result.warnings.find(w => w.code === 'PSV6-BOOL-OR-CONSTANT');
     expect(orWarn).toBeDefined();
@@ -57,21 +69,20 @@ describe('EnhancedBooleanValidator - Short-Circuit Optimization', () => {
   });
 
   it('warns on multiple expensive calculations in one boolean chain', () => {
-    context.cleanLines = [
+    setScript([
       'if ta.correlation(close, volume, 100) > 0.5 and ta.linreg(close, 200) > close'
-    ];
+    ]);
     const result = validator.validate(context, config);
     const expWarn = result.warnings.find(w => w.code === 'PSV6-BOOL-EXPENSIVE-CHAIN');
     expect(expWarn).toBeDefined();
   });
 
   it('does not warn when cheap checks precede expensive calc in AND chain', () => {
-    context.cleanLines = [
+    setScript([
       'if barstate.isnew and close > open and ta.linreg(close, 200) > close'
-    ];
+    ]);
     const result = validator.validate(context, config);
     const orderWarn = result.warnings.find(w => w.code === 'PSV6-BOOL-AND-ORDER');
     expect(orderWarn).toBeUndefined();
   });
 });
-

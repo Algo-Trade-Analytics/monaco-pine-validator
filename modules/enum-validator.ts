@@ -52,6 +52,7 @@ const KNOWN_NAMESPACES = new Set([
   'strategy',
   'runtime',
   'chart',
+  'timeframe',
   'dividends',
   'earnings',
   'linefill',

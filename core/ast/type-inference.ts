@@ -39,6 +39,7 @@ import {
   type WhileStatementNode,
   type TupleExpressionNode,
   type ArrayLiteralNode,
+  type LoopResultBinding,
 } from './nodes';
 
 const NUMERIC_BINARY_OPERATORS = new Set(['+', '-', '*', '/', '%', '^']);
@@ -489,6 +490,11 @@ function inferExpression(
       const resultType = analyzeRepeatStatement(environment, repeatExpression) ?? createUnknown('repeat:result');
       return annotateNode(environment, expression, resultType);
     }
+    case 'SwitchStatement': {
+      const switchExpression = expression as SwitchStatementNode;
+      const resultType = analyzeSwitchStatement(environment, switchExpression) ?? createUnknown('switch:result');
+      return annotateNode(environment, expression, resultType);
+    }
     default:
       return annotateNode(environment, expression, createUnknown(reason));
   }
@@ -583,16 +589,156 @@ function visitForStatement(environment: TypeEnvironment, statement: ForStatement
   analyzeForStatement(environment, statement);
 }
 
-function visitSwitchStatement(environment: TypeEnvironment, statement: SwitchStatementNode): void {
-  inferExpression(environment, statement.discriminant, 'switch:discriminant');
+function analyzeSwitchStatement(
+  environment: TypeEnvironment,
+  statement: SwitchStatementNode,
+): TypeMetadata | null {
+  const discriminantMetadata = inferExpression(environment, statement.discriminant, 'switch:discriminant');
+  const caseMetadatas: TypeMetadata[] = [];
+
   statement.cases.forEach((caseNode, index) => {
     if (caseNode.test) {
       inferExpression(environment, caseNode.test, `switch:case:${index}:test`);
     }
+
     caseNode.consequent.forEach((caseStatement) => {
       visitStatement(environment, caseStatement);
     });
+
+    const resultExpression = extractSwitchCaseResult(caseNode);
+    if (resultExpression) {
+      const metadata =
+        environment.nodeTypes.get(resultExpression) ??
+        inferExpression(environment, resultExpression, `switch:case:${index}:result`);
+      caseMetadatas.push(metadata);
+    }
   });
+
+  const merged = mergeSwitchCaseMetadatas(caseMetadatas) ?? discriminantMetadata ?? null;
+
+  if (merged && statement.resultBinding) {
+    bindSwitchResult(environment, statement.resultBinding, merged);
+  }
+
+  return merged;
+}
+
+function visitSwitchStatement(environment: TypeEnvironment, statement: SwitchStatementNode): void {
+  analyzeSwitchStatement(environment, statement);
+}
+
+function extractSwitchCaseResult(caseNode: SwitchCaseNode): ExpressionNode | null {
+  if (caseNode.consequent.length === 0) {
+    return null;
+  }
+
+  const first = caseNode.consequent[0];
+  switch (first.kind) {
+    case 'ExpressionStatement':
+      return (first as ExpressionStatementNode).expression;
+    case 'AssignmentStatement':
+      return (first as AssignmentStatementNode).right;
+    case 'ReturnStatement':
+      return (first as ReturnStatementNode).argument as ExpressionNode;
+    case 'VariableDeclaration':
+      return (first as VariableDeclarationNode).initializer ?? null;
+    default:
+      return null;
+  }
+}
+
+function mergeSwitchCaseMetadatas(metadatas: TypeMetadata[]): TypeMetadata | null {
+  const filtered = metadatas.filter((metadata) => metadata.kind !== 'unknown');
+  if (filtered.length === 0) {
+    return metadatas.length > 0 ? metadatas[0] : null;
+  }
+
+  return filtered.reduce((accumulator, current) => mergeTwoSwitchTypes(accumulator, current));
+}
+
+function mergeTwoSwitchTypes(first: TypeMetadata, second: TypeMetadata): TypeMetadata {
+  if (first.kind === 'unknown') {
+    return cloneTypeMetadata(second, { addSource: 'switch:merge:unknown-left' });
+  }
+  if (second.kind === 'unknown') {
+    return cloneTypeMetadata(first, { addSource: 'switch:merge:unknown-right' });
+  }
+
+  if (first.kind === second.kind) {
+    return createTypeMetadata(first.kind, 'switch:merge:same', combineCertainty(first, second));
+  }
+
+  if (isNumericKind(first.kind) && isNumericKind(second.kind)) {
+    const kind = first.kind === 'float' || second.kind === 'float' ? 'float' : 'int';
+    return createTypeMetadata(kind, 'switch:merge:numeric', combineCertainty(first, second));
+  }
+
+  if (
+    (first.kind === 'series' && isNumericKind(second.kind)) ||
+    (second.kind === 'series' && isNumericKind(first.kind))
+  ) {
+    return createTypeMetadata('series', 'switch:merge:series-numeric', combineCertainty(first, second));
+  }
+
+  if (first.kind === 'series' && second.kind === 'series') {
+    return createTypeMetadata('series', 'switch:merge:series', combineCertainty(first, second));
+  }
+
+  if (first.kind === 'bool' && second.kind === 'bool') {
+    return createTypeMetadata('bool', 'switch:merge:bool', combineCertainty(first, second));
+  }
+
+  if (first.kind === 'string' && second.kind === 'string') {
+    return createTypeMetadata('string', 'switch:merge:string', combineCertainty(first, second));
+  }
+
+  return createTypeMetadata('unknown', 'switch:merge:conflict', 'conflict');
+}
+
+function bindSwitchResult(
+  environment: TypeEnvironment,
+  binding: LoopResultBinding,
+  metadata: TypeMetadata,
+): void {
+  switch (binding.kind) {
+    case 'assignment':
+    case 'variableDeclaration':
+      assignSwitchTarget(environment, binding.target, metadata);
+      break;
+    case 'tupleAssignment': {
+      if (binding.target.kind === 'TupleExpression') {
+        const tuple = binding.target as TupleExpressionNode;
+        tuple.elements.forEach((element) => {
+          if (element && element.kind === 'Identifier') {
+            assignIdentifier(
+              environment,
+              element as IdentifierNode,
+              metadata,
+              'switch:result',
+            );
+          }
+        });
+      } else {
+        assignSwitchTarget(environment, binding.target, metadata);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+function assignSwitchTarget(
+  environment: TypeEnvironment,
+  target: ExpressionNode,
+  metadata: TypeMetadata,
+): void {
+  if (target.kind === 'Identifier') {
+    assignIdentifier(environment, target as IdentifierNode, metadata, 'switch:result');
+    return;
+  }
+
+  annotateNode(environment, target, metadata);
 }
 
 function visitFunctionDeclaration(

@@ -71,6 +71,7 @@ export class StringFunctionsValidator implements ValidationModule {
     this.astContext = this.getAstContext(config);
 
     if (!this.astContext?.ast) {
+      console.log('StringFunctionsValidator: missing AST, diagnostics =', this.context.astDiagnostics);
       return {
         isValid: true,
         errors: [],
@@ -355,6 +356,8 @@ export class StringFunctionsValidator implements ValidationModule {
     column: number,
     argumentNodes: ExpressionNode[] = [],
   ): void {
+    // Debug: log arguments for failing tests
+    console.log('validateStringFunction', functionName, args, argumentNodes.map(node => node.kind));
     switch (functionName) {
       case 'length':
         this.validateStrLength(args, lineNum, column, argumentNodes);

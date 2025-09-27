@@ -4,19 +4,22 @@
  */
 
 import {
-  AstValidationContext,
-  ValidationModule,
-  ValidationContext,
-  ValidatorConfig,
-  ValidationError,
-  ValidationResult,
+  type AstValidationContext,
+  type ValidationModule,
+  type ValidationContext,
+  type ValidatorConfig,
+  type ValidationError,
+  type ValidationResult,
+  type TypeInfo,
 } from '../core/types';
 import type {
   AssignmentStatementNode,
+  IdentifierNode,
   ExpressionNode,
   ExpressionStatementNode,
   ProgramNode,
   ReturnStatementNode,
+  TupleExpressionNode,
   SwitchCaseNode,
   SwitchStatementNode,
   VariableDeclarationNode,
@@ -47,11 +50,12 @@ export class SwitchValidator implements ValidationModule {
     const ast = this.astContext?.ast;
 
     if (!ast) {
+      this.validateSwitchSyntaxText();
       return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
+        isValid: this.errors.length === 0,
+        errors: this.errors,
+        warnings: this.warnings,
+        info: this.info,
         typeMap: new Map(),
         scriptType: context.scriptType,
       };
@@ -162,6 +166,8 @@ export class SwitchValidator implements ValidationModule {
     }
 
     this.validateSwitchStyleAst(statement.cases);
+
+    this.applyResultBindingTypes(statement, returnTypes);
   }
 
   private validateSwitchExpressionAst(statement: SwitchStatementNode): void {
@@ -316,25 +322,188 @@ export class SwitchValidator implements ValidationModule {
     return metadata.kind;
   }
 
-  private computeSwitchNestingDepth(statement: SwitchStatementNode): number {
-    let maxDepth = 0;
-    const stack: number[] = [];
+  private applyResultBindingTypes(
+    statement: SwitchStatementNode,
+    returnTypes: Set<string>,
+  ): void {
+    if (!statement.resultBinding) {
+      return;
+    }
 
-    visit(statement, {
-      SwitchStatement: {
-        enter: () => {
-          const parentDepth = stack.length > 0 ? stack[stack.length - 1] : 0;
-          const currentDepth = parentDepth + 1;
-          stack.push(currentDepth);
-          if (currentDepth > maxDepth) {
-            maxDepth = currentDepth;
-          }
-        },
-        exit: () => {
-          stack.pop();
-        },
-      },
-    });
+    const metadata = this.astContext?.typeEnvironment?.nodeTypes.get(statement);
+    let inferred = this.describeTypeMetadata(metadata);
+    if (!inferred || inferred === 'unknown') {
+      inferred = returnTypes.values().next().value ?? null;
+    }
+
+    if (!inferred || inferred === 'unknown') {
+      return;
+    }
+
+    this.assignResultBinding(statement.resultBinding, inferred);
+  }
+
+  private assignResultBinding(binding: SwitchStatementNode['resultBinding'], typeLabel: string): void {
+    if (!binding) {
+      return;
+    }
+
+    switch (binding.kind) {
+      case 'assignment':
+      case 'variableDeclaration':
+        this.assignTargetType(binding.target, typeLabel);
+        break;
+      case 'tupleAssignment':
+        if (binding.target.kind === 'TupleExpression') {
+          const tuple = binding.target as TupleExpressionNode;
+          tuple.elements.forEach((element) => {
+            if (element && element.kind === 'Identifier') {
+              this.assignIdentifierType(element as IdentifierNode, typeLabel);
+            }
+          });
+        } else {
+          this.assignTargetType(binding.target, typeLabel);
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  private assignTargetType(target: ExpressionNode, typeLabel: string): void {
+    if (target.kind === 'Identifier') {
+      this.assignIdentifierType(target as IdentifierNode, typeLabel);
+      return;
+    }
+
+    const line = target.loc.start.line;
+    const column = target.loc.start.column;
+    this.updateTypeMap(`__expr_${line}_${column}`, line, column, typeLabel);
+  }
+
+  private assignIdentifierType(identifier: IdentifierNode, typeLabel: string): void {
+    this.updateTypeMap(identifier.name, identifier.loc.start.line, identifier.loc.start.column, typeLabel);
+  }
+
+  private updateTypeMap(name: string, line: number, column: number, typeLabel: string): void {
+    if (!this.context.typeMap) {
+      this.context.typeMap = new Map();
+    }
+
+    const existing = this.context.typeMap.get(name);
+    const typeInfo: TypeInfo = existing ?? {
+      type: typeLabel as TypeInfo['type'],
+      isConst: false,
+      isSeries: typeLabel === 'series',
+      declaredAt: { line, column },
+      usages: [],
+    };
+
+    typeInfo.type = typeLabel as TypeInfo['type'];
+    typeInfo.isConst = typeInfo.isConst ?? false;
+    typeInfo.isSeries = typeLabel === 'series' ? true : (typeInfo.isSeries ?? false);
+
+    this.context.typeMap.set(name, typeInfo);
+  }
+
+  private computeSwitchNestingDepth(statement: SwitchStatementNode): number {
+    let maxDepth = 1;
+
+    const visitSwitch = (node: SwitchStatementNode, depth: number) => {
+      if (depth > maxDepth) {
+        maxDepth = depth;
+      }
+
+      node.cases.forEach((caseNode) => {
+        if (caseNode.test) {
+          visitExpression(caseNode.test as ExpressionNode, depth + 1);
+        }
+        caseNode.consequent.forEach((stmt) => visitStatementNode(stmt, depth + 1));
+      });
+    };
+
+    const visitStatementNode = (stmt: any, depth: number) => {
+      if (!stmt) {
+        return;
+      }
+      switch (stmt.kind) {
+        case 'SwitchStatement':
+          visitSwitch(stmt as SwitchStatementNode, depth);
+          break;
+        case 'ExpressionStatement':
+          visitExpression((stmt as ExpressionStatementNode).expression, depth);
+          break;
+        case 'ReturnStatement':
+          visitExpression((stmt as ReturnStatementNode).argument as ExpressionNode, depth);
+          break;
+        case 'AssignmentStatement':
+          visitExpression((stmt as AssignmentStatementNode).right as ExpressionNode, depth);
+          break;
+        case 'VariableDeclaration':
+          visitExpression((stmt as VariableDeclarationNode).initializer as ExpressionNode, depth);
+          break;
+        case 'BlockStatement':
+          (stmt as any).body?.forEach((inner: any) => visitStatementNode(inner, depth));
+          break;
+        default:
+          break;
+      }
+    };
+
+    const visitExpression = (expr: ExpressionNode | null | undefined, depth: number) => {
+      if (!expr) {
+        return;
+      }
+      if (expr.kind === 'SwitchStatement') {
+        visitSwitch(expr as SwitchStatementNode, depth);
+        return;
+      }
+      switch (expr.kind) {
+        case 'ConditionalExpression': {
+          const conditional = expr as ConditionalExpressionNode;
+          visitExpression(conditional.test, depth);
+          visitExpression(conditional.consequent, depth);
+          visitExpression(conditional.alternate, depth);
+          break;
+        }
+        case 'BinaryExpression': {
+          const binary = expr as BinaryExpressionNode;
+          visitExpression(binary.left as ExpressionNode, depth);
+          visitExpression(binary.right as ExpressionNode, depth);
+          break;
+        }
+        case 'UnaryExpression': {
+          const unary = expr as UnaryExpressionNode;
+          visitExpression(unary.argument as ExpressionNode, depth);
+          break;
+        }
+        case 'CallExpression': {
+          const call = expr as CallExpressionNode;
+          visitExpression(call.callee as ExpressionNode, depth);
+          call.args.forEach((arg) => visitExpression(arg.value, depth));
+          break;
+        }
+        case 'MemberExpression': {
+          const member = expr as MemberExpressionNode;
+          visitExpression(member.object as ExpressionNode, depth);
+          break;
+        }
+        case 'TupleExpression': {
+          const tuple = expr as TupleExpressionNode;
+          tuple.elements.forEach((element) => visitExpression(element ?? null, depth));
+          break;
+        }
+        case 'ArrayLiteral': {
+          const arrayLiteral = expr as ArrayLiteralNode;
+          arrayLiteral.elements.forEach((element) => visitExpression(element ?? null, depth));
+          break;
+        }
+        default:
+          break;
+      }
+    };
+
+    visitSwitch(statement, 1);
 
     return maxDepth;
   }
@@ -387,6 +556,70 @@ export class SwitchValidator implements ValidationModule {
       'Default clause should be placed at the end of switch statement',
       'PSV6-SWITCH-STYLE-DEFAULT-PLACEMENT',
     );
+  }
+
+  private validateSwitchSyntaxText(): void {
+    const lines = this.context.cleanLines ?? [];
+    const indentStack: number[] = [];
+    let maxDepth = 0;
+
+    let previousContent = '';
+
+    for (let index = 0; index < lines.length; index++) {
+      const rawLine = lines[index];
+      const withoutComment = rawLine.split('//')[0] ?? '';
+      const switchIndex = withoutComment.indexOf('switch');
+      if (switchIndex === -1) {
+        const trimmedLine = withoutComment.trim();
+        if (trimmedLine.length > 0) {
+          previousContent = trimmedLine;
+        }
+        continue;
+      }
+
+      const indent = switchIndex;
+      const trimmedLine = withoutComment.trim();
+      const isCaseContinuation = previousContent.trim().endsWith('=>') || previousContent.trim().endsWith('=>');
+
+      if (!isCaseContinuation) {
+        while (indentStack.length > 0 && indent <= indentStack[indentStack.length - 1]) {
+          indentStack.pop();
+        }
+      }
+
+
+      const remaining = withoutComment.slice(switchIndex).trim();
+      const hasExpression = /^switch\s+\S+/.test(remaining);
+      if (!hasExpression) {
+        const column = switchIndex + 1;
+        this.addError(
+          index + 1,
+          column,
+          'Switch statement requires an expression.',
+          'PSV6-SWITCH-SYNTAX',
+        );
+      }
+
+      const depth = indentStack.length + 1;
+      if (depth > maxDepth) {
+        maxDepth = depth;
+      }
+
+      indentStack.push(indent);
+
+      if (trimmedLine.length > 0) {
+        previousContent = trimmedLine;
+      }
+    }
+
+    if (maxDepth > 2) {
+      this.addWarning(
+        1,
+        1,
+        `Switch statement has deep nesting (${maxDepth} levels), consider refactoring.`,
+        'PSV6-SWITCH-DEEP-NESTING',
+      );
+    }
   }
 
 }

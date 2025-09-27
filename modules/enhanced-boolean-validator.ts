@@ -36,6 +36,7 @@ import {
 } from '../core/ast/nodes';
 import type { TypeMetadata } from '../core/ast/types';
 import { visit, type NodePath } from '../core/ast/traversal';
+import { ensureAstContext } from '../core/ast/context-utils';
 
 export class EnhancedBooleanValidator implements ValidationModule {
   name = 'EnhancedBooleanValidator';
@@ -55,7 +56,7 @@ export class EnhancedBooleanValidator implements ValidationModule {
     this.reset();
     this.config = config;
 
-    this.astContext = isAstValidationContext(context) && context.ast ? context : null;
+    this.astContext = ensureAstContext(context, config);
 
     if (!this.astContext?.ast) {
       return {
@@ -93,6 +94,28 @@ export class EnhancedBooleanValidator implements ValidationModule {
           this.validateAstBooleanCondition(test);
           if (this.config.enablePerformanceAnalysis) {
             this.validateAstBooleanShortCircuit(test);
+          }
+        },
+      },
+      AssignmentStatement: {
+        enter: (path) => {
+          if (!this.config.enablePerformanceAnalysis) {
+            return;
+          }
+          const assignmentRight = path.node.right;
+          if (assignmentRight) {
+            this.validateAstBooleanShortCircuit(assignmentRight as ExpressionNode);
+          }
+        },
+      },
+      VariableDeclaration: {
+        enter: (path) => {
+          if (!this.config.enablePerformanceAnalysis) {
+            return;
+          }
+          const initializer = path.node.initializer;
+          if (initializer) {
+            this.validateAstBooleanShortCircuit(initializer as ExpressionNode);
           }
         },
       },
@@ -174,6 +197,168 @@ export class EnhancedBooleanValidator implements ValidationModule {
       } else {
         this.evaluateAstOrChain(chain.clauses, line, column);
       }
+    }
+  }
+
+  private collectBooleanChains(expression: ExpressionNode): Array<{ operator: 'and' | 'or'; clauses: ExpressionNode[] }> {
+    const chains: Array<{ operator: 'and' | 'or'; clauses: ExpressionNode[] }> = [];
+    this.walkBooleanChains(expression, chains);
+    return chains;
+  }
+
+  private walkBooleanChains(
+    expression: ExpressionNode | null | undefined,
+    chains: Array<{ operator: 'and' | 'or'; clauses: ExpressionNode[] }>,
+  ): void {
+    if (!expression) {
+      return;
+    }
+
+    if (expression.kind === 'BinaryExpression') {
+      const binary = expression as BinaryExpressionNode;
+      if (binary.operator === 'and' || binary.operator === 'or') {
+        const operator = binary.operator as 'and' | 'or';
+        const clauses: ExpressionNode[] = [];
+        this.flattenBooleanChain(binary, operator, clauses);
+        if (clauses.length > 1) {
+          chains.push({ operator, clauses });
+        }
+        clauses.forEach((clause) => this.walkBooleanChains(clause, chains));
+        return;
+      }
+
+      this.walkBooleanChains(binary.left as ExpressionNode, chains);
+      this.walkBooleanChains(binary.right as ExpressionNode, chains);
+      return;
+    }
+
+    if (expression.kind === 'UnaryExpression') {
+      const unary = expression as UnaryExpressionNode;
+      this.walkBooleanChains(unary.argument as ExpressionNode, chains);
+      return;
+    }
+
+    if (expression.kind === 'ConditionalExpression') {
+      const conditional = expression as ConditionalExpressionNode;
+      this.walkBooleanChains(conditional.test, chains);
+      this.walkBooleanChains(conditional.consequent, chains);
+      this.walkBooleanChains(conditional.alternate, chains);
+      return;
+    }
+
+    if (expression.kind === 'CallExpression') {
+      const call = expression as CallExpressionNode;
+      this.walkBooleanChains(call.callee as ExpressionNode, chains);
+      call.args.forEach((argument: ArgumentNode) => this.walkBooleanChains(argument.value, chains));
+      return;
+    }
+
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      this.walkBooleanChains(member.object as ExpressionNode, chains);
+      return;
+    }
+
+    if (expression.kind === 'TupleExpression') {
+      const tuple = expression as TupleExpressionNode;
+      tuple.elements.forEach((element) => this.walkBooleanChains(element ?? null, chains));
+      return;
+    }
+
+    if (expression.kind === 'ArrayLiteral') {
+      const arrayLiteral = expression as ArrayLiteralNode;
+      arrayLiteral.elements.forEach((element) => this.walkBooleanChains(element ?? null, chains));
+    }
+  }
+
+  private flattenBooleanChain(
+    expression: ExpressionNode,
+    operator: 'and' | 'or',
+    clauses: ExpressionNode[],
+  ): void {
+    if (expression.kind === 'BinaryExpression') {
+      const binary = expression as BinaryExpressionNode;
+      if (binary.operator === operator) {
+        this.flattenBooleanChain(binary.left as ExpressionNode, operator, clauses);
+        this.flattenBooleanChain(binary.right as ExpressionNode, operator, clauses);
+        return;
+      }
+    }
+
+    clauses.push(expression);
+  }
+
+  private evaluateAstAndChain(clauses: ExpressionNode[], line: number, column: number): void {
+    let cheapSeen = false;
+    let orderIssue = false;
+    let expensiveCount = 0;
+
+    for (const clause of clauses) {
+      const isExpensive = this.containsExpensiveCalcAst(clause);
+      if (isExpensive) {
+        expensiveCount += 1;
+        if (!cheapSeen) {
+          orderIssue = true;
+        }
+      } else if (this.isCheapCheckAst(clause)) {
+        cheapSeen = true;
+      }
+    }
+
+    if (orderIssue) {
+      this.addWarning(
+        line,
+        column,
+        'Expensive calculation appears before cheaper conditions in AND chain; reorder checks for better short-circuiting.',
+        'PSV6-BOOL-AND-ORDER',
+      );
+    }
+
+    if (expensiveCount > 1) {
+      this.addWarning(
+        line,
+        column,
+        'Boolean chain contains multiple expensive calculations. Consider caching results or restructuring checks.',
+        'PSV6-BOOL-EXPENSIVE-CHAIN',
+      );
+    }
+  }
+
+  private evaluateAstOrChain(clauses: ExpressionNode[], line: number, column: number): void {
+    let constantFalseSeen = false;
+    let orderIssue = false;
+    let expensiveCount = 0;
+
+    for (const clause of clauses) {
+      if (this.isConstantFalseAst(clause)) {
+        constantFalseSeen = true;
+      }
+
+      const isExpensive = this.containsExpensiveCalcAst(clause);
+      if (isExpensive) {
+        expensiveCount += 1;
+        if (constantFalseSeen) {
+          orderIssue = true;
+        }
+      }
+    }
+
+    if (orderIssue) {
+      this.addWarning(
+        line,
+        column,
+        'Constant false clause precedes expensive calculation in OR chain; move cheap checks after the expensive call.',
+        'PSV6-BOOL-OR-CONSTANT',
+      );
+    }
+
+    if (expensiveCount > 1) {
+      this.addWarning(
+        line,
+        column,
+        'Boolean chain contains multiple expensive calculations. Consider caching results or restructuring checks.',
+        'PSV6-BOOL-EXPENSIVE-CHAIN',
+      );
     }
   }
 
@@ -450,8 +635,4 @@ export class EnhancedBooleanValidator implements ValidationModule {
     this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
   }
 
-}
-
-function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
-  return 'ast' in context;
 }

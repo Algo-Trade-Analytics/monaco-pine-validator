@@ -26,6 +26,8 @@ export function createProgramRule(parser: PineParser) {
     parser.MANY5(() => {
       const annotations: CompilerAnnotationNode[] = [];
 
+      parser.MANY9(() => parser.CONSUME6(Newline));
+
       parser.MANY7(() => {
         const annotationToken = parser.CONSUME(CompilerAnnotation);
         annotations.push(createCompilerAnnotationNode(annotationToken));

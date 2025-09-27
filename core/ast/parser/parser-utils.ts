@@ -11,6 +11,14 @@ import {
 } from '../nodes';
 import { Dot, Identifier as IdentifierToken } from './tokens';
 
+function hasIdentifierCategory(token: IToken): boolean {
+  const categories = (token.tokenType as unknown as { CATEGORIES?: unknown[] })?.CATEGORIES;
+  if (!Array.isArray(categories)) {
+    return false;
+  }
+  return categories.includes(IdentifierToken);
+}
+
 type AnnotatableStatementNode =
   | ScriptDeclarationNode
   | FunctionDeclarationNode
@@ -75,7 +83,8 @@ export function splitDeclarationTokens(
 ): { typeTokens: IToken[]; identifierToken: IToken | undefined } {
   let lastIdentifierIndex = -1;
   for (let index = tokens.length - 1; index >= 0; index -= 1) {
-    if (tokens[index]?.tokenType === IdentifierToken) {
+    const token = tokens[index];
+    if (token && (token.tokenType === IdentifierToken || hasIdentifierCategory(token))) {
       lastIdentifierIndex = index;
       break;
     }
@@ -109,6 +118,13 @@ export function isExportKeywordToken(token: IToken | undefined): boolean {
 
 export function isTokenKeyword(token: IToken | undefined, keyword: string): boolean {
   return (token?.image ?? '').toLowerCase() === keyword;
+}
+
+export function isIdentifierLikeToken(token: IToken | undefined): boolean {
+  if (!token) {
+    return false;
+  }
+  return token.tokenType === IdentifierToken || hasIdentifierCategory(token);
 }
 
 export function splitFunctionHeadTokens(tokens: IToken[]): { typeTokens: IToken[]; nameTokens: IToken[] } {

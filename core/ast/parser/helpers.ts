@@ -19,6 +19,7 @@ import {
   isDeclarationKeywordToken,
   isExportKeywordToken,
   isFunctionModifierToken,
+  isIdentifierLikeToken,
 } from './parser-utils';
 import {
   ColonEqual,
@@ -120,7 +121,7 @@ export function createCollectDeclarationTokensHelper(parser: PineParser) {
       }
 
       if (
-        tokenType === IdentifierToken ||
+        isIdentifierLikeToken(token) ||
         tokenType === Less ||
         tokenType === Greater ||
         tokenType === Comma
@@ -149,7 +150,7 @@ export function createCollectFunctionHeadTokensHelper(parser: PineParser) {
       }
 
       if (
-        tokenType === IdentifierToken ||
+        isIdentifierLikeToken(token) ||
         tokenType === Less ||
         tokenType === Greater ||
         tokenType === Comma ||
@@ -194,7 +195,7 @@ export function createCollectParameterTokensHelper(parser: PineParser) {
       }
 
       if (
-        tokenType === IdentifierToken ||
+        isIdentifierLikeToken(token) ||
         tokenType === Less ||
         tokenType === Greater ||
         tokenType === Comma ||
@@ -273,7 +274,7 @@ export function createVariableDeclarationStartGuard(parser: PineParser) {
         return false;
       }
 
-      const identifierCount = collected.tokens.filter((token) => token.tokenType === IdentifierToken).length;
+      const identifierCount = collected.tokens.filter((token) => isIdentifierLikeToken(token)).length;
       if (identifierCount === 0) {
         return false;
       }
@@ -297,7 +298,7 @@ export function createVariableDeclarationStartGuard(parser: PineParser) {
       return false;
     }
 
-    const identifierCount = collected.tokens.filter((token) => token.tokenType === IdentifierToken).length;
+    const identifierCount = collected.tokens.filter((token) => isIdentifierLikeToken(token)).length;
     return identifierCount >= 2;
   };
 }
@@ -380,7 +381,7 @@ export function createAssignmentStartGuard(parser: PineParser) {
       );
     }
 
-    if (first.tokenType !== IdentifierToken) {
+    if (!isIdentifierLikeToken(first)) {
       return false;
     }
 
@@ -404,7 +405,7 @@ export function createAssignmentStartGuard(parser: PineParser) {
       if (tokenType === Dot) {
         offset += 1;
         const next = parser.LA(offset);
-        if (next.tokenType !== IdentifierToken) {
+        if (!isIdentifierLikeToken(next)) {
           return false;
         }
         offset += 1;
