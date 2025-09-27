@@ -2,18 +2,18 @@
 
 ## Executive Summary
 
-The Chevrotain-based AST infrastructure, traversal helpers, and AST-aware modules are already in place, but the validator remains far from production readiness because only a nine-test smoke suite runs by default and it touches a tiny slice of the 49-module catalog. To reach a productive state, most regression specs must be restored and AST-dependent rule coverage expanded module by module.
+The Chevrotain-based AST infrastructure, traversal helpers, and AST-aware modules are already in place, but the validator remains far from production readiness because only a thirteen-test smoke suite runs by default and it touches a tiny slice of the 49-module catalog. To reach a productive state, most regression specs must be restored and AST-dependent rule coverage expanded module by module.
 
 ## Quantitative Snapshot
 
 | Dimension | Completed | Remaining | % Complete | % Remaining |
 | --- | --- | --- | --- | --- |
-| Automated assertions | 9 smoke tests currently executed | 1,021 deferred regression assertions | 0.87% | 99.13% |
-| Spec files in `tests/specs/` | 1 active (`validator-smoke.spec.ts`) | 52 deferred spec files | 1.89% | 98.11% |
+| Automated assertions | 13 smoke tests currently executed | 1,021 deferred regression assertions | 1.27% | 98.73% |
+| Spec files in `tests/specs/` | 2 active (`validator-smoke.spec.ts`, `validator-architecture.spec.ts`) | 51 deferred spec files | 3.77% | 96.23% |
 | Modules with regression coverage | 3 modules emitting the smoke-suite diagnostics (Core, Syntax, Function) | 46 modules without automated coverage | 6.12% | 93.88% |
 
-- The official smoke run reports 9 passing / 0 failing assertions while noting the broader 1,021-spec gauntlet is deferred, so 99% of assertions still sit outside the default run.【F:docs/validator-README.md†L15-L40】【F:docs/validator-coverage-summary.md†L5-L20】
-- Only `validator-smoke.spec.ts` is imported by `all-validation-tests.spec.ts`, leaving the other 52 spec files idle in the suite and pushing 98% of the regression catalogue out of circulation.【F:tests/specs/all-validation-tests.spec.ts†L1-L21】
+- The official smoke run reports 13 passing / 0 failing assertions while noting the broader 1,021-spec gauntlet is deferred, so nearly 99% of assertions still sit outside the default run.【F:docs/validator-README.md†L9-L44】【F:docs/validator-coverage-summary.md†L5-L24】
+- `validator-smoke.spec.ts` and `validator-architecture.spec.ts` are imported by default in `all-validation-tests.spec.ts`, leaving the other 51 spec files idle during `npm run test:validator` and keeping most of the regression catalogue out of circulation unless `npm run test:validator:full` is used.【F:tests/specs/all-validation-tests.spec.ts†L1-L80】
 - Smoke assertions cover diagnostics emitted by `CoreValidator` (missing declarations, const reassignment, negative history), `SyntaxValidator` (version placement, duplicate directives), and `FunctionValidator` (argument types), leaving the remaining 46 modules—roughly 94% of the catalog—unverified.【F:tests/specs/validator-smoke.spec.ts†L31-L99】【F:modules/core-validator.ts†L460-L467】【F:modules/core-validator.ts†L1830-L1865】【F:modules/syntax-validator.ts†L132-L146】【F:modules/function-validator.ts†L764-L785】【F:docs/validator-README.md†L7-L38】
 
 ## What Is Finished

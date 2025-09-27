@@ -14,17 +14,24 @@ This repository contains a work-in-progress Pine Script v6 validator built aroun
 | Area | Status |
 | --- | --- |
 | Test command | `npm run test:validator` |
-| Result | 9 passing / 0 failing tests (smoke suite of 9 assertions) |
+| Result | 13 passing / 0 failing tests (smoke suite of 13 assertions across two spec files) |
+| Full regression command | `npm run test:validator:full` (expected to fail until coverage is restored) |
+| Focused module run | `npm run test:validator -- --suite "Drawing Functions"` (or set `VALIDATOR_SUITE_FILTER`) |
 | Primary focus | Baseline smoke coverage that exercises the AST-enabled validator pipeline |
 | Parser integration | Chevrotain-based AST parsing runs automatically when validators are instantiated |
 
-The counts above come from the updated smoke suite (`npm run test:validator`).  The comprehensive 1,021-spec gauntlet exposed hundreds of gaps, so the suite has been pared back to nine representative assertions that confirm the AST-enabled pipeline, core syntax checks, and a handful of semantic guards still behave as expected.  The documentation below focuses on that pragmatic baseline while calling out the work required to restore the broader coverage.
+The counts above come from the updated smoke suite (`npm run test:validator`).  The comprehensive 1,021-spec gauntlet exposed hundreds of gaps, so the suite has been pared back to thirteen representative assertions split across the core diagnostics smoke tests and a new architecture integration suite that verifies the AST-enabled pipeline stays wired correctly.  The documentation below focuses on that pragmatic baseline while calling out the work required to restore the broader coverage.
 
 ## Running the Validator Locally
 
 ```bash
 npm install
 npm run test:validator
+npm run test:validator -- --suite "Drawing Functions"
+
+# Opt into the full regression catalogue
+npm run test:validator:full
+npm run test:validator:full -- --suite "TA Functions"
 ```
 
 The validator can also be targeted at AST-only specs:
@@ -53,13 +60,13 @@ console.log(result.errors, result.warnings, result.info);
 
 ## Key Findings From the Current Test Run
 
-1. **The validator now ships with a passing smoke suite** – the new tests cover missing version directives, duplicate versions, const reassignment, missing plots, function parameter validation, and negative history lookups so regressions surface quickly.
+1. **The validator now ships with a passing smoke suite** – the thirteen assertions cover missing version directives, duplicate versions, const reassignment, missing plots, function parameter validation, negative history lookups, and new architecture checks that ensure the AST-enabled pipeline stays wired correctly.
 2. **AST parsing remains enabled by default** – every smoke test instantiates `EnhancedModularValidator` without custom configuration, exercising the Chevrotain service and ensuring AST-dependent modules execute.
-3. **Comprehensive coverage is still pending** – the previous 1,021-spec suite remains a valuable backlog reference but is no longer executed automatically. Reintroducing those specs will require staged module work and focused fixtures.
+3. **Comprehensive coverage is still pending** – the previous 1,021-spec suite remains a valuable backlog reference that can now be exercised with `npm run test:validator:full`, but it is not part of the default run until the fixtures pass again.
 
 ## Known Gaps
 
-- **Comprehensive regression coverage is temporarily disabled**, so only nine smoke tests run during CI.  The remaining fixtures live in `tests/specs/` and should be restored gradually as modules regain feature parity.
+- **Comprehensive regression coverage is temporarily disabled**, so only thirteen smoke tests run during CI.  The remaining fixtures live in `tests/specs/` and should be restored gradually as modules regain feature parity.
 - **Module-level progress tracking is still manual** – we lack automation that correlates smoke coverage, deferred suites, and outstanding rule work per module.
 - **Gap documentation requires continuous updates** – as suites return we must refresh the counts and ensure developer guidance matches reality.
 

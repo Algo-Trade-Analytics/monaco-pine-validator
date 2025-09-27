@@ -11,39 +11,91 @@
 import { execSync } from 'node:child_process';
 import path from 'node:path';
 
+const args = process.argv.slice(2);
+const wantsHelp = args.includes('--help') || args.includes('-h');
+const verbose = args.includes('--verbose') || args.includes('-v');
+const mode = args.includes('--full') ? 'full' : args.includes('--smoke') ? 'smoke' : 'smoke';
+const suiteFilter = extractOptionValue(args, '--suite');
+
+if (wantsHelp) {
+  console.log(`
+Pine Script v6 Validator Test Runner
+
+Usage:
+  node ${path.join('tests', 'run-all-tests.js')} [options]
+
+Options:
+  --help, -h      Show this help message
+  --verbose, -v   Stream Vitest output directly instead of buffering
+  --full          Run the full regression suite (enables VALIDATOR_FULL_SUITE)
+  --smoke         Force the smoke suite (default)
+  --suite <name>  Only load spec modules whose names include the filter (comma separated)
+
+Examples:
+  node ${path.join('tests', 'run-all-tests.js')}
+  node ${path.join('tests', 'run-all-tests.js')} --full
+  npm run test:validator:full
+`);
+  process.exit(0);
+}
+
 console.log('🧪 Pine Script v6 Validator - Running All Tests');
 console.log('='.repeat(60));
 
-const specPattern = path.join('tests', 'specs', '**', '*.spec.ts');
+const specPattern = path.join('tests', 'specs', 'all-validation-tests.spec.ts');
+const astPattern = path.join('tests', 'ast', '**', '*.test.ts');
 
-const testFiles = [specPattern];
-
-const testCommands = [`npx vitest run --config vitest.validator.config.ts`];
+const suites = [
+  {
+    name: mode === 'full' ? 'Full validator spec suite' : 'Smoke validator spec suite',
+    file: specPattern,
+    command: 'npx vitest run --config vitest.validator.config.ts',
+    env: {
+      ...(mode === 'full' ? { VALIDATOR_FULL_SUITE: '1' } : {}),
+      ...(suiteFilter ? { VALIDATOR_SUITE_FILTER: suiteFilter } : {}),
+    },
+  },
+  {
+    name: 'AST module harness',
+    file: astPattern,
+    command: 'npx vitest run --config vitest.config.ts',
+    env: {},
+  },
+];
 
 async function runAllTests() {
   let totalPassed = 0;
   let totalFailed = 0;
 
-  for (let i = 0; i < testCommands.length; i++) {
-    const command = testCommands[i];
-    const testFile = testFiles[i];
-
-    console.log(`\n📋 Running: ${testFile}`);
+  for (const suite of suites) {
+    console.log(`\n📋 Running: ${suite.name}`);
+    console.log(`🧾 Pattern: ${suite.file}`);
     console.log('-'.repeat(50));
+    if (suiteFilter && suite.env?.VALIDATOR_SUITE_FILTER) {
+      console.log(`🎯 Suite filter: ${suite.env.VALIDATOR_SUITE_FILTER}`);
+    }
 
     try {
-      const output = execSync(command, {
+      const output = execSync(suite.command, {
         encoding: 'utf8',
-        stdio: 'pipe'
+        stdio: verbose ? 'inherit' : 'pipe',
+        env: { ...process.env, ...suite.env },
       });
 
-      console.log(output);
+      if (!verbose) {
+        console.log(output);
+      }
+
       totalPassed++;
-      console.log(`✅ ${testFile} - PASSED`);
+      console.log(`✅ ${suite.name} - PASSED`);
     } catch (error) {
-      console.log(error.stdout || error.message);
+      if (verbose) {
+        console.log('❌ Test command failed');
+      } else {
+        console.log(error.stdout || error.message);
+      }
       totalFailed++;
-      console.log(`❌ ${testFile} - FAILED`);
+      console.log(`❌ ${suite.name} - FAILED`);
     }
   }
 
@@ -62,27 +114,21 @@ async function runAllTests() {
   }
 }
 
-// Handle command line arguments
-const args = process.argv.slice(2);
-if (args.includes('--help') || args.includes('-h')) {
-  console.log(`
-Pine Script v6 Validator Test Runner
-
-Usage:
-  node ${path.join('tests', 'run-all-tests.js')} [options]
-
-Options:
-  --help, -h     Show this help message
-  --verbose, -v  Show verbose output
-
-Examples:
-  node ${path.join('tests', 'run-all-tests.js')}
-  npm run test:validator
-`);
-  process.exit(0);
-}
-
 runAllTests().catch(error => {
   console.error('❌ Error running tests:', error.message);
   process.exit(1);
 });
+
+function extractOptionValue(argv, flag) {
+  const withValue = argv.find((arg) => arg.startsWith(`${flag}=`));
+  if (withValue) {
+    return withValue.slice(flag.length + 1);
+  }
+
+  const flagIndex = argv.indexOf(flag);
+  if (flagIndex !== -1 && typeof argv[flagIndex + 1] === 'string') {
+    return argv[flagIndex + 1];
+  }
+
+  return null;
+}

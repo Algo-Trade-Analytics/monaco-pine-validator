@@ -6,7 +6,7 @@ The current validator delivers strong baseline coverage for syntax and structura
 
 ## Methodology
 
-1. Ran `npm run test:validator` to collect an end-to-end status snapshot (9 passing / 0 failing smoke assertions while the 1,021-spec regression set remains deferred).
+1. Ran `npm run test:validator` to collect an end-to-end status snapshot (13 passing / 0 failing smoke assertions while the 1,021-spec regression set remains deferred).
 2. Reviewed the archived suites to identify which modules and diagnostics still need implementation work before they can return to the default run.
 3. Inspected `BaseValidator` to confirm the AST service remains enabled by default and that modules execute in AST-aware mode.
 4. Mapped the findings into the gap themes below.

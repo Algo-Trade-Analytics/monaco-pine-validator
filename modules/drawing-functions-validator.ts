@@ -31,8 +31,10 @@ import {
   type NumberLiteralNode,
   type ProgramNode,
   type StringLiteralNode,
+  type AssignmentStatementNode,
+  type VariableDeclarationNode,
 } from '../core/ast/nodes';
-import { visit, type NodePath } from '../core/ast/traversal';
+import { visit, findAncestor, type NodePath } from '../core/ast/traversal';
 
 interface DrawingFunctionCall {
   namespace: string;
@@ -41,6 +43,8 @@ interface DrawingFunctionCall {
   column: number;
   arguments: string[];
   inLoop: boolean;
+  argumentNodes: ArgumentNode[];
+  assignedIdentifier: string | null;
 }
 
 export class DrawingFunctionsValidator implements ValidationModule {
@@ -57,6 +61,8 @@ export class DrawingFunctionsValidator implements ValidationModule {
   // Drawing function tracking
   private drawingFunctionCalls: DrawingFunctionCall[] = [];
   private drawingObjectCount = 0;
+  private createdDrawingVariables = new Set<string>();
+  private deletedDrawingVariables = new Set<string>();
 
   getDependencies(): string[] {
     return ['TypeValidator', 'FunctionValidator'];
@@ -79,7 +85,14 @@ export class DrawingFunctionsValidator implements ValidationModule {
       };
     }
 
-    this.collectDrawingDataAst(this.astContext.ast);
+    try {
+      this.collectDrawingDataAst(this.astContext.ast);
+    } catch (error) {
+      if (process.env.VALIDATOR_DEBUG_DRAWING === '1') {
+        console.error('[DrawingFunctionsValidator] collect error', error);
+      }
+      throw error;
+    }
 
     // Post-process validations
     try {
@@ -111,9 +124,14 @@ export class DrawingFunctionsValidator implements ValidationModule {
     this.astContext = null;
     this.drawingFunctionCalls = [];
     this.drawingObjectCount = 0;
+    this.createdDrawingVariables.clear();
+    this.deletedDrawingVariables.clear();
   }
 
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
+    if (process.env.VALIDATOR_DEBUG_DRAWING === '1') {
+      console.error('[DrawingFunctionsValidator] error', { line, column, message, code });
+    }
     // Only generate errors for clearly invalid cases
     if (this.isClearlyInvalid(message, code)) {
       this.errors.push({ line, column, message, severity: 'error', code, suggestion });
@@ -124,10 +142,16 @@ export class DrawingFunctionsValidator implements ValidationModule {
   }
 
   private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
+    if (process.env.VALIDATOR_DEBUG_DRAWING === '1') {
+      console.warn('[DrawingFunctionsValidator] warning', { line, column, message, code });
+    }
     this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
   }
 
   private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
+    if (process.env.VALIDATOR_DEBUG_DRAWING === '1') {
+      console.info('[DrawingFunctionsValidator] info', { line, column, message, code });
+    }
     this.info.push({ line, column, message, severity: 'info', code, suggestion });
   }
 
@@ -207,6 +231,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
 
     const functionName = member.property.name;
     const args = call.args.map((argument) => this.getArgumentText(argument));
+    const assignedIdentifier = this.extractAssignedIdentifier(path as NodePath<CallExpressionNode>);
 
     const line = member.property.loc.start.line;
     const column = member.property.loc.start.column;
@@ -218,12 +243,24 @@ export class DrawingFunctionsValidator implements ValidationModule {
       column,
       arguments: args,
       inLoop,
+      argumentNodes: call.args,
+      assignedIdentifier,
     };
 
     this.drawingFunctionCalls.push(callInfo);
 
     if (functionName === 'new') {
       this.drawingObjectCount++;
+      if (assignedIdentifier) {
+        this.createdDrawingVariables.add(assignedIdentifier);
+      }
+    }
+
+    if (functionName === 'delete') {
+      const deletedTarget = this.extractIdentifierFromArgument(call.args[0]);
+      if (deletedTarget) {
+        this.deletedDrawingVariables.add(deletedTarget);
+      }
     }
 
     this.validateDrawingFunction(namespace, functionName, args, line, column);
@@ -932,33 +969,11 @@ export class DrawingFunctionsValidator implements ValidationModule {
   }
 
   private validateDrawingBestPractices(): void {
-    // Check for missing cleanup
-    const createdObjects = new Set<string>();
-    const deletedObjects = new Set<string>();
-    
-    for (const call of this.drawingFunctionCalls) {
-      if (call.functionName === 'new') {
-        // Extract object variable name (simplified)
-        const line = this.context.cleanLines[call.line - 1];
-        const match = line.match(/(\w+)\s*=\s*\w+\.new/);
-        if (match) {
-          createdObjects.add(match[1]);
-        }
-      } else if (call.functionName === 'delete') {
-        // Extract object variable name (simplified)
-        const line = this.context.cleanLines[call.line - 1];
-        const match = line.match(/(\w+)\.delete\s*\(/);
-        if (match) {
-          deletedObjects.add(match[1]);
-        }
-      }
-    }
-
     // Check for objects that are created but not deleted
-    for (const obj of createdObjects) {
-      if (!deletedObjects.has(obj)) {
-        this.addInfo(1, 1, 
-          `Drawing object '${obj}' is created but not deleted. Consider adding cleanup code.`, 
+    for (const obj of this.createdDrawingVariables) {
+      if (!this.deletedDrawingVariables.has(obj)) {
+        this.addInfo(1, 1,
+          `Drawing object '${obj}' is created but not deleted. Consider adding cleanup code.`,
           'PSV6-DRAWING-CLEANUP-SUGGESTION');
       }
     }
@@ -966,14 +981,10 @@ export class DrawingFunctionsValidator implements ValidationModule {
     // Check for poor naming conventions
     const poorNames = new Set(['l', 'lb', 'b', 't', 'line', 'label', 'box', 'table']);
     for (const call of this.drawingFunctionCalls) {
-      if (call.functionName === 'new') {
-        const line = this.context.cleanLines[call.line - 1];
-        const match = line.match(/(\w+)\s*=\s*\w+\.new/);
-        if (match && poorNames.has(match[1])) {
-          this.addInfo(call.line, call.column, 
-            `Consider using a more descriptive name instead of '${match[1]}'`, 
-            'PSV6-DRAWING-NAMING-SUGGESTION');
-        }
+      if (call.functionName === 'new' && call.assignedIdentifier && poorNames.has(call.assignedIdentifier)) {
+        this.addInfo(call.line, call.column,
+          `Consider using a more descriptive name instead of '${call.assignedIdentifier}'`,
+          'PSV6-DRAWING-NAMING-SUGGESTION');
       }
     }
 
@@ -1106,7 +1117,27 @@ export class DrawingFunctionsValidator implements ValidationModule {
   }
 
   private getArgumentText(argument: ArgumentNode): string {
-    const valueText = this.getExpressionText(argument.value).trim();
+    if (!argument.value) {
+      if (process.env.VALIDATOR_DEBUG_DRAWING === '1') {
+        console.error('[DrawingFunctionsValidator] argument without value', argument);
+      }
+      return '';
+    }
+
+    let valueRaw: string;
+    try {
+      valueRaw = this.getExpressionText(argument.value);
+    } catch (error) {
+      if (process.env.VALIDATOR_DEBUG_DRAWING === '1') {
+        console.error('[DrawingFunctionsValidator] failed to extract argument text', {
+          argument,
+          error,
+        });
+      }
+      throw error;
+    }
+
+    const valueText = valueRaw?.trim?.() ?? '';
     if (argument.name) {
       return `${argument.name.name}=${valueText}`;
     }
@@ -1118,7 +1149,10 @@ export class DrawingFunctionsValidator implements ValidationModule {
       case 'StringLiteral':
         return (expression as StringLiteralNode).raw;
       case 'NumberLiteral':
-        return (expression as NumberLiteralNode).raw;
+        return (
+          (expression as NumberLiteralNode).raw ??
+          String((expression as NumberLiteralNode).value)
+        );
       case 'BooleanLiteral': {
         const literal = expression as BooleanLiteralNode;
         return literal.value ? 'true' : 'false';
@@ -1170,6 +1204,41 @@ export class DrawingFunctionsValidator implements ValidationModule {
         return null;
       }
       return this.getNamespaceName(member.object);
+    }
+    return null;
+  }
+
+  private extractAssignedIdentifier(path: NodePath<CallExpressionNode>): string | null {
+    const assignmentPath = findAncestor(path, (ancestor) => {
+      const kind = ancestor.node.kind;
+      return kind === 'AssignmentStatement' || kind === 'VariableDeclaration';
+    });
+
+    if (!assignmentPath) {
+      return null;
+    }
+
+    if (assignmentPath.node.kind === 'AssignmentStatement') {
+      const assignment = assignmentPath.node as AssignmentStatementNode;
+      if (assignment.left.kind === 'Identifier') {
+        return (assignment.left as IdentifierNode).name;
+      }
+    }
+
+    if (assignmentPath.node.kind === 'VariableDeclaration') {
+      const declaration = assignmentPath.node as VariableDeclarationNode;
+      return declaration.identifier.name;
+    }
+
+    return null;
+  }
+
+  private extractIdentifierFromArgument(argument?: ArgumentNode): string | null {
+    if (!argument || !argument.value) {
+      return null;
+    }
+    if (argument.value.kind === 'Identifier') {
+      return (argument.value as IdentifierNode).name;
     }
     return null;
   }
