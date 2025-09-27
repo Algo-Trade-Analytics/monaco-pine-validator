@@ -58,29 +58,7 @@ export function parseWithChevrotain(source: string, options: AstParseOptions = {
   sharedParser.reset();
   sharedParser.input = lexResult.tokens;
 
-  let programResult;
-  try {
-    programResult = sharedParser.program() ?? { directives: [], body: [] };
-  } catch (error) {
-    const firstError = sharedParser.errors[0];
-    const errorToken = firstError?.token ?? null;
-    const resynced = (firstError as unknown as { resyncedTokens?: IToken[] })?.resyncedTokens ?? [];
-    console.error('[parseWithChevrotain] parser crash', {
-      message: error instanceof Error ? error.message : String(error),
-      firstToken: lexResult.tokens[0]?.image,
-      firstTokenType: lexResult.tokens[0]?.tokenType?.name,
-      errorToken: errorToken ? { image: errorToken.image, type: errorToken.tokenType?.name } : null,
-      resyncedTokens: resynced.slice(0, 3).map((token) => ({
-        image: token.image,
-        type: token.tokenType?.name,
-      })),
-      firstParserError: firstError ? {
-        name: firstError.name,
-        message: firstError.message,
-      } : null,
-    });
-    throw error;
-  }
+  const programResult = sharedParser.program() ?? { directives: [], body: [] };
   const { directives, body } = programResult;
 
   const syntaxErrors: SyntaxError[] = [];

@@ -22,15 +22,10 @@ import { isExportKeywordToken, isTokenKeyword } from '../parser-utils';
 
 export function createStatementRule(parser: PineParser) {
   return parser.RULE('statement', () => {
-    const la = parser.LA(1);
-    console.log('[statement] next token', la.image, la.tokenType?.name);
     return parser.OR([
       {
         GATE: () => {
           const next = parser.LA(1).tokenType;
-          if (next === Indicator || next === Strategy || next === Library) {
-            console.log('  > script declaration gate matched');
-          }
           return next === Indicator || next === Strategy || next === Library;
         },
         ALT: () => parser.SUBRULE(parser.scriptDeclaration),
