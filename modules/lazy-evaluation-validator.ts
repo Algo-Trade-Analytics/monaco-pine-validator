@@ -71,6 +71,21 @@ interface FunctionStackEntry {
   hasHistorical: boolean;
 }
 
+interface TextBlockEntry {
+  type: 'loop' | 'switch' | 'type';
+  indent: number;
+}
+
+interface TextIfContext {
+  indent: number;
+  startLine: number;
+  consequent: Map<string, { hasHistorical: boolean; hasNa: boolean }>;
+  alternate: Map<string, { hasHistorical: boolean; hasNa: boolean }>;
+  inElse: boolean;
+  elseIndent: number | null;
+  lastLine: number;
+}
+
 export class LazyEvaluationValidator implements ValidationModule {
   name = 'LazyEvaluationValidator';
   priority = 83; // High priority - lazy evaluation issues can cause subtle bugs
@@ -88,6 +103,12 @@ export class LazyEvaluationValidator implements ValidationModule {
   private userFunctionsWithHistorical = new Set<string>();
   private conditionalHistoricalCount = 0;
   private emittedByLineAndFunc = new Set<string>();
+  private emittedUserFunctionWarnings = new Set<string>();
+  private emittedMethodWarnings = new Set<string>();
+
+  private textUserFunctionNames = new Set<string>();
+  private textMethodFunctionNames = new Set<string>();
+  private historicalFunctionPattern: RegExp | null = null;
 
   // State tracking for complex analysis
 
@@ -100,18 +121,11 @@ export class LazyEvaluationValidator implements ValidationModule {
     this.config = config;
 
     this.astContext = ensureAstContext(context, config);
-    if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+    if (this.astContext?.ast) {
+      this.validateWithAst(this.astContext.ast);
     }
 
-    this.validateWithAst(this.astContext.ast);
+    this.collectFromText(context);
     this.analyzePerformanceImpact();
     this.provideBestPracticesSuggestions();
 
@@ -122,6 +136,14 @@ export class LazyEvaluationValidator implements ValidationModule {
       isSeries: false,
       count: this.conditionalHistoricalCount,
     });
+
+    if (process.env.DEBUG_LAZY_EVAL === '1') {
+      console.log('[LazyEvaluationValidator] debug snapshot', {
+        errors: this.errors,
+        warnings: this.warnings,
+        info: this.info,
+      });
+    }
 
     return {
       isValid: this.errors.length === 0,
@@ -142,6 +164,10 @@ export class LazyEvaluationValidator implements ValidationModule {
     this.userFunctionsWithHistorical.clear();
     this.conditionalHistoricalCount = 0;
     this.emittedByLineAndFunc.clear();
+    this.emittedUserFunctionWarnings.clear();
+    this.emittedMethodWarnings.clear();
+    this.textUserFunctionNames.clear();
+    this.textMethodFunctionNames.clear();
     this.astContext = null;
     this.hasNestedTernaryHistoricalCall = false;
   }
@@ -223,17 +249,16 @@ export class LazyEvaluationValidator implements ValidationModule {
   }
 
   private emitUserFunctionWarnings(calls: PendingUserCall[]): void {
-    const seen = new Set<string>();
     for (const call of calls) {
       if (!this.userFunctionsWithHistorical.has(call.name)) {
         continue;
       }
 
       const key = `${call.name}:${call.line}:${call.column}:${call.context}`;
-      if (seen.has(key)) {
+      if (this.emittedUserFunctionWarnings.has(key)) {
         continue;
       }
-      seen.add(key);
+      this.emittedUserFunctionWarnings.add(key);
 
       if (call.context === 'ternary') {
         this.addWarning(
@@ -254,17 +279,16 @@ export class LazyEvaluationValidator implements ValidationModule {
   }
 
   private emitMethodWarnings(calls: PendingMethodCall[]): void {
-    const seen = new Set<string>();
     for (const call of calls) {
       if (!this.userFunctionsWithHistorical.has(call.name)) {
         continue;
       }
 
       const key = `${call.name}:${call.line}:${call.column}`;
-      if (seen.has(key)) {
+      if (this.emittedMethodWarnings.has(key)) {
         continue;
       }
-      seen.add(key);
+      this.emittedMethodWarnings.add(key);
 
       this.addWarning(
         call.line,
@@ -402,6 +426,15 @@ export class LazyEvaluationValidator implements ValidationModule {
       for (const [variableName, info] of consequentAssignments) {
         const alternateInfo = alternateAssignments.get(variableName);
         if (info.hasHistorical && alternateInfo?.hasNa) {
+          if (process.env.DEBUG_LAZY_EVAL === '1') {
+            console.log('[LazyEvaluationValidator] series inconsistency detected', {
+              variableName,
+              consequent: info,
+              alternate: alternateInfo,
+              startLine: statement.loc.start.line,
+              endLine: statement.loc.end.line,
+            });
+          }
           const startLine = Math.min(
             statement.loc.start.line,
             statement.consequent.loc.start.line,
@@ -516,6 +549,355 @@ export class LazyEvaluationValidator implements ValidationModule {
       },
     });
     return found;
+  }
+
+  private collectFromText(context: ValidationContext): void {
+    const lines = this.getTextLines(context);
+    if (lines.length === 0) {
+      return;
+    }
+
+    const blockStack: TextBlockEntry[] = [];
+    const ifStack: TextIfContext[] = [];
+    const pendingUserCalls: PendingUserCall[] = [];
+    const pendingMethodCalls: PendingMethodCall[] = [];
+    const pattern = this.getHistoricalFunctionPattern();
+
+    for (let index = 0; index < lines.length; index++) {
+      const rawLine = lines[index];
+      const lineNumber = index + 1;
+      const withoutComment = rawLine.replace(/\/\/.*$/, '');
+      const trimmed = withoutComment.trim();
+      const indent = rawLine.length - rawLine.trimStart().length;
+      const isBlank = trimmed.length === 0;
+      const isElseLine = /^else\b/.test(trimmed);
+
+      if (!isBlank && !isElseLine) {
+        while (ifStack.length > 0 && indent <= ifStack[ifStack.length - 1].indent) {
+          const ctx = ifStack.pop()!;
+          this.finalizeTextIfContext(ctx, lineNumber - 1);
+        }
+      }
+
+      if (!isBlank) {
+        while (blockStack.length > 0 && indent <= blockStack[blockStack.length - 1].indent) {
+          blockStack.pop();
+        }
+      }
+
+      if (isBlank) {
+        continue;
+      }
+
+      if (/^type\b/.test(trimmed)) {
+        blockStack.push({ type: 'type', indent });
+      }
+
+      if (/^switch\b/.test(trimmed)) {
+        blockStack.push({ type: 'switch', indent });
+      }
+
+      if (/^(for|while)\b/.test(trimmed)) {
+        blockStack.push({ type: 'loop', indent });
+      }
+
+      if (/^if\b/.test(trimmed)) {
+        ifStack.push({
+          indent,
+          startLine: lineNumber,
+          consequent: new Map(),
+          alternate: new Map(),
+          inElse: false,
+          elseIndent: null,
+          lastLine: lineNumber,
+        });
+      }
+
+      let analysisLine = trimmed;
+      let isElseRemainder = false;
+      if (isElseLine) {
+        const current = ifStack[ifStack.length - 1];
+        if (current) {
+          current.inElse = true;
+          current.elseIndent = indent;
+          current.lastLine = lineNumber;
+        }
+        analysisLine = trimmed.replace(/^else\b\s*/, '').trim();
+        isElseRemainder = true;
+        if (/^if\b/.test(analysisLine)) {
+          ifStack.push({
+            indent,
+            startLine: lineNumber,
+            consequent: new Map(),
+            alternate: new Map(),
+            inElse: false,
+            elseIndent: null,
+            lastLine: lineNumber,
+          });
+        }
+      }
+
+      const hasTernary = this.isTernaryLine(withoutComment);
+      if (hasTernary) {
+        const questionCount = (withoutComment.match(/\?/g) || []).length;
+        if (questionCount > 1) {
+          this.hasNestedTernaryHistoricalCall = true;
+        }
+      }
+
+      this.trackIfAssignments(analysisLine, indent, lineNumber, ifStack, isElseRemainder);
+
+      pattern.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(withoutComment)) !== null) {
+        const functionName = match[0];
+        const column = match.index + 1;
+        const contextType = this.resolveTextContext(withoutComment, trimmed, indent, blockStack, ifStack, hasTernary);
+        if (!contextType) {
+          continue;
+        }
+        this.addConditionalHistoricalCall(functionName, lineNumber, column, contextType);
+      }
+      pattern.lastIndex = 0;
+
+      const functionMatch = withoutComment.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*=>\s*(.+)$/);
+      if (functionMatch) {
+        const name = functionMatch[1];
+        const body = functionMatch[2];
+        const hasHistorical = this.containsHistoricalInText(body);
+        const insideType = this.isInsideType(blockStack);
+        if (insideType) {
+          this.textMethodFunctionNames.add(name);
+        } else {
+          this.textUserFunctionNames.add(name);
+        }
+        if (hasHistorical) {
+          this.userFunctionsWithHistorical.add(name);
+        }
+      }
+
+      for (const fnName of this.textUserFunctionNames) {
+        let searchIndex = -1;
+        const target = `${fnName}(`;
+        while ((searchIndex = withoutComment.indexOf(target, searchIndex + 1)) !== -1) {
+          if (searchIndex > 0 && /[.A-Za-z0-9_]/.test(withoutComment[searchIndex - 1])) {
+            continue;
+          }
+          const contextType = this.resolveTextContext(withoutComment, trimmed, indent, blockStack, ifStack, hasTernary);
+          if (!contextType || contextType === 'switch') {
+            continue;
+          }
+          pendingUserCalls.push({
+            name: fnName,
+            line: lineNumber,
+            column: searchIndex + 1,
+            context: contextType,
+          });
+        }
+      }
+
+      for (const methodName of this.textMethodFunctionNames) {
+        let searchIndex = -1;
+        const target = `.${methodName}(`;
+        while ((searchIndex = withoutComment.indexOf(target, searchIndex + 1)) !== -1) {
+          pendingMethodCalls.push({
+            name: methodName,
+            line: lineNumber,
+            column: searchIndex + 2,
+          });
+        }
+      }
+    }
+
+    while (ifStack.length > 0) {
+      const ctx = ifStack.pop()!;
+      this.finalizeTextIfContext(ctx, lines.length);
+    }
+
+    this.emitUserFunctionWarnings(pendingUserCalls);
+    this.emitMethodWarnings(pendingMethodCalls);
+  }
+
+  private getTextLines(context: ValidationContext): string[] {
+    if (context.cleanLines && context.cleanLines.length > 0) {
+      return [...context.cleanLines];
+    }
+    if (context.lines && context.lines.length > 0) {
+      return [...context.lines];
+    }
+    return context.rawLines ? [...context.rawLines] : [];
+  }
+
+  private getHistoricalFunctionPattern(): RegExp {
+    if (this.historicalFunctionPattern) {
+      return this.historicalFunctionPattern;
+    }
+    const names = Array.from(HISTORICAL_FUNCTIONS)
+      .sort((a, b) => b.length - a.length)
+      .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    this.historicalFunctionPattern = new RegExp(`\\b(?:${names.join('|')})\\b`, 'g');
+    return this.historicalFunctionPattern;
+  }
+
+  private trackIfAssignments(
+    analysisLine: string,
+    indent: number,
+    lineNumber: number,
+    ifStack: TextIfContext[],
+    isElseRemainder: boolean,
+  ): void {
+    if (analysisLine.length === 0) {
+      return;
+    }
+
+    const assignmentMatch = analysisLine.match(/^(?:var\b[^=]*\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*(?::=|=)\s*(.+)$/);
+    if (!assignmentMatch) {
+      return;
+    }
+
+    const context = this.findActiveIfContext(indent, ifStack, isElseRemainder);
+    if (!context) {
+      return;
+    }
+
+    const [, variable, expression] = assignmentMatch;
+    const targetMap = this.isInAlternateSection(context, indent, isElseRemainder)
+      ? context.alternate
+      : context.consequent;
+    const entry = targetMap.get(variable) ?? { hasHistorical: false, hasNa: false };
+    if (this.containsHistoricalInText(expression)) {
+      entry.hasHistorical = true;
+    }
+    if (this.containsNaInText(expression)) {
+      entry.hasNa = true;
+    }
+    targetMap.set(variable, entry);
+    context.lastLine = lineNumber;
+  }
+
+  private findActiveIfContext(
+    indent: number,
+    ifStack: TextIfContext[],
+    isElseRemainder: boolean,
+  ): TextIfContext | null {
+    for (let idx = ifStack.length - 1; idx >= 0; idx--) {
+      const ctx = ifStack[idx];
+      const elseIndent = ctx.elseIndent ?? ctx.indent;
+      if (ctx.inElse && (isElseRemainder || indent > elseIndent)) {
+        return ctx;
+      }
+      if (indent > ctx.indent) {
+        return ctx;
+      }
+      if (isElseRemainder && indent === ctx.indent) {
+        return ctx;
+      }
+    }
+    return null;
+  }
+
+  private isInAlternateSection(ctx: TextIfContext, indent: number, isElseRemainder: boolean): boolean {
+    if (!ctx.inElse) {
+      return false;
+    }
+    const elseIndent = ctx.elseIndent ?? ctx.indent;
+    return isElseRemainder || indent > elseIndent;
+  }
+
+  private containsHistoricalInText(text: string): boolean {
+    const pattern = this.getHistoricalFunctionPattern();
+    pattern.lastIndex = 0;
+    const result = pattern.test(text);
+    pattern.lastIndex = 0;
+    return result;
+  }
+
+  private containsNaInText(text: string): boolean {
+    return /\bna\b/.test(text);
+  }
+
+  private resolveTextContext(
+    line: string,
+    trimmed: string,
+    indent: number,
+    blockStack: TextBlockEntry[],
+    ifStack: TextIfContext[],
+    hasTernary: boolean,
+  ): ConditionalHistoricalCall['context'] | null {
+    if (hasTernary) {
+      return 'ternary';
+    }
+    if (this.isLoopLine(trimmed) || blockStack.some((entry) => entry.type === 'loop')) {
+      return 'loop';
+    }
+    if (this.isIfLine(trimmed) || this.isInsideIf(indent, ifStack)) {
+      return 'if';
+    }
+    if (blockStack.some((entry) => entry.type === 'switch')) {
+      return 'switch';
+    }
+    return null;
+  }
+
+  private isInsideType(blockStack: TextBlockEntry[]): boolean {
+    return blockStack.some((entry) => entry.type === 'type');
+  }
+
+  private isTernaryLine(line: string): boolean {
+    const questionIndex = line.indexOf('?');
+    if (questionIndex === -1) {
+      return false;
+    }
+    const colonIndex = line.indexOf(':', questionIndex + 1);
+    return colonIndex !== -1;
+  }
+
+  private isIfLine(trimmed: string): boolean {
+    return /^if\b/.test(trimmed);
+  }
+
+  private isLoopLine(trimmed: string): boolean {
+    return /^(for|while)\b/.test(trimmed);
+  }
+
+  private isInsideIf(indent: number, ifStack: TextIfContext[]): boolean {
+    for (let idx = ifStack.length - 1; idx >= 0; idx--) {
+      const ctx = ifStack[idx];
+      const elseIndent = ctx.elseIndent ?? ctx.indent;
+      if (ctx.inElse && indent > elseIndent) {
+        return true;
+      }
+      if (indent > ctx.indent) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private finalizeTextIfContext(ctx: TextIfContext, endLine: number): void {
+    const finalLine = Math.max(ctx.lastLine, endLine);
+    for (const [variableName, info] of ctx.consequent) {
+      const alternateInfo = ctx.alternate.get(variableName);
+      if (info.hasHistorical && alternateInfo?.hasNa) {
+        const alreadyRecorded = this.seriesInconsistencies.some(
+          (existing) => existing.variableName === variableName && existing.line === finalLine,
+        );
+        if (!alreadyRecorded) {
+          this.seriesInconsistencies.push({
+            variableName,
+            line: finalLine,
+            inconsistencyType: 'conditional_assignment',
+          });
+        }
+        this.addWarning(
+          finalLine,
+          1,
+          'Series may have inconsistent historical data due to conditional assignment',
+          'PSV6-LAZY-EVAL-SERIES-INCONSISTENCY',
+        );
+        this.removeConditionalWarningsInRange(ctx.startLine, finalLine);
+      }
+    }
   }
 
   private getExpressionQualifiedName(expression: ExpressionNode): string | null {

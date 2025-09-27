@@ -390,7 +390,15 @@ export class EnhancedModularValidator extends BaseValidator {
   protected buildResult(): ValidationResult {
     // Update our scriptType from the context (set by CoreValidator)
     this.scriptType = this.context.scriptType;
-    return super.buildResult();
+    const result = super.buildResult();
+    if (process.env.DEBUG_FINAL_VALIDATOR === '1') {
+      console.log('[EnhancedModularValidator] final snapshot', {
+        errors: result.errors,
+        warnings: result.warnings,
+        typeMapKeys: Array.from(result.typeMap.keys()),
+      });
+    }
+    return result;
   }
 
   private initializeBuiltInVariables(): void {

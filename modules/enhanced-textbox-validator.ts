@@ -116,7 +116,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
     this.validateTextConsistency();
 
     // Build analysis results for other validators
-    const typeMap = new Map();
+    const typeMap = this.context.typeMap ?? new Map();
     typeMap.set('textbox_analysis', {
       type: 'analysis',
       isConst: false,
