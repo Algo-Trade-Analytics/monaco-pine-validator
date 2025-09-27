@@ -4,12 +4,14 @@
 
 | Metric | Value |
 | --- | --- |
-| Total specs (`npm run test:validator`) | 9 |
-| Passing specs | 9 |
-| Failing specs | 0 |
-| Dominant focus | Smoke assertions that verify the AST-enabled pipeline and baseline diagnostics |
+| Smoke specs (`npm run test:validator`) | 13 |
+| Full regression specs (`npm run test:validator:full`) | 1,021 (opt-in) |
+| AST module tests (`tests/ast/**/*.test.ts`) | 389 |
+| Passing checks (default run) | 402 |
+| Failing checks (default run) | 0 |
+| Dominant focus | Smoke assertions plus AST module contracts that verify the Chevrotain-powered pipeline |
 
-The Vitest suites under `tests/specs/` include the legacy 1,021-spec regression set, but only the curated smoke assertions are imported by `all-validation-tests.spec.ts`.  This reduced run keeps the pipeline honest while avoiding hundreds of expected failures until module coverage catches up.
+The Vitest suites under `tests/specs/` include the legacy 1,021-spec regression set.  By default `all-validation-tests.spec.ts` imports the curated smoke assertions plus the new architecture integration spec so CI remains green, but you can opt into the full catalogue with `npm run test:validator:full`.  The CLI also executes the 389 AST module tests to guard parser behaviour and module contracts.  This combined run keeps the pipeline honest while avoiding hundreds of expected failures until module coverage catches up.
 
 ## Running the Suites
 
@@ -17,11 +19,14 @@ The Vitest suites under `tests/specs/` include the legacy 1,021-spec regression 
 # install dependencies
 npm install
 
-# full regression (mirrors CI)
+# default smoke + AST run (mirrors CI)
 npm run test:validator
 
-# focus on AST plumbing
-npx vitest run tests/ast/chevrotain-parser.test.ts
+# focus on a single AST spec
+npx vitest run --config vitest.config.ts tests/ast/chevrotain-parser.test.ts
+
+# opt into the historical regression catalogue
+npm run test:validator:full
 ```
 
 To exercise the full pipeline, instantiate the validator with the Chevrotain AST
@@ -41,12 +46,15 @@ const validator = new EnhancedModularValidator({
 
 | Category | Representative specs | Current behaviour |
 | --- | --- | --- |
-| Smoke coverage | `validator-smoke.spec.ts` (imported by `all-validation-tests.spec.ts`) | Pass – validates version handling, missing plots, const reassignment, function argument typing, and negative history lookups. |
-| Deferred regression suites | `array-validation.spec.ts`, `strategy-functions-validation.spec.ts`, `time-date-functions-validation.spec.ts`, etc. | Deferred – not executed by default until rules meet the historical expectations encoded in the fixtures. |
+| Smoke coverage | `validator-smoke.spec.ts` (default import in `all-validation-tests.spec.ts`) | Pass – validates version handling, missing plots, const reassignment, function argument typing, and negative history lookups. |
+| Architecture integration | `validator-architecture.spec.ts` (default import in `all-validation-tests.spec.ts`) | Pass – verifies the enhanced validator exposes AST data, honours disabled parsing, and surfaces the module catalog. |
+| AST module suites | `tests/ast/**/*.test.ts` | Pass – validate parsing, context preparation, and diagnostics for high-priority modules under the Chevrotain service. |
+| Deferred regression suites | `array-validation.spec.ts`, `strategy-functions-validation.spec.ts`, `time-date-functions-validation.spec.ts`, etc. | Available via `npm run test:validator:full` – currently expected to fail until rules meet the historical expectations encoded in the fixtures. |
 
 ## Observations
 
 - **Smoke coverage guards the core pipeline** – the curated assertions ensure the validator still handles version directives, const semantics, and function checks while using the AST service.
+- **AST harness runs alongside smoke checks** – the 389 module-focused tests confirm Chevrotain parsing, context preparation, and key module diagnostics stay stable.
 - **Deferred suites remain authoritative references** – hundreds of fixtures continue to describe the intended rule coverage even though they are not executed automatically.
 - **Documentation must track incremental progress** – as suites return we need to update counts and guidance so contributors understand which modules remain outstanding.
 

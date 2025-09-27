@@ -11,7 +11,7 @@
 | Area | Current Approach | Pain Points |
 | --- | --- | --- |
 | Parsing | Chevrotain grammar that recognises top-level declarations, control-flow statements, literals, and common expressions. | Parser coverage is still incomplete (e.g., expression edge cases, recovery paths) and the service is optional. |
-| Validation runtime | `BaseValidator` normalises source text and runs modules; AST data is injected automatically unless callers opt out. | AST-enabled smoke runs report 9 passing / 0 failing specs while the 1,021-spec regression set remains deferred pending rule coverage. |
+| Validation runtime | `BaseValidator` normalises source text and runs modules; AST data is injected automatically unless callers opt out. | AST-enabled smoke runs report 13 passing / 0 failing specs while the 1,021-spec regression set remains deferred pending rule coverage. |
 | Module catalogue | Many modules (time/date, alerts, textbox, strategy helpers, etc.) expect AST traversal when data is available. | Without AST these modules return empty diagnostics, masking real coverage gaps and confusing consumers who follow the default setup. |
 | Documentation & reporting | Recent docs acknowledge the failing suites but older roadmaps still imply the AST migration is complete. | The lack of authoritative status tracking makes it hard to separate finished work from aspirational plans. |
 

@@ -396,7 +396,14 @@ export class TypeInferenceValidator implements ValidationModule {
 
     if (lengthArg) {
       const lengthType = this.getExpressionType(lengthArg.value);
+      const isIntegralLiteral =
+        lengthArg.value.kind === 'NumberLiteral' && Number.isInteger((lengthArg.value as NumberLiteralNode).value);
+
       if (lengthType && lengthType !== 'int') {
+        if (lengthType === 'float' && isIntegralLiteral) {
+          return;
+        }
+
         const { line, column } = lengthArg.value.loc.start;
         this.addError(
           line,

@@ -26,6 +26,6 @@ Bring the Pine Script v6 validator to a reliable state where Monaco consumers an
 
 ## Status Tracking
 
-- Current snapshot: 9 passing / 0 failing smoke specs on `npm run test:validator` (1,021-spec regression set deferred).
+- Current snapshot: 13 passing / 0 failing smoke specs on `npm run test:validator` (1,021-spec regression set deferred).
 - Next milestone: reintroduce archived suites incrementally while keeping the default run green.
 - Reporting cadence: update this document after each major test suite improvement or configuration change.

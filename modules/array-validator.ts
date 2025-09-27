@@ -281,10 +281,6 @@ export class ArrayValidator implements ValidationModule {
         syntaxError = true;
       }
 
-      if (!typedConstructor && genericType && args.length === 0) {
-        syntaxError = true;
-      }
-
       if (!typedConstructor && ctor === 'array.new' && !genericType && args.length < 2) {
         syntaxError = true;
       }
@@ -485,10 +481,6 @@ export class ArrayValidator implements ValidationModule {
     let hasSyntaxError = false;
 
     if (!usesTypedConstructor && !usesGenerics && call.args.length === 0) {
-      hasSyntaxError = true;
-    }
-
-    if (!usesTypedConstructor && usesGenerics && call.args.length === 0) {
       hasSyntaxError = true;
     }
 

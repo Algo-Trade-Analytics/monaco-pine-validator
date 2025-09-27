@@ -9,7 +9,7 @@ base class and register different module sets depending on whether the caller
 needs the full experience or a reduced smoke configuration.  The current system
 still mirrors the legacy production validator, but the October 2023 snapshot
 shows that many modules rely on Chevrotain AST data.  With parsing enabled by
-default the current smoke suite reports 9 passing / 0 failing specs while the
+default the current smoke suite reports 13 passing / 0 failing specs while the
 archived fixtures remain a backlog for future module work.
 
 ## High-Level Components
