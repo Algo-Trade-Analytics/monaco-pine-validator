@@ -1,4 +1,8 @@
-import { ValidationResult } from '../../core/types';
+import { BaseValidator } from '../../core/base-validator';
+import { FunctionAstService } from '../../core/ast/service';
+import { parseWithChevrotain } from '../../core/ast/parser';
+import type { ValidationModule, ValidationResult, ValidatorConfig } from '../../core/types';
+import type { ProgramNode, ScriptDeclarationNode } from '../../core/ast/nodes';
 
 /**
  * Helper function to check if validation result has specific error codes
@@ -80,4 +84,98 @@ export function expectLacks(result: ValidationResult, expected: {
       expect(infoCodes).not.toContain(code);
     });
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// AST-backed module harness utilities
+// ──────────────────────────────────────────────────────────────────────────────
+
+export class ModuleValidationHarness extends BaseValidator {
+  private static readonly defaultAstService = new FunctionAstService((source, options) =>
+    parseWithChevrotain(source, { allowErrors: true, ...options }),
+  );
+
+  constructor(modules: ValidationModule | ValidationModule[], config: Partial<ValidatorConfig> = {}) {
+    super({
+      ...config,
+      ast: {
+        mode: 'primary',
+        service: ModuleValidationHarness.defaultAstService,
+        ...(config.ast ?? {}),
+      },
+    });
+
+    const list = Array.isArray(modules) ? modules : [modules];
+    for (const module of list) {
+      this.registerModule(module);
+    }
+  }
+
+  protected runCoreValidation(): void {
+    // No core validation in harness – we only execute the registered modules.
+  }
+
+  run(code: string, config: Partial<ValidatorConfig> = {}): ValidationResult {
+    this.rebuildConfig({
+      ...config,
+      ast: {
+        mode: 'primary',
+        service: ModuleValidationHarness.defaultAstService,
+        ...(config.ast ?? {}),
+      },
+    });
+
+    this.reset();
+    this.prepareContext(code);
+    if (!this.context.ast) {
+      return;
+    }
+    this.ensureScriptType();
+    this.runValidation();
+    return this.buildResult();
+  }
+
+  private ensureScriptType(): void {
+    if (this.context.scriptType) {
+      return;
+    }
+
+    const program = this.context.ast as ProgramNode | null;
+    if (!program) {
+      return;
+    }
+
+    const declaration = this.findScriptDeclaration(program);
+    if (!declaration) {
+      return;
+    }
+
+    this.scriptType = declaration.scriptType;
+    this.context.scriptType = declaration.scriptType;
+  }
+
+  private findScriptDeclaration(program: ProgramNode): ScriptDeclarationNode | null {
+    for (const node of program.body) {
+      if (node.kind === 'ScriptDeclaration') {
+        return node as ScriptDeclarationNode;
+      }
+    }
+    return null;
+  }
+}
+
+export function createModuleHarness(
+  modules: ValidationModule | ValidationModule[],
+  config: Partial<ValidatorConfig> = {},
+): ModuleValidationHarness {
+  return new ModuleValidationHarness(modules, config);
+}
+
+export function runModuleValidation(
+  modules: ValidationModule | ValidationModule[],
+  code: string,
+  config: Partial<ValidatorConfig> = {},
+): ValidationResult {
+  const harness = createModuleHarness(modules, config);
+  return harness.run(code, config);
 }

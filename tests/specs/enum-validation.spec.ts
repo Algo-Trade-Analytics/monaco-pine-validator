@@ -1,43 +1,30 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ValidationContext, ValidatorConfig } from '../../core/types';
-import { EnhancedModularValidator } from '../../EnhancedModularValidator';
-import { expectHas } from './test-utils';
+import type { ValidatorConfig } from '../../core/types';
+import { EnumValidator } from '../../modules/enum-validator';
+import { createModuleHarness, ModuleValidationHarness, expectHas } from './test-utils';
 
 describe('Enum Validation (TDD)', () => {
-  let validator: EnhancedModularValidator;
-  let context: ValidationContext;
-  let config: ValidatorConfig;
+  let harness: ModuleValidationHarness;
+
+  const BASE_CONFIG: Partial<ValidatorConfig> = {
+    targetVersion: 6,
+    strictMode: true,
+    allowDeprecated: false,
+    enableTypeChecking: true,
+    enableControlFlowAnalysis: true,
+    enablePerformanceAnalysis: true,
+    enableStyleChecks: true,
+    enableWarnings: true,
+    enableInfo: true,
+    customRules: [],
+    ignoredCodes: [],
+  };
+
+  const run = (code: string, overrides: Partial<ValidatorConfig> = {}) =>
+    harness.run(code, { ...BASE_CONFIG, ...overrides });
 
   beforeEach(() => {
-    validator = new EnhancedModularValidator();
-    context = {
-      lines: [],
-      cleanLines: [],
-      rawLines: [],
-      typeMap: new Map(),
-      usedVars: new Set(),
-      declaredVars: new Map(),
-      functionNames: new Set(),
-      methodNames: new Set(),
-      functionParams: new Map(),
-      scriptType: null,
-      version: 6,
-      hasVersion: false,
-      firstVersionLine: null
-    };
-    config = {
-      strictMode: true,
-      enableWarnings: true,
-      enableInfo: true,
-      targetVersion: 6,
-      allowDeprecated: false,
-      enableTypeChecking: true,
-      enableControlFlowAnalysis: true,
-      enablePerformanceAnalysis: true,
-      enableStyleChecks: true,
-      customRules: [],
-      ignoredCodes: []
-    };
+    harness = createModuleHarness(new EnumValidator(), BASE_CONFIG);
   });
 
   describe('PSV6-ENUM-SYNTAX: Enum Declaration Syntax Validation', () => {
@@ -52,10 +39,7 @@ enum MyEnum
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -68,10 +52,7 @@ enum EmptyEnum
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { errors: ['PSV6-ENUM-EMPTY'] });
     });
 
@@ -86,10 +67,7 @@ enum MyEnum
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { errors: ['PSV6-ENUM-DUPLICATE-VALUE'] });
     });
 
@@ -104,10 +82,7 @@ enum MyEnum
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { errors: ['PSV6-ENUM-INVALID-VALUE-NAME'] });
     });
   });
@@ -125,10 +100,7 @@ enum Status
 Status current_status = Status.ACTIVE
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -144,10 +116,7 @@ enum Status
 Status current_status = Status.UNDEFINED
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { errors: ['PSV6-ENUM-UNDEFINED-VALUE'] });
     });
 
@@ -158,10 +127,7 @@ indicator("Invalid Enum Access Test")
 Status current_status = Status.ACTIVE
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { errors: ['PSV6-ENUM-UNDEFINED-TYPE'] });
     });
 
@@ -176,10 +142,7 @@ enum Status
 int current_status = Status.ACTIVE
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { errors: ['PSV6-ENUM-TYPE-MISMATCH'] });
     });
   });
@@ -202,10 +165,7 @@ f(status) =>
 result = f(Status.ACTIVE)
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -231,10 +191,7 @@ f(status) =>
 result = f(Color.RED)
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { errors: ['PSV6-ENUM-FUNCTION-TYPE-MISMATCH'] });
     });
   });
@@ -254,10 +211,7 @@ if current_status == Status.ACTIVE
 else
     plot(high)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -278,10 +232,7 @@ Status current_status = Status.ACTIVE
 if current_status == Color.RED
     plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { warnings: ['PSV6-ENUM-COMPARISON-TYPE-MISMATCH'] });
     });
   });
@@ -305,10 +256,7 @@ switch current_status
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -333,10 +281,7 @@ switch current_status
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { errors: ['PSV6-ENUM-SWITCH-CASE-TYPE-MISMATCH'] });
     });
   });
@@ -352,10 +297,7 @@ enum e
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { info: ['PSV6-ENUM-NAMING-SUGGESTION'] });
     });
 
@@ -369,10 +311,7 @@ enum Status
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { info: ['PSV6-ENUM-VALUE-NAMING-SUGGESTION'] });
     });
   });
@@ -395,10 +334,7 @@ Status current_status = Status.ACTIVE
 Color current_color = Color.RED
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -416,10 +352,7 @@ bool is_active = current_status == Status.ACTIVE
 string status_text = is_active ? "Active" : "Inactive"
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -438,10 +371,7 @@ f() =>
 Status result = f()
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });

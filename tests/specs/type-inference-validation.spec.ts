@@ -1,38 +1,33 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { TypeInferenceValidator } from '../../modules/type-inference-validator';
-import { ValidationContext, ValidatorConfig } from '../../core/types';
-import { expectHas, expectLacks } from './test-utils';
+import type { ValidatorConfig } from '../../core/types';
+import { createModuleHarness, ModuleValidationHarness, expectHas, expectLacks } from './test-utils';
 
 /// <reference types="vitest/globals" />
 
 describe('Type Inference Validation (TDD)', () => {
-  let validator: TypeInferenceValidator;
-  let context: ValidationContext;
-  let config: ValidatorConfig;
+  let harness: ModuleValidationHarness;
+
+  const BASE_CONFIG: Partial<ValidatorConfig> = {
+    targetVersion: 6,
+    strictMode: true,
+    allowDeprecated: false,
+    enableTypeChecking: true,
+    enableControlFlowAnalysis: true,
+    enablePerformanceAnalysis: true,
+    enablePerformanceChecks: true,
+    enableStyleChecks: true,
+    enableWarnings: true,
+    enableInfo: true,
+    customRules: [],
+    ignoredCodes: [],
+  };
+
+  const run = (code: string, overrides: Partial<ValidatorConfig> = {}) =>
+    harness.run(code, { ...BASE_CONFIG, ...overrides });
 
   beforeEach(() => {
-    validator = new TypeInferenceValidator();
-    context = {
-      lines: [],
-      cleanLines: [],
-      rawLines: [],
-      typeMap: new Map(),
-      usedVars: new Set(),
-      declaredVars: new Map(),
-      functionNames: new Set(),
-      methodNames: new Set(),
-      functionParams: new Map(),
-      scriptType: null,
-      version: 6,
-      hasVersion: true,
-      firstVersionLine: 1
-    };
-    config = {
-      targetVersion: 6,
-      strictMode: true,
-      enablePerformanceChecks: true,
-      enableStyleChecks: true
-    };
+    harness = createModuleHarness(new TypeInferenceValidator(), BASE_CONFIG);
   });
 
   describe('PSV6-TYPE-ASSIGNMENT: Assignment Type Compatibility', () => {
@@ -48,10 +43,7 @@ message: string = "Hello"
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -67,10 +59,7 @@ flag: bool = 10
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { errors: ['PSV6-TYPE-ASSIGNMENT-MISMATCH'] });
     });
   });
@@ -87,10 +76,7 @@ crossover_result = ta.crossover(close, ta.sma(close, 20))
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -106,10 +92,7 @@ crossover_result = ta.crossover(close, "sma")
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { errors: ['PSV6-TYPE-FUNCTION-PARAM-MISMATCH'] });
     });
   });
@@ -128,10 +111,7 @@ if ta.crossover(close, ta.sma(close, 20))
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -149,10 +129,7 @@ if 10
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { warnings: ['PSV6-TYPE-CONDITIONAL-TYPE'] });
     });
   });
@@ -171,10 +148,7 @@ sma_value = ta.sma(close, 20)
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -189,10 +163,7 @@ value = complex_expression_with_unknown_types
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { warnings: ['PSV6-TYPE-INFERENCE-AMBIGUOUS'] });
     });
   });
@@ -208,10 +179,7 @@ comparison = na == 0
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { warnings: ['PSV6-TYPE-SAFETY-NA-ARITHMETIC', 'PSV6-TYPE-SAFETY-NA-COMPARISON'] });
     });
 
@@ -226,10 +194,7 @@ if value == na
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { warnings: ['PSV6-TYPE-SAFETY-NA-FUNCTION'] });
     });
   });
@@ -244,10 +209,7 @@ count: int = 10.5
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { warnings: ['PSV6-TYPE-CONVERSION-FLOAT-TO-INT'] });
     });
 
@@ -262,10 +224,7 @@ if value
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { warnings: ['PSV6-TYPE-CONVERSION-IMPLICIT-BOOL'] });
     });
 
@@ -279,10 +238,7 @@ converted = str.tostring(message)
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { info: ['PSV6-TYPE-CONVERSION-REDUNDANT-STRING'] });
     });
   });
@@ -300,10 +256,7 @@ text_message = "Hello"
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { info: ['PSV6-TYPE-ANNOTATION-SUGGESTION'] });
     });
 
@@ -318,10 +271,7 @@ flag: bool = true
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { info: ['PSV6-TYPE-ANNOTATION-REDUNDANT'] });
     });
 
@@ -336,10 +286,7 @@ flag: string = true
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expectHas(result, { errors: ['PSV6-TYPE-ANNOTATION-MISMATCH'] });
     });
   });
@@ -358,10 +305,7 @@ price_ratio = close / open
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -377,10 +321,7 @@ max_sma = math.max(ta.sma(close, 10), ta.sma(close, 20))
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      const result = run(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
