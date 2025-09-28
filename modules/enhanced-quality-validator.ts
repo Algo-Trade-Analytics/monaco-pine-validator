@@ -78,7 +78,7 @@ export class EnhancedQualityValidator implements ValidationModule {
 
   private validateScriptComplexityAst(program: ProgramNode): void {
     const complexity = this.calculateScriptComplexityAst(program);
-    if (complexity > 8) {
+    if (complexity >= 6) {
       this.addWarning(
         1,
         0,
@@ -150,7 +150,7 @@ export class EnhancedQualityValidator implements ValidationModule {
           const name = fn.identifier?.name ?? 'anonymous';
 
           const complexity = this.calculateFunctionComplexityAst(fn);
-          if (complexity > 8) {
+          if (complexity >= 6) {
             this.addWarning(
               anchor.loc.start.line,
               anchor.loc.start.column,
@@ -241,7 +241,7 @@ export class EnhancedQualityValidator implements ValidationModule {
 
   private validateNestingDepthAst(program: ProgramNode): void {
     const { depth, line, column } = this.calculateMaxNestingDepthAst(program);
-    if (depth > 3) {
+    if (depth >= 4) {
       this.addWarning(
         line,
         column,

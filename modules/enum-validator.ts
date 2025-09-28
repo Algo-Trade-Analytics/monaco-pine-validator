@@ -94,7 +94,7 @@ export class EnumValidator implements ValidationModule {
   private astFunctionParams: Map<string, ParameterNode[]> = new Map();
 
   getDependencies(): string[] {
-    return [];
+    return ['UDTValidator'];
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
@@ -131,14 +131,23 @@ export class EnumValidator implements ValidationModule {
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
+    if (process.env.DEBUG_ENUM === '1') {
+      console.log('[EnumValidator] addError', { line, column, code, message });
+    }
     this.errors.push({ line, column, message, code });
   }
 
   private addWarning(line: number, column: number, message: string, code: string): void {
+    if (process.env.DEBUG_ENUM === '1') {
+      console.log('[EnumValidator] addWarning', { line, column, code, message });
+    }
     this.warnings.push({ line, column, message, code });
   }
 
   private addInfo(line: number, column: number, message: string, code: string): void {
+    if (process.env.DEBUG_ENUM === '1') {
+      console.log('[EnumValidator] addInfo', { line, column, code, message });
+    }
     this.info.push({ line, column, message, code });
   }
 
@@ -348,6 +357,22 @@ export class EnumValidator implements ValidationModule {
     }
 
     this.astFunctionParams.set(node.identifier.name, node.params);
+
+    for (const param of node.params) {
+      const typeName = this.getTypeReferenceName(param.typeAnnotation);
+      if (!typeName) {
+        continue;
+      }
+      const typeInfo = this.context.typeMap.get(typeName);
+      if (typeInfo?.type === 'udt') {
+        this.setTypeMapEntry(param.identifier.name, param.identifier, {
+          type: 'udt',
+          isConst: false,
+          isSeries: false,
+          udtName: typeInfo.udtName ?? typeName,
+        });
+      }
+    }
   }
 
   private processVariableDeclaration(node: VariableDeclarationNode): void {

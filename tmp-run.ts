@@ -1,30 +1,22 @@
-import process from 'node:process';
 import { EnhancedModularValidator } from './EnhancedModularValidator.ts';
 
-process.on('uncaughtException', (error) => {
-  console.error('uncaught', error);
-  if (error && typeof error === 'object') {
-    console.error('keys', Object.keys(error));
-  }
-});
+const validator = new EnhancedModularValidator();
+const code = `//@version=6
+indicator("Test")
 
-(async () => {
-  const validator = new EnhancedModularValidator({
-    enableWarnings: true,
-    enableInfo: true,
-  });
+type PriceBar
+    float o
+    float h
+    float l
+    float c
 
-  const code = `//@version=6
-indicator("Invalid Enum Test")
+isBullish(PriceBar bar) =>
+    bar.c > bar.o
 
-enum MyEnum
-    VALUE1
-    123INVALID
-    VALUE3
+myBar = PriceBar.new(open, high, low, close)
+bgcolor(isBullish(myBar) ? color.new(color.green, 80) : na)
+`;
 
-plot(close)`;
-
-  const result = validator.validate(code);
-  console.log('isValid', result.isValid);
-  console.log('errors', result.errors.map((e) => ({ code: e.code, message: e.message, line: e.line })));
-})();
+const result = validator.validate(code);
+console.log('errors', result.errors.map(e => `${e.code}:${e.message}`));
+console.log('warnings', result.warnings.map(e => `${e.code}:${e.message}`));

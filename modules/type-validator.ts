@@ -358,6 +358,10 @@ export class TypeValidator implements ValidationModule {
   }
 
   private areTypesCompatible(left: string, right: string): boolean {
+    if (left === 'na' || right === 'na') {
+      return true;
+    }
+
     if (left === right) {
       return true;
     }
@@ -419,6 +423,9 @@ export class TypeValidator implements ValidationModule {
         return 'void';
       case 'Identifier': {
         const identifier = expression as IdentifierNode;
+        if (identifier.name === 'na') {
+          return 'na';
+        }
         const typeInfo = context.typeMap.get(identifier.name);
         if (typeInfo && typeInfo.type !== 'unknown') {
           return typeInfo.type;

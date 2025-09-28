@@ -6,6 +6,7 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
+import { ensureAstContext } from '../core/ast/context-utils';
 import {
   type ArgumentNode,
   type BinaryExpressionNode,
@@ -216,7 +217,7 @@ export class FunctionValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
-    this.astContext = this.getAstContext(config);
+    this.astContext = this.getAstContext(config) ?? ensureAstContext(context, config);
     const program = this.astContext?.ast;
 
     if (!program) {
@@ -262,6 +263,10 @@ export class FunctionValidator implements ValidationModule {
     // Update the shared context with function information
     // Function metadata already shared before validation
 
+    if (this.isDebugEnabled()) {
+      console.log('[FunctionValidator] final errors', this.errors.map(e => e.code));
+    }
+
     return this.buildResult();
   }
 
@@ -286,6 +291,9 @@ export class FunctionValidator implements ValidationModule {
     const key = `${line}:${column}:${code ?? message}`;
     if (this.errorKeys.has(key)) {
       return;
+    }
+    if (this.isDebugEnabled() && code && (code === 'PSV6-FUNCTION-UNKNOWN' || code === 'PSV6-FUNCTION-NAMESPACE')) {
+      console.log('[FunctionValidator] addError', { line, column, code, message });
     }
     this.errorKeys.add(key);
     this.errors.push({ line, column, message, severity: 'error', code, suggestion });
@@ -360,6 +368,55 @@ export class FunctionValidator implements ValidationModule {
       }
     }
 
+    for (let index = 0; index < lines.length; index += 1) {
+      const rawLine = lines[index];
+      const cleaned = this.stripInlineComment(rawLine);
+
+      const typeMatch = cleaned.match(/^\s*type\s+([A-Z][A-Za-z0-9_]*)\b/);
+      if (typeMatch) {
+        const typeName = typeMatch[1];
+        if (!this.context.typeMap.has(typeName)) {
+          this.context.typeMap.set(typeName, {
+            type: 'udt',
+            isConst: false,
+            isSeries: false,
+            declaredAt: { line: index + 1, column: rawLine.indexOf(typeName) + 1 },
+            usages: [],
+            udtName: typeName,
+          });
+        }
+      }
+
+      const varMatch = cleaned.match(/^\s*(?:var|const)?\s*([A-Z][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Z][A-Za-z0-9_]*)\.new\b/);
+      if (varMatch) {
+        const typeName = varMatch[1];
+        const varName = varMatch[2];
+
+        if (!this.context.typeMap.has(typeName)) {
+          this.context.typeMap.set(typeName, {
+            type: 'udt',
+            isConst: false,
+            isSeries: false,
+            declaredAt: { line: index + 1, column: rawLine.indexOf(typeName) + 1 },
+            usages: [],
+            udtName: typeName,
+          });
+        }
+
+        const existing = this.context.typeMap.get(varName);
+        if (!existing || existing.type === 'unknown') {
+          this.context.typeMap.set(varName, {
+            type: 'udt',
+            isConst: /^\s*const\b/.test(cleaned),
+            isSeries: false,
+            declaredAt: { line: index + 1, column: rawLine.indexOf(varName) + 1 },
+            usages: existing?.usages ?? [],
+            udtName: typeName,
+          });
+        }
+      }
+    }
+
     const functionRegex = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*\(([^)]*)\)\s*=>/;
     const seenFunctions = new Set<string>();
 
@@ -406,6 +463,8 @@ export class FunctionValidator implements ValidationModule {
         }
       }
     }
+
+    this.collectFunctionCallsFromText(lines);
   }
 
   private getSourceLines(): string[] {
@@ -687,7 +746,7 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
-    const lines = this.context.lines ?? [];
+    const lines = this.context.lines ?? this.context.cleanLines ?? [];
     if (!node.loc) {
       return '';
     }
@@ -706,6 +765,108 @@ export class FunctionValidator implements ValidationModule {
     const lastLine = lines[endLineIndex] ?? '';
     parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
     return parts.join('\n');
+  }
+
+  private collectFunctionCallsFromText(lines: string[]): void {
+    const callRegex = /([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*\(/g;
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+      const rawLine = lines[lineIndex];
+      const line = this.stripInlineComment(rawLine);
+      callRegex.lastIndex = 0;
+
+      let match: RegExpExecArray | null;
+      while ((match = callRegex.exec(line)) !== null) {
+        const fullMatch = match[0];
+        const functionName = fullMatch.slice(0, fullMatch.indexOf('(')).trim();
+        const column = match.index + 1;
+
+        const capture = this.extractArgumentsText(lines, lineIndex, match.index + fullMatch.length);
+        if (!capture.text) {
+          break;
+        }
+
+        const trailing = lines[capture.endLine]?.slice(capture.endColumn) ?? '';
+        if (/^\s*=>/.test(trailing)) {
+          if (lineIndex === capture.endLine) {
+            callRegex.lastIndex = capture.endColumn;
+          }
+          continue;
+        }
+
+        const args = this.splitParameterList(capture.text);
+        this.functionCalls.push({
+          name: functionName,
+          arguments: args,
+          line: lineIndex + 1,
+          column,
+          startIndex: Math.max(0, column - 1),
+        });
+
+        if (lineIndex === capture.endLine) {
+          callRegex.lastIndex = capture.endColumn;
+        } else {
+          callRegex.lastIndex = line.length;
+        }
+      }
+    }
+  }
+
+  private extractArgumentsText(
+    lines: string[],
+    startLine: number,
+    startColumn: number,
+  ): { text: string; endLine: number; endColumn: number } | { text: ''; endLine: number; endColumn: number } {
+    let buffer = '';
+    let depth = 1;
+    let inString: string | null = null;
+    let lineIndex = startLine;
+    let columnIndex = startColumn;
+
+    while (lineIndex < lines.length) {
+      const rawLine = this.stripInlineComment(lines[lineIndex]);
+      for (let i = columnIndex; i < rawLine.length; i += 1) {
+        const ch = rawLine[i];
+        const prev = i > 0 ? rawLine[i - 1] : '';
+
+        if (inString) {
+          buffer += ch;
+          if (ch === inString && prev !== '\\') {
+            inString = null;
+          }
+          continue;
+        }
+
+        if (ch === '"' || ch === '\'') {
+          inString = ch;
+          buffer += ch;
+          continue;
+        }
+
+        if (ch === '(') {
+          depth += 1;
+          buffer += ch;
+          continue;
+        }
+
+        if (ch === ')') {
+          depth -= 1;
+          if (depth === 0) {
+            return { text: buffer.trim(), endLine: lineIndex, endColumn: i + 1 };
+          }
+          buffer += ch;
+          continue;
+        }
+
+        buffer += ch;
+      }
+
+      buffer += '\n';
+      lineIndex += 1;
+      columnIndex = 0;
+    }
+
+    return { text: '', endLine: lineIndex, endColumn: columnIndex };
   }
 
   private isArgumentCountCompatible(requiredParams: number, totalParams: number, implicitOffset: number, provided: number): boolean {
