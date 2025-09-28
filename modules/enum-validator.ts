@@ -53,6 +53,9 @@ const KNOWN_NAMESPACES = new Set([
   'runtime',
   'chart',
   'timeframe',
+  'barstate',
+  'shape',
+  'location',
   'currency',
   'dividends',
   'earnings',
@@ -406,6 +409,10 @@ export class EnumValidator implements ValidationModule {
       return;
     }
 
+    if (this.isUdtNamespace(reference.enumName)) {
+      return;
+    }
+
     if (KNOWN_NAMESPACES.has(reference.enumName)) {
       return;
     }
@@ -563,6 +570,9 @@ export class EnumValidator implements ValidationModule {
       if (typeInfo?.enumType) {
         return typeInfo.enumType;
       }
+      if (typeInfo?.type === 'udt') {
+        return null;
+      }
     }
 
     return null;
@@ -610,6 +620,14 @@ export class EnumValidator implements ValidationModule {
     const object = member.object as IdentifierNode;
     const property = member.property as IdentifierNode;
     return { enumName: object.name, memberName: property.name, node: member };
+  }
+
+  private isUdtNamespace(name: string): boolean {
+    const typeInfo = this.context.typeMap.get(name);
+    if (typeInfo?.type === 'udt') {
+      return true;
+    }
+    return false;
   }
 
   private setTypeMapEntry(name: string, node: { loc: { start: { line: number; column: number } } }, overrides: Partial<TypeInfo> = {}): void {

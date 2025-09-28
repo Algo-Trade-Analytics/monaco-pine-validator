@@ -25,6 +25,7 @@ import {
   type UnaryExpressionNode,
 } from '../core/ast/nodes';
 import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
+import { ensureAstContext } from '../core/ast/context-utils';
 
 const VALID_ARRAY_ELEMENT_TYPES = new Set([
   'int',
@@ -114,6 +115,7 @@ export class ArrayValidator implements ValidationModule {
   private arrayAllocations = 0;
   private arrayUsage = new Map<string, { pushes: number[]; sets: number[]; clears: number[] }>();
   private attemptedFallbackDeclarations = new Set<string>();
+  private knownUdtTypes = new Set<string>();
 
   getDependencies(): string[] {
     return ['FunctionValidator'];
@@ -128,6 +130,7 @@ export class ArrayValidator implements ValidationModule {
     this.context = context;
 
     this.astContext = this.getAstContext(config);
+    this.knownUdtTypes = this.collectKnownUdtTypes();
     if (this.astContext?.ast) {
       this.collectArrayDataAst(this.astContext.ast);
     } else {
@@ -152,9 +155,10 @@ export class ArrayValidator implements ValidationModule {
     this.info = [];
     this.astContext = null;
     this.arrayDeclarations.clear();
-    this.arrayAllocations = 0;
-    this.arrayUsage.clear();
-    this.attemptedFallbackDeclarations.clear();
+   this.arrayAllocations = 0;
+   this.arrayUsage.clear();
+   this.attemptedFallbackDeclarations.clear();
+    this.knownUdtTypes.clear();
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
@@ -1052,7 +1056,36 @@ export class ArrayValidator implements ValidationModule {
     if (!config.ast || config.ast.mode === 'disabled') {
       return null;
     }
-    return 'ast' in this.context ? (this.context as AstValidationContext) : null;
+    return ensureAstContext(this.context, config);
+  }
+
+  private collectKnownUdtTypes(): Set<string> {
+    const result = new Set<string>();
+
+    if (this.astContext?.symbolTable) {
+      for (const record of this.astContext.symbolTable.values()) {
+        if (record.kind === 'type') {
+          result.add(record.name);
+        }
+      }
+    }
+
+    const lines =
+      (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0
+        ? this.context.cleanLines
+        : Array.isArray(this.context.lines)
+          ? this.context.lines
+          : []) ?? [];
+
+    const typeRegex = /^\s*type\s+([A-Za-z_][A-Za-z0-9_]*)/;
+    for (const line of lines) {
+      const match = line.match(typeRegex);
+      if (match) {
+        result.add(match[1]);
+      }
+    }
+
+    return result;
   }
 
   private validateArrayPerformanceAst(): void {
@@ -1137,7 +1170,8 @@ export class ArrayValidator implements ValidationModule {
     const validTypes = [...VALID_ARRAY_ELEMENT_TYPES];
     const typeInfo = this.context.typeMap.get(type);
     const isUDT = typeInfo?.type === 'udt';
-    const isValid = validTypes.includes(type) || isUDT;
+    const isDeclaredType = this.knownUdtTypes.has(type);
+    const isValid = validTypes.includes(type) || isUDT || isDeclaredType;
 
     if (!isValid) {
       this.addError(

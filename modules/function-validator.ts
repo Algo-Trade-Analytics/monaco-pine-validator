@@ -224,6 +224,12 @@ export class FunctionValidator implements ValidationModule {
         console.log('[FunctionValidator] text fallback scriptType', this.context.scriptType);
       }
       this.validateWithText();
+      this.validateFunctionCalls();
+      this.validateUserFunctions();
+      this.validateDuplicateFunctions();
+      this.validateInconsistentReturnTypes();
+      this.validatePerformanceIssues();
+      this.validateFunctionComplexityText();
       return this.buildResult();
     }
 
@@ -320,13 +326,30 @@ export class FunctionValidator implements ValidationModule {
       return;
     }
 
+    if (!this.context.scriptType) {
+      for (const line of lines) {
+        const trimmed = this.stripInlineComment(line).trim();
+        if (!trimmed) continue;
+        if (trimmed.startsWith('indicator(')) {
+          this.context.scriptType = 'indicator';
+          break;
+        }
+        if (trimmed.startsWith('strategy(')) {
+          this.context.scriptType = 'strategy';
+          break;
+        }
+        if (trimmed.startsWith('library(')) {
+          this.context.scriptType = 'library';
+          break;
+        }
+      }
+    }
+
     let isLibrary = this.context.scriptType === 'library';
     if (!isLibrary) {
       for (const line of lines) {
         const trimmed = this.stripInlineComment(line).trim();
-        if (!trimmed) {
-          continue;
-        }
+        if (!trimmed) continue;
         if (trimmed.startsWith('library(')) {
           isLibrary = true;
           break;
@@ -336,19 +359,50 @@ export class FunctionValidator implements ValidationModule {
         }
       }
     }
-    const callRegex = /([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
 
-    for (let index = 0; index < lines.length; index++) {
+    const functionRegex = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*\(([^)]*)\)\s*=>/;
+    const seenFunctions = new Set<string>();
+
+    for (let index = 0; index < lines.length; index += 1) {
       const rawLine = lines[index];
-      const lineWithoutComment = this.stripInlineComment(rawLine);
-      callRegex.lastIndex = 0;
-      let match: RegExpExecArray | null;
-      while ((match = callRegex.exec(lineWithoutComment)) !== null) {
-        const fullName = match[1];
-        const column = match.index + 1;
+      const match = this.stripInlineComment(rawLine).match(functionRegex);
+      if (!match) {
+        continue;
+      }
 
-        if (isLibrary && fullName.startsWith('strategy.')) {
-          this.addError(index + 1, column, `Unknown function: ${fullName}`, 'PSV6-FUNCTION-UNKNOWN');
+      const name = match[1];
+      const paramsText = match[2] ?? '';
+      const key = `${name}@${index + 1}`;
+      if (seenFunctions.has(key)) {
+        continue;
+      }
+      seenFunctions.add(key);
+
+      const params = this.splitParameterList(paramsText);
+      const isMethod = name.includes('.') && params.length > 0 && this.extractParamName(params[0]) === 'this';
+
+      this.registerFunctionSignature(name, params, index + 1, isMethod);
+      if (this.context.functionNames) {
+        this.context.functionNames.add(name);
+      }
+      if (this.context.functionParams && !this.context.functionParams.has(name)) {
+        this.context.functionParams.set(name, params);
+      }
+    }
+
+    if (isLibrary) {
+      const callRegex = /([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
+      for (let index = 0; index < lines.length; index++) {
+        const rawLine = lines[index];
+        const lineWithoutComment = this.stripInlineComment(rawLine);
+        callRegex.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = callRegex.exec(lineWithoutComment)) !== null) {
+          const fullName = match[1];
+          const column = match.index + 1;
+          if (fullName.startsWith('strategy.')) {
+            this.addError(index + 1, column, `Unknown function: ${fullName}`, 'PSV6-FUNCTION-UNKNOWN');
+          }
         }
       }
     }
@@ -370,6 +424,91 @@ export class FunctionValidator implements ValidationModule {
   private stripInlineComment(line: string): string {
     const idx = line.indexOf('//');
     return idx >= 0 ? line.slice(0, idx) : line;
+  }
+
+  private splitParameterList(paramsText: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let parenDepth = 0;
+    let angleDepth = 0;
+    let bracketDepth = 0;
+    let inString: string | null = null;
+
+    const pushCurrent = () => {
+      const value = current.trim();
+      if (value) {
+        result.push(value);
+      }
+      current = '';
+    };
+
+    for (let i = 0; i < paramsText.length; i += 1) {
+      const char = paramsText[i];
+      const prev = i > 0 ? paramsText[i - 1] : '';
+
+      if (inString) {
+        current += char;
+        if (char === inString && prev !== '\\') {
+          inString = null;
+        }
+        continue;
+      }
+
+      if (char === '"' || char === '\'') {
+        inString = char;
+        current += char;
+        continue;
+      }
+
+      if (char === '(') {
+        parenDepth += 1;
+        current += char;
+        continue;
+      }
+      if (char === ')') {
+        if (parenDepth > 0) {
+          parenDepth -= 1;
+        }
+        current += char;
+        continue;
+      }
+
+      if (char === '<') {
+        angleDepth += 1;
+        current += char;
+        continue;
+      }
+      if (char === '>') {
+        if (angleDepth > 0) {
+          angleDepth -= 1;
+        }
+        current += char;
+        continue;
+      }
+
+      if (char === '[') {
+        bracketDepth += 1;
+        current += char;
+        continue;
+      }
+      if (char === ']') {
+        if (bracketDepth > 0) {
+          bracketDepth -= 1;
+        }
+        current += char;
+        continue;
+      }
+
+      if (char === ',' && parenDepth === 0 && angleDepth === 0 && bracketDepth === 0) {
+        pushCurrent();
+        continue;
+      }
+
+      current += char;
+    }
+
+    pushCurrent();
+    return result;
   }
 
   private collectFunctionsFromAst(program: ProgramNode): void {
@@ -980,6 +1119,58 @@ export class FunctionValidator implements ValidationModule {
     }
 
     this.validateFunctionComplexityAst();
+  }
+
+  private validateFunctionComplexityText(): void {
+    const lines = this.getSourceLines();
+    if (lines.length === 0) {
+      return;
+    }
+
+    const functionRegex = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*\(([^)]*)\)\s*=>/;
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const rawLine = lines[index];
+      const match = this.stripInlineComment(rawLine).match(functionRegex);
+      if (!match) {
+        continue;
+      }
+
+      const funcName = match[1];
+      const baseIndent = this.getLineIndentation(rawLine);
+      let complexity = 1;
+
+      for (let bodyIndex = index + 1; bodyIndex < lines.length; bodyIndex += 1) {
+        const bodyLine = lines[bodyIndex];
+        const trimmed = bodyLine.trim();
+        if (!trimmed) {
+          continue;
+        }
+        const indent = this.getLineIndentation(bodyLine);
+        if (indent <= baseIndent) {
+          break;
+        }
+
+        if (/^(if|else\s+if|else)\b/.test(trimmed)) {
+          complexity += 1;
+          if (/^else\b/.test(trimmed)) {
+            complexity += 1;
+          }
+        }
+        if (/^(for|while|switch)\b/.test(trimmed)) {
+          complexity += 1;
+        }
+      }
+
+      if (complexity > 10) {
+        this.addWarning(
+          index + 1,
+          1,
+          `Function '${funcName}' has high complexity (${complexity}). Consider breaking it into smaller functions`,
+          'PSV6-FUNCTION-STYLE-COMPLEXITY',
+        );
+      }
+    }
   }
 
   private validateFunctionComplexityAst(): void {

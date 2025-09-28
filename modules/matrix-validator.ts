@@ -10,6 +10,7 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { ensureAstContext } from '../core/ast/context-utils';
 import {
   type ArgumentNode,
   type AssignmentStatementNode,
@@ -74,32 +75,19 @@ export class MatrixValidator implements ValidationModule {
     this.reset();
     this.context = context;
 
-    this.astContext = this.getAstContext(config);
+    this.astContext = this.getAstContext(context, config);
     const ast = this.astContext?.ast;
 
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: context.scriptType,
-      };
+      this.collectMatrixDataText();
+      return this.buildResult(context.scriptType);
     }
 
     this.collectMatrixDataAst(ast);
     this.validateMatrixPerformanceAst();
     this.validateMatrixBestPracticesAst();
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors.map((error) => ({ ...error, severity: 'error' as const })),
-      warnings: this.warnings.map((warning) => ({ ...warning, severity: 'warning' as const })),
-      info: this.info.map((entry) => ({ ...entry, severity: 'info' as const })),
-      typeMap: context.typeMap,
-      scriptType: context.scriptType,
-    };
+    return this.buildResult(context.scriptType);
   }
 
   private reset(): void {
@@ -215,8 +203,43 @@ export class MatrixValidator implements ValidationModule {
     const column = call.loc.start.column;
 
     const elementType = this.inferMatrixElementTypeFromCall(call);
-    if (elementType && elementType !== 'unknown') {
-      this.validateMatrixType(elementType, line, column);
+    const hasGenericType = Array.isArray(call.typeArguments) && call.typeArguments.length > 0;
+    const normalizedElementType = elementType && elementType.trim().length > 0 ? elementType.trim() : null;
+    const elementTypeIsKnown = normalizedElementType ? VALID_MATRIX_ELEMENT_TYPES.has(normalizedElementType) : false;
+
+    if (!normalizedElementType || normalizedElementType === 'unknown') {
+      this.addError(
+        line,
+        column,
+        'Matrix declarations must specify a valid element type, e.g. matrix.new<float>(rows, cols).',
+        'PSV6-MATRIX-INVALID-SYNTAX',
+      );
+    }
+
+    if (normalizedElementType && !elementTypeIsKnown) {
+      this.addError(
+        line,
+        column,
+        `Unknown matrix element type '${normalizedElementType}'. Supported types: ${Array.from(VALID_MATRIX_ELEMENT_TYPES).join(', ')}.`,
+        'PSV6-MATRIX-INVALID-SYNTAX',
+      );
+    }
+
+    if (normalizedElementType && normalizedElementType !== 'unknown') {
+      this.validateMatrixType(normalizedElementType, line, column);
+    }
+
+    const args = call.args;
+    const typeProvidedViaArgument = !hasGenericType && elementTypeIsKnown;
+    const dimensionArgumentCount = args.length - (typeProvidedViaArgument ? 1 : 0);
+
+    if (dimensionArgumentCount < 2) {
+      this.addError(
+        line,
+        column,
+        'Matrix declarations must provide both row and column dimensions.',
+        'PSV6-MATRIX-INVALID-SYNTAX',
+      );
     }
 
     const { rows, cols } = this.extractMatrixDimensionsFromCall(call);
@@ -576,11 +599,82 @@ export class MatrixValidator implements ValidationModule {
     }
   }
 
-  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
-      return null;
+  private collectMatrixDataText(): void {
+    const lines = this.context.rawLines?.length
+      ? this.context.rawLines
+      : this.context.cleanLines?.length
+        ? this.context.cleanLines
+        : this.context.lines ?? [];
+
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return;
     }
-    return 'ast' in this.context ? (this.context as AstValidationContext) : null;
+
+    const genericCallRegex = /matrix\.new\s*<([^>]*)>\s*\(([^)]*)\)/gi;
+
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      genericCallRegex.lastIndex = 0;
+      let match: RegExpExecArray | null;
+
+      while ((match = genericCallRegex.exec(line)) !== null) {
+        const typeFragment = (match[1] ?? '').trim();
+        const argsFragment = match[2] ?? '';
+        const column = match.index + 1;
+        const lineNumber = index + 1;
+
+        if (typeFragment.length === 0) {
+          this.addError(
+            lineNumber,
+            column,
+            'Matrix declarations must specify a valid element type, e.g. matrix.new<float>(rows, cols).',
+            'PSV6-MATRIX-INVALID-SYNTAX',
+          );
+        } else if (!VALID_MATRIX_ELEMENT_TYPES.has(typeFragment)) {
+          this.addError(
+            lineNumber,
+            column,
+            `Unknown matrix element type '${typeFragment}'. Supported types: ${Array.from(VALID_MATRIX_ELEMENT_TYPES).join(', ')}.`,
+            'PSV6-MATRIX-INVALID-SYNTAX',
+          );
+        }
+
+        const rawArgs = argsFragment
+          .split(',')
+          .map((part) => part.trim())
+          .filter((part) => part.length > 0);
+
+        const hasExplicitInitialValue = rawArgs.length >= 3;
+        const dimensionCount = hasExplicitInitialValue ? 2 : rawArgs.length;
+
+        if (dimensionCount < 2) {
+          this.addError(
+            lineNumber,
+            column,
+            'Matrix declarations must provide both row and column dimensions.',
+            'PSV6-MATRIX-INVALID-SYNTAX',
+          );
+        }
+      }
+    }
+  }
+
+  private buildResult(scriptType: ValidationContext['scriptType']): ValidationResult {
+    return {
+      isValid: this.errors.length === 0,
+      errors: this.errors.map((error) => ({ ...error, severity: 'error' as const })),
+      warnings: this.warnings.map((warning) => ({ ...warning, severity: 'warning' as const })),
+      info: this.info.map((entry) => ({ ...entry, severity: 'info' as const })),
+      typeMap: this.context.typeMap,
+      scriptType,
+    };
+  }
+
+  private getAstContext(
+    context: ValidationContext,
+    config: ValidatorConfig,
+  ): AstValidationContext | null {
+    return ensureAstContext(context, config);
   }
 
   private extractGenericElementType(call: CallExpressionNode): string | null {

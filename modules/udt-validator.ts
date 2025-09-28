@@ -497,15 +497,21 @@ export class UDTValidator implements ValidationModule {
     node: VariableDeclarationNode,
     scopeStack: Array<Map<string, VariableTypeRecord>>,
   ): void {
+    const name = node.identifier.name;
+    const location = { line: node.identifier.loc.start.line, column: node.identifier.loc.start.column };
+    const isConst = node.declarationKind === 'const';
+
     const annotationType = this.interpretTypeReference(node.typeAnnotation);
     if (annotationType) {
-      this.assignVariableType(node.identifier.name, annotationType, scopeStack);
+      this.assignVariableType(name, annotationType, scopeStack);
+      this.storeVariableType(name, location, annotationType, isConst);
     }
 
     if (node.initializer) {
       const initializerType = this.inferAstExpressionVariableType(node.initializer, scopeStack);
       if (initializerType) {
-        this.assignVariableType(node.identifier.name, initializerType, scopeStack);
+        this.assignVariableType(name, initializerType, scopeStack);
+        this.storeVariableType(name, location, initializerType, isConst);
       }
     }
   }
@@ -520,9 +526,13 @@ export class UDTValidator implements ValidationModule {
 
     const identifier = node.left as IdentifierNode;
     const inferredType = this.inferAstExpressionVariableType(node.right, scopeStack);
-    if (inferredType) {
-      this.assignVariableType(identifier.name, inferredType, scopeStack);
+    if (!inferredType) {
+      return;
     }
+
+    this.assignVariableType(identifier.name, inferredType, scopeStack);
+    const loc = { line: identifier.loc.start.line, column: identifier.loc.start.column };
+    this.storeVariableType(identifier.name, loc, inferredType, false);
   }
 
   private validateAstMethodCall(
@@ -632,6 +642,79 @@ export class UDTValidator implements ValidationModule {
       return;
     }
     scopeStack[scopeStack.length - 1].set(name, type);
+  }
+
+  private storeVariableType(
+    name: string,
+    location: { line: number; column: number },
+    record: VariableTypeRecord,
+    isConst: boolean,
+  ): void {
+    const existing = this.context.typeMap.get(name);
+    const declaredAt = existing?.declaredAt ?? location;
+    const usages = existing?.usages ?? [];
+
+    const info: TypeInfo = {
+      type: this.mapVariableRecordToType(record),
+      isConst: existing?.isConst ?? isConst,
+      isSeries:
+        existing?.isSeries ??
+        (record.kind === 'primitive' && (record.name === 'series' || record.name === 'series float' || record.name === 'series int')),
+      declaredAt,
+      usages,
+    };
+
+    if (record.kind === 'udt') {
+      info.udtName = record.name;
+    } else if (existing?.udtName) {
+      info.udtName = existing.udtName;
+    }
+
+    if (existing?.elementType) {
+      info.elementType = existing.elementType;
+    }
+    if (existing?.keyType) {
+      info.keyType = existing.keyType;
+    }
+    if (existing?.valueType) {
+      info.valueType = existing.valueType;
+    }
+    if (existing?.enumType) {
+      info.enumType = existing.enumType;
+    }
+
+    this.context.typeMap.set(name, info);
+  }
+
+  private mapVariableRecordToType(record: VariableTypeRecord): TypeInfo['type'] {
+    if (record.kind === 'udt') {
+      return 'udt';
+    }
+    if (record.kind === 'primitive') {
+      const primitive = record.name.toLowerCase();
+      switch (primitive) {
+        case 'int':
+        case 'float':
+        case 'bool':
+        case 'string':
+        case 'color':
+        case 'series':
+        case 'line':
+        case 'label':
+        case 'box':
+        case 'table':
+        case 'linefill':
+        case 'polyline':
+        case 'chart.point':
+        case 'array':
+        case 'matrix':
+        case 'map':
+          return primitive as TypeInfo['type'];
+        default:
+          return 'unknown';
+      }
+    }
+    return 'unknown';
   }
 
   private resolveVariableType(

@@ -16,7 +16,7 @@ import {
   type SymbolRecord,
 } from '../core/types';
 import { KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT } from '../core/constants';
-import type { IdentifierNode, ProgramNode } from '../core/ast/nodes';
+import type { IdentifierNode, ProgramNode, TypeDeclarationNode } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 
 export class ScopeValidator implements ValidationModule {
@@ -32,6 +32,7 @@ export class ScopeValidator implements ValidationModule {
   private astUndefinedWarningSites = new Set<string>();
   private astInvalidIdentifierErrorSites = new Set<string>();
   private astKeywordErrorSites = new Set<string>();
+  private astUdtFieldLocations = new Set<string>();
 
   getDependencies(): string[] {
     return ['CoreValidator']; // Depends on core validation
@@ -74,6 +75,7 @@ export class ScopeValidator implements ValidationModule {
     this.astUndefinedWarningSites.clear();
     this.astInvalidIdentifierErrorSites.clear();
     this.astKeywordErrorSites.clear();
+    this.astUdtFieldLocations.clear();
   }
 
   private addError(line: number, column: number, message: string, code?: string): void {
@@ -98,6 +100,7 @@ export class ScopeValidator implements ValidationModule {
       return;
     }
 
+    this.collectAstUdtFieldLocations(program);
     const identifierPaths = this.collectAstIdentifierPaths(program);
 
     this.emitAstDuplicateDeclarationWarnings(context);
@@ -118,6 +121,21 @@ export class ScopeValidator implements ValidationModule {
     });
 
     return paths;
+  }
+
+  private collectAstUdtFieldLocations(program: ProgramNode): void {
+    this.astUdtFieldLocations.clear();
+
+    visit(program, {
+      TypeDeclaration: {
+        enter: (path) => {
+          for (const field of path.node.fields) {
+            const { line, column } = field.identifier.loc.start;
+            this.astUdtFieldLocations.add(`${line}:${column}`);
+          }
+        },
+      },
+    });
   }
 
   private emitAstDuplicateDeclarationWarnings(context: AstValidationContext): void {
@@ -236,6 +254,10 @@ export class ScopeValidator implements ValidationModule {
       const scopeId = scopes[index] ?? null;
       const kind = kinds[index] ?? record.kind;
       if (!this.shouldCheckAstDeclarationKind(kind)) {
+        return;
+      }
+      const key = `${location.line}:${location.column}`;
+      if (this.astUdtFieldLocations.has(key)) {
         return;
       }
       entries.push({

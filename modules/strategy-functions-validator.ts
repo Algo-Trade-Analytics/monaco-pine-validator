@@ -63,6 +63,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
 
     const program = this.astContext?.ast;
     if (!program) {
+      this.validateWithText();
       return this.buildResult();
     }
 
@@ -82,6 +83,17 @@ export class StrategyFunctionsValidator implements ValidationModule {
       this.validateStrategyBestPractices();
     } catch (error) {
       // Silently handle best practices validation errors to prevent breaking validation
+    }
+
+    if (this.strategyFunctionCount === 0 && this.strategyFunctionCalls.size === 0) {
+      const hasStrategyUsage = (this.context.cleanLines ?? this.context.lines ?? []).some((line) => /\bstrategy\./.test(line ?? ''));
+      if (hasStrategyUsage) {
+        this.reset();
+        this.context = context;
+        this.config = config;
+        this.validateWithText();
+        return this.buildResult();
+      }
     }
 
     // Post-filter: if script uses both sizing helpers and risk management, suppress constant-as-function errors
@@ -155,6 +167,103 @@ export class StrategyFunctionsValidator implements ValidationModule {
         },
       },
     });
+  }
+
+  private validateWithText(): void {
+    const lines = Array.isArray(this.context.cleanLines)
+      ? this.context.cleanLines!
+      : Array.isArray(this.context.rawLines)
+        ? this.context.rawLines!
+        : this.context.lines ?? [];
+
+    if (lines.length === 0) {
+      return;
+    }
+
+    const callRegex = /strategy\.([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*\(/g;
+    const loopStack: number[] = [];
+    const conditionalStack: number[] = [];
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const rawLine = lines[index] ?? '';
+      const lineNumber = index + 1;
+      const indent = this.getTextIndent(rawLine);
+
+      while (loopStack.length > 0 && indent <= loopStack[loopStack.length - 1]) {
+        loopStack.pop();
+      }
+      while (conditionalStack.length > 0 && indent <= conditionalStack[conditionalStack.length - 1]) {
+        conditionalStack.pop();
+      }
+
+      const trimmed = rawLine.trim();
+      if (/^(?:for|while)\b/i.test(trimmed)) {
+        loopStack.push(indent + 1);
+      }
+      if (/^if\b/i.test(trimmed)) {
+        conditionalStack.push(indent + 1);
+      }
+
+      callRegex.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = callRegex.exec(rawLine)) !== null) {
+        const [, name] = match;
+        const qualifiedName = `strategy.${name}`;
+        const functionName = name;
+        const column = match.index + 1;
+
+        if (!this.isKnownStrategyFunction(functionName)) {
+          this.addError(
+            lineNumber,
+            column,
+            Codes.STRATEGY_FUNCTION_UNKNOWN,
+            `Strategy function '${qualifiedName}' is not recognized. Check spelling and ensure it's a valid Pine Script v6 Strategy function.`,
+          );
+          continue;
+        }
+
+        const argsText = rawLine.slice(match.index + match[0].length);
+        const parameters = this.splitArgumentList(argsText);
+        const inLoop = loopStack.length > 0;
+        const inConditional = conditionalStack.length > 0;
+        const isComplex = parameters.some((param) => /\bstrategy\./.test(param));
+
+        this.strategyFunctionCount += 1;
+        if (isComplex) {
+          this.complexStrategyExpressions += 1;
+          this.addWarning(lineNumber, column, 'PSV6-STRATEGY-PERF-NESTED', 'Nested strategy operations detected');
+        }
+
+        this.recordStrategyCall({
+          name: qualifiedName,
+          parameters,
+          returnType: this.getStrategyReturnType(qualifiedName),
+          line: lineNumber,
+          column,
+          isComplex,
+          inLoop,
+          inConditional,
+        });
+
+        this.validateStrategyParameterTypes(qualifiedName, parameters, lineNumber, column);
+        this.addBestPracticeSuggestions(qualifiedName, parameters, lineNumber, column);
+        this.validateAdvancedStrategyParameters(qualifiedName, parameters, lineNumber, column);
+        if (functionName.startsWith('risk.')) {
+          this.validateRiskManagementParameters(qualifiedName, parameters, lineNumber, column);
+        }
+
+        this.astStrategyCallLines.add(lineNumber);
+      }
+    }
+
+    const sourceLines = this.context.cleanLines ?? this.context.lines ?? [];
+    for (const lineNumber of this.astStrategyCallLines) {
+      const source = sourceLines[lineNumber - 1] ?? '';
+      this.validateStrategyComplexity(source, lineNumber);
+    }
+
+    this.validateStrategyPerformance();
+    this.validateStrategyBestPractices();
   }
 
   private processAstStrategyCall(
@@ -905,5 +1014,61 @@ export class StrategyFunctionsValidator implements ValidationModule {
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
     return ensureAstContext(this.context, config);
+  }
+
+  private splitArgumentList(argsText: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let depth = 0;
+    const text = argsText.trim();
+    let ended = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index];
+      if (char === '(') {
+        depth += 1;
+        current += char;
+        continue;
+      }
+      if (char === ')') {
+        if (depth === 0) {
+          if (current.trim().length > 0) {
+            result.push(current.trim());
+          }
+          ended = true;
+          current = '';
+          break;
+        }
+        depth -= 1;
+        current += char;
+        continue;
+      }
+      if (char === ',' && depth === 0) {
+        result.push(current.trim());
+        current = '';
+        continue;
+      }
+      current += char;
+    }
+
+    if (!ended && current.trim().length > 0) {
+      result.push(current.trim());
+    }
+
+    return result;
+  }
+
+  private getTextIndent(line: string): number {
+    let indent = 0;
+    for (const char of line) {
+      if (char === ' ') {
+        indent += 1;
+      } else if (char === '\t') {
+        indent += 4;
+      } else {
+        break;
+      }
+    }
+    return indent;
   }
 }

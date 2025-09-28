@@ -171,6 +171,7 @@ export class CoreValidator implements ValidationModule {
   private astHistoryReferenceWarnedLines = new Set<number>();
   private astReassignmentErrorSites = new Set<string>();
   private astCompoundAssignmentErrorSites = new Set<string>();
+  private astTypeFieldLines = new Set<number>();
 
   private scopeStack: ScopeInfo[] = [];
   private indentStack: number[] = [0];
@@ -279,6 +280,7 @@ export class CoreValidator implements ValidationModule {
     this.bracket = 0;
     this.brace = 0;
     this.astFunctionStack = [];
+    this.astTypeFieldLines.clear();
   }
 
   private processAstProgram(program: ProgramNode): void {
@@ -310,7 +312,7 @@ export class CoreValidator implements ValidationModule {
     visit(program, {
       VariableDeclaration: {
         enter: (path) => {
-          this.processAstVariableDeclaration(path.node as VariableDeclarationNode);
+          this.processAstVariableDeclaration(path as NodePath<VariableDeclarationNode>);
         },
       },
       AssignmentStatement: {
@@ -410,7 +412,12 @@ export class CoreValidator implements ValidationModule {
     });
   }
 
-  private processAstVariableDeclaration(declaration: VariableDeclarationNode): void {
+  private processAstVariableDeclaration(path: NodePath<VariableDeclarationNode>): void {
+    if (this.isInsideTypeDeclaration(path)) {
+      return;
+    }
+
+    const declaration = path.node;
     const line = declaration.loc.start.line;
     const rawLine = this.context.rawLines[line - 1] ?? '';
     const strippedNoStrings = this.stripStringsAndLineComment(rawLine);
@@ -431,6 +438,20 @@ export class CoreValidator implements ValidationModule {
     const rhs = this.extractAssignmentRight(rawLine);
     const isConst = declaration.declarationKind === 'const';
     this.registerTypeHeuristic(name, rhs, line, identifierColumn, isConst);
+  }
+
+  private isInsideTypeDeclaration(path: NodePath): boolean {
+    let current: NodePath | null = path.parent;
+    while (current) {
+      if (current.node.kind === 'TypeDeclaration') {
+        return true;
+      }
+      if (current.node.kind === 'Program') {
+        return false;
+      }
+      current = current.parent;
+    }
+    return false;
   }
 
   private processAstAssignmentStatement(statement: AssignmentStatementNode): void {
@@ -648,6 +669,7 @@ export class CoreValidator implements ValidationModule {
       const fieldIndent = Math.max(0, field.loc.start.column - 1);
       this.declared.set(fieldName, fieldLine);
       this.declIndent.set(fieldName, fieldIndent);
+      this.astTypeFieldLines.add(fieldLine);
     }
 
     this.typeFields.set(name, fields);
@@ -2361,7 +2383,7 @@ export class CoreValidator implements ValidationModule {
       this.addError(line, col, `Invalid identifier '${name}'.`, 'PS006');
       return;
     }
-    if (KEYWORDS.has(name) || PSEUDO_VARS.has(name)) {
+    if (!this.astTypeFieldLines.has(line) && (KEYWORDS.has(name) || PSEUDO_VARS.has(name))) {
       this.addError(line, col, `Identifier '${name}' conflicts with a Pine keyword/builtin.`, 'PS007');
       return;
     }

@@ -516,7 +516,6 @@ bgcolor(current_trend == Trend.BULLISH ? color.new(color.green, 90) :
         !error.message.includes('Type mismatch') &&
         !error.message.includes('First assignment must use')
       );
-      
       expect(filteredErrors.length).toBe(0);
     });
   });

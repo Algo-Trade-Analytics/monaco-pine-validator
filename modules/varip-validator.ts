@@ -240,7 +240,7 @@ export class VaripValidator implements ValidationModule {
           const operatorInfo = this.resolveAssignmentOperator(statement, left);
           const operator = operatorInfo?.operator ?? '=';
 
-          if (operator !== ':=') {
+          if (!this.isAllowedAssignmentOperator(operator)) {
             const siteKey = `${line}:${name}`;
             if (!this.astAssignmentErrorSites.has(siteKey)) {
               this.astAssignmentErrorSites.add(siteKey);
@@ -330,6 +330,24 @@ export class VaripValidator implements ValidationModule {
 
   private lineHasBarstateGuard(line: string): boolean {
     return line.includes('barstate.isconfirmed') || line.includes('barstate.isnew');
+  }
+
+  private isAllowedAssignmentOperator(operator: AssignmentOperator): boolean {
+    if (operator === '=') {
+      return false;
+    }
+
+    switch (operator) {
+      case ':=':
+      case '+=':
+      case '-=':
+      case '*=':
+      case '/=':
+      case '%=':
+        return true;
+      default:
+        return false;
+    }
   }
 
   private validateVaripPerformanceAst(): void {

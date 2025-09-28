@@ -12,6 +12,8 @@ import {
   type ValidatorConfig,
 } from '../core/types';
 import { VERSION_RE, SCRIPT_START_RE, KEYWORDS, NAMESPACES, PSEUDO_VARS } from '../core/constants';
+import { ensureAstContext } from '../core/ast/context-utils';
+import type { AstDiagnostics } from '../core/ast/types';
 import {
   type AssignmentStatementNode,
   type BinaryExpressionNode,
@@ -35,6 +37,7 @@ export class SyntaxValidator implements ValidationModule {
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
+  private astDiagnostics: AstDiagnostics | null = null;
 
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
@@ -49,30 +52,20 @@ export class SyntaxValidator implements ValidationModule {
     this.context = context;
     this.config = config;
     this.astContext = this.getAstContext(context, config);
+    this.astDiagnostics = this.getAstDiagnostics(context);
 
     if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: context.typeMap,
-        scriptType: context.scriptType,
-      };
+      this.validateTextFallback();
+      if (this.errors.length === 0) {
+        this.reportParseDiagnostics();
+      }
+      return this.buildResult();
     }
 
     this.validateWithAst(this.astContext.ast);
-
     this.validateOverallStructure();
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: context.typeMap,
-      scriptType: context.scriptType,
-    };
+    return this.buildResult();
   }
 
   private reset(): void {
@@ -80,6 +73,7 @@ export class SyntaxValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
+    this.astDiagnostics = null;
   }
 
   private validateWithAst(program: ProgramNode): void {
@@ -465,7 +459,79 @@ export class SyntaxValidator implements ValidationModule {
     if (!config.ast || config.ast.mode === 'disabled') {
       return null;
     }
-    return isAstValidationContext(context) && context.ast ? context : null;
+    const ensured = ensureAstContext(context, config);
+    if (ensured) {
+      return ensured;
+    }
+    return isAstValidationContext(context) ? context : null;
+  }
+
+  private getAstDiagnostics(context: ValidationContext): AstDiagnostics | null {
+    return isAstValidationContext(context) ? context.astDiagnostics ?? null : null;
+  }
+
+  private reportParseDiagnostics(): void {
+    const diagnostics = this.astDiagnostics;
+    if (!diagnostics || diagnostics.syntaxErrors.length === 0) {
+      return;
+    }
+
+    for (const error of diagnostics.syntaxErrors) {
+      const details = error.details;
+      const line = details?.lineno ?? 1;
+      const column = details?.offset ?? 1;
+      const message = error.message || 'Syntax error detected.';
+      this.addWarning(line, column, message, 'PSV6-SYNTAX-ERROR');
+    }
+  }
+
+  private validateTextFallback(): void {
+    const lines =
+      (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0
+        ? this.context.cleanLines
+        : Array.isArray(this.context.lines)
+          ? this.context.lines
+          : []) ?? [];
+
+    const stack: Array<{ line: number; column: number; char: '(' | '[' | '{' }> = [];
+    const matching: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
+
+    lines.forEach((line, index) => {
+      for (let columnIndex = 0; columnIndex < line.length; columnIndex++) {
+        const char = line[columnIndex];
+        if (char === '(' || char === '[' || char === '{') {
+          stack.push({ line: index + 1, column: columnIndex + 1, char });
+        } else if (char === ')' || char === ']' || char === '}') {
+          const expected = matching[char];
+          const last = stack.pop();
+          if (!last || last.char !== expected) {
+            this.addError(index + 1, columnIndex + 1, `Unexpected '${char}'.`, 'PSV6-SYNTAX-ERROR');
+          }
+        }
+      }
+    });
+
+    while (stack.length > 0) {
+      const unmatched = stack.pop()!;
+      const closing = unmatched.char === '(' ? ')' : unmatched.char === '[' ? ']' : '}';
+      this.addError(
+        unmatched.line,
+        unmatched.column,
+        `Missing closing '${closing}' for opening '${unmatched.char}'.`,
+        'PSV6-SYNTAX-ERROR',
+      );
+    }
+  }
+
+  private buildResult(): ValidationResult {
+    return {
+      isValid: this.errors.length === 0,
+      errors: this.errors,
+      warnings: this.warnings,
+      info: this.info,
+      typeMap: this.context.typeMap,
+      scriptType: this.context.scriptType,
+    };
   }
 }
 
