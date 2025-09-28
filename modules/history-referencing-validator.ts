@@ -252,6 +252,14 @@ export class HistoryReferencingValidator implements ValidationModule {
       'PSV6-HISTORY-INVALID-INDEX',
       'Use positive indices like close[1] for historical data, or array.get(myArray, -1) for arrays.',
     );
+
+    this.addError(
+      line,
+      column,
+      'History references cannot look into the future. Negative offsets access future bars.',
+      'PSV6-FUTURE-DATA',
+      'Replace negative indices with positive history references like close[1] or cache future values explicitly.',
+    );
   }
 
   private checkLargeHistoryIndex(node: IndexExpressionNode): void {

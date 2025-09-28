@@ -139,6 +139,7 @@ export class CoreValidator implements ValidationModule {
   private astProcessedNumericConditions = false;
   private astProcessedLinewidthZero = false;
   private astProcessedNaComparisons = false;
+  private astNaComparisonWarningLines = new Set<number>();
   private astProcessedControlFlow = false;
   private astProcessedInvalidOperators = false;
   private astProcessedFunctionDeclarations = false;
@@ -188,24 +189,21 @@ export class CoreValidator implements ValidationModule {
     this.config = config;
     this.astContext = this.getAstContext(config);
 
-    if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+    const ast = this.astContext?.ast ?? null;
+    if (ast) {
+      this.processAstProgram(ast);
     }
-
-    const ast = this.astContext.ast;
-    this.processAstProgram(ast);
 
     // Function declarations are now handled by FunctionDeclarationsValidator
     // Scan each line for core validation
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
+    const lines = Array.isArray(context.cleanLines)
+      ? context.cleanLines
+      : Array.isArray(context.lines)
+        ? context.lines
+        : [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       const lineNum = i + 1;
       this.scanLine(line, lineNum);
     }
@@ -244,6 +242,7 @@ export class CoreValidator implements ValidationModule {
     this.astProcessedNumericConditions = false;
     this.astProcessedLinewidthZero = false;
     this.astProcessedNaComparisons = false;
+    this.astNaComparisonWarningLines.clear();
     this.astProcessedControlFlow = false;
     this.astProcessedInvalidOperators = false;
     this.astProcessedFunctionDeclarations = false;
@@ -972,6 +971,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     const { line, column } = expression.loc.start;
+    this.astNaComparisonWarningLines.add(line);
     this.addWarning(
       line,
       column,
@@ -1612,6 +1612,7 @@ export class CoreValidator implements ValidationModule {
 
   private handleVariableDeclarations(line: string, lineNum: number, strippedNoStrings: string): void {
     if (this.astProcessedVariableStatements) {
+      this.handleVariableDeclarationsAstSupplement(line, lineNum, strippedNoStrings);
       return;
     }
 
@@ -1626,6 +1627,19 @@ export class CoreValidator implements ValidationModule {
     // Only check for := in actual declarations (lines that start with var/varip/const or type annotations)
     if (/^\s*(?:(?:var|varip|const)\s+|(?:(?:int|float|bool|string|color|line|label|box|table|array|matrix|map)\s+))[A-Za-z_][A-Za-z0-9_]*\s*:=/.test(strippedNoStrings)) {
       this.addError(lineNum, 1, 'Use "=" (not ":=") in declarations.', 'PSD02');
+    }
+
+    const thisAssignmentMatch = strippedNoStrings.match(/^\s*this\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*/);
+    if (thisAssignmentMatch) {
+      const column = line.indexOf('this') + 1;
+      const target = thisAssignmentMatch[1];
+      this.addError(
+        lineNum,
+        column,
+        `Use ':=' to assign to 'this.${target}'. '=' is reserved for the first assignment.`,
+        'PS016',
+      );
+      return;
     }
 
     // Variable declaration
@@ -1690,6 +1704,52 @@ export class CoreValidator implements ValidationModule {
         }
       }
     }
+  }
+
+  private handleVariableDeclarationsAstSupplement(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (/^\s*(if|for|while)\b/.test(strippedNoStrings)) {
+      return;
+    }
+
+    if (/^\s*[A-Za-z_][A-Za-z0-9_]*\s*=>/.test(line)) {
+      return;
+    }
+
+    if (this.findNamedArgsCached(line).size > 0) {
+      return;
+    }
+
+    const thisMemberMatch = strippedNoStrings.match(/^\s*this\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*/);
+    if (thisMemberMatch) {
+      const column = line.indexOf('this') + 1;
+      const target = thisMemberMatch[1];
+      this.addError(
+        lineNum,
+        column,
+        `Use ':=' to assign to 'this.${target}'. '=' is reserved for the first assignment.`,
+        'PS016',
+      );
+      return;
+    }
+
+    const match = strippedNoStrings.match(SIMPLE_ASSIGN_RE);
+    if (!match) {
+      return;
+    }
+
+    const varName = match[1];
+    if (KEYWORDS.has(varName)) {
+      return;
+    }
+
+    const col = line.indexOf(varName) + 1;
+
+    if (this.declared.has(varName) && this.constNames.has(varName)) {
+      this.addError(lineNum, col, `Cannot reassign const '${varName}' with '='.`, 'PS019');
+      return;
+    }
+
+    this.handleNewVar(varName, lineNum, col);
   }
 
   private validateScriptBoundaries(line: string, lineNum: number, strippedNoStrings: string): void {
@@ -1860,7 +1920,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     // Check for NA comparisons when AST isn't available
-    if (!this.astProcessedNaComparisons && /(\bna\s*[!=]=)|([!=]=\s*na\b)/.test(strippedNoStrings)) {
+    if (/(\bna\s*[!=]=)|([!=]=\s*na\b)/.test(strippedNoStrings) && !this.astNaComparisonWarningLines.has(lineNum)) {
       this.addWarning(lineNum, 1, "Direct comparison with 'na' is unreliable. Use na(x), e.g., na(myValue).", 'PS023', 'Replace `x == na` with `na(x)` and `x != na` with `not na(x)`.');
     }
   }
@@ -2350,6 +2410,10 @@ export class CoreValidator implements ValidationModule {
           this.scopeStack.push({ indent, params: new Set(params), fnName, variables: new Set() });
           if(!this.paramUsage.has(fnName)) this.paramUsage.set(fnName, new Set());
         }
+      } else if (prevLine && /^(if|for|while|switch|else|case|default)\b/i.test(prevLine.trim())) {
+        this.scopeStack.push({ indent, params: new Set(), fnName: null, variables: new Set() });
+      } else if (prevLine && /^type\b/.test(prevLine.trim())) {
+        this.scopeStack.push({ indent, params: new Set(), fnName: null, variables: new Set() });
       }
     } else if (indent < topIndent) {
       while (this.indentStack.length > 1 && indent < this.indentStack[this.indentStack.length - 1]) {
@@ -2402,6 +2466,29 @@ export class CoreValidator implements ValidationModule {
         'PSW05',
         'Rename the local or the parameter to avoid confusion.',
       );
+    }
+
+    const isShadowingParameter = paramsHere.has(name) && name !== 'this';
+    const alreadyInScope = lexicalScope.variables.has(name);
+    if (alreadyInScope) {
+      this.addWarning(
+        line,
+        col,
+        `Identifier '${name}' already declared in this block; use ':=' to reassign.`,
+        'PSW03',
+      );
+    } else if (!isShadowingParameter) {
+      for (let i = this.scopeStack.length - 2; i >= 0; i--) {
+        if (this.scopeStack[i].variables.has(name)) {
+          this.addWarning(
+            line,
+            col,
+            `Identifier '${name}' shadows an outer declaration.`,
+            'PSW04',
+          );
+          break;
+        }
+      }
     }
 
     const siteKey = `${line}:${name}`;

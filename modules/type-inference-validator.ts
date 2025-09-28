@@ -374,6 +374,36 @@ export class TypeInferenceValidator implements ValidationModule {
         );
       }
     }
+
+    if (!ARITHMETIC_OPERATORS.has(node.operator)) {
+      return;
+    }
+
+    const leftType = this.getExpressionType(node.left);
+    const rightType = this.getExpressionType(node.right);
+
+    if (!this.isImplicitNumericConversion(leftType, rightType)) {
+      return;
+    }
+
+    const { line, column } = node.loc.start;
+    this.addWarning(
+      line,
+      column,
+      'Implicit numeric conversion detected. Cast explicitly to clarify intent.',
+      'PSV6-TYPE-CONVERSION',
+    );
+  }
+
+  private isImplicitNumericConversion(leftType: string | null, rightType: string | null): boolean {
+    if (!leftType || !rightType) {
+      return false;
+    }
+
+    return (
+      (leftType === 'int' && rightType === 'float') ||
+      (leftType === 'float' && rightType === 'int')
+    );
   }
 
   private validateTaSmaCall(node: CallExpressionNode): void {

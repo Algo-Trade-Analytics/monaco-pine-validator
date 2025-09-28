@@ -51,20 +51,13 @@ export class StyleValidator implements ValidationModule {
     this.context = context;
     const astContext = this.getAstContext(config);
 
-    if (!astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: context.typeMap,
-        scriptType: context.scriptType,
-      };
+    if (astContext?.ast) {
+      this.runAstAnalysis(astContext.ast);
+    } else {
+      this.analyzeFunctionComplexityTextual(this.context);
     }
 
-    this.runAstAnalysis(astContext.ast);
-
-    // Textual style checks still operate on clean lines
+    // Textual style checks operate regardless of AST availability
     this.analyzeCodeQualityTextual(this.context);
 
     return {
@@ -535,6 +528,59 @@ export class StyleValidator implements ValidationModule {
     this.checkLongLines(context);
     this.checkIndentationConsistency(context);
     this.checkDeadCode(context);
+  }
+
+  private analyzeFunctionComplexityTextual(context: ValidationContext): void {
+    const lines = context.cleanLines ?? [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*=>/);
+      if (!match) {
+        continue;
+      }
+
+      const name = match[1];
+      const baseIndent = line.match(/^\s*/)?.[0].length ?? 0;
+      let complexity = 0;
+
+      for (let j = i + 1; j < lines.length; j++) {
+        const bodyLine = lines[j];
+        if (bodyLine.trim() === '') {
+          continue;
+        }
+
+        const indent = bodyLine.match(/^\s*/)?.[0].length ?? 0;
+        if (indent <= baseIndent) {
+          break;
+        }
+
+        const trimmed = bodyLine.trim();
+        if (/^(if|for|while|switch)\b/i.test(trimmed)) {
+          complexity += 1;
+          if (/\belse\b/i.test(trimmed)) {
+            complexity += 1;
+          }
+        }
+        const logicalMatches = trimmed.match(/\b(and|or)\b/gi);
+        if (logicalMatches) {
+          complexity += logicalMatches.length;
+        }
+        if (trimmed.includes('?') && trimmed.includes(':')) {
+          complexity += 1;
+        }
+      }
+
+      if (complexity > 5) {
+        this.addWarning(
+          i + 1,
+          baseIndent + 1,
+          `Function '${name}' has high complexity (${complexity} conditions).`,
+          'PSV6-STYLE-COMPLEXITY',
+          'Consider breaking down complex functions into smaller, more focused functions.',
+        );
+      }
+    }
   }
 
   private isPoorVariableName(name: string): boolean {

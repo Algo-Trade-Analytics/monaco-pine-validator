@@ -45,18 +45,11 @@ export class WhileLoopValidator implements ValidationModule {
     this.reset();
 
     const astContext = this.getAstContext(context, config);
-    if (!astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: context.scriptType,
-      };
+    if (astContext?.ast) {
+      this.validateWhileLoopsAst(astContext.ast);
+    } else {
+      this.validateWhileLoopsTextual(context);
     }
-
-    this.validateWhileLoopsAst(astContext.ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -149,6 +142,64 @@ export class WhileLoopValidator implements ValidationModule {
         maxDepth.column,
         `While loop nesting depth is ${maxDepth.depth}. Consider refactoring.`,
         'PSV6-WHILE-DEEP-NESTING',
+      );
+    }
+  }
+
+  private validateWhileLoopsTextual(context: ValidationContext): void {
+    const lines = context.cleanLines ?? [];
+    if (process.env.DEBUG_WHILE_TEXT === '1') {
+      console.log('[LINES]', lines);
+    }
+    const whileStack: Array<{ indent: number; line: number }> = [];
+
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index] ?? '';
+      const trimmed = line.trim();
+      const lineNumber = index + 1;
+
+      if (process.env.DEBUG_WHILE_TEXT === '1' && line.includes('while')) {
+        console.log('[LINE]', lineNumber, JSON.stringify(line));
+      }
+
+      if (/^while\b/i.test(trimmed)) {
+        const condition = trimmed.slice(5).trim();
+        const column = line.indexOf('while') + 1;
+
+        if (process.env.DEBUG_WHILE_TEXT === '1') {
+          console.log('[WHILE_LINE]', lineNumber, JSON.stringify(trimmed));
+        }
+
+        if (condition === '' || condition.startsWith('//')) {
+          this.addError(
+            lineNumber,
+            column,
+            'While loop requires a condition.',
+            'PSV6-WHILE-EMPTY-CONDITION',
+          );
+        }
+
+        const indent = line.match(/^\s*/)?.[0].length ?? 0;
+        whileStack.push({ indent, line: lineNumber });
+        continue;
+      }
+
+      if (/^end\b/i.test(trimmed)) {
+        if (whileStack.length > 0) {
+          whileStack.pop();
+        }
+      }
+    }
+
+    for (const entry of whileStack) {
+      if (process.env.DEBUG_WHILE_TEXT === '1') {
+        console.log('[WHILE_STACK]', entry.line, entry.indent);
+      }
+      this.addError(
+        entry.line,
+        1,
+        'While loop missing matching end statement.',
+        'PSV6-WHILE-MISSING-END',
       );
     }
   }

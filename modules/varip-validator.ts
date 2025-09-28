@@ -61,18 +61,11 @@ export class VaripValidator implements ValidationModule {
     this.astContext = this.getAstContext(config);
     const ast = this.astContext?.ast;
 
-    if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: context.typeMap,
-        scriptType: context.scriptType,
-      };
+    if (ast) {
+      this.validateWithAst(ast);
+    } else {
+      this.validateWithoutAst();
     }
-
-    this.validateWithAst(ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -362,7 +355,9 @@ export class VaripValidator implements ValidationModule {
       );
     }
 
-    if (this.context.scriptType === 'strategy' && varipCount > 5) {
+    const scriptType = this.context.scriptType ?? this.detectScriptTypeTextual();
+
+    if (scriptType === 'strategy' && varipCount > 5) {
       this.addWarning(
         1,
         1,
@@ -370,6 +365,63 @@ export class VaripValidator implements ValidationModule {
         'PSV6-VARIP-STRATEGY',
       );
     }
+  }
+
+  private validateWithoutAst(): void {
+    const varipCount = this.countVaripDeclarationsTextual();
+
+    if (varipCount > 10) {
+      this.addWarning(
+        1,
+        1,
+        `High number of varip variables (${varipCount}). Consider if all are necessary for performance`,
+        'PSV6-VARIP-PERFORMANCE',
+      );
+    }
+
+    const scriptType = this.detectScriptTypeTextual();
+    if (scriptType === 'strategy' && varipCount > 5) {
+      this.addWarning(
+        1,
+        1,
+        'Strategy scripts should minimize varip usage for better backtesting accuracy',
+        'PSV6-VARIP-STRATEGY',
+      );
+    }
+
+    this.validateVaripSyntaxFallbackAst();
+  }
+
+  private countVaripDeclarationsTextual(): number {
+    const lines = this.context.cleanLines ?? [];
+    let count = 0;
+    for (const line of lines) {
+      if (/^\s*varip\b/i.test(line)) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  private detectScriptTypeTextual(): 'indicator' | 'strategy' | 'library' | null {
+    if (this.context.scriptType) {
+      return this.context.scriptType;
+    }
+
+    const lines = this.context.cleanLines ?? [];
+    for (const rawLine of lines) {
+      const line = rawLine.trim().toLowerCase();
+      if (line.startsWith('strategy(')) {
+        return 'strategy';
+      }
+      if (line.startsWith('indicator(')) {
+        return 'indicator';
+      }
+      if (line.startsWith('library(')) {
+        return 'library';
+      }
+    }
+    return null;
   }
 
   private validateVaripSyntaxFallbackAst(): void {
