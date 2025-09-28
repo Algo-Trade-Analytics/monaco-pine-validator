@@ -77,11 +77,19 @@ export class LinefillValidator implements ValidationModule {
     this.astContext = this.getAstContext(config);
     const ast = this.astContext?.ast;
     if (!ast) {
+      if (this.containsLinefillSyntax()) {
+        this.addError(
+          1,
+          1,
+          'Unable to parse linefill expression. Check linefill syntax.',
+          'PSV6-LINEFILL-SYNTAX'
+        );
+      }
       return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
+        isValid: this.errors.length === 0,
+        errors: this.errors,
+        warnings: this.warnings,
+        info: this.info,
         typeMap: new Map(),
         scriptType: context.scriptType,
       };
@@ -132,6 +140,11 @@ export class LinefillValidator implements ValidationModule {
     this.hasCacheSuggestion = false;
     this.hasCleanupSuggestion = false;
     this.hasTransparencySuggestion = false;
+  }
+
+  private containsLinefillSyntax(): boolean {
+    const lines = this.context.cleanLines?.length ? this.context.cleanLines : this.context.lines ?? [];
+    return lines.some((line) => line.includes('linefill.'));
   }
 
   private collectLinefillDataFromAst(program: ProgramNode): void {
@@ -247,6 +260,10 @@ export class LinefillValidator implements ValidationModule {
     column: number,
     inLoop: boolean,
   ): void {
+    if (process.env.DEBUG_LINEFILL === '1') {
+      // eslint-disable-next-line no-console
+      console.log('[LinefillValidator] call', functionName, args);
+    }
     this.linefillFunctionCalls.push({
       name: functionName,
       line: lineNum,
@@ -612,23 +629,27 @@ export class LinefillValidator implements ValidationModule {
   }
 
   private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode | MemberExpressionNode): string {
-    const lines = this.context.lines ?? [];
+    const sourceLines = (this.context.lines && this.context.lines.length > 0)
+      ? this.context.lines
+      : (this.context.cleanLines && this.context.cleanLines.length > 0)
+        ? this.context.cleanLines
+        : [];
     if (!node.loc) {
       return '';
     }
     const startLineIndex = Math.max(0, node.loc.start.line - 1);
     const endLineIndex = Math.max(0, node.loc.end.line - 1);
     if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
+      const line = sourceLines[startLineIndex] ?? '';
       return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
     }
     const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
+    const firstLine = sourceLines[startLineIndex] ?? '';
     parts.push(firstLine.slice(node.loc.start.column - 1));
     for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
+      parts.push(sourceLines[index] ?? '');
     }
-    const lastLine = lines[endLineIndex] ?? '';
+    const lastLine = sourceLines[endLineIndex] ?? '';
     parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
     return parts.join('\n');
   }

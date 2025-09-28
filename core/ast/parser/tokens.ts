@@ -93,18 +93,21 @@ export const Indicator = createToken({
   name: 'Indicator',
   pattern: /indicator/,
   longer_alt: Identifier,
+  categories: [Identifier],
 });
 
 export const Strategy = createToken({
   name: 'Strategy',
   pattern: /strategy/,
   longer_alt: Identifier,
+  categories: [Identifier],
 });
 
 export const Library = createToken({
   name: 'Library',
   pattern: /library/,
   longer_alt: Identifier,
+  categories: [Identifier],
 });
 
 export const Import = createToken({

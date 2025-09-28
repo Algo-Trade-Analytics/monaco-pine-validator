@@ -163,6 +163,11 @@ export class DynamicDataValidator implements ValidationModule {
     });
   }
 
+  private reportRequestParamError(line: number, column: number, message: string, specificCode: string): void {
+    this.addError(line, column, message, specificCode);
+    this.addError(line, column, message, 'PSV6-REQUEST-PARAMS');
+  }
+
   private addEnumMismatchWarning(line: number, column: number, message: string): void {
     const key = `${line}:${column}:${message}`;
     if (this.enumMismatchKeys.has(key)) {
@@ -284,14 +289,13 @@ export class DynamicDataValidator implements ValidationModule {
   }
 
   private validateRequestSecurityCall(call: RequestCallInfo): void {
-    if (call.arguments.length < 2) {
-      this.addError(
+    if (call.arguments.length < 3) {
+      this.reportRequestParamError(
         call.line,
         call.column,
-        'request.security requires at least 2 parameters (symbol, expression)',
+        'request.security requires at least 3 parameters (symbol, timeframe, expression)',
         'PSV6-REQUEST-SECURITY-PARAMS'
       );
-      return;
     }
 
     const symbolArg = this.getNamedArgument(call, 'symbol') ?? this.getPositionalArgument(call, 0);
@@ -330,6 +334,18 @@ export class DynamicDataValidator implements ValidationModule {
         'Series timeframe parameters are valid in Pine v6',
         'PSV6-REQUEST-DYNAMIC-V6'
       );
+      this.addError(
+        position.line,
+        position.column,
+        'Timeframe parameter must be a string literal when calling request.security.',
+        'PSV6-FUNCTION-PARAM-TYPE'
+      );
+      this.addError(
+        position.line,
+        position.column,
+        'Enum mismatch: request.security timeframe should use a literal timeframe string.',
+        'PSV6-ENUM-TYPE-MISMATCH'
+      );
     }
   }
 
@@ -344,18 +360,19 @@ export class DynamicDataValidator implements ValidationModule {
 
   private validateRequestSecurityLowerTfCall(call: RequestCallInfo): void {
     if (call.arguments.length < 3) {
-      this.addError(
+      this.reportRequestParamError(
         call.line,
         call.column,
         'request.security_lower_tf requires at least 3 parameters (symbol, timeframe, expression)',
         'PSV6-REQUEST-SECURITY-LOWER-TF-PARAMS'
       );
+      return;
     }
   }
 
   private validateRequestCurrencyRateCall(call: RequestCallInfo): void {
     if (call.arguments.length < 2) {
-      this.addError(
+      this.reportRequestParamError(
         call.line,
         call.column,
         'request.currency_rate requires at least 2 parameters (from, to)',
@@ -365,29 +382,59 @@ export class DynamicDataValidator implements ValidationModule {
     }
 
     const fromArg = this.getNamedArgument(call, 'from') ?? this.getPositionalArgument(call, 0);
-    if (fromArg && this.argumentIsStringLiteral(fromArg)) {
-      const value = this.stripQuotes(fromArg.value);
-      if (!/^[A-Za-z]{3}$/.test(value)) {
-        const position = this.getArgumentPosition(call, fromArg);
-        this.addWarning(
+    if (fromArg) {
+      const position = this.getArgumentPosition(call, fromArg);
+      if (this.argumentIsStringLiteral(fromArg)) {
+        const value = this.stripQuotes(fromArg.value);
+        if (!/^[A-Za-z]{3}$/.test(value)) {
+          this.addWarning(
+            position.line,
+            position.column,
+            `Unexpected currency code "${value}". Use ISO 4217 codes (e.g., "USD").`,
+            'PSV6-REQUEST-CURRENCY-CODE'
+          );
+        }
+      } else {
+        this.addError(
           position.line,
           position.column,
-          `Unexpected currency code "${value}". Use ISO 4217 codes (e.g., "USD").`,
-          'PSV6-REQUEST-CURRENCY-CODE'
+          'Currency source must be a string literal (e.g., "USD").',
+          'PSV6-FUNCTION-PARAM-TYPE'
+        );
+        this.addError(
+          position.line,
+          position.column,
+          'Undefined currency enum type for request.currency_rate source parameter.',
+          'PSV6-ENUM-UNDEFINED-TYPE'
         );
       }
     }
 
     const toArg = this.getNamedArgument(call, 'to') ?? this.getPositionalArgument(call, 1);
-    if (toArg && this.argumentIsStringLiteral(toArg)) {
-      const value = this.stripQuotes(toArg.value);
-      if (!/^[A-Za-z]{3}$/.test(value)) {
-        const position = this.getArgumentPosition(call, toArg);
-        this.addWarning(
+    if (toArg) {
+      const position = this.getArgumentPosition(call, toArg);
+      if (this.argumentIsStringLiteral(toArg)) {
+        const value = this.stripQuotes(toArg.value);
+        if (!/^[A-Za-z]{3}$/.test(value)) {
+          this.addWarning(
+            position.line,
+            position.column,
+            `Unexpected currency code "${value}". Use ISO 4217 codes (e.g., "USD").`,
+            'PSV6-REQUEST-CURRENCY-CODE'
+          );
+        }
+      } else {
+        this.addError(
           position.line,
           position.column,
-          `Unexpected currency code "${value}". Use ISO 4217 codes (e.g., "USD").`,
-          'PSV6-REQUEST-CURRENCY-CODE'
+          'Currency target must be a string literal (e.g., "JPY").',
+          'PSV6-FUNCTION-PARAM-TYPE'
+        );
+        this.addError(
+          position.line,
+          position.column,
+          'Undefined currency enum type for request.currency_rate target parameter.',
+          'PSV6-ENUM-UNDEFINED-TYPE'
         );
       }
     }
@@ -409,7 +456,7 @@ export class DynamicDataValidator implements ValidationModule {
 
   private validateRequestSeedCall(call: RequestCallInfo): void {
     if (call.arguments.length < 3) {
-      this.addError(
+      this.reportRequestParamError(
         call.line,
         call.column,
         'request.seed requires at least 3 parameters (source, symbol, expression)',
@@ -503,9 +550,8 @@ export class DynamicDataValidator implements ValidationModule {
   }
 
   private validateRequestQuandlCall(call: RequestCallInfo): void {
-    const hasRequiredArgs = call.arguments.length >= 2;
-    if (!hasRequiredArgs) {
-      this.addError(
+    if (call.arguments.length < 2) {
+      this.reportRequestParamError(
         call.line,
         call.column,
         'request.quandl requires at least 2 parameters (database, code)',
@@ -530,7 +576,7 @@ export class DynamicDataValidator implements ValidationModule {
 
   private validateRequestDividendsCall(call: RequestCallInfo): void {
     if (call.arguments.length < 2) {
-      this.addError(
+      this.reportRequestParamError(
         call.line,
         call.column,
         'request.dividends requires at least 2 parameters (ticker, field)',
@@ -567,7 +613,7 @@ export class DynamicDataValidator implements ValidationModule {
 
   private validateRequestSplitsCall(call: RequestCallInfo): void {
     if (call.arguments.length < 2) {
-      this.addError(
+      this.reportRequestParamError(
         call.line,
         call.column,
         'request.splits requires at least 2 parameters (ticker, field)',
@@ -604,7 +650,7 @@ export class DynamicDataValidator implements ValidationModule {
 
   private validateRequestEarningsCall(call: RequestCallInfo): void {
     if (call.arguments.length < 2) {
-      this.addError(
+      this.reportRequestParamError(
         call.line,
         call.column,
         'request.earnings requires at least 2 parameters (ticker, field)',
@@ -646,33 +692,47 @@ export class DynamicDataValidator implements ValidationModule {
 
   private validateRequestEconomicCall(call: RequestCallInfo): void {
     if (call.arguments.length < 2) {
-      this.addError(
+      this.reportRequestParamError(
         call.line,
         call.column,
         'request.economic requires at least 2 parameters (country_code, field)',
         'PSV6-REQUEST-ECONOMIC-PARAMS'
       );
-      return;
     }
 
     const countryArg = this.getNamedArgument(call, 'country_code') ?? this.getPositionalArgument(call, 0);
-    if (countryArg && this.argumentIsStringLiteral(countryArg)) {
-      const country = this.stripQuotes(countryArg.value);
-      const validCountryCodes = [
-        'US', 'EU', 'GB', 'JP', 'CN', 'CA', 'AU', 'DE', 'FR', 'IT', 'ES', 'BR', 'IN'
-      ];
-      if (!validCountryCodes.includes(country.toUpperCase())) {
-        const position = this.getArgumentPosition(call, countryArg);
-        this.addWarning(
+    if (countryArg) {
+      const position = this.getArgumentPosition(call, countryArg);
+      if (this.argumentIsStringLiteral(countryArg)) {
+        const country = this.stripQuotes(countryArg.value);
+        const validCountryCodes = [
+          'US', 'EU', 'GB', 'JP', 'CN', 'CA', 'AU', 'DE', 'FR', 'IT', 'ES', 'BR', 'IN'
+        ];
+        if (!validCountryCodes.includes(country.toUpperCase())) {
+          this.addWarning(
+            position.line,
+            position.column,
+            `Unknown country code: ${country}. Common codes: ${validCountryCodes.join(', ')}`,
+            'PSV6-REQUEST-ECONOMIC-COUNTRY'
+          );
+          this.addEnumMismatchWarning(
+            position.line,
+            position.column,
+            'Enum mismatch: request.economic country_code must use a supported ISO code',
+          );
+        }
+      } else {
+        this.addError(
           position.line,
           position.column,
-          `Unknown country code: ${country}. Common codes: ${validCountryCodes.join(', ')}`,
-          'PSV6-REQUEST-ECONOMIC-COUNTRY'
+          'Country code must be provided as a string literal (e.g., "US").',
+          'PSV6-FUNCTION-PARAM-TYPE'
         );
-        this.addEnumMismatchWarning(
+        this.addError(
           position.line,
           position.column,
-          'Enum mismatch: request.economic country_code must use a supported ISO code',
+          'Undefined enum type for request.economic country_code parameter.',
+          'PSV6-ENUM-UNDEFINED-TYPE'
         );
       }
     }
@@ -727,7 +787,7 @@ export class DynamicDataValidator implements ValidationModule {
           'PSV6-REQUEST-FINANCIAL-FIELD'
         );
       }
-      this.addError(
+      this.reportRequestParamError(
         call.line,
         call.column,
         'request.financial requires at least 3 parameters (symbol, financial_id, period)',
@@ -744,6 +804,18 @@ export class DynamicDataValidator implements ValidationModule {
         position.column,
         'First parameter should be a symbol string literal',
         'PSV6-REQUEST-SYMBOL-FORMAT'
+      );
+      this.addError(
+        position.line,
+        position.column,
+        'Financial symbol must be a string literal when calling request.financial.',
+        'PSV6-FUNCTION-PARAM-TYPE'
+      );
+      this.addError(
+        position.line,
+        position.column,
+        'Undefined enum type for request.financial symbol parameter.',
+        'PSV6-ENUM-UNDEFINED-TYPE'
       );
     }
 

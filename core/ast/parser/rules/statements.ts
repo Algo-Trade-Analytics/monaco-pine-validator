@@ -4,6 +4,7 @@ import {
   For,
   If,
   Import,
+  LParen,
   LBracket,
   Repeat,
   Return,
@@ -25,8 +26,13 @@ export function createStatementRule(parser: PineParser) {
     return parser.OR([
       {
         GATE: () => {
-          const next = parser.LA(1).tokenType;
-          return next === Indicator || next === Strategy || next === Library;
+          const first = parser.LA(1);
+          const tokenType = first.tokenType;
+          if (tokenType !== Indicator && tokenType !== Strategy && tokenType !== Library) {
+            return false;
+          }
+          const next = parser.nextSignificantToken(2);
+          return next.tokenType === LParen;
         },
         ALT: () => parser.SUBRULE(parser.scriptDeclaration),
       },

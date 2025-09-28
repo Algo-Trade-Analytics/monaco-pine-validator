@@ -81,8 +81,6 @@ export class AlertFunctionsValidator implements ValidationModule {
     this.astContext = ensureAstContext(context, config);
 
     if (!this.astContext?.ast) {
-      // eslint-disable-next-line no-console
-      console.log('[AlertValidator] no AST available', context.astDiagnostics);
       return {
         isValid: true,
         errors: [],
@@ -210,9 +208,6 @@ export class AlertFunctionsValidator implements ValidationModule {
 
     const frequencyPath = this.getAlertFrequencyPath(freqArgument.value);
     const { line, column } = freqArgument.value.loc.start;
-
-    // eslint-disable-next-line no-console
-    console.log('[AlertFunctionsValidator] freq argument kind', freqArgument.value.kind, frequencyPath, process.env.DEBUG_ALERT);
 
     if (frequencyPath && VALID_ALERT_FREQUENCIES.has(frequencyPath)) {
       alertCall.frequency = frequencyPath;
@@ -357,7 +352,7 @@ export class AlertFunctionsValidator implements ValidationModule {
     }
 
     const freqAll = this.alertFrequencyUsage.get('alert.freq_all') || 0;
-    if (freqAll > 2) {
+    if (freqAll >= 2) {
       this.warnings.push({
         code: 'PSV6-ALERT-SPAM-RISK',
         message: `Multiple alert.freq_all usage (${freqAll}) may cause alert spam. Consider using alert.freq_once_per_bar_close`,
@@ -442,10 +437,6 @@ export class AlertFunctionsValidator implements ValidationModule {
 
     this.recordedFrequencyKeys.add(key);
     this.alertFrequencyUsage.set(frequency, (this.alertFrequencyUsage.get(frequency) || 0) + 1);
-    if (process.env.DEBUG_ALERT === '1') {
-      // eslint-disable-next-line no-console
-      console.log('[AlertFunctionsValidator] frequency usage', frequency, { line, column });
-    }
     this.info.push({
       code: 'PSV6-ALERT-FREQ-USAGE',
       message: `Alert frequency constant '${frequency}' detected`,

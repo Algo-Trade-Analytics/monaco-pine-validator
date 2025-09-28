@@ -62,6 +62,13 @@ const KNOWN_NAMESPACES = new Set([
   'earnings',
   'linefill',
   'polyline',
+  'syminfo',
+  'display',
+  'extend',
+  'format',
+  'scale',
+  'adjustment',
+  'backadjustment',
 ]);
 
 const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -368,6 +375,10 @@ export class EnumValidator implements ValidationModule {
       return;
     }
 
+    if (this.isKnownNamespace(enumReference.enumName)) {
+      return;
+    }
+
     const enumInfo = this.astEnumDeclarations.get(enumReference.enumName);
     if (!enumInfo) {
       const { line, column } = enumReference.node.object.loc.start;
@@ -414,7 +425,7 @@ export class EnumValidator implements ValidationModule {
       return;
     }
 
-    if (KNOWN_NAMESPACES.has(reference.enumName)) {
+    if (this.isKnownNamespace(reference.enumName)) {
       return;
     }
 
@@ -629,6 +640,10 @@ export class EnumValidator implements ValidationModule {
       return true;
     }
     return false;
+  }
+
+  private isKnownNamespace(name: string): boolean {
+    return KNOWN_NAMESPACES.has(name);
   }
 
   private setTypeMapEntry(name: string, node: { loc: { start: { line: number; column: number } } }, overrides: Partial<TypeInfo> = {}): void {
