@@ -53,6 +53,7 @@ const KNOWN_NAMESPACES = new Set([
   'runtime',
   'chart',
   'timeframe',
+  'currency',
   'dividends',
   'earnings',
   'linefill',
@@ -92,18 +93,11 @@ export class EnumValidator implements ValidationModule {
 
     this.astContext = isAstValidationContext(context) && context.ast ? context : null;
 
-    if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: context.typeMap,
-        scriptType: context.scriptType,
-      };
+    if (this.astContext?.ast) {
+      this.validateWithAst(this.astContext.ast);
+    } else {
+      this.validateWithText();
     }
-
-    this.validateWithAst(this.astContext.ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -180,6 +174,95 @@ export class EnumValidator implements ValidationModule {
     });
   }
 
+  private validateWithText(): void {
+    const lines = Array.isArray(this.context.rawLines)
+      ? this.context.rawLines
+      : Array.isArray(this.context.cleanLines)
+        ? this.context.cleanLines
+        : this.context.lines ?? [];
+
+    if (lines.length === 0) {
+      return;
+    }
+
+    const enumNames = new Set<string>();
+    const functionParams = new Map<string, string[]>();
+
+    for (const rawLine of lines) {
+      const enumMatch = rawLine.match(/^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)/i);
+      if (enumMatch) {
+        enumNames.add(enumMatch[1]);
+      }
+    }
+
+    for (const rawLine of lines) {
+      const funcMatch = rawLine.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*=>/);
+      if (!funcMatch) {
+        continue;
+      }
+
+      const [, name, params] = funcMatch;
+      const paramNames = params
+        .split(',')
+        .map((segment) => segment.split('=')[0]?.trim())
+        .filter((segment): segment is string => Boolean(segment));
+      functionParams.set(name, paramNames);
+    }
+
+    const callPattern = /([A-Za-z_][A-Za-z0-9_]*)\s*\(([^()]*)\)/g;
+
+    lines.forEach((rawLine, index) => {
+      let match: RegExpExecArray | null;
+      while ((match = callPattern.exec(rawLine)) !== null) {
+        const [, name, argsString] = match;
+        const params = functionParams.get(name);
+        if (!params || params.length === 0) {
+          continue;
+        }
+
+        const args = argsString.split(',').map((arg) => arg.trim());
+        for (let i = 0; i < Math.min(args.length, params.length); i += 1) {
+          const arg = args[i];
+          const enumMatch = arg.match(/^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/);
+          if (!enumMatch) {
+            continue;
+          }
+
+          const actualEnum = enumMatch[1];
+          const expectedEnum = this.inferEnumFromParam(params[i], enumNames);
+          if (!expectedEnum || expectedEnum === actualEnum) {
+            continue;
+          }
+
+          const column = (match.index ?? 0) + 1;
+          this.addError(
+            index + 1,
+            column,
+            `Function parameter type mismatch: expected ${expectedEnum}, got ${actualEnum}`,
+            'PSV6-ENUM-FUNCTION-TYPE-MISMATCH',
+          );
+        }
+      }
+    });
+  }
+
+  private inferEnumFromParam(paramName: string, enumNames: Set<string>): string | null {
+    if (!paramName) {
+      return null;
+    }
+
+    if (enumNames.has(paramName)) {
+      return paramName;
+    }
+
+    const capitalized = paramName.charAt(0).toUpperCase() + paramName.slice(1);
+    if (enumNames.has(capitalized)) {
+      return capitalized;
+    }
+
+    return null;
+  }
+
   private processEnumDeclaration(node: EnumDeclarationNode): void {
     const enumName = node.identifier.name;
     const { line, column } = node.identifier.loc.start;
@@ -201,6 +284,15 @@ export class EnumValidator implements ValidationModule {
     for (const member of node.members) {
       const memberName = member.identifier.name;
       const memberLoc = member.identifier.loc.start;
+
+      const rawLine = this.getLine(memberLoc.line);
+      const lineWithoutComment = rawLine.replace(/\/\/.*$/, '');
+      const trimmedValue = lineWithoutComment.trim();
+
+      if (trimmedValue && !/^[A-Za-z_]/.test(trimmedValue)) {
+        this.addError(memberLoc.line, memberLoc.column, `Invalid enum value name: ${trimmedValue}`, 'PSV6-ENUM-INVALID-VALUE-NAME');
+        continue;
+      }
 
       if (!IDENTIFIER_PATTERN.test(memberName)) {
         this.addError(memberLoc.line, memberLoc.column, `Invalid enum value name: ${memberName}`, 'PSV6-ENUM-INVALID-VALUE-NAME');
@@ -225,7 +317,21 @@ export class EnumValidator implements ValidationModule {
     this.astEnumDeclarations.set(enumName, info);
   }
 
+  private getLine(lineNumber: number): string {
+    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length >= lineNumber) {
+      return this.context.rawLines[lineNumber - 1] ?? '';
+    }
+    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length >= lineNumber) {
+      return this.context.cleanLines[lineNumber - 1] ?? '';
+    }
+    if (Array.isArray(this.context.lines) && this.context.lines.length >= lineNumber) {
+      return this.context.lines[lineNumber - 1] ?? '';
+    }
+    return '';
+  }
+
   private recordFunctionDeclaration(node: FunctionDeclarationNode): void {
+    // console.log('record function decl', node.identifier?.name);
     if (!node.identifier) {
       return;
     }
@@ -236,6 +342,11 @@ export class EnumValidator implements ValidationModule {
   private processVariableDeclaration(node: VariableDeclarationNode): void {
     const variableName = node.identifier.name;
     const typeName = this.getTypeReferenceName(node.typeAnnotation);
+
+    if (node.initializer?.kind === 'ArrowFunctionExpression') {
+      // console.log('record arrow', variableName);
+      this.astFunctionParams.set(variableName, node.initializer.params);
+    }
 
     let declaredEnum: string | null = null;
     if (typeName && this.astEnumDeclarations.has(typeName)) {
@@ -270,6 +381,12 @@ export class EnumValidator implements ValidationModule {
     if (declaredEnum && declaredEnum !== enumReference.enumName) {
       const { line, column } = node.identifier.loc.start;
       this.addError(line, column, `Type mismatch: expected ${declaredEnum}, got ${enumReference.enumName}`, 'PSV6-ENUM-TYPE-MISMATCH');
+      return;
+    }
+
+    if (typeName && !declaredEnum && !this.astEnumDeclarations.has(typeName)) {
+      const { line, column } = node.identifier.loc.start;
+      this.addError(line, column, `Type mismatch: expected ${typeName}, got ${enumReference.enumName}`, 'PSV6-ENUM-TYPE-MISMATCH');
       return;
     }
 
