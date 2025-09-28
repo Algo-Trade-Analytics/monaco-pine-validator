@@ -1052,7 +1052,7 @@ export class TypeInferenceValidator implements ValidationModule {
       if (inferredType === 'unknown') {
         const message = `Cannot infer type for expression: ${expression}`;
         if (/(\band\b|\bor\b)/.test(expression)) {
-          this.addError(lineNum, 1, message, 'PSV6-TYPE-INFERENCE-AMBIGUOUS');
+          this.addWarning(lineNum, 1, message, 'PSV6-TYPE-INFERENCE-AMBIGUOUS');
         } else {
           this.addWarning(lineNum, 1, message, 'PSV6-TYPE-INFERENCE-AMBIGUOUS');
         }

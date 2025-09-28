@@ -79,6 +79,8 @@ export class FunctionValidator implements ValidationModule {
   private paramUsage = new Map<string, Set<string>>();
   private userFunctions: Map<string, FunctionInfo[]> = new Map();
   private functionCalls: FunctionCall[] = [];
+  private seriesLikeIdentifiers = new Set<string>();
+
   private readonly allowedInstanceMethods = new Set([
     'push','pop','get','set','size','clear','reverse','sort','sort_indices','copy','slice','concat','fill','from','from_example',
     'indexof','lastindexof','includes','binary_search','binary_search_leftmost','binary_search_rightmost','range','remove','insert',
@@ -217,6 +219,9 @@ export class FunctionValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
+    const sourceLines = this.getSourceLines();
+    this.markSeriesLikeIdentifiers(sourceLines);
+
     this.astContext = this.getAstContext(config) ?? ensureAstContext(context, config);
     const program = this.astContext?.ast;
 
@@ -285,6 +290,7 @@ export class FunctionValidator implements ValidationModule {
     this.errorKeys.clear();
     this.warningKeys.clear();
     this.infoKeys.clear();
+    this.seriesLikeIdentifiers.clear();
   }
 
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
@@ -767,6 +773,33 @@ export class FunctionValidator implements ValidationModule {
     return parts.join('\n');
   }
 
+  private markSeriesLikeIdentifiers(lines: string[]): void {
+    this.seriesLikeIdentifiers.clear();
+    const assignmentRegex = /^\s*(?:var|const|let|int|float|bool)?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/;
+
+    lines.forEach((rawLine) => {
+      const line = this.stripInlineComment(rawLine).trim();
+      if (!line) {
+        return;
+      }
+      const match = line.match(assignmentRegex);
+      if (!match) {
+        return;
+      }
+      const [, identifier, expression] = match;
+      if (!identifier) {
+        return;
+      }
+      if (/\?.*?:/.test(expression) && /(barstate\.|ta\.|security\.|request\.)/.test(expression)) {
+        this.seriesLikeIdentifiers.add(identifier);
+        return;
+      }
+      if (/(?:ta\.crossover|ta\.crossunder|ta\.valuewhen|request\.)/.test(expression)) {
+        this.seriesLikeIdentifiers.add(identifier);
+      }
+    });
+  }
+
   private collectFunctionCallsFromText(lines: string[]): void {
     const callRegex = /([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*\(/g;
 
@@ -911,7 +944,7 @@ export class FunctionValidator implements ValidationModule {
         }
       }
 
-      const delegatedNamespaces = new Set(['ta','math','str','input','line','label','box','table','map','strategy','array','matrix','polyline']);
+      const delegatedNamespaces = new Set(['math','str','input','line','label','box','table','map','strategy','array','matrix','polyline']);
       // In library scripts, restrict certain namespaces explicitly to match TDD expectations
       if (this.context.scriptType === 'library') {
         if (namespace === 'strategy') {
@@ -1168,7 +1201,11 @@ export class FunctionValidator implements ValidationModule {
     // Validate qualifier: if 'simple' required but argument appears to be 'series', flag mismatch
     if (param.qualifier === 'simple') {
       const inferred = this.inferArgumentType(argValue);
-      if (inferred === 'series') {
+      const looksSeries = this.argumentLooksSeries(argValue);
+      if (process.env.DEBUG_FUNC === '1') {
+        console.log('[FunctionValidator] simple qualifier check', { funcName, param: param.name, argValue, inferred, looksSeries });
+      }
+      if (inferred === 'series' || looksSeries) {
         this.addError(line, column,
           `Parameter '${param.name}' of '${funcName}' requires simple type, got series`,
           'PSV6-FUNCTION-PARAM-TYPE');
@@ -1187,6 +1224,23 @@ export class FunctionValidator implements ValidationModule {
         }
       }
     }
+  }
+
+  private argumentLooksSeries(arg: string): boolean {
+    const value = arg.trim();
+    if (!value) {
+      return false;
+    }
+    if (/(?:barstate\.|ta\.|security\.|request\.)/.test(value)) {
+      return true;
+    }
+    if (/\?.*?:/.test(value)) {
+      return true;
+    }
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(value) && this.seriesLikeIdentifiers.has(value)) {
+      return true;
+    }
+    return false;
   }
 
   private validateUserFunctionCall(call: FunctionCall): void {

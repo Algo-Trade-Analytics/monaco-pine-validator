@@ -158,6 +158,12 @@ export class TypeValidator implements ValidationModule {
             return;
           }
 
+          const consequentIsNa = expression.consequent.kind === 'Identifier' && (expression.consequent as IdentifierNode).name === 'na';
+          const alternateIsNa = expression.alternate.kind === 'Identifier' && (expression.alternate as IdentifierNode).name === 'na';
+          if (consequentIsNa || alternateIsNa) {
+            return;
+          }
+
           if (this.areTypesCompatible(consequentType, alternateType)) {
             return;
           }
@@ -366,6 +372,10 @@ export class TypeValidator implements ValidationModule {
       return true;
     }
 
+    if (left === 'void' || right === 'void') {
+      return true;
+    }
+
     const numeric = new Set(['int', 'float']);
     if (numeric.has(left) && numeric.has(right)) {
       return true;
@@ -402,6 +412,10 @@ export class TypeValidator implements ValidationModule {
   private getExpressionTypeLabel(context: AstValidationContext, expression: ExpressionNode | null): string | null {
     if (!expression) {
       return null;
+    }
+
+    if (expression.kind === 'Identifier' && (expression as IdentifierNode).name === 'na') {
+      return 'na';
     }
 
     const metadata = context.typeEnvironment.nodeTypes.get(expression as ExpressionNode);

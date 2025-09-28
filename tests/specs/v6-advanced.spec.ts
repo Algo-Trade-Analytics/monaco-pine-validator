@@ -160,7 +160,6 @@ bgcolor(isBullish(myBar) ? color.new(color.green, 80) : na)`;
       // Should not produce errors for valid UDT usage
       // Note: Currently the validator has limitations with complex type inference for UDTs and ternary expressions
       // Filter out known limitations: function parameter type errors for complex expressions
-      console.log('codes.errors', codes.errors);
       const filteredErrors = codes.errors.filter(error => 
         !error.includes('PSV6-FUNCTION-PARAM-TYPE')
       );
