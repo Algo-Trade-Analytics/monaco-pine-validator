@@ -47,6 +47,7 @@ const KNOWN_NAMESPACES = new Set([
   'table',
   'position',
   'size',
+  'alert',
   'request',
   'input',
   'strategy',

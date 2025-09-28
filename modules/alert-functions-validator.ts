@@ -68,6 +68,7 @@ export class AlertFunctionsValidator implements ValidationModule {
   private alertFunctionCalls: AlertFunctionCall[] = [];
   private alertConditions = 0;
   private alertFrequencyUsage: Map<string, number> = new Map();
+  private recordedFrequencyKeys = new Set<string>();
 
   getDependencies(): string[] {
     return ['CoreValidator'];
@@ -80,6 +81,8 @@ export class AlertFunctionsValidator implements ValidationModule {
     this.astContext = ensureAstContext(context, config);
 
     if (!this.astContext?.ast) {
+      // eslint-disable-next-line no-console
+      console.log('[AlertValidator] no AST available', context.astDiagnostics);
       return {
         isValid: true,
         errors: [],
@@ -95,6 +98,16 @@ export class AlertFunctionsValidator implements ValidationModule {
     this.validateAlertUsagePatterns();
     this.validateAlertTimingAst();
     this.analyzeAlertPerformance();
+
+    if (process.env.DEBUG_ALERT === '1') {
+      // eslint-disable-next-line no-console
+      console.log('[AlertFunctionsValidator] summary', {
+        calls: this.alertFunctionCalls.length,
+        usage: Object.fromEntries(this.alertFrequencyUsage),
+        infoCodes: this.info.map((m) => m.code),
+        errorCodes: this.errors.map((m) => m.code),
+      });
+    }
 
     return {
       isValid: this.errors.length === 0,
@@ -113,6 +126,7 @@ export class AlertFunctionsValidator implements ValidationModule {
     this.alertFunctionCalls = [];
     this.alertConditions = 0;
     this.alertFrequencyUsage.clear();
+    this.recordedFrequencyKeys.clear();
     this.astContext = null;
   }
 
@@ -123,6 +137,9 @@ export class AlertFunctionsValidator implements ValidationModule {
       },
       MemberExpression: {
         enter: (path) => this.processAstMemberExpression(path as NodePath<MemberExpressionNode>),
+      },
+      Identifier: {
+        enter: (path) => this.processIdentifier(path.node.name, path.node.loc?.start ?? null),
       },
     });
   }
@@ -194,12 +211,12 @@ export class AlertFunctionsValidator implements ValidationModule {
     const frequencyPath = this.getAlertFrequencyPath(freqArgument.value);
     const { line, column } = freqArgument.value.loc.start;
 
+    // eslint-disable-next-line no-console
+    console.log('[AlertFunctionsValidator] freq argument kind', freqArgument.value.kind, frequencyPath, process.env.DEBUG_ALERT);
+
     if (frequencyPath && VALID_ALERT_FREQUENCIES.has(frequencyPath)) {
       alertCall.frequency = frequencyPath;
-      this.alertFrequencyUsage.set(
-        frequencyPath,
-        (this.alertFrequencyUsage.get(frequencyPath) || 0) + 1,
-      );
+      this.recordAlertFrequencyUsage(frequencyPath, line, column);
       this.info.push({
         code: 'PSV6-ALERT-FREQ-VALID',
         message: `Alert frequency '${frequencyPath}' is properly configured`,
@@ -250,16 +267,8 @@ export class AlertFunctionsValidator implements ValidationModule {
     if (!qualified || !ALERT_FREQUENCY_CONSTANTS.has(qualified)) {
       return;
     }
-
     const { line, column } = path.node.loc.start;
-    this.alertFrequencyUsage.set(qualified, (this.alertFrequencyUsage.get(qualified) || 0) + 1);
-    this.info.push({
-      code: 'PSV6-ALERT-FREQ-USAGE',
-      message: `Alert frequency constant '${qualified}' detected`,
-      line,
-      column,
-      severity: 'info',
-    });
+    this.recordAlertFrequencyUsage(qualified, line, column);
   }
 
   private validateAlertConditions(): void {
@@ -411,6 +420,39 @@ export class AlertFunctionsValidator implements ValidationModule {
     }
 
     return null;
+  }
+
+  private processIdentifier(name: string, loc: { line: number; column: number } | null): void {
+    if (!loc) {
+      return;
+    }
+
+    if (!name.startsWith('alert.freq_')) {
+      return;
+    }
+
+    this.recordAlertFrequencyUsage(name, loc.line, loc.column);
+  }
+
+  private recordAlertFrequencyUsage(frequency: string, line: number, column: number): void {
+    const key = `${frequency}:${line}:${column}`;
+    if (this.recordedFrequencyKeys.has(key)) {
+      return;
+    }
+
+    this.recordedFrequencyKeys.add(key);
+    this.alertFrequencyUsage.set(frequency, (this.alertFrequencyUsage.get(frequency) || 0) + 1);
+    if (process.env.DEBUG_ALERT === '1') {
+      // eslint-disable-next-line no-console
+      console.log('[AlertFunctionsValidator] frequency usage', frequency, { line, column });
+    }
+    this.info.push({
+      code: 'PSV6-ALERT-FREQ-USAGE',
+      message: `Alert frequency constant '${frequency}' detected`,
+      line,
+      column,
+      severity: 'info',
+    });
   }
 
   private formatExpression(expression: ExpressionNode): string {
