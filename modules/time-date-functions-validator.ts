@@ -96,25 +96,23 @@ export class TimeDateFunctionsValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
-    this.astContext = this.getAstContext(config);
-    const ast = this.astContext?.ast;
+    const contextWithAst = 'ast' in context ? (context as AstValidationContext) : null;
 
-    if (ast) {
-      this.collectTimeDataFromAst(ast);
-      this.validateTimePerformance();
-      this.validateTimeBestPractices();
-    } else {
-      this.validateWithText();
+    if (!config.ast || config.ast.mode === 'disabled') {
+      return this.buildResult();
     }
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: context.scriptType,
-    };
+    this.astContext = contextWithAst?.ast ? contextWithAst : this.getAstContext(config);
+    const ast = this.astContext?.ast;
+    if (!ast) {
+      return this.buildResult();
+    }
+
+    this.collectTimeDataFromAst(ast);
+    this.validateTimePerformance();
+    this.validateTimeBestPractices();
+
+    return this.buildResult();
   }
 
   private reset(): void {
@@ -351,17 +349,6 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     this.addInfo(lineNum, column,
       'time_close calculates the bar close time for a given timeframe and session. Ensure timezone/bars_back are set when needed.',
       'PSV6-TIME-CLOSE-INFO');
-  }
-
-  private validateWithText(): void {
-    const lines = this.getSourceLines();
-    if (lines.length === 0) {
-      return;
-    }
-
-    this.collectTimeDataFromText(lines);
-    this.validateTimePerformance();
-    this.validateTimeBestPractices();
   }
 
   private validateTimeTradingday(args: string[], lineNum: number, column: number): void {
@@ -687,173 +674,6 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     }
   }
 
-  private collectTimeDataFromText(lines: string[]): void {
-    const callRegex = /(time_close|time_tradingday|timestamp|timenow)\s*\(/g;
-
-    for (let index = 0; index < lines.length; index++) {
-      const rawLine = lines[index];
-      const lineWithoutComment = this.stripInlineComment(rawLine);
-      if (!lineWithoutComment.includes('time')) {
-        continue;
-      }
-
-      if (!this.hasTimezoneReference && /timezone\./.test(lineWithoutComment)) {
-        this.hasTimezoneReference = true;
-      }
-
-      callRegex.lastIndex = 0;
-      let match: RegExpExecArray | null;
-      while ((match = callRegex.exec(lineWithoutComment)) !== null) {
-        const functionName = match[1];
-        const openParenIndex = match.index + functionName.length;
-        const argsSection = this.extractArgumentsSectionFromText(lines, index, openParenIndex + 1);
-        const args = this.splitArgumentsText(argsSection);
-
-        this.timeFunctionCalls.push({
-          functionName,
-          line: index + 1,
-          column: openParenIndex + 1,
-          arguments: args,
-        });
-
-        this.validateTimeFunction(functionName, args, index + 1, openParenIndex + 1);
-      }
-    }
-  }
-
-  private getSourceLines(): string[] {
-    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
-      return [...this.context.cleanLines];
-    }
-    if (Array.isArray(this.context.lines) && this.context.lines.length > 0) {
-      return [...this.context.lines];
-    }
-    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length > 0) {
-      return [...this.context.rawLines];
-    }
-    return [];
-  }
-
-  private extractArgumentsSectionFromText(
-    lines: string[],
-    startLine: number,
-    startColumn: number,
-  ): string {
-    let buffer = '';
-    let depth = 1;
-    let lineIndex = startLine;
-    let columnIndex = startColumn;
-    let inString = false;
-    let stringDelimiter: string | null = null;
-
-    while (lineIndex < lines.length && depth > 0) {
-      const line = lines[lineIndex];
-      for (let i = columnIndex; i < line.length; i++) {
-        const char = line[i];
-
-        if (inString) {
-          buffer += char;
-          if (char === stringDelimiter && line[i - 1] !== '\\') {
-            inString = false;
-            stringDelimiter = null;
-          }
-          continue;
-        }
-
-        if (char === '"' || char === "'") {
-          inString = true;
-          stringDelimiter = char;
-          buffer += char;
-          continue;
-        }
-
-        if (char === '(') {
-          depth += 1;
-          buffer += char;
-          continue;
-        }
-
-        if (char === ')') {
-          depth -= 1;
-          if (depth === 0) {
-            return buffer.trim();
-          }
-          buffer += char;
-          continue;
-        }
-
-        buffer += char;
-      }
-
-      buffer += ' ';
-      lineIndex += 1;
-      columnIndex = 0;
-    }
-
-    return buffer.trim();
-  }
-
-  private splitArgumentsText(text: string): string[] {
-    const args: string[] = [];
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar: string | null = null;
-
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-
-      if (inString) {
-        current += char;
-        if (char === stringChar && text[i - 1] !== '\\') {
-          inString = false;
-          stringChar = null;
-        }
-        continue;
-      }
-
-      if (char === '"' || char === "'") {
-        inString = true;
-        stringChar = char;
-        current += char;
-        continue;
-      }
-
-      if (char === '(') {
-        depth += 1;
-        current += char;
-        continue;
-      }
-
-      if (char === ')') {
-        depth -= 1;
-        current += char;
-        continue;
-      }
-
-      if (char === ',' && depth === 0) {
-        if (current.trim().length > 0) {
-          args.push(current.trim());
-        }
-        current = '';
-        continue;
-      }
-
-      current += char;
-    }
-
-    if (current.trim().length > 0) {
-      args.push(current.trim());
-    }
-
-    return args;
-  }
-
-  private stripInlineComment(line: string): string {
-    const commentIndex = line.indexOf('//');
-    return commentIndex >= 0 ? line.slice(0, commentIndex) : line;
-  }
-
   private emitTimeComparison(node: BinaryExpressionNode, identifier: string, compared: ExpressionNode): void {
     const loc = node.loc?.start;
     if (!loc) {
@@ -974,6 +794,17 @@ export class TimeDateFunctionsValidator implements ValidationModule {
   private isVariableReference(value: string): boolean {
     const trimmed = value.trim();
     return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed);
+  }
+
+  private buildResult(): ValidationResult {
+    return {
+      isValid: this.errors.length === 0,
+      errors: this.errors,
+      warnings: this.warnings,
+      info: this.info,
+      typeMap: new Map(),
+      scriptType: this.context.scriptType,
+    };
   }
 
   private addError(line: number, column: number, message: string, code: string): void {

@@ -81,7 +81,7 @@ export function createStatementRule(parser: PineParser) {
           if (parser.LA(1).tokenType !== Repeat) {
             return false;
           }
-          const next = parser.nextSignificantToken(2);
+          const next = parser.LA(2);
           return next.tokenType === Newline;
         },
         ALT: () => parser.SUBRULE(parser.repeatStatement),

@@ -55,18 +55,18 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.config = config;
 
     if (!config.ast || config.ast.mode === 'disabled') {
-      this.collectStrategyDataText();
       return this.buildResult();
     }
 
-    this.astContext = this.getAstContext(config);
+    const contextWithAst = 'ast' in context ? (context as AstValidationContext) : null;
+    this.astContext = contextWithAst?.ast ? contextWithAst : this.getAstContext(config);
 
-    if (!this.astContext?.ast) {
-      this.collectStrategyDataText();
+    const program = this.astContext?.ast;
+    if (!program) {
       return this.buildResult();
     }
 
-    this.collectStrategyDataAst(this.astContext.ast);
+    this.collectStrategyDataAst(program);
     for (const line of this.astStrategyCallLines) {
       const sourceLine = this.context.cleanLines[line - 1] ?? '';
       this.validateStrategyComplexity(sourceLine, line);
@@ -109,61 +109,6 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.complexStrategyExpressions = 0;
   }
 
-  private collectStrategyDataText(): void {
-    const lines = this.getSourceLines();
-    if (lines.length === 0) {
-      return;
-    }
-
-    for (let index = 0; index < lines.length; index++) {
-      const rawLine = lines[index];
-      const lineWithoutComment = this.stripInlineComment(rawLine);
-      if (!/\bstrategy\b/.test(lineWithoutComment)) {
-        continue;
-      }
-
-      const column = this.lineContainsNestedStrategyCall(lineWithoutComment);
-      if (column !== null) {
-        this.addWarning(
-          index + 1,
-          column,
-          'PSV6-STRATEGY-PERF-NESTED',
-          'Nested strategy operations detected',
-        );
-      }
-    }
-  }
-
-  private lineContainsNestedStrategyCall(line: string): number | null {
-    const callRegex = /strategy\.[A-Za-z_]+\s*\(([^)]*)/g;
-    let match: RegExpExecArray | null;
-    while ((match = callRegex.exec(line)) !== null) {
-      const argsSection = match[1] ?? '';
-      if (argsSection.includes('strategy.')) {
-        return match.index + 1;
-      }
-    }
-    return null;
-  }
-
-  private getSourceLines(): string[] {
-    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
-      return [...this.context.cleanLines];
-    }
-    if (Array.isArray(this.context.lines) && this.context.lines.length > 0) {
-      return [...this.context.lines];
-    }
-    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length > 0) {
-      return [...this.context.rawLines];
-    }
-    return [];
-  }
-
-  private stripInlineComment(line: string): string {
-    const idx = line.indexOf('//');
-    return idx >= 0 ? line.slice(0, idx) : line;
-  }
-
   private buildResult(typeMap: Map<string, unknown> = new Map()): ValidationResult {
     return {
       isValid: this.errors.length === 0,
@@ -171,7 +116,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
       warnings: this.warnings,
       info: this.info,
       typeMap,
-      scriptType: null,
+      scriptType: this.context.scriptType,
     };
   }
 
@@ -231,7 +176,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
       this.addError(
         line,
         column,
-        `PSV6-STRATEGY-FUNCTION-UNKNOWN: Unknown Strategy function: ${qualifiedName}`,
+        Codes.STRATEGY_FUNCTION_UNKNOWN,
         `Strategy function '${qualifiedName}' is not recognized. Check spelling and ensure it's a valid Pine Script v6 Strategy function.`,
       );
       return;
