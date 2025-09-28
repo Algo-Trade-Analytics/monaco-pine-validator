@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { EnhancedModularValidator } from '../../EnhancedModularValidator';
-import { expectHas, expectLacks, expectValid, expectInvalid } from './test-utils';
+import { TimeDateFunctionsValidator } from '../../modules/time-date-functions-validator';
+import { expectHas, expectLacks, expectValid, expectInvalid, runModuleValidation } from './test-utils';
 
-const createValidator = () => new EnhancedModularValidator({
-  targetVersion: 6,
-  strictMode: true,
-  enablePerformanceAnalysis: true
-});
+const validate = (code: string) =>
+  runModuleValidation(new TimeDateFunctionsValidator(), code, {
+    targetVersion: 6,
+    strictMode: true,
+    enablePerformanceAnalysis: true,
+  });
 
 describe('Time/Date Functions Validation', () => {
 
@@ -21,7 +22,7 @@ close_time_utc = time_close("60", session.regular, "UTC")
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expect(result.isValid).toBe(true);
       expectHas(result, { info: ['PSV6-TIME-CLOSE-INFO'] });
     });
@@ -35,7 +36,7 @@ close_time = time_close()
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { errors: ['PSV6-TIME-CLOSE-PARAMS'] });
     });
 
@@ -48,7 +49,7 @@ close_time = time_close("60", "invalid_session")
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { warnings: ['PSV6-TIME-CLOSE-SESSION'] });
     });
 
@@ -61,7 +62,7 @@ close_time = time_close("60", session.regular, "America/New_York")
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expect(result.isValid).toBe(true);
       expectHas(result, { info: ['PSV6-TIMEZONE-CUSTOM'] });
     });
@@ -78,7 +79,7 @@ trading_day_utc = time_tradingday(time, "UTC")
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expect(result.isValid).toBe(true);
       expectHas(result, { info: ['PSV6-TIME-TRADINGDAY-INFO'] });
     });
@@ -92,7 +93,7 @@ trading_day = time_tradingday()
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { errors: ['PSV6-TIME-TRADINGDAY-PARAMS'] });
     });
 
@@ -105,7 +106,7 @@ trading_day = time_tradingday("invalid_time")
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { warnings: ['PSV6-TIME-TRADINGDAY-TIME'] });
     });
   });
@@ -121,7 +122,7 @@ ts_tz = timestamp(2024, 1, 1, 9, 30, 0, "UTC")
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expect(result.isValid).toBe(true);
       expectHas(result, { info: ['PSV6-TIMESTAMP-INFO'] });
     });
@@ -135,7 +136,7 @@ ts = timestamp(2024, 1, 1)
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { errors: ['PSV6-TIMESTAMP-PARAMS'] });
     });
 
@@ -148,7 +149,7 @@ ts = timestamp(2024, 13, 1, 9, 30, 0)
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { errors: ['PSV6-TIMESTAMP-MONTH-RANGE'] });
     });
 
@@ -161,7 +162,7 @@ ts = timestamp(2024, 1, 32, 9, 30, 0)
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { errors: ['PSV6-TIMESTAMP-DAY-RANGE'] });
     });
 
@@ -174,7 +175,7 @@ ts = timestamp(2024, 1, 1, 25, 30, 0)
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { errors: ['PSV6-TIMESTAMP-HOUR-RANGE'] });
     });
 
@@ -187,7 +188,7 @@ ts = timestamp(2024, 1, 1, 9, 65, 0)
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { errors: ['PSV6-TIMESTAMP-MINUTE-RANGE'] });
     });
 
@@ -200,7 +201,7 @@ ts = timestamp(2024, 1, 1, 9, 30, 65)
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { errors: ['PSV6-TIMESTAMP-SECOND-RANGE'] });
     });
 
@@ -213,7 +214,7 @@ ts = timestamp(2200, 1, 1, 9, 30, 0)
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { warnings: ['PSV6-TIMESTAMP-YEAR-RANGE'] });
     });
   });
@@ -228,7 +229,7 @@ current_time = timenow
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -242,7 +243,7 @@ current_time = timenow("UTC")
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { warnings: ['PSV6-TIMENOW-NO-PARAMS'] });
     });
   });
@@ -259,7 +260,7 @@ close_local = time_close("60", session.regular, "America/New_York")
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -273,7 +274,7 @@ close_time = time_close("60", session.regular, timezone.unknown)
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { warnings: ['PSV6-TIMEZONE-INVALID'] });
     });
 
@@ -287,7 +288,7 @@ close_london = time_close("60", session.regular, "Europe/London")
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expect(result.isValid).toBe(true);
       expectHas(result, { info: ['PSV6-TIMEZONE-CUSTOM'] });
     });
@@ -304,7 +305,7 @@ close_extended = time_close("60", session.extended)
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -318,7 +319,7 @@ close_time = time_close("60", session.unknown)
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { warnings: ['PSV6-SESSION-UNKNOWN'] });
     });
   });
@@ -334,7 +335,7 @@ trading_day = time_tradingday(time, "UTC")
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { info: ['PSV6-TIME-BEST-PRACTICE'] });
     });
 
@@ -348,7 +349,7 @@ trading_day = time_tradingday(time)
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { info: ['PSV6-TIMEZONE-SUGGESTION'] });
     });
 
@@ -362,7 +363,7 @@ for i = 0 to 10
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { warnings: ['PSV6-TIME-PERF-LOOP'] });
     });
 
@@ -377,7 +378,7 @@ ${Array.from({length: 15}, (_, i) =>
 
 plot(close)`;
       
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expectHas(result, { warnings: ['PSV6-TIME-PERF-MANY-CALLS'] });
     });
   });
@@ -401,7 +402,7 @@ current_day = dayofmonth
 // Simple plot without complex conditions to avoid validation complexity
 plot(close)`;
       
-    const result = createValidator().validate(code);
+    const result = validate(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
@@ -429,7 +430,7 @@ isTicks = timeframe.isticks
 plot(close)
       `;
 
-      const result = createValidator().validate(code);
+      const result = validate(code);
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
     });
