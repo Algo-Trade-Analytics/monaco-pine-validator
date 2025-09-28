@@ -620,6 +620,9 @@ export class FunctionValidator implements ValidationModule {
   private validateFunctionCalls(): void {
     if (this.astContext?.ast) {
       this.collectFunctionCallsFromAst(this.astContext.ast);
+      if (this.isDebugEnabled()) {
+        console.log('[FunctionValidator] collected calls', this.functionCalls.map(call => ({ name: call.name, args: call.arguments })));
+      }
     }
 
     // Validate all collected function calls
@@ -816,6 +819,13 @@ export class FunctionValidator implements ValidationModule {
     }
 
     const methodName = parts[parts.length - 1];
+    const baseName = parts[0];
+
+    const baseTypeInfo = this.context.typeMap.get(baseName);
+    if (baseName === 'this' || baseTypeInfo?.type === 'udt' || this.isVariableAssignedUDTConstructor(baseName) || this.isUDTConstructor(baseName)) {
+      return;
+    }
+
     if (this.allowedInstanceMethods.has(methodName)) {
       return;
     }
@@ -2229,10 +2239,13 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
+    if (config.ast && config.ast.mode === 'disabled') {
       return null;
     }
-    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+    if (!isAstValidationContext(this.context) || !this.context.ast) {
+      return null;
+    }
+    return this.context as AstValidationContext;
   }
 }
 

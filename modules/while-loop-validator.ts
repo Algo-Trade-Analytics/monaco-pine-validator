@@ -47,9 +47,9 @@ export class WhileLoopValidator implements ValidationModule {
     const astContext = this.getAstContext(context, config);
     if (astContext?.ast) {
       this.validateWhileLoopsAst(astContext.ast);
-    } else {
-      this.validateWhileLoopsTextual(context);
     }
+
+    this.validateWhileLoopsTextual(context);
 
     return {
       isValid: this.errors.length === 0,
@@ -148,9 +148,6 @@ export class WhileLoopValidator implements ValidationModule {
 
   private validateWhileLoopsTextual(context: ValidationContext): void {
     const lines = context.cleanLines ?? [];
-    if (process.env.DEBUG_WHILE_TEXT === '1') {
-      console.log('[LINES]', lines);
-    }
     const whileStack: Array<{ indent: number; line: number }> = [];
 
     for (let index = 0; index < lines.length; index++) {
@@ -158,17 +155,9 @@ export class WhileLoopValidator implements ValidationModule {
       const trimmed = line.trim();
       const lineNumber = index + 1;
 
-      if (process.env.DEBUG_WHILE_TEXT === '1' && line.includes('while')) {
-        console.log('[LINE]', lineNumber, JSON.stringify(line));
-      }
-
       if (/^while\b/i.test(trimmed)) {
         const condition = trimmed.slice(5).trim();
         const column = line.indexOf('while') + 1;
-
-        if (process.env.DEBUG_WHILE_TEXT === '1') {
-          console.log('[WHILE_LINE]', lineNumber, JSON.stringify(trimmed));
-        }
 
         if (condition === '' || condition.startsWith('//')) {
           this.addError(
@@ -192,9 +181,6 @@ export class WhileLoopValidator implements ValidationModule {
     }
 
     for (const entry of whileStack) {
-      if (process.env.DEBUG_WHILE_TEXT === '1') {
-        console.log('[WHILE_STACK]', entry.line, entry.indent);
-      }
       this.addError(
         entry.line,
         1,

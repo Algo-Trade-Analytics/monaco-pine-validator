@@ -347,10 +347,13 @@ export class EnhancedQualityValidator implements ValidationModule {
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
+    if (config.ast && config.ast.mode === 'disabled') {
       return null;
     }
-    return isAstValidationContext(this.context) && this.context.ast ? (this.context as AstValidationContext) : null;
+    if (!isAstValidationContext(this.context) || !this.context.ast) {
+      return null;
+    }
+    return this.context as AstValidationContext;
   }
 }
 

@@ -63,20 +63,14 @@ export class MathFunctionsValidator implements ValidationModule {
     this.reset();
     this.context = context;
     this.astContext = this.getAstContext(config);
-    if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null
-      };
+    if (this.astContext?.ast) {
+      this.collectMathDataAst(this.astContext.ast);
+      this.validateMathPerformanceAst();
+      this.validateMathBestPractices();
+    } else {
+      this.collectMathDataText();
+      this.validateMathPerformanceText();
     }
-
-    this.collectMathDataAst(this.astContext.ast);
-    this.validateMathPerformanceAst();
-    this.validateMathBestPractices();
 
     const typeMap = new Map();
     for (const [funcName, funcInfo] of this.mathFunctionCalls) {
@@ -234,6 +228,26 @@ export class MathFunctionsValidator implements ValidationModule {
       this.addWarning(
         0,
         0,
+        'PSV6-MATH-PERF-NESTED',
+        `Too many complex Math expressions (${this.complexMathExpressions}). Consider simplifying for better performance.`,
+      );
+    }
+  }
+
+  private validateMathPerformanceText(): void {
+    if (this.mathFunctionCount > 3) {
+      this.addWarning(
+        1,
+        1,
+        'PSV6-MATH-PERF-MANY',
+        `Too many Math function calls (${this.mathFunctionCount}). Consider optimizing for better performance.`,
+      );
+    }
+
+    if (this.complexMathExpressions > 1) {
+      this.addWarning(
+        1,
+        1,
         'PSV6-MATH-PERF-NESTED',
         `Too many complex Math expressions (${this.complexMathExpressions}). Consider simplifying for better performance.`,
       );
@@ -461,10 +475,41 @@ export class MathFunctionsValidator implements ValidationModule {
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
-    if (!config.ast || config.ast.mode === 'disabled') {
+    if (config.ast && config.ast.mode === 'disabled') {
       return null;
     }
-    return isAstValidationContext(this.context) ? (this.context as AstValidationContext) : null;
+    if (!isAstValidationContext(this.context) || !this.context.ast) {
+      return null;
+    }
+    return this.context as AstValidationContext;
+  }
+
+  private collectMathDataText(): void {
+    const lines = this.context.cleanLines ?? this.context.lines ?? [];
+    if (!lines.length) {
+      return;
+    }
+
+    let callCount = 0;
+    let complexCount = 0;
+    const complexFunctions = new Set(['math.pow', 'math.sum', 'math.avg']);
+
+    for (const line of lines) {
+      const matches = line.match(/math\.[A-Za-z_]+/g);
+      if (!matches) {
+        continue;
+      }
+
+      callCount += matches.length;
+      for (const match of matches) {
+        if (complexFunctions.has(match)) {
+          complexCount += 1;
+        }
+      }
+    }
+
+    this.mathFunctionCount = Math.max(this.mathFunctionCount, callCount);
+    this.complexMathExpressions = Math.max(this.complexMathExpressions, complexCount);
   }
 
   private extractNumericValue(param: string, node?: ExpressionNode): number | null {

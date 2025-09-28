@@ -631,6 +631,16 @@ export class EnumValidator implements ValidationModule {
 
     const object = member.object as IdentifierNode;
     const property = member.property as IdentifierNode;
+
+    if (this.isUdtNamespace(object.name)) {
+      return null;
+    }
+
+    const objectType = this.context.typeMap.get(object.name)?.type;
+    if (objectType === 'udt') {
+      return null;
+    }
+
     return { enumName: object.name, memberName: property.name, node: member };
   }
 

@@ -24,6 +24,14 @@ import type {
   AssignmentStatementNode,
   IdentifierNode,
   TupleExpressionNode,
+  NumberLiteralNode,
+  StringLiteralNode,
+  BooleanLiteralNode,
+  NullLiteralNode,
+  MemberExpressionNode,
+  CallExpressionNode,
+  UnaryExpressionNode,
+  BinaryExpressionNode,
 } from '../core/ast/nodes';
 import type { TypeMetadata } from '../core/ast/types';
 
@@ -144,13 +152,8 @@ export class TypeValidator implements ValidationModule {
       ConditionalExpression: {
         enter: (path) => {
           const expression = path.node as ConditionalExpressionNode;
-          const metadata = environment.nodeTypes.get(expression);
-          if (!metadata || metadata.certainty !== 'conflict') {
-            return;
-          }
-
-          const consequentType = this.describeTypeMetadata(environment.nodeTypes.get(expression.consequent));
-          const alternateType = this.describeTypeMetadata(environment.nodeTypes.get(expression.alternate));
+          const consequentType = this.getExpressionTypeLabel(context, expression.consequent);
+          const alternateType = this.getExpressionTypeLabel(context, expression.alternate);
           if (!consequentType || !alternateType) {
             return;
           }
@@ -163,7 +166,12 @@ export class TypeValidator implements ValidationModule {
           const column = expression.loc.start.column;
           const key = `${line}`;
           this.registerAstDiagnostic('PSV6-TERNARY-TYPE', key);
-          this.addError(line, column, `Ternary operator type mismatch: '${consequentType}' vs '${alternateType}'.`, 'PSV6-TERNARY-TYPE');
+          this.addError(
+            line,
+            column,
+            `Ternary operator type mismatch: '${consequentType}' vs '${alternateType}'.`,
+            'PSV6-TERNARY-TYPE',
+          );
         },
       },
     });
@@ -386,6 +394,170 @@ export class TypeValidator implements ValidationModule {
     ]);
     return known.has(name);
   }
+
+  private getExpressionTypeLabel(context: AstValidationContext, expression: ExpressionNode | null): string | null {
+    if (!expression) {
+      return null;
+    }
+
+    const metadata = context.typeEnvironment.nodeTypes.get(expression as ExpressionNode);
+    const metadataLabel = this.describeTypeMetadata(metadata);
+    if (metadataLabel && metadataLabel !== 'unknown') {
+      return metadataLabel;
+    }
+
+    switch (expression.kind) {
+      case 'NumberLiteral': {
+        const literal = expression as NumberLiteralNode;
+        return Number.isInteger(literal.value) ? 'int' : 'float';
+      }
+      case 'StringLiteral':
+        return 'string';
+      case 'BooleanLiteral':
+        return 'bool';
+      case 'NullLiteral':
+        return 'void';
+      case 'Identifier': {
+        const identifier = expression as IdentifierNode;
+        const typeInfo = context.typeMap.get(identifier.name);
+        if (typeInfo && typeInfo.type !== 'unknown') {
+          return typeInfo.type;
+        }
+        const identifierMetadata = context.typeEnvironment.identifiers.get(identifier.name);
+        const inferred = this.describeTypeMetadata(identifierMetadata);
+        return inferred && inferred !== 'unknown' ? inferred : null;
+      }
+      case 'MemberExpression':
+        return this.resolveMemberExpressionType(context, expression as MemberExpressionNode);
+      case 'CallExpression': {
+        const call = expression as CallExpressionNode;
+        const qualified = this.resolveQualifiedName(call.callee);
+        if (qualified) {
+          const hint = this.lookupCallReturnType(qualified);
+          if (hint) {
+            return hint;
+          }
+        }
+        return null;
+      }
+      case 'UnaryExpression': {
+        const unary = expression as UnaryExpressionNode;
+        return this.getExpressionTypeLabel(context, unary.argument);
+      }
+      case 'BinaryExpression': {
+        const binary = expression as BinaryExpressionNode;
+        const left = this.getExpressionTypeLabel(context, binary.left);
+        const right = this.getExpressionTypeLabel(context, binary.right);
+        if (!left || !right) {
+          return null;
+        }
+        if (left === right) {
+          return left;
+        }
+        if (this.areTypesCompatible(left, right)) {
+          return left;
+        }
+        return null;
+      }
+      case 'ArrayLiteral':
+        return 'array';
+      case 'MatrixLiteral':
+        return 'matrix';
+      case 'ConditionalExpression': {
+        const conditional = expression as ConditionalExpressionNode;
+        const consequent = this.getExpressionTypeLabel(context, conditional.consequent);
+        const alternate = this.getExpressionTypeLabel(context, conditional.alternate);
+        if (consequent && alternate && this.areTypesCompatible(consequent, alternate)) {
+          return consequent;
+        }
+        return null;
+      }
+      default:
+        return null;
+    }
+  }
+
+  private resolveMemberExpressionType(context: AstValidationContext, member: MemberExpressionNode): string | null {
+    const qualified = this.resolveQualifiedName(member);
+    if (qualified) {
+      const typeInfo = context.typeMap.get(qualified);
+      if (typeInfo && typeInfo.type !== 'unknown') {
+        return typeInfo.type;
+      }
+
+      const namespaceHint = this.namespaceTypeHints.get(qualified.split('.')[0] ?? '');
+      if (namespaceHint) {
+        return namespaceHint;
+      }
+    }
+
+    const objectName = this.resolveQualifiedName(member.object);
+    if (objectName) {
+      const fieldKey = `${objectName}.${member.property.name}`;
+      const fieldInfo = context.typeMap.get(fieldKey);
+      if (fieldInfo && fieldInfo.type !== 'unknown') {
+        return fieldInfo.type;
+      }
+    }
+
+    return null;
+  }
+
+  private resolveQualifiedName(expression: ExpressionNode): string | null {
+    if (expression.kind === 'Identifier') {
+      return (expression as IdentifierNode).name;
+    }
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.computed) {
+        return null;
+      }
+      const objectName = this.resolveQualifiedName(member.object);
+      if (!objectName) {
+        return null;
+      }
+      return `${objectName}.${member.property.name}`;
+    }
+    return null;
+  }
+
+  private lookupCallReturnType(name: string): string | null {
+    if (this.callReturnTypeHints.has(name)) {
+      return this.callReturnTypeHints.get(name)!;
+    }
+    const namespace = name.split('.')[0] ?? '';
+    return this.namespaceTypeHints.get(namespace) ?? null;
+  }
+
+  private readonly namespaceTypeHints = new Map<string, string>([
+    ['ta', 'series'],
+    ['math', 'float'],
+    ['str', 'string'],
+    ['color', 'color'],
+    ['line', 'line'],
+    ['label', 'label'],
+    ['box', 'box'],
+    ['table', 'table'],
+    ['polyline', 'polyline'],
+    ['location', 'int'],
+    ['size', 'int'],
+    ['shape', 'int'],
+    ['display', 'int'],
+    ['text', 'string'],
+    ['timeframe', 'string'],
+    ['session', 'string'],
+    ['syminfo', 'string'],
+    ['alert', 'string'],
+    ['strategy', 'series'],
+    ['request', 'series'],
+  ]);
+
+  private readonly callReturnTypeHints = new Map<string, string>([
+    ['color.new', 'color'],
+    ['color.rgb', 'color'],
+    ['color.from_gradient', 'color'],
+    ['color', 'color'],
+  ]);
 
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
     this.errors.push({ line, column, message, severity: 'error', code, suggestion });

@@ -238,6 +238,17 @@ export class EnhancedLibraryValidator implements ValidationModule {
       }
     }
 
+    if (this.astContext?.declaredVars?.has(alias) || this.astContext?.functionNames?.has(alias)) {
+      this.addError(
+        line,
+        column,
+        `Library alias '${alias}' conflicts with user-defined name`,
+        'PSV6-LIB-ALIAS',
+        this.createAliasSuggestion(alias),
+      );
+      return;
+    }
+
     if (EnhancedLibraryValidator.BUILT_IN_ALIAS_CONFLICTS.has(alias)) {
       this.addError(
         line,

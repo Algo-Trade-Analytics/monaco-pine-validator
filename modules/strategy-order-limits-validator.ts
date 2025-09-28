@@ -686,6 +686,13 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
           if (path.node.declarationKind === 'var' && /entered/i.test(path.node.identifier.name)) {
             this.astHasVarEntryTracking = true;
           }
+
+          if (path.node.initializer && this.looksLikeOrderCounter(path.node.identifier.name)) {
+            const numericValue = this.getNumericLiteralValue(path.node.initializer);
+            if (typeof numericValue === 'number') {
+              this.totalOrderCount = Math.max(this.totalOrderCount, numericValue);
+            }
+          }
         },
       },
       MemberExpression: {
@@ -776,6 +783,23 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     };
 
     const stack: BlockFrame[] = [];
+    const orderCounterPattern = /\bvar\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\d+)/;
+
+    for (const rawLine of lines) {
+      const match = rawLine.match(orderCounterPattern);
+      if (!match) {
+        continue;
+      }
+      const [, identifier, numericLiteral] = match;
+      if (!this.looksLikeOrderCounter(identifier)) {
+        continue;
+      }
+      const value = Number.parseInt(numericLiteral, 10);
+      if (Number.isFinite(value)) {
+        this.totalOrderCount = Math.max(this.totalOrderCount, value);
+      }
+    }
+
     const memberRegex = /strategy\.[A-Za-z0-9_\.]+/g;
     const orderRegex = /strategy\.(entry|order|exit|close_all|close|cancel_all|cancel)\s*\((.*)$/;
     const loopRegex = /^\s*(for|while)\b/;
@@ -1163,6 +1187,10 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
       return `${objectName}.${member.property.name}`;
     }
     return null;
+  }
+
+  private looksLikeOrderCounter(name: string): boolean {
+    return /(order_count|orders_count|orderCount|ordersCount|orderCounter|ordersCounter)/i.test(name);
   }
 
   private getNumericLiteralValue(expression: ExpressionNode): number | null {
