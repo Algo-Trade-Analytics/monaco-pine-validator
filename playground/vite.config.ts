@@ -15,6 +15,6 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    include: ['@monaco-editor/react']
+    include: ['@monaco-editor/react', 'error-stack-parser', 'stackframe']
   }
 });

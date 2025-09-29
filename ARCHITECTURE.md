@@ -1,0 +1,73 @@
+# Pine Validator Architecture
+
+This document provides a high-level overview of the Pine Validator codebase. It covers the major packages, the AST and validation pipeline, supporting tooling, and where to look for tests and playground assets.
+
+## Repository Layout
+
+- `core/` – foundational runtime for parsing Pine scripts, building ASTs, managing validation context, and hosting low-level utilities.
+- `modules/` – individual validation modules. Each module inspects part of the AST or execution context and emits diagnostics.
+- `tests/` – Vitest suites covering both the AST infrastructure (`tests/ast`) and the validator behaviour itself (`tests/specs`).
+- `playground/` – lightweight sandbox for experimenting with validators from Node or the browser.
+- `docs/` – user-facing documentation snippets and reference material.
+- `EnhancedModularValidator.ts`, `ModularUltimateValidator.ts` – top-level orchestrators that wire modules together into production-ready validators.
+
+## Core Runtime (`core/`)
+
+### AST Subsystem (`core/ast/`)
+
+- `core/ast/parser` contains the hand-written Chevrotain parser. Key files:
+  - `parser.ts` – extends `EmbeddedActionsParser`, exposing a public façade (`createRule`, `consumeToken`, `invokeSubrule`, etc.) for rule factories so they never touch Chevrotain’s protected members directly.
+  - `rules/` – grammar rules broken down by concern (`expressions.ts`, `statements.ts`, `control-flow.ts`, `program.ts`, `declarations.ts`).
+  - `helpers.ts` – shared parsing helpers such as indentation handling, declaration token collectors, and lookahead utilities.
+  - `tokens.ts` – the Chevrotain token definitions covering Pine V6 syntax.
+- `core/ast/nodes.ts` defines the strong typing for every AST node emitted by the parser.
+- `core/ast/context-utils.ts`, `core/ast/scope-builder.ts`, and related files walk the AST to build symbol tables, track scopes, and expose metadata needed by validators.
+
+### Validation Infrastructure
+
+- `core/base-validator.ts` – abstract base class that manages diagnostics buffers (`errors`, `warnings`, `info`), common utilities, and the shared `ValidationContext` object.
+- `core/types.ts` – shared interfaces (`ValidationContext`, `ValidatorConfig`, `Diagnostic`, etc.) used across the project.
+- `core/monaco/` – integration layer for the Monaco editor playground (language worker harness, token mapping helpers, etc.).
+- `core/constants.ts` & `core/constants-registry.ts` – enumerations and registries used by modules to classify diagnostics and look up metadata.
+
+## Validation Modules (`modules/`)
+
+Each file implements a specific validator by extending `BaseValidator` or composing helper classes. Highlights:
+
+- General-purpose validators: `core-validator.ts`, `syntax-validator.ts`, `type-validator.ts`.
+- Feature-specific validators: `strategy-order-limits-validator.ts`, `dynamic-data-validator.ts`, `linefill-validator.ts`, `enum-validator.ts`, etc.
+- `modules/index.ts` exports module constructors so orchestrators can register them easily.
+- Shared utilities live under `modules/functions/`.
+
+The orchestrators at the repo root load these modules:
+
+- `EnhancedModularValidator.ts` – default validator pipeline used by the CLI and editor integrations.
+- `ModularUltimateValidator.ts` – extended bundle enabling every available module.
+
+## Testing & Harnesses (`tests/`)
+
+- `tests/ast/` – unit tests for the parser, scope builder, and AST-driven validators. They run through Vitest using `npm run test:ast`.
+- `tests/specs/` – high-level validation suites. `tests/specs/all-validation-tests.spec.ts` dynamically loads every module’s spec based on environment flags, enabling both smoke and full regression runs (`npm run test:validator`, `npm run test:validator:full`).
+- `tests/specs/test-utils.ts` – shared harness utilities for constructing `ValidationContext`, invoking modules, and asserting diagnostics.
+
+## Tooling, Scripts, and Playground
+
+- `playground/` – contains a `package.json` plus scripts for experimenting with the validator from a REPL or bundler. Useful when integrating with editors or prototyping new diagnostics.
+- `scripts/` – helper Node scripts (for profiling or running bespoke validation scenarios).
+- Root-level entry points (`index.ts`, `integration-test.ts`, `test-modular-validator.ts`) demonstrate how to wire validators in different environments.
+- `tsconfig.json`, `vitest.config.ts`, and `vitest.validator.config.ts` define TypeScript compilation, standard unit tests, and validator-specific Vitest runs, respectively.
+
+## Data Flow Overview
+
+1. **Parsing:** Pine source is tokenised and parsed via Chevrotain (`core/ast/parser`). The result is a strongly typed AST (`core/ast/nodes.ts`).
+2. **AST Enrichment:** Scope builders and context utilities annotate the AST with additional semantic information (symbol tables, control-flow edges, etc.).
+3. **Validation Pipeline:** `EnhancedModularValidator` (or `ModularUltimateValidator`) instantiates validators from `modules/`, feeding them the `ValidationContext` plus AST metadata. Each module emits diagnostics and may populate entries in `context.typeMap` for downstream analysis.
+4. **Reporting:** Diagnostics are aggregated and returned to callers (CLI, Monaco worker, tests). Some modules also add structured analysis artefacts (for example, `strategy_order_analysis`) to support cross-module insights.
+
+## Getting Started Checklist
+
+- Run `npm run test:ast` to ensure parser and AST utilities stay healthy.
+- Run `npm run test:validator:full` for the comprehensive validation suite.
+- Explore `playground/` to experiment with new diagnostics before integrating them into the production pipeline.
+- Review `modules/` and `core/` to understand existing validator patterns before adding new ones.
+

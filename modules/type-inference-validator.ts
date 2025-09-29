@@ -807,7 +807,7 @@ export class TypeInferenceValidator implements ValidationModule {
       const updated: TypeInfo = { ...existing };
       let changed = false;
 
-      if (updated.type === 'unknown' && type !== 'unknown') {
+      if (!updated.type) {
         updated.type = type;
         updated.isSeries = type === 'series' || updated.isSeries;
         changed = true;
@@ -1957,56 +1957,6 @@ export class TypeInferenceValidator implements ValidationModule {
     };
     
     return paramTypes[funcName] || null;
-  }
-
-  private areTypesCompatible(type1: string, type2: string): boolean {
-    // Type compatibility rules
-    if (type1 === 'any' || type2 === 'any') return true;
-    if (type1 === type2) return true;
-    
-    // Numeric compatibility
-    if ((type1 === 'int' || type1 === 'float') && (type2 === 'int' || type2 === 'float')) {
-      return true;
-    }
-    
-    // Series compatibility
-    if ((type1 === 'series' || type1 === 'series int' || type1 === 'series float') && 
-        (type2 === 'series' || type2 === 'series int' || type2 === 'series float')) {
-      return true;
-    }
-    
-    // Float/int to series compatibility (Pine Script allows scalar values to be passed to series parameters)
-    if (type1 === 'series' && (type2 === 'float' || type2 === 'int')) {
-      return true;
-    }
-    
-    // Boolean compatibility
-    if ((type1 === 'bool' || type1 === 'series bool') && 
-        (type2 === 'bool' || type2 === 'series bool')) {
-      return true;
-    }
-    
-    // String compatibility
-    if (type1 === 'string' && type2 === 'string') {
-      return true;
-    }
-    
-    // na compatibility (na can be assigned to any type)
-    if (type2 === 'na') {
-      return true;
-    }
-    
-    // Literal to series compatibility (literals can be assigned to series)
-    if (type1 === 'series' && (type2 === 'int' || type2 === 'float' || type2 === 'bool')) {
-      return true;
-    }
-    
-    // Series to numeric compatibility (series can be used where numeric is expected)
-    if ((type1 === 'int' || type1 === 'float') && type2 === 'series') {
-      return true;
-    }
-
-    return false;
   }
 
   private suggestTypeFromVariableName(varName: string): string | null {
