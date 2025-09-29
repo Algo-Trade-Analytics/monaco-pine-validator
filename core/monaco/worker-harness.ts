@@ -5,7 +5,7 @@ import type {
   ValidationResult,
   ValidatorConfig,
 } from '../types';
-import type { AstService } from '../ast/types';
+import type { AstService, AstConfig } from '../ast/types';
 import {
   MarkerSeverity,
   type MarkerData,
@@ -72,9 +72,11 @@ function mergeConfig(
     Object.assign(merged, override);
   }
 
-  const baseAst = base?.ast ?? {};
-  const overrideAst = override?.ast ?? {};
+  const baseAst: Partial<AstConfig> = base?.ast ?? {};
+  const overrideAst: Partial<AstConfig> = override?.ast ?? {};
   merged.ast = {
+    mode: 'primary',
+    service: null,
     ...baseAst,
     ...overrideAst,
   };
@@ -86,13 +88,13 @@ function normaliseConfig(
   config: Partial<ValidatorConfig>,
   fallbackService: AstService | undefined,
 ): Partial<ValidatorConfig> {
-  const astConfig = config.ast ?? {};
+  const astConfig: Partial<AstConfig> = config.ast ?? {};
   return {
     ...config,
     ast: {
       ...astConfig,
       mode: astConfig.mode ?? 'primary',
-      service: astConfig.service ?? fallbackService ?? astConfig.service ?? null,
+      service: astConfig.service ?? fallbackService ?? null,
     },
   };
 }
@@ -101,8 +103,8 @@ function configsEqual(a: Partial<ValidatorConfig>, b: Partial<ValidatorConfig>):
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   for (const key of keys) {
     if (key === 'ast') {
-      const astA = a.ast ?? {};
-      const astB = b.ast ?? {};
+      const astA: Partial<AstConfig> = a.ast ?? {};
+      const astB: Partial<AstConfig> = b.ast ?? {};
       if ((astA.mode ?? 'primary') !== (astB.mode ?? 'primary')) {
         return false;
       }

@@ -228,7 +228,7 @@ export function createMonacoWorkerClient(options: WorkerClientOptions): MonacoWo
       };
 
       return new Promise<WorkerConfiguredMessage>((resolve, reject) => {
-        enqueue(requestId, resolve, reject);
+        enqueue(requestId, resolve as (message: MonacoWorkerOutboundMessage) => void, reject);
         send(message);
       });
     },
@@ -243,7 +243,7 @@ export function createMonacoWorkerClient(options: WorkerClientOptions): MonacoWo
       };
 
       return new Promise<WorkerResultMessage>((resolve, reject) => {
-        enqueue(requestId, resolve, reject);
+        enqueue(requestId, resolve as (message: MonacoWorkerOutboundMessage) => void, reject);
         send(message);
       });
     },
@@ -259,7 +259,7 @@ export function createMonacoWorkerClient(options: WorkerClientOptions): MonacoWo
       };
 
       return new Promise<WorkerDisposedMessage>((resolve, reject) => {
-        enqueue(requestId, resolve, reject);
+        enqueue(requestId, resolve as (message: MonacoWorkerOutboundMessage) => void, reject);
         send(message);
         disposed = true;
       });

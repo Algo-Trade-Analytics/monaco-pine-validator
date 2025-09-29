@@ -1,4 +1,4 @@
-import type { AstService } from '../ast/types';
+import type { AstService, AstConfig } from '../ast/types';
 import type { ValidatorConfig } from '../types';
 import {
   createMonacoWorkerHarness,
@@ -10,6 +10,14 @@ import type {
   MonacoWorkerOutboundMessage,
 } from './messages';
 
+// Declare DedicatedWorkerGlobalScope for Web Worker environment
+declare global {
+  interface DedicatedWorkerGlobalScope {
+    postMessage(message: any): void;
+    onmessage: ((event: MessageEvent) => void) | null;
+  }
+}
+
 export interface WorkerController {
   handleMessage(event: MessageEvent<MonacoWorkerInboundMessage>): void;
   dispose(requestId?: string): void;
@@ -19,7 +27,7 @@ export interface CreateWorkerOptions extends WorkerHarnessOptions {
   readonly markerSource?: string;
   readonly validatorConfig?: Partial<ValidatorConfig>;
   readonly version?: number;
-  readonly globalScope?: Pick<DedicatedWorkerGlobalScope, 'postMessage'>;
+  readonly globalScope?: Pick<DedicatedWorkerGlobalScope, 'postMessage' | 'onmessage'>;
 }
 
 function normaliseBaseConfig(
@@ -27,11 +35,11 @@ function normaliseBaseConfig(
   astService: AstService | undefined,
 ): Partial<ValidatorConfig> {
   const base = { ...(config ?? {}) };
-  const astConfig = base.ast ?? {};
+  const astConfig: Partial<AstConfig> = base.ast ?? {};
   base.ast = {
     ...astConfig,
     mode: astConfig.mode ?? 'primary',
-    service: astConfig.service ?? astService ?? astConfig.service ?? null,
+    service: astConfig.service ?? astService ?? null,
   };
   return base;
 }
