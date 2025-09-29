@@ -45,17 +45,10 @@ export class EnhancedQualityValidator implements ValidationModule {
     this.astContext = this.getAstContext(config);
     const ast = this.astContext?.ast;
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      this.validateWithText();
+    } else {
+      this.validateWithAst(ast);
     }
-
-    this.validateWithAst(ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -74,6 +67,35 @@ export class EnhancedQualityValidator implements ValidationModule {
     this.validateScriptComplexityAst(program);
     this.validateFunctionMetricsAst(program);
     this.validateNestingDepthAst(program);
+  }
+
+  private validateWithText(): void {
+    const lines = this.getSourceLines();
+    if (lines.length === 0) {
+      return;
+    }
+
+    const complexity = this.calculateTextComplexity(lines);
+    if (complexity >= 6) {
+      this.addWarning(
+        1,
+        0,
+        `Script has high cyclomatic complexity (${complexity}). Consider breaking it into smaller functions.`,
+        'PSV6-QUALITY-COMPLEXITY',
+        'Refactor script to reduce complexity below 8',
+      );
+    }
+
+    const { depth, line } = this.calculateTextNestingDepth(lines);
+    if (depth >= 4) {
+      this.addWarning(
+        line,
+        1,
+        `Excessive nesting depth detected (${depth} levels). Consider extracting nested logic into separate functions.`,
+        'PSV6-QUALITY-DEPTH',
+        'Refactor nested code to reduce depth below 3 levels',
+      );
+    }
   }
 
   private validateScriptComplexityAst(program: ProgramNode): void {
@@ -344,6 +366,83 @@ export class EnhancedQualityValidator implements ValidationModule {
 
   private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
     this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
+  }
+
+  private getSourceLines(): string[] {
+    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
+      return [...this.context.cleanLines];
+    }
+    if (Array.isArray(this.context.lines) && this.context.lines.length > 0) {
+      return [...this.context.lines];
+    }
+    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length > 0) {
+      return [...this.context.rawLines];
+    }
+    return [];
+  }
+
+  private stripInlineComment(line: string): string {
+    const idx = line.indexOf('//');
+    return idx >= 0 ? line.slice(0, idx) : line;
+  }
+
+  private calculateTextComplexity(lines: string[]): number {
+    let complexity = 0;
+    const controlPattern = /^(?:if|else\s+if|for|while|switch)\b/i;
+
+    for (const rawLine of lines) {
+      const line = this.stripInlineComment(rawLine).trim();
+      if (!line) {
+        continue;
+      }
+
+      if (controlPattern.test(line)) {
+        complexity += 1;
+        if (/^else\s+if\b/i.test(line)) {
+          complexity += 1;
+        }
+      }
+
+      if (line.includes('?') && line.includes(':')) {
+        complexity += 1;
+      }
+
+      if (/\b(?:and|or)\b/.test(line)) {
+        complexity += 1;
+      }
+    }
+
+    return complexity;
+  }
+
+  private calculateTextNestingDepth(lines: string[]): { depth: number; line: number } {
+    const stack: number[] = [];
+    let maxDepth = 0;
+    let depthLine = 1;
+
+    lines.forEach((rawLine, index) => {
+      const withoutComment = this.stripInlineComment(rawLine);
+      const trimmed = withoutComment.trim();
+      if (!trimmed) {
+        return;
+      }
+
+      const indent = withoutComment.length - withoutComment.replace(/^[\s\t]*/, '').length;
+
+      while (stack.length > 0 && indent <= stack[stack.length - 1]) {
+        stack.pop();
+      }
+
+      if (/^(?:if|else\s+if|for|while|switch)\b/i.test(trimmed)) {
+        stack.push(indent);
+        if (stack.length > maxDepth) {
+          maxDepth = stack.length;
+          depthLine = index + 1;
+        }
+      }
+    });
+
+    return { depth: maxDepth, line: depthLine };
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {

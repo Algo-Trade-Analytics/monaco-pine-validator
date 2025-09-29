@@ -184,7 +184,7 @@ export class WhileLoopValidator implements ValidationModule {
       this.addError(
         entry.line,
         1,
-        'While loop missing matching end statement.',
+        'While loop missing end statement.',
         'PSV6-WHILE-MISSING-END',
       );
     }

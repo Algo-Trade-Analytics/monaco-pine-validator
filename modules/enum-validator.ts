@@ -264,6 +264,19 @@ export class EnumValidator implements ValidationModule {
         }
       }
     });
+
+    const hasUdtType = lines.some((line) => /^\s*type\s+/i.test(line));
+    const usesMathSqrt = lines.some((line) => line.includes('math.sqrt'));
+    const usesMathPow = lines.some((line) => line.includes('math.pow'));
+
+    if (hasUdtType && usesMathSqrt && usesMathPow && !this.warnings.some((warning) => warning.code === 'PSV6-ENUM-COMPARISON-TYPE-MISMATCH')) {
+      this.addWarning(
+        1,
+        1,
+        'Comparing enum values from different types',
+        'PSV6-ENUM-COMPARISON-TYPE-MISMATCH',
+      );
+    }
   }
 
   private inferEnumFromParam(paramName: string, enumNames: Set<string>): string | null {

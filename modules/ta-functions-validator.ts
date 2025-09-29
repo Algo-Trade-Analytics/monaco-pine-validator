@@ -44,6 +44,7 @@ export class TAFunctionsValidator implements ValidationModule {
   private astLineCallCounts: Map<number, number> = new Map();
   private boolAssignmentTargets: Map<string, { callName: string }> = new Map();
   private reportedBooleanUsages: Set<string> = new Set();
+  private seriesLikeIdentifiers: Set<string> = new Set();
 
   private taFunctionCalls: Map<string, TAFunctionInfo> = new Map();
   private taFunctionCount = 0;
@@ -56,6 +57,8 @@ export class TAFunctionsValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
+
+    this.markSeriesLikeIdentifiers();
 
     this.astContext = this.getAstContext(config);
     const program = this.astContext?.ast;
@@ -101,6 +104,7 @@ export class TAFunctionsValidator implements ValidationModule {
     this.taFunctionCalls.clear();
     this.taFunctionCount = 0;
     this.complexTAExpressions = 0;
+    this.seriesLikeIdentifiers.clear();
   }
 
   private collectTAFunctionDataText(): void {
@@ -125,6 +129,48 @@ export class TAFunctionsValidator implements ValidationModule {
           'PSV6-TA-PERF-NESTED',
           'Multiple TA operations on one line',
         );
+      }
+    }
+  }
+
+  private markSeriesLikeIdentifiers(): void {
+    this.seriesLikeIdentifiers.clear();
+
+    const lines = this.getSourceLines();
+    if (lines.length === 0) {
+      return;
+    }
+
+    const assignmentRegex = /^\s*(?:var|varip|const|let|int|float|bool)?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/;
+
+    for (const rawLine of lines) {
+      const withoutComment = this.stripInlineComment(rawLine).trim();
+      if (!withoutComment) {
+        continue;
+      }
+
+      const match = withoutComment.match(assignmentRegex);
+      if (!match) {
+        continue;
+      }
+
+      const [, identifier, expression] = match;
+      if (!identifier || !expression) {
+        continue;
+      }
+
+      if (/\?.*?:/.test(expression) && /(barstate\.|ta\.|security\.|request\.)/.test(expression)) {
+        this.seriesLikeIdentifiers.add(identifier);
+        continue;
+      }
+
+      if (/(?:ta\.crossover|ta\.crossunder|ta\.valuewhen|request\.)/.test(expression)) {
+        this.seriesLikeIdentifiers.add(identifier);
+        continue;
+      }
+
+      if (/(?:ta\.|security\.|request\.)/.test(expression) && /\b(?:and|or)\b/.test(expression)) {
+        this.seriesLikeIdentifiers.add(identifier);
       }
     }
   }
@@ -591,11 +637,17 @@ export class TAFunctionsValidator implements ValidationModule {
     // Check context type map for identifiers (variables inferred by other modules)
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(param)) {
       const typeInfo = this.context.typeMap.get(param);
-      if (typeInfo && typeInfo.type) {
-        // Normalize common series type variations
-        if (typeInfo.type === 'series' || (typeInfo as any).type?.startsWith?.('series ')) {
+      if (typeInfo) {
+        if (typeInfo.isSeries || typeInfo.type === 'series' || (typeInfo as any).type?.startsWith?.('series ')) {
           return 'series';
         }
+      }
+
+      if (this.seriesLikeIdentifiers.has(param)) {
+        return 'series';
+      }
+
+      if (typeInfo && typeInfo.type && typeInfo.type !== 'unknown') {
         return typeInfo.type;
       }
     }

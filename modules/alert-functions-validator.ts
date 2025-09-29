@@ -26,6 +26,8 @@ import {
   type ExpressionNode,
   type MemberExpressionNode,
   type ProgramNode,
+  type IdentifierNode,
+  type BinaryExpressionNode,
 } from '../core/ast/nodes';
 import { findAncestor, type NodePath, visit } from '../core/ast/traversal';
 import { ensureAstContext } from '../core/ast/context-utils';
@@ -75,8 +77,9 @@ export class AlertFunctionsValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    this.context = context;
     this.reset();
+
+    this.context = context;
 
     this.astContext = ensureAstContext(context, config);
 
@@ -255,6 +258,20 @@ export class AlertFunctionsValidator implements ValidationModule {
         severity: 'warning',
       });
     }
+
+    if (conditionArg) {
+      const resolved = this.resolveConditionType(conditionArg);
+      if (!resolved || !resolved.type || resolved.type === 'unknown') {
+        const { line, column } = conditionArg.loc?.start ?? call.loc.start;
+        this.errors.push({
+          code: 'PSV6-ALERT-CONDITION-TYPE',
+          message: 'Unable to determine alert condition type. Expected a series bool expression.',
+          line,
+          column,
+          severity: 'error',
+        });
+      }
+    }
   }
 
   private processAstMemberExpression(path: NodePath<MemberExpressionNode>): void {
@@ -375,6 +392,38 @@ export class AlertFunctionsValidator implements ValidationModule {
     }
 
     return null;
+  }
+
+  private resolveConditionType(expression: ExpressionNode | null): { type: string | null; isSeries: boolean } | null {
+    if (!expression) {
+      return null;
+    }
+
+    if (expression.kind === 'Identifier') {
+      const identifier = expression as IdentifierNode;
+      const info = this.context.typeMap.get(identifier.name);
+      if (info) {
+        return { type: info.type ?? null, isSeries: info.isSeries ?? false };
+      }
+      return { type: null, isSeries: false };
+    }
+
+    if (expression.kind === 'BooleanLiteral') {
+      return { type: 'bool', isSeries: false };
+    }
+
+    if (expression.kind === 'BinaryExpression') {
+      const binary = expression as BinaryExpressionNode;
+      if (['and', 'or', '==', '!=', '>', '<', '>=', '<='].includes(binary.operator)) {
+        return { type: 'bool', isSeries: true };
+      }
+    }
+
+    if (expression.kind === 'CallExpression') {
+      return { type: 'bool', isSeries: true };
+    }
+
+    return { type: null, isSeries: false };
   }
 
   private resolveExpressionPath(expression: ExpressionNode): string[] | null {

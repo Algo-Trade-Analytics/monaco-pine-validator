@@ -944,7 +944,7 @@ export class FunctionValidator implements ValidationModule {
         }
       }
 
-      const delegatedNamespaces = new Set(['math','str','input','line','label','box','table','map','strategy','array','matrix','polyline']);
+      const delegatedNamespaces = new Set(['ta','math','str','input','line','label','box','table','map','strategy','array','matrix','polyline']);
       // In library scripts, restrict certain namespaces explicitly to match TDD expectations
       if (this.context.scriptType === 'library') {
         if (namespace === 'strategy') {
@@ -1202,9 +1202,6 @@ export class FunctionValidator implements ValidationModule {
     if (param.qualifier === 'simple') {
       const inferred = this.inferArgumentType(argValue);
       const looksSeries = this.argumentLooksSeries(argValue);
-      if (process.env.DEBUG_FUNC === '1') {
-        console.log('[FunctionValidator] simple qualifier check', { funcName, param: param.name, argValue, inferred, looksSeries });
-      }
       if (inferred === 'series' || looksSeries) {
         this.addError(line, column,
           `Parameter '${param.name}' of '${funcName}' requires simple type, got series`,
