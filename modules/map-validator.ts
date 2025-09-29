@@ -944,8 +944,8 @@ export class MapValidator implements ValidationModule {
     }
 
     const scalarType = valueType === 'na' ? 'float' : valueType;
-    if (scalarType !== 'unknown') {
-      this.assignCallResult(path, { type: scalarType });
+    if (scalarType !== 'unknown' && this.isValidType(scalarType)) {
+      this.assignCallResult(path, { type: scalarType as TypeInfo['type'] });
     }
   }
 
@@ -1253,7 +1253,7 @@ export class MapValidator implements ValidationModule {
 
     const identifierMetadata = this.astContext?.typeEnvironment?.identifiers.get(varName);
     if (identifierMetadata) {
-      return identifierMetadata.kind !== 'unknown' && identifierMetadata.kind !== 'parameter';
+      return identifierMetadata.kind !== 'unknown';
     }
 
     return false;
@@ -1285,5 +1285,14 @@ export class MapValidator implements ValidationModule {
 
   getMapKeyType(varName: string): string | null {
     return this.mapDeclarations.get(varName)?.keyType || null;
+  }
+
+  private isValidType(type: string): type is TypeInfo['type'] {
+    const validTypes: TypeInfo['type'][] = [
+      'string', 'float', 'int', 'series', 'array', 'map', 'bool', 
+      'color', 'line', 'label', 'box', 'table', 'linefill', 
+      'polyline', 'chart.point', 'matrix', 'udt', 'unknown'
+    ];
+    return validTypes.includes(type as TypeInfo['type']);
   }
 }

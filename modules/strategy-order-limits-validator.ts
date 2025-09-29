@@ -131,13 +131,11 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     // Build analysis results for other validators
     const typeMap = this.context.typeMap ?? new Map();
     typeMap.set('strategy_order_analysis', {
-      type: 'analysis',
+      type: 'unknown',
       isConst: false,
       isSeries: false,
       declaredAt: { line: 1, column: 1 },
-      usages: [],
-      orderCount: this.totalOrderCount,
-      patterns: this.orderPatterns.length
+      usages: []
     });
     this.context.typeMap = typeMap;
 

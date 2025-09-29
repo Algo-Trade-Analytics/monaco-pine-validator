@@ -44,6 +44,7 @@ import type {
   TypeReferenceNode,
   TupleExpressionNode,
   UnaryExpressionNode,
+  VariableDeclarationNode,
   VersionDirectiveNode,
   WhileStatementNode,
 } from '../core/ast/nodes';
