@@ -636,9 +636,55 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
     parameters: [
       { name: 'series1', type: 'series', qualifier: 'series', required: true },
       { name: 'series2', type: 'series', qualifier: 'series', required: true },
-      { name: 'color', type: 'color', qualifier: 'simple', required: false },
-      { name: 'title', type: 'string', qualifier: 'const', required: false },
+      { name: 'color', type: 'color', qualifier: 'series', required: false },
+      { name: 'top_value', type: 'series', qualifier: 'series', required: false },
+      { name: 'bottom_value', type: 'series', qualifier: 'series', required: false },
+      { name: 'top_color', type: 'color', qualifier: 'series', required: false },
+      { name: 'bottom_color', type: 'color', qualifier: 'series', required: false },
+      { name: 'title', type: 'string', qualifier: 'simple', required: false },
+      { name: 'editable', type: 'bool', qualifier: 'input', required: false },
+      { name: 'show_last', type: 'int', qualifier: 'input', required: false },
+      { name: 'display', type: 'int', qualifier: 'simple', required: false },
       { name: 'fillgaps', type: 'bool', qualifier: 'const', required: false }
+    ],
+    overloads: [
+      {
+        parameters: [
+          { name: 'hline1', type: 'series', qualifier: 'series', required: true },
+          { name: 'hline2', type: 'series', qualifier: 'series', required: true },
+          { name: 'color', type: 'color', qualifier: 'series', required: true },
+          { name: 'title', type: 'string', qualifier: 'simple', required: false },
+          { name: 'editable', type: 'bool', qualifier: 'input', required: false },
+          { name: 'fillgaps', type: 'bool', qualifier: 'const', required: false },
+          { name: 'display', type: 'int', qualifier: 'simple', required: false }
+        ]
+      },
+      {
+        parameters: [
+          { name: 'plot1', type: 'series', qualifier: 'series', required: true },
+          { name: 'plot2', type: 'series', qualifier: 'series', required: true },
+          { name: 'color', type: 'color', qualifier: 'series', required: true },
+          { name: 'title', type: 'string', qualifier: 'simple', required: false },
+          { name: 'editable', type: 'bool', qualifier: 'input', required: false },
+          { name: 'show_last', type: 'int', qualifier: 'input', required: false },
+          { name: 'fillgaps', type: 'bool', qualifier: 'const', required: false },
+          { name: 'display', type: 'int', qualifier: 'simple', required: false }
+        ]
+      },
+      {
+        parameters: [
+          { name: 'plot1', type: 'series', qualifier: 'series', required: true },
+          { name: 'plot2', type: 'series', qualifier: 'series', required: true },
+          { name: 'top_value', type: 'series', qualifier: 'series', required: true },
+          { name: 'bottom_value', type: 'series', qualifier: 'series', required: true },
+          { name: 'top_color', type: 'color', qualifier: 'series', required: true },
+          { name: 'bottom_color', type: 'color', qualifier: 'series', required: true },
+          { name: 'title', type: 'string', qualifier: 'simple', required: false },
+          { name: 'display', type: 'int', qualifier: 'simple', required: false },
+          { name: 'fillgaps', type: 'bool', qualifier: 'const', required: false },
+          { name: 'editable', type: 'bool', qualifier: 'input', required: false }
+        ]
+      }
     ],
     returnType: 'void',
     deprecatedParams: ['transp']

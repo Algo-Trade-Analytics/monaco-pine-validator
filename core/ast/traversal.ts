@@ -377,6 +377,7 @@ function collectChildren(path: NodePath): ChildEntry[] {
     case 'StringLiteral':
     case 'BooleanLiteral':
     case 'NullLiteral':
+    case 'ColorLiteral':
       break;
     case 'TypeReference': {
       const typeReference = node as TypeReferenceNode;
@@ -387,9 +388,11 @@ function collectChildren(path: NodePath): ChildEntry[] {
       break;
     }
     case 'Comment':
+    case 'CompilerAnnotation':
       break;
     default: {
       const exhaustiveCheck: never = node;
+      void exhaustiveCheck;
       throw new Error('Unhandled node kind in traversal');
     }
   }

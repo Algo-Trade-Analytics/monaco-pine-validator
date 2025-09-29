@@ -4,6 +4,7 @@ import {
   type NullLiteralNode,
   type NumberLiteralNode,
   type StringLiteralNode,
+  type ColorLiteralNode,
 } from '../../nodes';
 import { ensureToken, spanFromTokens } from './base';
 
@@ -21,10 +22,12 @@ export function createStringNode(token?: IToken): StringLiteralNode {
 
 export function createNumberNode(token?: IToken): NumberLiteralNode {
   const safeToken = ensureToken(token);
-  const value = Number(safeToken.image.replace(/_/g, ''));
+  const raw = safeToken.image;
+  const value = Number(raw.replace(/_/g, ''));
   return {
     kind: 'NumberLiteral',
     value,
+    raw,
     ...spanFromTokens(safeToken, safeToken),
   };
 }
@@ -42,6 +45,17 @@ export function createNullNode(token?: IToken): NullLiteralNode {
   const safeToken = ensureToken(token);
   return {
     kind: 'NullLiteral',
+    ...spanFromTokens(safeToken, safeToken),
+  };
+}
+
+export function createColorLiteralNode(token?: IToken): ColorLiteralNode {
+  const safeToken = ensureToken(token);
+  const raw = safeToken.image;
+  return {
+    kind: 'ColorLiteral',
+    value: raw,
+    raw,
     ...spanFromTokens(safeToken, safeToken),
   };
 }

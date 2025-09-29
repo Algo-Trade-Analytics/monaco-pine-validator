@@ -20,6 +20,17 @@ import {
   VAR_DECL_RE, SIMPLE_ASSIGN_RE, TUPLE_DECL_RE, TUPLE_REASSIGN_RE,
   KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT, IDENT
 } from '../core/constants';
+
+const ALLOWED_KEYWORD_IDENTIFIERS = new Set(['color']);
+
+const isReservedKeyword = (name: string): boolean =>
+  KEYWORDS.has(name) && !ALLOWED_KEYWORD_IDENTIFIERS.has(name);
+
+const isReservedPseudoVar = (name: string): boolean =>
+  PSEUDO_VARS.has(name) && !ALLOWED_KEYWORD_IDENTIFIERS.has(name);
+
+const isReservedIdentifier = (name: string): boolean =>
+  isReservedKeyword(name) || isReservedPseudoVar(name);
 import type {
   ArgumentNode,
   AssignmentStatementNode,
@@ -500,7 +511,7 @@ export class CoreValidator implements ValidationModule {
       return;
     }
 
-    if (KEYWORDS.has(name)) {
+    if (isReservedKeyword(name)) {
       return;
     }
 
@@ -755,7 +766,7 @@ export class CoreValidator implements ValidationModule {
       return;
     }
 
-    if (KEYWORDS.has(name) || PSEUDO_VARS.has(name)) {
+    if (isReservedIdentifier(name)) {
       this.used.add(name);
       return;
     }
@@ -1677,7 +1688,7 @@ export class CoreValidator implements ValidationModule {
           return;
         }
 
-        if (!KEYWORDS.has(varName)) {
+        if (!isReservedKeyword(varName)) {
           this.handleNewVar(varName, lineNum, col);
           const rhs = line.slice(line.indexOf('=') + 1);
           this.registerTypeHeuristic(varName, rhs, lineNum, col, false);
@@ -1711,7 +1722,7 @@ export class CoreValidator implements ValidationModule {
         }
         
         // Check if variable is declared (for first assignment with :=)
-        if (!this.declared.has(varName) && !KEYWORDS.has(varName)) {
+        if (!this.declared.has(varName) && !isReservedKeyword(varName)) {
           // Let the scope validator emit the primary PS016 for undeclared identifiers.
           return;
         }
@@ -1751,7 +1762,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     const varName = match[1];
-    if (KEYWORDS.has(varName)) {
+    if (isReservedKeyword(varName)) {
       return;
     }
 
@@ -1990,7 +2001,7 @@ export class CoreValidator implements ValidationModule {
     
     for (const [name, line] of this.declared.entries()) {
       if (IGNORE_UNUSED.has(name)) continue;
-      if (!this.used.has(name) && !KEYWORDS.has(name) && !this.functionNames.has(name) && !functionParamSet.has(name)) {
+      if (!this.used.has(name) && !isReservedKeyword(name) && !this.functionNames.has(name) && !functionParamSet.has(name)) {
         this.addWarning(line, 1, `Variable '${name}' is declared but never used.`, 'PSU01');
       }
     }
@@ -2166,10 +2177,12 @@ export class CoreValidator implements ValidationModule {
   private parseScriptDeclaration(startLine: number): void {
     let buf = '';
     let depth = 0;
+    const headerLines: number[] = [];
 
     // iterate from the start line until we close the first (... )
     for (let i = startLine - 1; i < this.context.cleanLines.length; i++) {
       const raw = this.context.cleanLines[i];
+      headerLines.push(i + 1);
       let inStr: '"' | "'" | null = null;
       let esc = false;
       buf += raw + '\n';
@@ -2185,11 +2198,15 @@ export class CoreValidator implements ValidationModule {
 
       if (depth === 0) break;
     }
-    
+
     if (depth !== 0) {
         this.addError(startLine, 1, 'Unclosed script declaration (missing ")").', 'PS004A');
         return;
     }
+
+    headerLines.forEach((lineNumber) => {
+      this.astScriptDeclarationLines.add(lineNumber);
+    });
 
     const m = buf.match(/^\s*(indicator|strategy|library)\s*\(/);
     if (!m) {
@@ -2460,7 +2477,7 @@ export class CoreValidator implements ValidationModule {
       this.addError(line, col, `Invalid identifier '${name}'.`, 'PS006');
       return;
     }
-    if (!this.astTypeFieldLines.has(line) && (KEYWORDS.has(name) || PSEUDO_VARS.has(name))) {
+    if (!this.astTypeFieldLines.has(line) && isReservedIdentifier(name)) {
       this.addError(line, col, `Identifier '${name}' conflicts with a Pine keyword/builtin.`, 'PS007');
       return;
     }
@@ -2701,7 +2718,7 @@ export class CoreValidator implements ValidationModule {
       const col = (m.index ?? 0) + 1;
       
       if (WILDCARD_IDENT.has(tok)) { this.used.add(tok); continue; }
-      if (KEYWORDS.has(tok) || PSEUDO_VARS.has(tok)) { this.used.add(tok); continue; }
+      if (isReservedIdentifier(tok)) { this.used.add(tok); continue; }
       
       this.used.add(tok);
       if (this.declared.has(tok)) {

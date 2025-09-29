@@ -57,6 +57,7 @@ export type NodeKind =
   | 'StringLiteral'
   | 'BooleanLiteral'
   | 'NullLiteral'
+  | 'ColorLiteral'
   | 'TypeReference'
   | 'Comment';
 
@@ -102,6 +103,7 @@ export type Node =
   | StringLiteralNode
   | BooleanLiteralNode
   | NullLiteralNode
+  | ColorLiteralNode
   | TypeReferenceNode
   | CommentNode;
 
@@ -149,7 +151,8 @@ export type LiteralNode =
   | NumberLiteralNode
   | StringLiteralNode
   | BooleanLiteralNode
-  | NullLiteralNode;
+  | NullLiteralNode
+  | ColorLiteralNode;
 
 export type DeclarationNode = FunctionDeclarationNode | VariableDeclarationNode | ScriptDeclarationNode;
 
@@ -417,6 +420,12 @@ export interface BooleanLiteralNode extends BaseNode {
 
 export interface NullLiteralNode extends BaseNode {
   kind: 'NullLiteral';
+}
+
+export interface ColorLiteralNode extends BaseNode {
+  kind: 'ColorLiteral';
+  value: string;
+  raw: string;
 }
 
 export interface TypeReferenceNode extends BaseNode {

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "scripts/**/*.ts",
+    "EnhancedModularValidator.ts",
+    "core/**/*.ts",
+    "modules/**/*.ts"
+  ]
+}

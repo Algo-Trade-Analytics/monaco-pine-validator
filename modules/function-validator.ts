@@ -1129,30 +1129,154 @@ export class FunctionValidator implements ValidationModule {
 
     // Validate parameter count and types
     this.validateFunctionParameters(fullName, rules || {}, call);
-    
+
     // Validate return type usage in expressions
     this.validateReturnTypeUsage(fullName, call);
   }
 
-  private validateFunctionParameters(funcName: string, rules: any, call: FunctionCall): void {
-    if (!rules.parameters) return;
-
-    const requiredParams = rules.parameters.filter((p: any) => p.required !== false).length;
-    if (call.arguments.length < requiredParams) {
-      this.addError(call.line, call.column, 
-        `Function ${funcName} expects at least ${requiredParams} parameters, got ${call.arguments.length}`, 
-        'PSV6-FUNCTION-PARAM-COUNT');
+  private getNamedArgumentNames(call: FunctionCall): Set<string> {
+    const names = new Set<string>();
+    for (const argument of call.arguments) {
+      const eqIndex = argument.indexOf('=');
+      if (eqIndex === -1) continue;
+      const name = argument.slice(0, eqIndex).trim();
+      if (name) {
+        names.add(name);
+      }
     }
-    
-    if (call.arguments.length > rules.parameters.length) {
-      this.addError(call.line, call.column, 
-        `Function ${funcName} expects at most ${rules.parameters.length} parameters, got ${call.arguments.length}`, 
-        'PSV6-FUNCTION-PARAM-COUNT');
+    return names;
+  }
+
+  private getFunctionParameterCandidates(rules: any) {
+    const candidates: Array<{ parameters: any[]; required: number; max: number }> = [];
+
+    const addCandidate = (parameters: unknown): void => {
+      if (!Array.isArray(parameters) || parameters.length === 0) {
+        return;
+      }
+      const required = parameters.reduce((count, param) => {
+        if (!param || typeof param !== 'object') {
+          return count;
+        }
+        return count + (param.required === false ? 0 : 1);
+      }, 0);
+      candidates.push({ parameters, required, max: parameters.length });
+    };
+
+    if (rules && Array.isArray(rules.parameters)) {
+      addCandidate(rules.parameters);
+    }
+
+    if (rules && Array.isArray(rules.overloads)) {
+      for (const overload of rules.overloads) {
+        if (overload && Array.isArray(overload.parameters)) {
+          addCandidate(overload.parameters);
+        }
+      }
+    }
+
+    return candidates;
+  }
+
+  private selectFunctionParameterSet(rules: any, call: FunctionCall) {
+    const candidates = this.getFunctionParameterCandidates(rules);
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const namedArgs = this.getNamedArgumentNames(call);
+    const argumentCount = call.arguments.length;
+
+    const viable = candidates.filter((candidate) => {
+      if (argumentCount < candidate.required || argumentCount > candidate.max) {
+        return false;
+      }
+
+      if (namedArgs.size === 0) {
+        return true;
+      }
+
+      const parameterNames = new Set<string>();
+      for (const parameter of candidate.parameters) {
+        if (!parameter || typeof parameter !== 'object') continue;
+        if (typeof parameter.name === 'string') {
+          parameterNames.add(parameter.name);
+        }
+      }
+
+      for (const name of namedArgs) {
+        if (!parameterNames.has(name)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    if (viable.length === 0) {
+      return null;
+    }
+
+    viable.sort((a, b) => {
+      if (b.required !== a.required) {
+        return b.required - a.required;
+      }
+      return a.max - b.max;
+    });
+
+    return viable[0];
+  }
+
+  private validateFunctionParameters(funcName: string, rules: any, call: FunctionCall): void {
+    const match = this.selectFunctionParameterSet(rules, call);
+
+    if (!match) {
+      const candidates = this.getFunctionParameterCandidates(rules);
+      if (candidates.length === 0) {
+        return;
+      }
+
+      const rangeLabel = candidates
+        .map((candidate) =>
+          candidate.required === candidate.max
+            ? `${candidate.required}`
+            : `${candidate.required}-${candidate.max}`,
+        )
+        .join(', ');
+
+      this.addError(
+        call.line,
+        call.column,
+        `Function ${funcName} does not accept ${call.arguments.length} parameters. Allowed counts: ${rangeLabel}`,
+        'PSV6-FUNCTION-PARAM-COUNT',
+      );
+      return;
+    }
+
+    const params = match.parameters;
+    const requiredParams = match.required;
+
+    if (call.arguments.length < requiredParams) {
+      this.addError(
+        call.line,
+        call.column,
+        `Function ${funcName} expects at least ${requiredParams} parameters, got ${call.arguments.length}`,
+        'PSV6-FUNCTION-PARAM-COUNT',
+      );
+    }
+
+    if (call.arguments.length > params.length) {
+      this.addError(
+        call.line,
+        call.column,
+        `Function ${funcName} expects at most ${params.length} parameters, got ${call.arguments.length}`,
+        'PSV6-FUNCTION-PARAM-COUNT',
+      );
     }
 
     // Validate parameter types and qualifiers (extracted from UltimateValidator)
-    for (let i = 0; i < rules.parameters.length && i < call.arguments.length; i++) {
-      const param = rules.parameters[i];
+    for (let i = 0; i < params.length && i < call.arguments.length; i++) {
+      const param = params[i];
       const arg = call.arguments[i];
       
       // Check if this is a named parameter

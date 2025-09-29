@@ -5,6 +5,7 @@ export {
   createNullNode,
   createNumberNode,
   createStringNode,
+  createColorLiteralNode,
 } from './builders/literals';
 export {
   createArgumentNode,

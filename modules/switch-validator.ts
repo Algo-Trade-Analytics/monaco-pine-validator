@@ -23,6 +23,12 @@ import type {
   SwitchCaseNode,
   SwitchStatementNode,
   VariableDeclarationNode,
+  ConditionalExpressionNode,
+  BinaryExpressionNode,
+  UnaryExpressionNode,
+  CallExpressionNode,
+  MemberExpressionNode,
+  ArrayLiteralNode,
 } from '../core/ast/nodes';
 import { visit } from '../core/ast/traversal';
 import type { TypeMetadata } from '../core/ast/types';
@@ -331,7 +337,7 @@ export class SwitchValidator implements ValidationModule {
     }
 
     const metadata = this.astContext?.typeEnvironment?.nodeTypes.get(statement);
-    let inferred = this.describeTypeMetadata(metadata);
+    let inferred = this.describeTypeMetadata(metadata ?? null);
     if (!inferred || inferred === 'unknown') {
       inferred = returnTypes.values().next().value ?? null;
     }
@@ -568,7 +574,8 @@ export class SwitchValidator implements ValidationModule {
     for (let index = 0; index < lines.length; index++) {
       const rawLine = lines[index];
       const withoutComment = rawLine.split('//')[0] ?? '';
-      const switchIndex = withoutComment.indexOf('switch');
+      const switchMatch = /\bswitch\b/.exec(withoutComment);
+      const switchIndex = switchMatch ? switchMatch.index : -1;
       if (switchIndex === -1) {
         const trimmedLine = withoutComment.trim();
         if (trimmedLine.length > 0) {
@@ -581,15 +588,22 @@ export class SwitchValidator implements ValidationModule {
       const trimmedLine = withoutComment.trim();
       const isCaseContinuation = previousContent.trim().endsWith('=>') || previousContent.trim().endsWith('=>');
 
+      const afterKeyword = withoutComment[switchIndex + switchMatch![0].length];
+      if (afterKeyword && /[A-Za-z0-9_]/.test(afterKeyword)) {
+        previousContent = trimmedLine;
+        continue;
+      }
+
       if (!isCaseContinuation) {
         while (indentStack.length > 0 && indent <= indentStack[indentStack.length - 1]) {
           indentStack.pop();
         }
       }
 
-
-      const remaining = withoutComment.slice(switchIndex).trim();
-      const hasExpression = /^switch\s+\S+/.test(remaining);
+      const remaining = withoutComment
+        .slice(switchIndex + switchMatch![0].length)
+        .trimStart();
+      const hasExpression = remaining.length > 0 && !remaining.startsWith('=>');
       if (!hasExpression) {
         const column = switchIndex + 1;
         this.addError(

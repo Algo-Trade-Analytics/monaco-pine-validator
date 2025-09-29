@@ -85,6 +85,11 @@ export const NumberLiteral = createToken({
   pattern: /\d+(?:_?\d)*(?:\.\d+(?:_?\d)*)?/,
 });
 
+export const ColorLiteral = createToken({
+  name: 'ColorLiteral',
+  pattern: /#(?:[0-9A-Fa-f]{8}|[0-9A-Fa-f]{6})/,
+});
+
 export const True = createToken({ name: 'True', pattern: /true/, longer_alt: Identifier });
 export const False = createToken({ name: 'False', pattern: /false/, longer_alt: Identifier });
 export const NaToken = createToken({ name: 'NaToken', pattern: /na/, longer_alt: Identifier });
@@ -220,6 +225,7 @@ export const AllTokens = [
   LineComment,
   StringLiteral,
   NumberLiteral,
+  ColorLiteral,
   Indicator,
   Strategy,
   Library,

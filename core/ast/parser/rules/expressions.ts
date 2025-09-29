@@ -35,6 +35,7 @@ import {
   NotEqual,
   NullishCoalescing,
   NumberLiteral as NumberToken,
+  ColorLiteral as ColorToken,
   Or,
   Percent,
   Plus,
@@ -69,6 +70,7 @@ import {
   createNumberNode,
   createPlaceholderExpression,
   createStringNode,
+  createColorLiteralNode,
   createTupleExpressionNode,
   createUnaryExpressionNode,
   buildTypeReferenceFromTokens,
@@ -81,6 +83,9 @@ function createLiteralFromToken(token: IToken) {
   }
   if (token.tokenType === NumberToken) {
     return createNumberNode(token);
+  }
+  if (token.tokenType === ColorToken) {
+    return createColorLiteralNode(token);
   }
   if (token.tokenType === True) {
     return createBooleanNode(token, true);
@@ -164,8 +169,14 @@ export function createConditionalExpressionRule(parser: PineParser) {
     const test = parser.invokeSubrule(parser.nullishCoalescingExpression);
     if (parser.lookAhead(1).tokenType === Question) {
       const questionToken = parser.consumeToken(Question);
+      while (parser.lookAhead(1).tokenType === Newline) {
+        parser.consumeToken(Newline);
+      }
       const consequent = parser.invokeSubrule(parser.expression, 2);
       const colonToken = parser.consumeToken(Colon);
+      while (parser.lookAhead(1).tokenType === Newline) {
+        parser.consumeToken(Newline);
+      }
       const alternate = parser.invokeSubrule(parser.expression, 3);
       const endToken = parser.lookAhead(0);
       return createConditionalExpressionNode(
@@ -484,12 +495,23 @@ export function createArgumentListRule(parser: PineParser) {
   return parser.createRule('argumentList', (): ArgumentNode[] => {
     const args: ArgumentNode[] = [];
 
+    while (parser.lookAhead(1).tokenType === Newline) {
+      parser.consumeToken(Newline);
+    }
+
     args.push(parser.invokeSubrule(parser.argument));
 
-    parser.repeatMany(() => {
+    while (parser.lookAhead(1).tokenType === Comma) {
       parser.consumeToken(Comma);
+      while (parser.lookAhead(1).tokenType === Newline) {
+        parser.consumeToken(Newline);
+      }
       args.push(parser.invokeSubrule(parser.argument, 2));
-    });
+    }
+
+    while (parser.lookAhead(1).tokenType === Newline) {
+      parser.consumeToken(Newline);
+    }
 
     return args;
   });
@@ -607,6 +629,8 @@ export function createPrimaryExpressionRule(parser: PineParser) {
         return createLiteralFromToken(parser.consumeToken(StringToken));
       case NumberToken:
         return createLiteralFromToken(parser.consumeToken(NumberToken));
+      case ColorToken:
+        return createLiteralFromToken(parser.consumeToken(ColorToken));
       case True:
         return createLiteralFromToken(parser.consumeToken(True));
       case False:

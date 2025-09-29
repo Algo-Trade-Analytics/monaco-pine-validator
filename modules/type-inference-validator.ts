@@ -28,6 +28,7 @@ import {
   type NumberLiteralNode,
   type StringLiteralNode,
   type BooleanLiteralNode,
+  type ColorLiteralNode,
 } from '../core/ast/nodes';
 import { visit } from '../core/ast/traversal';
 import { ensureAstContext } from '../core/ast/context-utils';
@@ -583,13 +584,20 @@ export class TypeInferenceValidator implements ValidationModule {
         return 'bool';
       case 'StringLiteral':
         return 'string';
+      case 'ColorLiteral':
+        return 'color';
       default:
         return null;
     }
   }
 
   private isLiteralExpression(expression: ExpressionNode): boolean {
-    return expression.kind === 'NumberLiteral' || expression.kind === 'BooleanLiteral' || expression.kind === 'StringLiteral';
+    return (
+      expression.kind === 'NumberLiteral' ||
+      expression.kind === 'BooleanLiteral' ||
+      expression.kind === 'StringLiteral' ||
+      expression.kind === 'ColorLiteral'
+    );
   }
 
   private isNaExpression(expression: ExpressionNode): boolean {
@@ -1952,8 +1960,8 @@ export class TypeInferenceValidator implements ValidationModule {
       'str.tostring': ['any', 'string'],
       'str.tonumber': ['string'],
       'plot': ['series'],
-      'color': ['any'],
-      'color.new': ['any', 'int']
+      'color': ['color'],
+      'color.new': ['color', 'int']
     };
     
     return paramTypes[funcName] || null;
