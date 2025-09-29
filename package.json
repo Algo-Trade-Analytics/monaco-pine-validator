@@ -7,9 +7,12 @@
     "test": "vitest run",
     "test:ast": "vitest run tests/ast",
     "test:validator": "node tests/run-all-tests.js",
-    "test:validator:full": "node tests/run-all-tests.js --full"
+    "test:validator:full": "node tests/run-all-tests.js --full",
+    "test:e2e": "vitest run tests/e2e",
+    "test:playwright": "npm --prefix playground run build && npx playwright install --with-deps && playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.1",
     "@types/node": "^20.14.9",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",

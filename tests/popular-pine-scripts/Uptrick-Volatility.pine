@@ -1,0 +1,141 @@
+// This work is licensed under an Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0) 
+// https://creativecommons.org/licenses/by-sa/4.0/
+// © Uptrick
+//@version=6
+
+
+//    ██╗   ██╗██████╗ ████████╗██████╗ ██╗ ██████╗██╗  ██╗
+//    ██║   ██║██╔══██╗╚══██╔══╝██╔══██╗██║██╔════╝██║ ██╔╝
+//    ██║   ██║██████╔╝   ██║   ██████╔╝██║██║     █████╔╝ 
+//    ██║   ██║██╔═══╝    ██║   ██╔══██╗██║██║     ██╔═██╗ 
+//    ╚██████╔╝██║        ██║   ██║  ██║██║╚██████╗██║  ██╗
+//     ╚═════╝ ╚═╝        ╚═╝   ╚═╝  ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝
+
+indicator("Uptrick: Volatility Weighted Cloud",
+     shorttitle="VWC",
+     overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ── Uptrick colors
+bullMain = color.new(#5CF0D7, 0)
+bearMain = color.new(#B32AC3, 0)
+
+// ── Inputs
+grpCore      = "Core"
+len          = input.int(34, "Basis Length (short-term)", minval=5, group=grpCore)
+basisType    = input.string("ALMA", "Basis Type", options=["EMA","ALMA"], group=grpCore)
+almaOffset   = input.float(0.85, "ALMA Offset", minval=0.01, maxval=0.99, step=0.01, group=grpCore, inline="ALMA")
+almaSigma    = input.float(6.0, "Sigma", minval=1.0, step=0.5, group=grpCore, inline="ALMA")
+basisSmooth  = input.int(3, "Basis Smoothing EMA", minval=1, group=grpCore)
+
+grpVol       = "Volatility & Bands"
+volMethod    = input.string("MAD", "Volatility", options=["StDev","MAD"], group=grpVol)
+volLen       = input.int(20, "Vol Length (short-term)", minval=5, group=grpVol)
+volSmooth    = input.int(5, "Vol Smoothing EMA", minval=1, group=grpVol)
+minMult      = input.float(0.8, "Min Multiplier", step=0.1, group=grpVol)
+maxMult      = input.float(1.8, "Max Multiplier", step=0.1, group=grpVol)
+rankLen      = input.int(100, "Volatility Rank Lookback", minval=20, group=grpVol)
+showBands    = input.bool(true, "Show Adaptive Bands", group=grpVol)
+
+// ── Helpers
+basisFrom(srcSeries) =>
+    _raw = basisType == "ALMA" ? ta.alma(srcSeries, len, almaOffset, almaSigma) : ta.ema(srcSeries, len)
+    basisSmooth > 1 ? ta.ema(_raw, basisSmooth) : _raw
+
+volFrom(srcSeries) =>
+    _stdev = ta.stdev(srcSeries, volLen)
+    _mad   = ta.sma(math.abs(srcSeries - ta.sma(srcSeries, volLen)), volLen) * 1.4826
+    _vRaw  = volMethod == "StDev" ? _stdev : _mad
+    volSmooth > 1 ? ta.ema(_vRaw, volSmooth) : _vRaw
+
+// ── Compute the 4-source bases (no raw price plotting)
+bO = basisFrom(open)
+bH = basisFrom(high)
+bL = basisFrom(low)
+bC = basisFrom(close)
+
+// ── Adaptive volatility based on the same close-basis pipeline
+v      = volFrom(close)
+vRank  = ta.percentrank(v, rankLen) / 100.0
+mult   = minMult + (maxMult - minMult) * vRank
+
+// Use the close-basis as the “main basis” for bands
+bMain  = bC
+upper  = bMain + v * mult
+lower  = bMain - v * mult
+
+// ── Signals vs adaptive bands (preserve crossing logic)
+longCond  = ta.crossover(close, upper)
+shortCond = ta.crossunder(close, lower)
+
+// ── Persistent bar color by latest signal (always colored)
+var int lastSignal = 0   // 1 = long bias, -1 = short bias
+lastSignal := longCond ? 1 : shortCond ? -1 : (na(lastSignal[1]) ? (close >= bMain ? 1 : -1) : lastSignal[1])
+barCol = lastSignal == 1 ? bullMain : bearMain
+barcolor(barCol)
+plotcandle(open,high,low,close, "Plotcandle", barCol, barCol, bordercolor = barCol)
+// ── Plot the “Basis Cloud”: four bases from O/H/L/C
+// We don’t plot raw price. We render a cloud by filling areas between the four basis lines.
+pO = plot(bO, "Basis Open",  color=color.new(barCol, 0), linewidth=1)
+pC = plot(bC, "Basis Close", color=color.new(barCol, 0), linewidth=2)
+
+// Primary cloud (High ↔ Low)
+// Inner cloud (Open ↔ Close)
+fill(pO, pC, color=color.new(barCol, 0), title="Basis Cloud O–C")
+// Edge blends to “cover” gaps (optional soft fills)
+
+// ── Adaptive Bands (optional display)
+dispBands = showBands ? display.all : display.none
+
+pu = plot(upper, "Upper Band", color=color.new(color.white, 0), display=dispBands)
+pl = plot(lower, "Lower Band", color=color.new(color.white, 0), display=dispBands)
+
+fill(pu, pC, upper, bC, color.new(bullMain, 50), #2b3a6300, display = dispBands)
+fill(pl, pC, bC, lower, #2b3a6300 ,color.new(bearMain, 50), display=dispBands)
+// fill(plot1, plot2, top_value, bottom_value, top_color, bottom_color)
+dipthis = showBands ? display.none : display.all
+fill(pC, plot(close, color= #363a4500), bC, close,color.new(barCol,50),#363a4500, display = dipthis)
+
+
+
+// ── Alerts
+alertcondition(longCond,  "UPT ASB Long",  "Close crossed above Adaptive Upper Band → LONG")
+alertcondition(shortCond, "UPT ASB Short", "Close crossed below Adaptive Lower Band → SHORT")
+
+
+
+// ── Add-on: Trend Switch Labels
+grpLbl   = "Trend Switch Labels"
+showLbl  = input.bool(true, "Show Trend Switch Labels", group=grpLbl)
+anchor   = input.string("Auto (High/Low)", "Label Anchor", options=["Auto (High/Low)", "On bMain"], group=grpLbl)
+atrLen   = input.int(14, "ATR Length (offset)", minval=1, group=grpLbl)
+atrOff   = input.float(0.25, "ATR Offset (multiplier)", step=0.05, group=grpLbl)
+lblSize  = input.string("small", "Label Size", options=["tiny","small","normal","large","huge"], group=grpLbl)
+
+toSize(s) =>
+    s == "tiny"   ? size.tiny  :
+     s == "small"  ? size.small :
+     s == "normal" ? size.normal:
+     s == "large"  ? size.large : size.huge 
+
+// Detect switches in persistent bias
+switchUp   = showLbl and lastSignal == 1  and lastSignal[1] == -1
+switchDown = showLbl and lastSignal == -1 and lastSignal[1] == 1
+
+atr = ta.atr(atrLen)
+yUp = anchor == "On bMain" ? bMain : low  - atr * atrOff
+yDn = anchor == "On bMain" ? bMain : high + atr * atrOff
+
+if switchUp
+    label.new(bar_index, yUp,
+         text="𝓤𝓹",
+         style=label.style_label_up,
+         size=toSize(lblSize),
+         color=bullMain, textcolor=color.black)
+
+if switchDown
+    label.new(bar_index, yDn,
+         text="𝓓𝓸𝔀𝓷",
+         style=label.style_label_down,
+         size=toSize(lblSize),
+         color=bearMain, textcolor=color.white)
+

@@ -1,3 +1,4 @@
+import './polyfills/process';
 import { installMonacoValidationWorker } from '../../core/monaco/worker';
 
 installMonacoValidationWorker({
