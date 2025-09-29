@@ -58,6 +58,10 @@ export class TAFunctionsValidator implements ValidationModule {
     this.reset();
     this.context = context;
 
+    if (config.ast?.mode === 'disabled') {
+      return this.buildResult();
+    }
+
     this.markSeriesLikeIdentifiers();
 
     this.astContext = this.getAstContext(config);

@@ -75,6 +75,18 @@ export class LinefillValidator implements ValidationModule {
     this.reset();
     this.context = context;
     this.astContext = this.getAstContext(config);
+
+    if (config.ast?.mode === 'disabled') {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: context.scriptType,
+      };
+    }
+
     const ast = this.astContext?.ast;
     if (!ast) {
       if (this.containsLinefillSyntax()) {
@@ -162,13 +174,17 @@ export class LinefillValidator implements ValidationModule {
         },
       },
       ForStatement: {
-        enter: () => loopStack.push('for'),
+        enter: () => {
+          loopStack.push('for');
+        },
         exit: () => {
           loopStack.pop();
         },
       },
       WhileStatement: {
-        enter: () => loopStack.push('while'),
+        enter: () => {
+          loopStack.push('while');
+        },
         exit: () => {
           loopStack.pop();
         },

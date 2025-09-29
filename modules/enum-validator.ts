@@ -102,6 +102,17 @@ export class EnumValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
+    if (config.ast?.mode === 'disabled') {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: context.typeMap,
+        scriptType: context.scriptType,
+      };
+    }
+
     this.astContext = isAstValidationContext(context) && context.ast ? context : null;
 
     if (this.astContext?.ast) {

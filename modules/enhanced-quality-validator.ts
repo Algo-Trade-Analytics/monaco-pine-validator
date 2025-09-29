@@ -42,6 +42,17 @@ export class EnhancedQualityValidator implements ValidationModule {
     this.reset();
     this.context = context;
 
+    if (config.ast?.mode === 'disabled') {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: context.scriptType ?? null,
+      };
+    }
+
     this.astContext = this.getAstContext(config);
     const ast = this.astContext?.ast;
     if (!ast) {
