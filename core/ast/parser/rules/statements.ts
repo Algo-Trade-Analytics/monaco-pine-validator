@@ -23,7 +23,7 @@ import {
 import { isExportKeywordToken, isTokenKeyword } from '../parser-utils';
 
 export function createStatementRule(parser: PineParser) {
-  return parser.defineRule('statement', (): StatementNode => {
+  return parser.createRule('statement', (): StatementNode => {
     return parser.choose<StatementNode>([
       {
         GATE: () => {

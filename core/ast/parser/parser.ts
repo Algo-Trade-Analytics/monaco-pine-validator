@@ -249,6 +249,13 @@ export class PineParser extends EmbeddedActionsParser {
   }
 
   public consumeToken(tokenType: any, occurrence = 1, options?: unknown): IToken {
+    if (!tokenType) {
+      // Fallback for cases where helpers pass through a previously consumed token instance.
+      // Chevrotain's lexer adapter exposes a consumeToken helper that advances the input.
+      // @ts-expect-error – consumeToken exists on the underlying lexer adapter but is not declared in the typings.
+      super.consumeToken();
+      return this.LA(0);
+    }
     const method = this.getDslMethod<ConsumeMethod>('CONSUME', occurrence);
     return options === undefined ? method(tokenType) : method(tokenType, options);
   }
@@ -278,7 +285,7 @@ export class PineParser extends EmbeddedActionsParser {
     return method(alternatives) as T;
   }
 
-  public defineRule<R extends RuleMethod<any>>(name: string, implementation: R): R {
+  public createRule<R extends RuleMethod<any>>(name: string, implementation: R): R {
     return this.RULE(name, implementation) as R;
   }
 

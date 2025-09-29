@@ -128,7 +128,7 @@ function isArrowFunctionStart(parser: PineParser): boolean {
 }
 
 export function createArrowFunctionExpressionRule(parser: PineParser) {
-  return parser.defineRule('arrowFunctionExpression', () => {
+  return parser.createRule('arrowFunctionExpression', () => {
     const lParen = parser.consumeToken(LParen);
     let params: ParameterNode[] = [];
     if (parser.lookAhead(1).tokenType !== RParen) {
@@ -156,11 +156,11 @@ export function createArrowFunctionExpressionRule(parser: PineParser) {
 }
 
 export function createExpressionRule(parser: PineParser) {
-  return parser.defineRule('expression', () => parser.invokeSubrule(parser.conditionalExpression));
+  return parser.createRule('expression', () => parser.invokeSubrule(parser.conditionalExpression));
 }
 
 export function createConditionalExpressionRule(parser: PineParser) {
-  return parser.defineRule('conditionalExpression', () => {
+  return parser.createRule('conditionalExpression', () => {
     const test = parser.invokeSubrule(parser.nullishCoalescingExpression);
     if (parser.lookAhead(1).tokenType === Question) {
       const questionToken = parser.consumeToken(Question);
@@ -182,7 +182,7 @@ export function createConditionalExpressionRule(parser: PineParser) {
 }
 
 export function createNullishCoalescingExpressionRule(parser: PineParser) {
-  return parser.defineRule('nullishCoalescingExpression', () => {
+  return parser.createRule('nullishCoalescingExpression', () => {
     let expression = parser.invokeSubrule(parser.logicalOrExpression);
     parser.repeatMany(() => {
       const operator = parser.consumeToken(NullishCoalescing);
@@ -195,7 +195,7 @@ export function createNullishCoalescingExpressionRule(parser: PineParser) {
 }
 
 export function createLogicalOrExpressionRule(parser: PineParser) {
-  return parser.defineRule('logicalOrExpression', () => {
+  return parser.createRule('logicalOrExpression', () => {
     let expression = parser.invokeSubrule(parser.logicalAndExpression);
     parser.repeatMany(() => {
       const operator = parser.consumeToken(Or);
@@ -208,7 +208,7 @@ export function createLogicalOrExpressionRule(parser: PineParser) {
 }
 
 export function createLogicalAndExpressionRule(parser: PineParser) {
-  return parser.defineRule('logicalAndExpression', () => {
+  return parser.createRule('logicalAndExpression', () => {
     let expression = parser.invokeSubrule(parser.equalityExpression);
     parser.repeatMany(() => {
       const operator = parser.consumeToken(And);
@@ -221,7 +221,7 @@ export function createLogicalAndExpressionRule(parser: PineParser) {
 }
 
 export function createEqualityExpressionRule(parser: PineParser) {
-  return parser.defineRule('equalityExpression', () => {
+  return parser.createRule('equalityExpression', () => {
     let expression = parser.invokeSubrule(parser.relationalExpression);
     parser.repeatMany(() => {
       const operator = parser.choose<IToken>([
@@ -237,7 +237,7 @@ export function createEqualityExpressionRule(parser: PineParser) {
 }
 
 export function createRelationalExpressionRule(parser: PineParser) {
-  return parser.defineRule('relationalExpression', () => {
+  return parser.createRule('relationalExpression', () => {
     let expression = parser.invokeSubrule(parser.additiveExpression);
     parser.repeatMany(() => {
       const operator = parser.choose<IToken>([
@@ -255,7 +255,7 @@ export function createRelationalExpressionRule(parser: PineParser) {
 }
 
 export function createAdditiveExpressionRule(parser: PineParser) {
-  return parser.defineRule('additiveExpression', () => {
+  return parser.createRule('additiveExpression', () => {
     let expression = parser.invokeSubrule(parser.multiplicativeExpression);
     parser.repeatMany(() => {
       const operator = parser.choose<IToken>([
@@ -271,7 +271,7 @@ export function createAdditiveExpressionRule(parser: PineParser) {
 }
 
 export function createMultiplicativeExpressionRule(parser: PineParser) {
-  return parser.defineRule('multiplicativeExpression', () => {
+  return parser.createRule('multiplicativeExpression', () => {
     let expression = parser.invokeSubrule(parser.unaryExpression);
     parser.repeatMany(() => {
       const operator = parser.choose<IToken>([
@@ -288,7 +288,7 @@ export function createMultiplicativeExpressionRule(parser: PineParser) {
 }
 
 export function createUnaryExpressionRule(parser: PineParser) {
-  return parser.defineRule('unaryExpression', () => {
+  return parser.createRule('unaryExpression', () => {
     const lookahead = parser.lookAhead(1).tokenType;
     if (lookahead === Plus) {
       const operator = parser.consumeToken(Plus);
@@ -311,7 +311,7 @@ export function createUnaryExpressionRule(parser: PineParser) {
 }
 
 export function createCallTypeReferenceRule(parser: PineParser) {
-  return parser.defineRule('callTypeReference', (): IToken[] => {
+  return parser.createRule('callTypeReference', (): IToken[] => {
     const tokens: IToken[] = [];
 
     const identifier = parser.consumeToken(IdentifierToken);
@@ -359,7 +359,7 @@ export function createCallTypeReferenceRule(parser: PineParser) {
 }
 
 export function createCallExpressionRule(parser: PineParser) {
-  return parser.defineRule('callExpression', () => {
+  return parser.createRule('callExpression', () => {
     let expression = parser.invokeSubrule(parser.primaryExpression) ?? createPlaceholderExpression();
 
     while (true) {
@@ -451,7 +451,7 @@ export function createCallExpressionRule(parser: PineParser) {
 }
 
 export function createMemberExpressionRule(parser: PineParser) {
-  return parser.defineRule('memberExpression', () => {
+  return parser.createRule('memberExpression', () => {
     let expression = parser.invokeSubrule(parser.primaryExpression) ?? createPlaceholderExpression();
     parser.repeatMany(() => {
       parser.choose([
@@ -481,7 +481,7 @@ export function createMemberExpressionRule(parser: PineParser) {
 }
 
 export function createArgumentListRule(parser: PineParser) {
-  return parser.defineRule('argumentList', (): ArgumentNode[] => {
+  return parser.createRule('argumentList', (): ArgumentNode[] => {
     const args: ArgumentNode[] = [];
 
     args.push(parser.invokeSubrule(parser.argument));
@@ -496,7 +496,7 @@ export function createArgumentListRule(parser: PineParser) {
 }
 
 export function createArgumentRule(parser: PineParser) {
-  return parser.defineRule('argument', () => {
+  return parser.createRule('argument', () => {
     const lookahead = parser.lookAhead(1);
     if (isIdentifierLikeToken(lookahead) && parser.lookAhead(2).tokenType === Equal) {
       const nameToken = parser.consumeToken(IdentifierToken);
@@ -515,7 +515,7 @@ export function createArgumentRule(parser: PineParser) {
 }
 
 export function createBracketExpressionRule(parser: PineParser) {
-  return parser.defineRule('bracketExpression', (mode: 'expression' | 'tuple' = 'expression'): ExpressionNode => {
+  return parser.createRule('bracketExpression', (mode: 'expression' | 'tuple' = 'expression'): ExpressionNode => {
     const lBracket = parser.consumeToken(LBracket);
     const elements: (ExpressionNode | null)[] = [];
     let expectElement = true;
@@ -598,7 +598,7 @@ export function createBracketExpressionRule(parser: PineParser) {
 }
 
 export function createPrimaryExpressionRule(parser: PineParser) {
-  return parser.defineRule('primaryExpression', (): ExpressionNode => {
+  return parser.createRule('primaryExpression', (): ExpressionNode => {
     const token = parser.lookAhead(1);
     switch (token.tokenType) {
       case IdentifierToken:
@@ -639,7 +639,7 @@ export function createPrimaryExpressionRule(parser: PineParser) {
 }
 
 export function createIdentifierExpressionRule(parser: PineParser) {
-  return parser.defineRule('identifierExpression', () => {
+  return parser.createRule('identifierExpression', () => {
     const first = parser.consumeToken(IdentifierToken);
     let expression: ExpressionNode = createIdentifierNode(first);
 
@@ -655,7 +655,7 @@ export function createIdentifierExpressionRule(parser: PineParser) {
 }
 
 export function createIfExpressionRule(parser: PineParser) {
-  return parser.defineRule('ifExpression', (baseIndentOverride?: number) => {
+  return parser.createRule('ifExpression', (baseIndentOverride?: number) => {
     const ifToken = parser.consumeToken(If);
     const test = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
     const baseIndent = baseIndentOverride ?? parser.getLineIndent(ifToken.startLine ?? 1);
@@ -687,21 +687,21 @@ export function createIfExpressionRule(parser: PineParser) {
 }
 
 export function createForExpressionRule(parser: PineParser) {
-  return parser.defineRule('forExpression', () => {
+  return parser.createRule('forExpression', () => {
     const forToken = parser.consumeToken(For);
     return parser.parseForLoop(forToken);
   });
 }
 
 export function createWhileExpressionRule(parser: PineParser) {
-  return parser.defineRule('whileExpression', () => {
+  return parser.createRule('whileExpression', () => {
     const whileToken = parser.consumeToken(While);
     return parser.parseWhileLoop(whileToken);
   });
 }
 
 export function createSwitchExpressionRule(parser: PineParser) {
-  return parser.defineRule('switchExpression', () => {
+  return parser.createRule('switchExpression', () => {
     const switchToken = parser.consumeToken(Switch);
     return parser.parseSwitchStructure(switchToken);
   });

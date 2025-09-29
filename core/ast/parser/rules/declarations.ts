@@ -59,7 +59,7 @@ import {
 const EOF_TOKEN = EOF;
 
 export function createParameterRule(parser: PineParser) {
-  return parser.defineRule('parameter', () => {
+  return parser.createRule('parameter', () => {
     const tokens = parser.collectParameterTokens(1);
     const { typeTokens } = splitDeclarationTokens(tokens);
     const typeAnnotation = buildTypeReferenceFromTokens(typeTokens);
@@ -81,7 +81,7 @@ export function createParameterRule(parser: PineParser) {
 }
 
 export function createParameterListRule(parser: PineParser) {
-  return parser.defineRule('parameterList', () => {
+  return parser.createRule('parameterList', () => {
     const params: ParameterNode[] = [];
     params.push(parser.invokeSubrule(parser.parameter));
     parser.repeatMany(() => {
@@ -93,7 +93,7 @@ export function createParameterListRule(parser: PineParser) {
 }
 
 export function createFunctionDeclarationRule(parser: PineParser) {
-  return parser.defineRule('functionDeclaration', (providedExport?: IToken) => {
+  return parser.createRule('functionDeclaration', (providedExport?: IToken) => {
     let startToken: IToken | undefined = providedExport;
     let exportToken: IToken | undefined = providedExport;
 
@@ -163,7 +163,7 @@ export function createFunctionDeclarationRule(parser: PineParser) {
 }
 
 export function createScriptDeclarationRule(parser: PineParser) {
-  return parser.defineRule('scriptDeclaration', () => {
+  return parser.createRule('scriptDeclaration', () => {
     const token = parser.choose([
       {
         ALT: () => parser.consumeToken(Indicator),
@@ -189,7 +189,7 @@ export function createScriptDeclarationRule(parser: PineParser) {
 }
 
 export function createImportDeclarationRule(parser: PineParser) {
-  return parser.defineRule('importDeclaration', () => {
+  return parser.createRule('importDeclaration', () => {
     const importToken = parser.consumeToken(Import);
     const pathToken = parser.consumeToken(StringToken);
     parser.consumeToken(As);
@@ -199,7 +199,7 @@ export function createImportDeclarationRule(parser: PineParser) {
 }
 
 export function createEnumMemberRule(parser: PineParser) {
-  return parser.defineRule('enumMember', (_parentIndent: number) => {
+  return parser.createRule('enumMember', (_parentIndent: number) => {
     const identifierToken = parser.consumeToken(IdentifierToken);
     const identifier = createIdentifierNode(identifierToken);
 
@@ -217,7 +217,7 @@ export function createEnumMemberRule(parser: PineParser) {
 }
 
 export function createEnumDeclarationRule(parser: PineParser) {
-  return parser.defineRule('enumDeclaration', (providedExport?: IToken) => {
+  return parser.createRule('enumDeclaration', (providedExport?: IToken) => {
     let exportToken: IToken | undefined = providedExport;
     if (!exportToken && isExportKeywordToken(parser.lookAhead(1))) {
       exportToken = parser.consumeToken(IdentifierToken);
@@ -262,7 +262,7 @@ export function createEnumDeclarationRule(parser: PineParser) {
 }
 
 export function createTypeFieldRule(parser: PineParser) {
-  return parser.defineRule('typeField', () => {
+  return parser.createRule('typeField', () => {
     const collected = parser.collectDeclarationTokens(1);
     const tokens = collected?.tokens ?? [];
     const { typeTokens } = splitDeclarationTokens(tokens);
@@ -278,7 +278,7 @@ export function createTypeFieldRule(parser: PineParser) {
 }
 
 export function createTypeDeclarationRule(parser: PineParser) {
-  return parser.defineRule('typeDeclaration', (providedExport?: IToken) => {
+  return parser.createRule('typeDeclaration', (providedExport?: IToken) => {
     let exportToken: IToken | undefined = providedExport;
     if (!exportToken && isExportKeywordToken(parser.lookAhead(1))) {
       exportToken = parser.consumeToken(IdentifierToken);
@@ -323,7 +323,7 @@ export function createTypeDeclarationRule(parser: PineParser) {
 }
 
 export function createVariableDeclarationRule(parser: PineParser) {
-  return parser.defineRule('variableDeclaration', () => {
+  return parser.createRule('variableDeclaration', () => {
     let declarationKind: VariableDeclarationKind = 'simple';
     let declarationToken: IToken | undefined;
 

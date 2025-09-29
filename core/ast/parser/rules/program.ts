@@ -5,7 +5,7 @@ import type { VersionDirectiveNode, StatementNode, CompilerAnnotationNode } from
 import type { PineParser } from '../parser';
 
 export function createProgramRule(parser: PineParser) {
-  return parser.defineRule('program', () => {
+  return parser.createRule('program', () => {
     const directives: VersionDirectiveNode[] = [];
     const body: StatementNode[] = [];
 
@@ -40,7 +40,7 @@ export function createProgramRule(parser: PineParser) {
 }
 
 export function createVersionDirectiveRule(parser: PineParser) {
-  return parser.defineRule('versionDirective', () => {
+  return parser.createRule('versionDirective', () => {
     const token = parser.consumeToken(VersionDirective);
     return createVersionDirectiveNode(token);
   });

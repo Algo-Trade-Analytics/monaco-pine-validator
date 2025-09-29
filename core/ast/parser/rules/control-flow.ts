@@ -146,14 +146,14 @@ function parseSwitchCaseConsequent(
 }
 
 export function createExpressionStatementRule(parser: PineParser) {
-  return parser.defineRule('expressionStatement', () => {
+  return parser.createRule('expressionStatement', () => {
     const expression = parser.invokeSubrule(parser.expression);
     return createExpressionStatementNode(expression);
   });
 }
 
 export function createTupleAssignmentStatementRule(parser: PineParser) {
-  return parser.defineRule('tupleAssignmentStatement', () => {
+  return parser.createRule('tupleAssignmentStatement', () => {
     const left = parser.invokeSubrule(parser.bracketExpression, 1, { ARGS: ['tuple'] });
     const operator = parser.choose<IToken>([
       { ALT: () => parser.consumeToken(Equal) },
@@ -180,7 +180,7 @@ export function createTupleAssignmentStatementRule(parser: PineParser) {
 }
 
 export function createAssignmentStatementRule(parser: PineParser) {
-  return parser.defineRule('assignmentStatement', () => {
+  return parser.createRule('assignmentStatement', () => {
     const left = parser.invokeSubrule(parser.assignmentTarget);
     const operator = parser.choose<IToken>([
       { ALT: () => parser.consumeToken(Equal) },
@@ -207,7 +207,7 @@ export function createAssignmentStatementRule(parser: PineParser) {
 }
 
 export function createIfStatementRule(parser: PineParser) {
-  return parser.defineRule('ifStatement', (indentOverride?: number) => {
+  return parser.createRule('ifStatement', (indentOverride?: number) => {
     const ifToken = parser.consumeToken(If);
     const test = parser.invokeSubrule(parser.expression);
     const indent = indentOverride ?? tokenIndent(ifToken);
@@ -240,7 +240,7 @@ export function createIfStatementRule(parser: PineParser) {
 }
 
 export function createForStatementRule(parser: PineParser) {
-  return parser.defineRule('forStatement', () => {
+  return parser.createRule('forStatement', () => {
     const forToken = parser.consumeToken(For);
     return parser.parseForLoop(forToken);
   });
@@ -328,7 +328,7 @@ export function createParseForLoop(parser: PineParser) {
 }
 
 export function createForIteratorTargetRule(parser: PineParser) {
-  return parser.defineRule('forIteratorTarget', (): ExpressionNode => {
+  return parser.createRule('forIteratorTarget', (): ExpressionNode => {
     const next = parser.lookAhead(1);
     if (next.tokenType === LBracket) {
       const tuple = parser.invokeSubrule(parser.bracketExpression, 1, { ARGS: ['tuple'] });
@@ -341,11 +341,11 @@ export function createForIteratorTargetRule(parser: PineParser) {
 }
 
 export function createSwitchStatementRule(parser: PineParser) {
-  return parser.defineRule('switchStatement', () => parser.invokeSubrule(parser.switchExpression));
+  return parser.createRule('switchStatement', () => parser.invokeSubrule(parser.switchExpression));
 }
 
 export function createSwitchCaseRule(parser: PineParser) {
-  return parser.defineRule('switchCase', () => {
+  return parser.createRule('switchCase', () => {
     const startToken = parser.lookAhead(1);
     let test: ExpressionNode | null = null;
 
@@ -436,7 +436,7 @@ export function createParseSwitchStructure(parser: PineParser) {
 }
 
 export function createWhileStatementRule(parser: PineParser) {
-  return parser.defineRule('whileStatement', () => {
+  return parser.createRule('whileStatement', () => {
     const whileToken = parser.consumeToken(While);
     return parser.parseWhileLoop(whileToken);
   });
@@ -453,7 +453,7 @@ export function createParseWhileLoop(parser: PineParser) {
 }
 
 export function createRepeatStatementRule(parser: PineParser) {
-  return parser.defineRule('repeatStatement', () => {
+  return parser.createRule('repeatStatement', () => {
     const repeatToken = parser.consumeToken(Repeat);
     const body = parser.parseIndentedBlock(tokenIndent(repeatToken));
     const result = extractLoopResult(body);
@@ -466,7 +466,7 @@ export function createRepeatStatementRule(parser: PineParser) {
 }
 
 export function createReturnStatementRule(parser: PineParser) {
-  return parser.defineRule('returnStatement', () => {
+  return parser.createRule('returnStatement', () => {
     const returnToken = parser.consumeToken(Return);
     let argument: ExpressionNode | null = null;
     const nextTokenType = parser.lookAhead(1).tokenType;
@@ -479,14 +479,14 @@ export function createReturnStatementRule(parser: PineParser) {
 }
 
 export function createBreakStatementRule(parser: PineParser) {
-  return parser.defineRule('breakStatement', () => {
+  return parser.createRule('breakStatement', () => {
     const token = parser.consumeToken(Break);
     return createBreakStatementNode(token);
   });
 }
 
 export function createContinueStatementRule(parser: PineParser) {
-  return parser.defineRule('continueStatement', () => {
+  return parser.createRule('continueStatement', () => {
     const token = parser.consumeToken(Continue);
     return createContinueStatementNode(token);
   });
