@@ -1,52 +1,47 @@
 import { CompilerAnnotation, Newline, VersionDirective } from '../tokens';
 import { attachCompilerAnnotations } from '../parser-utils';
-import {
-  createCompilerAnnotationNode,
-  createVersionDirectiveNode,
-  type VersionDirectiveNode,
-  type StatementNode,
-  type CompilerAnnotationNode,
-} from '../node-builders';
+import { createCompilerAnnotationNode, createVersionDirectiveNode } from '../node-builders';
+import type { VersionDirectiveNode, StatementNode, CompilerAnnotationNode } from '../../nodes';
 import type { PineParser } from '../parser';
 
 export function createProgramRule(parser: PineParser) {
-  return parser.RULE('program', () => {
+  return parser.defineRule('program', () => {
     const directives: VersionDirectiveNode[] = [];
     const body: StatementNode[] = [];
 
-    parser.MANY(() => parser.CONSUME(Newline));
+    parser.repeatMany(() => parser.consumeToken(Newline));
 
-    parser.MANY2(() => {
-      directives.push(parser.SUBRULE(parser.versionDirective));
-      parser.MANY3(() => parser.CONSUME2(Newline));
-    });
+    parser.repeatMany(() => {
+      directives.push(parser.invokeSubrule(parser.versionDirective));
+      parser.repeatMany(() => parser.consumeToken(Newline, 2), 3);
+    }, 2);
 
-    parser.MANY4(() => parser.CONSUME3(Newline));
+    parser.repeatMany(() => parser.consumeToken(Newline, 3), 4);
 
-    parser.MANY5(() => {
+    parser.repeatMany(() => {
       const annotations: CompilerAnnotationNode[] = [];
 
-      parser.MANY9(() => parser.CONSUME6(Newline));
+      parser.repeatMany(() => parser.consumeToken(Newline, 6), 9);
 
-      parser.MANY7(() => {
-        const annotationToken = parser.CONSUME(CompilerAnnotation);
+      parser.repeatMany(() => {
+        const annotationToken = parser.consumeToken(CompilerAnnotation);
         annotations.push(createCompilerAnnotationNode(annotationToken));
-        parser.MANY8(() => parser.CONSUME5(Newline));
-      });
+        parser.repeatMany(() => parser.consumeToken(Newline, 5), 8);
+      }, 7);
 
-      const statementNode = parser.SUBRULE(parser.statement);
+      const statementNode = parser.invokeSubrule(parser.statement);
       attachCompilerAnnotations(statementNode, annotations);
       body.push(statementNode);
-      parser.MANY6(() => parser.CONSUME4(Newline));
-    });
+      parser.repeatMany(() => parser.consumeToken(Newline, 4), 6);
+    }, 5);
 
     return { directives, body };
   });
 }
 
 export function createVersionDirectiveRule(parser: PineParser) {
-  return parser.RULE('versionDirective', () => {
-    const token = parser.CONSUME(VersionDirective);
+  return parser.defineRule('versionDirective', () => {
+    const token = parser.consumeToken(VersionDirective);
     return createVersionDirectiveNode(token);
   });
 }

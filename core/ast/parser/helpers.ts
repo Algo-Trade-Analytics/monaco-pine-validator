@@ -48,7 +48,7 @@ export function createNextSignificantTokenHelper(parser: PineParser) {
   return (startOffset: number): IToken => {
     let offset = startOffset;
     while (true) {
-      const token = parser.LA(offset);
+      const token = parser.lookAhead(offset);
       if (token.tokenType === EOF) {
         return token;
       }
@@ -70,7 +70,7 @@ export function createGetLineIndentHelper(
     }
 
     let indent: number | undefined;
-    for (const token of parser.input) {
+    for (const token of parser.getInputTokens()) {
       if ((token.startLine ?? 0) !== line) {
         continue;
       }
@@ -95,13 +95,13 @@ export function createGetLineIndentHelper(
 
 export function createParseIfExpressionBranchHelper(parser: PineParser) {
   return (baseIndent: number): BlockStatementNode => {
-    if (parser.LA(1).tokenType === Newline) {
+    if (parser.lookAhead(1).tokenType === Newline) {
       return parser.parseIndentedBlock(baseIndent);
     }
 
-    const startToken = parser.LA(1);
-    const value = parser.SUBRULE(parser.expression) ?? createPlaceholderExpression();
-    const endToken = parser.LA(0);
+    const startToken = parser.lookAhead(1);
+    const value = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
+    const endToken = parser.lookAhead(0);
     const statement = createExpressionStatementNode(value);
     return createBlockStatementNode([statement], startToken, endToken);
   };
@@ -113,7 +113,7 @@ export function createCollectDeclarationTokensHelper(parser: PineParser) {
     let offset = startOffset;
 
     while (true) {
-      const token = parser.LA(offset);
+      const token = parser.lookAhead(offset);
       const tokenType = token.tokenType;
 
       if (tokenType === EOF || tokenType === Newline || tokenType === Equal || tokenType === ColonEqual) {
@@ -142,7 +142,7 @@ export function createCollectFunctionHeadTokensHelper(parser: PineParser) {
     let offset = startOffset;
 
     while (true) {
-      const token = parser.LA(offset);
+      const token = parser.lookAhead(offset);
       const tokenType = token.tokenType;
 
       if (tokenType === LParen) {
@@ -177,7 +177,7 @@ export function createCollectParameterTokensHelper(parser: PineParser) {
     let genericDepth = 0;
 
     while (true) {
-      const token = parser.LA(offset);
+      const token = parser.lookAhead(offset);
       const tokenType = token.tokenType;
 
       if (tokenType === EOF) {
@@ -215,11 +215,11 @@ export function createFunctionDeclarationStartGuard(parser: PineParser) {
   return (): boolean => {
     let offset = 1;
 
-    if (isExportKeywordToken(parser.LA(offset))) {
+    if (isExportKeywordToken(parser.lookAhead(offset))) {
       offset += 1;
     }
 
-    while (isFunctionModifierToken(parser.LA(offset))) {
+    while (isFunctionModifierToken(parser.lookAhead(offset))) {
       offset += 1;
     }
 
@@ -232,7 +232,7 @@ export function createFunctionDeclarationStartGuard(parser: PineParser) {
     let depth = 0;
 
     while (true) {
-      const token = parser.LA(scanOffset);
+      const token = parser.lookAhead(scanOffset);
       const tokenType = token.tokenType;
 
       if (tokenType === EOF) {
@@ -256,17 +256,17 @@ export function createFunctionDeclarationStartGuard(parser: PineParser) {
       scanOffset += 1;
     }
 
-    while (parser.LA(scanOffset).tokenType === Newline) {
+    while (parser.lookAhead(scanOffset).tokenType === Newline) {
       scanOffset += 1;
     }
 
-    return parser.LA(scanOffset).tokenType === FatArrow;
+    return parser.lookAhead(scanOffset).tokenType === FatArrow;
   };
 }
 
 export function createVariableDeclarationStartGuard(parser: PineParser) {
   return (): boolean => {
-    const first = parser.LA(1);
+    const first = parser.lookAhead(1);
 
     if (isDeclarationKeywordToken(first)) {
       const collected = parser.collectDeclarationTokens(2);
@@ -305,7 +305,7 @@ export function createVariableDeclarationStartGuard(parser: PineParser) {
 
 export function createTupleAssignmentStartGuard(parser: PineParser) {
   return (): boolean => {
-    if (parser.LA(1).tokenType !== LBracket) {
+    if (parser.lookAhead(1).tokenType !== LBracket) {
       return false;
     }
 
@@ -313,7 +313,7 @@ export function createTupleAssignmentStartGuard(parser: PineParser) {
     let depth = 1;
 
     while (depth > 0) {
-      const token = parser.LA(offset);
+      const token = parser.lookAhead(offset);
       const tokenType = token.tokenType;
 
       if (tokenType === LBracket) {
@@ -327,11 +327,11 @@ export function createTupleAssignmentStartGuard(parser: PineParser) {
       offset += 1;
     }
 
-    while (parser.LA(offset).tokenType === Newline) {
+    while (parser.lookAhead(offset).tokenType === Newline) {
       offset += 1;
     }
 
-    const terminator = parser.LA(offset).tokenType;
+    const terminator = parser.lookAhead(offset).tokenType;
     return (
       terminator === Equal ||
       terminator === ColonEqual ||
@@ -346,12 +346,12 @@ export function createTupleAssignmentStartGuard(parser: PineParser) {
 
 export function createAssignmentStartGuard(parser: PineParser) {
   return (): boolean => {
-    const first = parser.LA(1);
+    const first = parser.lookAhead(1);
     if (first.tokenType === LBracket) {
       let offset = 2;
       let depth = 1;
       while (depth > 0) {
-        const token = parser.LA(offset);
+        const token = parser.lookAhead(offset);
         const tokenType = token.tokenType;
 
         if (tokenType === LBracket) {
@@ -365,11 +365,11 @@ export function createAssignmentStartGuard(parser: PineParser) {
         offset += 1;
       }
 
-      while (parser.LA(offset).tokenType === Newline) {
+      while (parser.lookAhead(offset).tokenType === Newline) {
         offset += 1;
       }
 
-      const terminator = parser.LA(offset).tokenType;
+      const terminator = parser.lookAhead(offset).tokenType;
       return (
         terminator === Equal ||
         terminator === ColonEqual ||
@@ -387,7 +387,7 @@ export function createAssignmentStartGuard(parser: PineParser) {
 
     let offset = 2;
     while (true) {
-      const token = parser.LA(offset);
+      const token = parser.lookAhead(offset);
       const tokenType = token.tokenType;
 
       if (
@@ -404,7 +404,7 @@ export function createAssignmentStartGuard(parser: PineParser) {
 
       if (tokenType === Dot) {
         offset += 1;
-        const next = parser.LA(offset);
+        const next = parser.lookAhead(offset);
         if (!isIdentifierLikeToken(next)) {
           return false;
         }
@@ -416,7 +416,7 @@ export function createAssignmentStartGuard(parser: PineParser) {
         offset += 1;
         let bracketDepth = 1;
         while (bracketDepth > 0) {
-          const inner = parser.LA(offset);
+          const inner = parser.lookAhead(offset);
           const innerType = inner.tokenType;
 
           if (innerType === LBracket) {
@@ -452,27 +452,27 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
     let firstStatementToken: IToken | undefined;
     let lastToken: IToken | undefined;
 
-    if (parser.LA(1).tokenType === Newline) {
-      const newlineToken = parser.CONSUME(Newline);
+    if (parser.lookAhead(1).tokenType === Newline) {
+      const newlineToken = parser.consumeToken(Newline);
       blockStartToken = blockStartToken ?? newlineToken;
       lastToken = newlineToken;
     }
 
     let shouldBreak = false;
     while (!shouldBreak) {
-      let next = parser.LA(1);
+      let next = parser.lookAhead(1);
       while (next.tokenType === Newline) {
         let lookaheadOffset = 2;
-        let lookahead = parser.LA(lookaheadOffset);
+        let lookahead = parser.lookAhead(lookaheadOffset);
         while (lookahead.tokenType === Newline) {
           lookaheadOffset += 1;
-          lookahead = parser.LA(lookaheadOffset);
+          lookahead = parser.lookAhead(lookaheadOffset);
         }
 
         if (lookahead.tokenType === EOF) {
-          const newlineToken = parser.CONSUME(Newline);
+          const newlineToken = parser.consumeToken(Newline);
           lastToken = newlineToken;
-          next = parser.LA(1);
+          next = parser.lookAhead(1);
           continue;
         }
 
@@ -481,9 +481,9 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
           break;
         }
 
-        const newlineToken = parser.CONSUME(Newline);
+        const newlineToken = parser.consumeToken(Newline);
         lastToken = newlineToken;
-        next = parser.LA(1);
+        next = parser.lookAhead(1);
       }
 
       if (shouldBreak) {
@@ -491,15 +491,15 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
       }
 
       const annotations: CompilerAnnotationNode[] = [];
-      while (parser.LA(1).tokenType === CompilerAnnotation) {
-        const annotationToken = parser.CONSUME(CompilerAnnotation);
+      while (parser.lookAhead(1).tokenType === CompilerAnnotation) {
+        const annotationToken = parser.consumeToken(CompilerAnnotation);
         annotations.push(createCompilerAnnotationNode(annotationToken));
         lastToken = annotationToken;
 
-        while (parser.LA(1).tokenType === Newline) {
-          const newlineToken = parser.CONSUME(Newline);
+        while (parser.lookAhead(1).tokenType === Newline) {
+          const newlineToken = parser.consumeToken(Newline);
           lastToken = newlineToken;
-          const lookahead = parser.LA(1);
+          const lookahead = parser.lookAhead(1);
           if (lookahead.tokenType === EOF || tokenIndent(lookahead) <= indent) {
             shouldBreak = true;
             break;
@@ -515,16 +515,16 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
         break;
       }
 
-      next = parser.LA(1);
+      next = parser.lookAhead(1);
       if (next.tokenType === EOF || tokenIndent(next) <= indent) {
         break;
       }
 
-      const statementStartToken = parser.LA(1);
-      const statement = parser.SUBRULE(parser.statement);
+      const statementStartToken = parser.lookAhead(1);
+      const statement = parser.invokeSubrule(parser.statement);
       statements.push(statement);
       firstStatementToken = firstStatementToken ?? statementStartToken;
-      lastToken = parser.LA(0);
+      lastToken = parser.lookAhead(0);
       attachCompilerAnnotations(statement, annotations);
     }
 

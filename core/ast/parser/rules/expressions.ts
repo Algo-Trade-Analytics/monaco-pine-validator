@@ -92,7 +92,7 @@ function createLiteralFromToken(token: IToken) {
 }
 
 function isArrowFunctionStart(parser: PineParser): boolean {
-  if (parser.LA(1).tokenType !== LParen) {
+  if (parser.lookAhead(1).tokenType !== LParen) {
     return false;
   }
 
@@ -100,7 +100,7 @@ function isArrowFunctionStart(parser: PineParser): boolean {
   let depth = 0;
 
   while (true) {
-    const lookahead = parser.LA(offset);
+    const lookahead = parser.lookAhead(offset);
     const tokenType = lookahead.tokenType;
 
     if (tokenType === EOF) {
@@ -120,33 +120,33 @@ function isArrowFunctionStart(parser: PineParser): boolean {
     offset += 1;
   }
 
-  while (parser.LA(offset).tokenType === Newline) {
+  while (parser.lookAhead(offset).tokenType === Newline) {
     offset += 1;
   }
 
-  return parser.LA(offset).tokenType === FatArrow;
+  return parser.lookAhead(offset).tokenType === FatArrow;
 }
 
 export function createArrowFunctionExpressionRule(parser: PineParser) {
-  return parser.RULE('arrowFunctionExpression', () => {
-    const lParen = parser.CONSUME(LParen);
+  return parser.defineRule('arrowFunctionExpression', () => {
+    const lParen = parser.consumeToken(LParen);
     let params: ParameterNode[] = [];
-    if (parser.LA(1).tokenType !== RParen) {
-      params = parser.SUBRULE(parser.parameterList);
+    if (parser.lookAhead(1).tokenType !== RParen) {
+      params = parser.invokeSubrule(parser.parameterList);
     }
-    parser.CONSUME(RParen);
-    const arrowToken = parser.CONSUME(FatArrow);
+    parser.consumeToken(RParen);
+    const arrowToken = parser.consumeToken(FatArrow);
 
     let body: BlockStatementNode;
     let endToken: IToken | undefined = arrowToken;
 
-    if (parser.LA(1).tokenType === Newline) {
+    if (parser.lookAhead(1).tokenType === Newline) {
       const baseIndent = parser.getLineIndent(arrowToken.startLine ?? lParen.startLine ?? 1);
       body = parser.parseIndentedBlock(baseIndent);
-      endToken = parser.LA(0) ?? arrowToken;
+      endToken = parser.lookAhead(0) ?? arrowToken;
     } else {
-      const expression = parser.SUBRULE(parser.expression) ?? createPlaceholderExpression();
-      endToken = parser.LA(0) ?? arrowToken;
+      const expression = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
+      endToken = parser.lookAhead(0) ?? arrowToken;
       const returnStatement = createImplicitReturnStatementNode(expression, arrowToken);
       body = createBlockStatementNode([returnStatement], arrowToken, endToken);
     }
@@ -156,18 +156,18 @@ export function createArrowFunctionExpressionRule(parser: PineParser) {
 }
 
 export function createExpressionRule(parser: PineParser) {
-  return parser.RULE('expression', () => parser.SUBRULE(parser.conditionalExpression));
+  return parser.defineRule('expression', () => parser.invokeSubrule(parser.conditionalExpression));
 }
 
 export function createConditionalExpressionRule(parser: PineParser) {
-  return parser.RULE('conditionalExpression', () => {
-    const test = parser.SUBRULE(parser.nullishCoalescingExpression);
-    if (parser.LA(1).tokenType === Question) {
-      const questionToken = parser.CONSUME(Question);
-      const consequent = parser.SUBRULE2(parser.expression);
-      const colonToken = parser.CONSUME(Colon);
-      const alternate = parser.SUBRULE3(parser.expression);
-      const endToken = parser.LA(0);
+  return parser.defineRule('conditionalExpression', () => {
+    const test = parser.invokeSubrule(parser.nullishCoalescingExpression);
+    if (parser.lookAhead(1).tokenType === Question) {
+      const questionToken = parser.consumeToken(Question);
+      const consequent = parser.invokeSubrule(parser.expression, 2);
+      const colonToken = parser.consumeToken(Colon);
+      const alternate = parser.invokeSubrule(parser.expression, 3);
+      const endToken = parser.lookAhead(0);
       return createConditionalExpressionNode(
         test,
         consequent,
@@ -182,12 +182,12 @@ export function createConditionalExpressionRule(parser: PineParser) {
 }
 
 export function createNullishCoalescingExpressionRule(parser: PineParser) {
-  return parser.RULE('nullishCoalescingExpression', () => {
-    let expression = parser.SUBRULE(parser.logicalOrExpression);
-    parser.MANY(() => {
-      const operator = parser.CONSUME(NullishCoalescing);
-      const right = parser.SUBRULE2(parser.logicalOrExpression);
-      const endToken = parser.LA(0);
+  return parser.defineRule('nullishCoalescingExpression', () => {
+    let expression = parser.invokeSubrule(parser.logicalOrExpression);
+    parser.repeatMany(() => {
+      const operator = parser.consumeToken(NullishCoalescing);
+      const right = parser.invokeSubrule(parser.logicalOrExpression, 2);
+      const endToken = parser.lookAhead(0);
       expression = createBinaryExpressionNode(expression, operator, right, endToken);
     });
     return expression;
@@ -195,12 +195,12 @@ export function createNullishCoalescingExpressionRule(parser: PineParser) {
 }
 
 export function createLogicalOrExpressionRule(parser: PineParser) {
-  return parser.RULE('logicalOrExpression', () => {
-    let expression = parser.SUBRULE(parser.logicalAndExpression);
-    parser.MANY(() => {
-      const operator = parser.CONSUME(Or);
-      const right = parser.SUBRULE2(parser.logicalAndExpression);
-      const endToken = parser.LA(0);
+  return parser.defineRule('logicalOrExpression', () => {
+    let expression = parser.invokeSubrule(parser.logicalAndExpression);
+    parser.repeatMany(() => {
+      const operator = parser.consumeToken(Or);
+      const right = parser.invokeSubrule(parser.logicalAndExpression, 2);
+      const endToken = parser.lookAhead(0);
       expression = createBinaryExpressionNode(expression, operator, right, endToken);
     });
     return expression;
@@ -208,12 +208,12 @@ export function createLogicalOrExpressionRule(parser: PineParser) {
 }
 
 export function createLogicalAndExpressionRule(parser: PineParser) {
-  return parser.RULE('logicalAndExpression', () => {
-    let expression = parser.SUBRULE(parser.equalityExpression);
-    parser.MANY(() => {
-      const operator = parser.CONSUME(And);
-      const right = parser.SUBRULE2(parser.equalityExpression);
-      const endToken = parser.LA(0);
+  return parser.defineRule('logicalAndExpression', () => {
+    let expression = parser.invokeSubrule(parser.equalityExpression);
+    parser.repeatMany(() => {
+      const operator = parser.consumeToken(And);
+      const right = parser.invokeSubrule(parser.equalityExpression, 2);
+      const endToken = parser.lookAhead(0);
       expression = createBinaryExpressionNode(expression, operator, right, endToken);
     });
     return expression;
@@ -221,15 +221,15 @@ export function createLogicalAndExpressionRule(parser: PineParser) {
 }
 
 export function createEqualityExpressionRule(parser: PineParser) {
-  return parser.RULE('equalityExpression', () => {
-    let expression = parser.SUBRULE(parser.relationalExpression);
-    parser.MANY(() => {
-      const operator = parser.OR([
-        { ALT: () => parser.CONSUME(EqualEqual) },
-        { ALT: () => parser.CONSUME(NotEqual) },
+  return parser.defineRule('equalityExpression', () => {
+    let expression = parser.invokeSubrule(parser.relationalExpression);
+    parser.repeatMany(() => {
+      const operator = parser.choose<IToken>([
+        { ALT: () => parser.consumeToken(EqualEqual) },
+        { ALT: () => parser.consumeToken(NotEqual) },
       ]);
-      const right = parser.SUBRULE2(parser.relationalExpression);
-      const endToken = parser.LA(0);
+      const right = parser.invokeSubrule(parser.relationalExpression, 2);
+      const endToken = parser.lookAhead(0);
       expression = createBinaryExpressionNode(expression, operator, right, endToken);
     });
     return expression;
@@ -237,17 +237,17 @@ export function createEqualityExpressionRule(parser: PineParser) {
 }
 
 export function createRelationalExpressionRule(parser: PineParser) {
-  return parser.RULE('relationalExpression', () => {
-    let expression = parser.SUBRULE(parser.additiveExpression);
-    parser.MANY(() => {
-      const operator = parser.OR([
-        { ALT: () => parser.CONSUME(LessEqual) },
-        { ALT: () => parser.CONSUME(GreaterEqual) },
-        { ALT: () => parser.CONSUME(Less) },
-        { ALT: () => parser.CONSUME(Greater) },
+  return parser.defineRule('relationalExpression', () => {
+    let expression = parser.invokeSubrule(parser.additiveExpression);
+    parser.repeatMany(() => {
+      const operator = parser.choose<IToken>([
+        { ALT: () => parser.consumeToken(LessEqual) },
+        { ALT: () => parser.consumeToken(GreaterEqual) },
+        { ALT: () => parser.consumeToken(Less) },
+        { ALT: () => parser.consumeToken(Greater) },
       ]);
-      const right = parser.SUBRULE2(parser.additiveExpression);
-      const endToken = parser.LA(0);
+      const right = parser.invokeSubrule(parser.additiveExpression, 2);
+      const endToken = parser.lookAhead(0);
       expression = createBinaryExpressionNode(expression, operator, right, endToken);
     });
     return expression;
@@ -255,15 +255,15 @@ export function createRelationalExpressionRule(parser: PineParser) {
 }
 
 export function createAdditiveExpressionRule(parser: PineParser) {
-  return parser.RULE('additiveExpression', () => {
-    let expression = parser.SUBRULE(parser.multiplicativeExpression);
-    parser.MANY(() => {
-      const operator = parser.OR([
-        { ALT: () => parser.CONSUME(Plus) },
-        { ALT: () => parser.CONSUME(Minus) },
+  return parser.defineRule('additiveExpression', () => {
+    let expression = parser.invokeSubrule(parser.multiplicativeExpression);
+    parser.repeatMany(() => {
+      const operator = parser.choose<IToken>([
+        { ALT: () => parser.consumeToken(Plus) },
+        { ALT: () => parser.consumeToken(Minus) },
       ]);
-      const right = parser.SUBRULE2(parser.multiplicativeExpression);
-      const endToken = parser.LA(0);
+      const right = parser.invokeSubrule(parser.multiplicativeExpression, 2);
+      const endToken = parser.lookAhead(0);
       expression = createBinaryExpressionNode(expression, operator, right, endToken);
     });
     return expression;
@@ -271,16 +271,16 @@ export function createAdditiveExpressionRule(parser: PineParser) {
 }
 
 export function createMultiplicativeExpressionRule(parser: PineParser) {
-  return parser.RULE('multiplicativeExpression', () => {
-    let expression = parser.SUBRULE(parser.unaryExpression);
-    parser.MANY(() => {
-      const operator = parser.OR([
-        { ALT: () => parser.CONSUME(Star) },
-        { ALT: () => parser.CONSUME(Slash) },
-        { ALT: () => parser.CONSUME(Percent) },
+  return parser.defineRule('multiplicativeExpression', () => {
+    let expression = parser.invokeSubrule(parser.unaryExpression);
+    parser.repeatMany(() => {
+      const operator = parser.choose<IToken>([
+        { ALT: () => parser.consumeToken(Star) },
+        { ALT: () => parser.consumeToken(Slash) },
+        { ALT: () => parser.consumeToken(Percent) },
       ]);
-      const right = parser.SUBRULE2(parser.unaryExpression);
-      const endToken = parser.LA(0);
+      const right = parser.invokeSubrule(parser.unaryExpression, 2);
+      const endToken = parser.lookAhead(0);
       expression = createBinaryExpressionNode(expression, operator, right, endToken);
     });
     return expression;
@@ -288,68 +288,68 @@ export function createMultiplicativeExpressionRule(parser: PineParser) {
 }
 
 export function createUnaryExpressionRule(parser: PineParser) {
-  return parser.RULE('unaryExpression', () => {
-    const lookahead = parser.LA(1).tokenType;
+  return parser.defineRule('unaryExpression', () => {
+    const lookahead = parser.lookAhead(1).tokenType;
     if (lookahead === Plus) {
-      const operator = parser.CONSUME(Plus);
-      const argument = parser.SUBRULE(parser.unaryExpression);
+      const operator = parser.consumeToken(Plus);
+      const argument = parser.invokeSubrule(parser.unaryExpression);
       return createUnaryExpressionNode(operator, argument);
     }
     if (lookahead === Minus) {
-      const operator = parser.CONSUME(Minus);
-      const argument = parser.SUBRULE(parser.unaryExpression);
+      const operator = parser.consumeToken(Minus);
+      const argument = parser.invokeSubrule(parser.unaryExpression);
       return createUnaryExpressionNode(operator, argument);
     }
     if (lookahead === Not) {
-      const operator = parser.CONSUME(Not);
-      const argument = parser.SUBRULE(parser.unaryExpression);
+      const operator = parser.consumeToken(Not);
+      const argument = parser.invokeSubrule(parser.unaryExpression);
       return createUnaryExpressionNode(operator, argument);
     }
 
-    return parser.SUBRULE(parser.callExpression);
+    return parser.invokeSubrule(parser.callExpression);
   });
 }
 
 export function createCallTypeReferenceRule(parser: PineParser) {
-  return parser.RULE('callTypeReference', (): IToken[] => {
+  return parser.defineRule('callTypeReference', (): IToken[] => {
     const tokens: IToken[] = [];
 
-    const identifier = parser.CONSUME(IdentifierToken);
-    parser.ACTION(() => {
+    const identifier = parser.consumeToken(IdentifierToken);
+    parser.runAction(() => {
       tokens.push(identifier);
     });
 
-    parser.MANY(() => {
-      const dotToken = parser.CONSUME(Dot);
-      const segmentToken = parser.CONSUME2(IdentifierToken);
-      parser.ACTION(() => {
+    parser.repeatMany(() => {
+      const dotToken = parser.consumeToken(Dot);
+      const segmentToken = parser.consumeToken(IdentifierToken, 2);
+      parser.runAction(() => {
         tokens.push(dotToken);
         tokens.push(segmentToken);
       });
     });
 
-    parser.OPTION(() => {
-      const lessToken = parser.CONSUME(Less);
-      parser.ACTION(() => {
+    parser.optional(() => {
+      const lessToken = parser.consumeToken(Less);
+      parser.runAction(() => {
         tokens.push(lessToken);
       });
 
-      const firstTokens = parser.SUBRULE(parser.callTypeReference);
-      parser.ACTION(() => {
+      const firstTokens = parser.invokeSubrule(parser.callTypeReference);
+      parser.runAction(() => {
         tokens.push(...firstTokens);
       });
 
-      parser.MANY2(() => {
-        const commaToken = parser.CONSUME(Comma);
-        const additionalTokens = parser.SUBRULE2(parser.callTypeReference);
-        parser.ACTION(() => {
+      parser.repeatMany(() => {
+        const commaToken = parser.consumeToken(Comma);
+        const additionalTokens = parser.invokeSubrule(parser.callTypeReference, 2);
+        parser.runAction(() => {
           tokens.push(commaToken);
           tokens.push(...additionalTokens);
         });
-      });
+      }, 2);
 
-      const greaterToken = parser.CONSUME(Greater);
-      parser.ACTION(() => {
+      const greaterToken = parser.consumeToken(Greater);
+      parser.runAction(() => {
         tokens.push(greaterToken);
       });
     });
@@ -359,26 +359,26 @@ export function createCallTypeReferenceRule(parser: PineParser) {
 }
 
 export function createCallExpressionRule(parser: PineParser) {
-  return parser.RULE('callExpression', () => {
-    let expression = parser.SUBRULE(parser.primaryExpression) ?? createPlaceholderExpression();
+  return parser.defineRule('callExpression', () => {
+    let expression = parser.invokeSubrule(parser.primaryExpression) ?? createPlaceholderExpression();
 
     while (true) {
-      const lookahead = parser.LA(1);
+      const lookahead = parser.lookAhead(1);
       const tokenType = lookahead.tokenType;
 
       if (tokenType === Less) {
-        const canParseGenericCall = parser.BACKTRACK(() => {
-          parser.CONSUME(Less);
-          parser.SUBRULE(parser.callTypeReference);
-          while (parser.LA(1).tokenType === Comma) {
-            parser.CONSUME(Comma);
-            parser.SUBRULE2(parser.callTypeReference);
+        const canParseGenericCall = parser.backtrack(() => {
+          parser.consumeToken(Less);
+          parser.invokeSubrule(parser.callTypeReference);
+          while (parser.lookAhead(1).tokenType === Comma) {
+            parser.consumeToken(Comma);
+            parser.invokeSubrule(parser.callTypeReference, 2);
           }
-          parser.CONSUME(Greater);
-          while (parser.LA(1).tokenType === Newline) {
-            parser.CONSUME(Newline);
+          parser.consumeToken(Greater);
+          while (parser.lookAhead(1).tokenType === Newline) {
+            parser.consumeToken(Newline);
           }
-          parser.CONSUME(LParen);
+          parser.consumeToken(LParen);
           return true;
         });
 
@@ -388,24 +388,24 @@ export function createCallExpressionRule(parser: PineParser) {
 
         const typeArgumentTokenGroups: IToken[][] = [];
 
-        parser.CONSUME(Less);
-        typeArgumentTokenGroups.push(parser.SUBRULE(parser.callTypeReference));
-        while (parser.LA(1).tokenType === Comma) {
-          parser.CONSUME(Comma);
-          typeArgumentTokenGroups.push(parser.SUBRULE2(parser.callTypeReference));
+        parser.consumeToken(Less);
+        typeArgumentTokenGroups.push(parser.invokeSubrule(parser.callTypeReference));
+        while (parser.lookAhead(1).tokenType === Comma) {
+          parser.consumeToken(Comma);
+          typeArgumentTokenGroups.push(parser.invokeSubrule(parser.callTypeReference, 2));
         }
-        parser.CONSUME(Greater);
+        parser.consumeToken(Greater);
 
-        while (parser.LA(1).tokenType === Newline) {
-          parser.CONSUME(Newline);
+        while (parser.lookAhead(1).tokenType === Newline) {
+          parser.consumeToken(Newline);
         }
 
-        parser.CONSUME(LParen);
+        parser.consumeToken(LParen);
         let args: ArgumentNode[] = [];
-        if (parser.LA(1).tokenType !== RParen) {
-          args = parser.SUBRULE(parser.argumentList);
+        if (parser.lookAhead(1).tokenType !== RParen) {
+          args = parser.invokeSubrule(parser.argumentList);
         }
-        const rParen = parser.CONSUME(RParen);
+        const rParen = parser.consumeToken(RParen);
         const typeArguments = typeArgumentTokenGroups
           .map((group) => buildTypeReferenceFromTokens(group))
           .filter((node): node is TypeReferenceNode => node !== null);
@@ -414,31 +414,31 @@ export function createCallExpressionRule(parser: PineParser) {
       }
 
       if (tokenType === LParen) {
-        parser.CONSUME(LParen);
+        parser.consumeToken(LParen);
         let args: ArgumentNode[] = [];
-        if (parser.LA(1).tokenType !== RParen) {
-          args = parser.SUBRULE(parser.argumentList);
+        if (parser.lookAhead(1).tokenType !== RParen) {
+          args = parser.invokeSubrule(parser.argumentList);
         }
-        const rParen = parser.CONSUME(RParen);
+        const rParen = parser.consumeToken(RParen);
         expression = createCallExpressionNode(expression, args, rParen, []);
         continue;
       }
 
       if (tokenType === Dot) {
-        parser.CONSUME(Dot);
-        const propertyToken = parser.CONSUME(IdentifierToken);
+        parser.consumeToken(Dot);
+        const propertyToken = parser.consumeToken(IdentifierToken);
         const property = createIdentifierNode(propertyToken);
         expression = createMemberExpressionNode(expression, property, propertyToken);
         continue;
       }
 
       if (tokenType === LBracket) {
-        const lBracket = parser.CONSUME(LBracket);
+        const lBracket = parser.consumeToken(LBracket);
         let indexExpression: ExpressionNode | undefined;
-        if (parser.LA(1).tokenType !== RBracket) {
-          indexExpression = parser.SUBRULE2(parser.expression);
+        if (parser.lookAhead(1).tokenType !== RBracket) {
+          indexExpression = parser.invokeSubrule(parser.expression, 2);
         }
-        const rBracket = parser.CONSUME(RBracket);
+        const rBracket = parser.consumeToken(RBracket);
         expression = createIndexExpressionNode(expression, indexExpression, rBracket ?? lBracket);
         continue;
       }
@@ -451,26 +451,26 @@ export function createCallExpressionRule(parser: PineParser) {
 }
 
 export function createMemberExpressionRule(parser: PineParser) {
-  return parser.RULE('memberExpression', () => {
-    let expression = parser.SUBRULE(parser.primaryExpression) ?? createPlaceholderExpression();
-    parser.MANY(() => {
-      parser.OR([
+  return parser.defineRule('memberExpression', () => {
+    let expression = parser.invokeSubrule(parser.primaryExpression) ?? createPlaceholderExpression();
+    parser.repeatMany(() => {
+      parser.choose([
         {
           ALT: () => {
-            parser.CONSUME(Dot);
-            const propertyToken = parser.CONSUME(IdentifierToken);
+            parser.consumeToken(Dot);
+            const propertyToken = parser.consumeToken(IdentifierToken);
             const property = createIdentifierNode(propertyToken);
             expression = createMemberExpressionNode(expression, property, propertyToken);
           },
         },
         {
           ALT: () => {
-            const lBracket = parser.CONSUME(LBracket);
+            const lBracket = parser.consumeToken(LBracket);
             let indexExpression: ExpressionNode | undefined;
-            if (parser.LA(1).tokenType !== RBracket) {
-              indexExpression = parser.SUBRULE2(parser.expression);
+            if (parser.lookAhead(1).tokenType !== RBracket) {
+              indexExpression = parser.invokeSubrule(parser.expression, 2);
             }
-            const rBracket = parser.CONSUME(RBracket);
+            const rBracket = parser.consumeToken(RBracket);
             expression = createIndexExpressionNode(expression, indexExpression, rBracket ?? lBracket);
           },
         },
@@ -481,14 +481,14 @@ export function createMemberExpressionRule(parser: PineParser) {
 }
 
 export function createArgumentListRule(parser: PineParser) {
-  return parser.RULE('argumentList', (): ArgumentNode[] => {
+  return parser.defineRule('argumentList', (): ArgumentNode[] => {
     const args: ArgumentNode[] = [];
 
-    args.push(parser.SUBRULE(parser.argument));
+    args.push(parser.invokeSubrule(parser.argument));
 
-    parser.MANY(() => {
-      parser.CONSUME(Comma);
-      args.push(parser.SUBRULE2(parser.argument));
+    parser.repeatMany(() => {
+      parser.consumeToken(Comma);
+      args.push(parser.invokeSubrule(parser.argument, 2));
     });
 
     return args;
@@ -496,33 +496,33 @@ export function createArgumentListRule(parser: PineParser) {
 }
 
 export function createArgumentRule(parser: PineParser) {
-  return parser.RULE('argument', () => {
-    const lookahead = parser.LA(1);
-    if (isIdentifierLikeToken(lookahead) && parser.LA(2).tokenType === Equal) {
-      const nameToken = parser.CONSUME(IdentifierToken);
-      parser.CONSUME(Equal);
-      const value = parser.SUBRULE(parser.expression);
+  return parser.defineRule('argument', () => {
+    const lookahead = parser.lookAhead(1);
+    if (isIdentifierLikeToken(lookahead) && parser.lookAhead(2).tokenType === Equal) {
+      const nameToken = parser.consumeToken(IdentifierToken);
+      parser.consumeToken(Equal);
+      const value = parser.invokeSubrule(parser.expression);
       const name = createIdentifierNode(nameToken);
-      const endToken = parser.LA(0);
+      const endToken = parser.lookAhead(0);
       return createArgumentNode(name, value, nameToken, endToken);
     }
 
-    const start = parser.LA(1);
-    const value = parser.SUBRULE2(parser.expression);
-    const end = parser.LA(0);
+    const start = parser.lookAhead(1);
+    const value = parser.invokeSubrule(parser.expression, 2);
+    const end = parser.lookAhead(0);
     return createArgumentNode(null, value, start, end);
   });
 }
 
 export function createBracketExpressionRule(parser: PineParser) {
-  return parser.RULE('bracketExpression', (mode: 'expression' | 'tuple' = 'expression'): ExpressionNode => {
-    const lBracket = parser.CONSUME(LBracket);
+  return parser.defineRule('bracketExpression', (mode: 'expression' | 'tuple' = 'expression'): ExpressionNode => {
+    const lBracket = parser.consumeToken(LBracket);
     const elements: (ExpressionNode | null)[] = [];
     let expectElement = true;
     let hasParsedElement = false;
 
     while (true) {
-      const next = parser.LA(1);
+      const next = parser.lookAhead(1);
       const tokenType = next.tokenType;
 
       if (tokenType === RBracket || tokenType === EOF) {
@@ -530,12 +530,12 @@ export function createBracketExpressionRule(parser: PineParser) {
       }
 
       if (tokenType === Newline) {
-        parser.CONSUME(Newline);
+        parser.consumeToken(Newline);
         continue;
       }
 
       if (tokenType === Comma) {
-        parser.CONSUME(Comma);
+        parser.consumeToken(Comma);
         if (expectElement) {
           elements.push(null);
         }
@@ -545,16 +545,16 @@ export function createBracketExpressionRule(parser: PineParser) {
 
       let element: ExpressionNode | undefined;
       if (!hasParsedElement) {
-        element = parser.SUBRULE(parser.expression);
+        element = parser.invokeSubrule(parser.expression);
         hasParsedElement = true;
       } else {
-        element = parser.SUBRULE2(parser.expression);
+        element = parser.invokeSubrule(parser.expression, 2);
       }
       elements.push(element);
       expectElement = false;
 
-      if (parser.LA(1).tokenType === Comma) {
-        parser.CONSUME(Comma);
+      if (parser.lookAhead(1).tokenType === Comma) {
+        parser.consumeToken(Comma);
         expectElement = true;
       } else {
         expectElement = false;
@@ -562,11 +562,11 @@ export function createBracketExpressionRule(parser: PineParser) {
       }
     }
 
-    if (expectElement && elements.length > 0 && parser.LA(1).tokenType === RBracket) {
+    if (expectElement && elements.length > 0 && parser.lookAhead(1).tokenType === RBracket) {
       elements.push(null);
     }
 
-    const rBracket = parser.CONSUME(RBracket);
+    const rBracket = parser.consumeToken(RBracket);
 
     const tuple = createTupleExpressionNode(elements, lBracket, rBracket);
     if (mode === 'tuple') {
@@ -598,54 +598,54 @@ export function createBracketExpressionRule(parser: PineParser) {
 }
 
 export function createPrimaryExpressionRule(parser: PineParser) {
-  return parser.RULE('primaryExpression', (): ExpressionNode => {
-    const token = parser.LA(1);
+  return parser.defineRule('primaryExpression', (): ExpressionNode => {
+    const token = parser.lookAhead(1);
     switch (token.tokenType) {
       case IdentifierToken:
-        return parser.SUBRULE(parser.identifierExpression);
+        return parser.invokeSubrule(parser.identifierExpression);
       case StringToken:
-        return createLiteralFromToken(parser.CONSUME(StringToken));
+        return createLiteralFromToken(parser.consumeToken(StringToken));
       case NumberToken:
-        return createLiteralFromToken(parser.CONSUME(NumberToken));
+        return createLiteralFromToken(parser.consumeToken(NumberToken));
       case True:
-        return createLiteralFromToken(parser.CONSUME(True));
+        return createLiteralFromToken(parser.consumeToken(True));
       case False:
-        return createLiteralFromToken(parser.CONSUME(False));
+        return createLiteralFromToken(parser.consumeToken(False));
       case NaToken:
-        return createLiteralFromToken(parser.CONSUME(NaToken));
+        return createLiteralFromToken(parser.consumeToken(NaToken));
       case Switch:
-        return parser.SUBRULE(parser.switchExpression);
+        return parser.invokeSubrule(parser.switchExpression);
       case If:
-        return parser.SUBRULE(parser.ifExpression);
+        return parser.invokeSubrule(parser.ifExpression);
       case For:
-        return parser.SUBRULE(parser.forExpression);
+        return parser.invokeSubrule(parser.forExpression);
       case While:
-        return parser.SUBRULE(parser.whileExpression);
+        return parser.invokeSubrule(parser.whileExpression);
       case LBracket:
-        return parser.SUBRULE(parser.bracketExpression);
+        return parser.invokeSubrule(parser.bracketExpression);
       case LParen: {
         if (isArrowFunctionStart(parser)) {
-          return parser.SUBRULE(parser.arrowFunctionExpression);
+          return parser.invokeSubrule(parser.arrowFunctionExpression);
         }
-        parser.CONSUME(LParen);
-        const expression = parser.SUBRULE(parser.expression);
-        parser.CONSUME(RParen);
+        parser.consumeToken(LParen);
+        const expression = parser.invokeSubrule(parser.expression);
+        parser.consumeToken(RParen);
         return expression ?? createPlaceholderExpression();
       }
       default:
-        return createIdentifierNode(parser.CONSUME(IdentifierToken));
+        return createIdentifierNode(parser.consumeToken(IdentifierToken));
     }
   });
 }
 
 export function createIdentifierExpressionRule(parser: PineParser) {
-  return parser.RULE('identifierExpression', () => {
-    const first = parser.CONSUME(IdentifierToken);
+  return parser.defineRule('identifierExpression', () => {
+    const first = parser.consumeToken(IdentifierToken);
     let expression: ExpressionNode = createIdentifierNode(first);
 
-    parser.MANY(() => {
-      parser.CONSUME(Dot);
-      const propertyToken = parser.CONSUME2(IdentifierToken);
+    parser.repeatMany(() => {
+      parser.consumeToken(Dot);
+      const propertyToken = parser.consumeToken(IdentifierToken, 2);
       const property = createIdentifierNode(propertyToken);
       expression = createMemberExpressionNode(expression, property, propertyToken);
     });
@@ -655,54 +655,54 @@ export function createIdentifierExpressionRule(parser: PineParser) {
 }
 
 export function createIfExpressionRule(parser: PineParser) {
-  return parser.RULE('ifExpression', (baseIndentOverride?: number) => {
-    const ifToken = parser.CONSUME(If);
-    const test = parser.SUBRULE(parser.expression) ?? createPlaceholderExpression();
+  return parser.defineRule('ifExpression', (baseIndentOverride?: number) => {
+    const ifToken = parser.consumeToken(If);
+    const test = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
     const baseIndent = baseIndentOverride ?? parser.getLineIndent(ifToken.startLine ?? 1);
     const consequent = parser.parseIfExpressionBranch(baseIndent);
 
     let alternate: IfExpressionNode | BlockStatementNode | null = null;
 
     let offset = 1;
-    while (parser.LA(offset).tokenType === Newline) {
+    while (parser.lookAhead(offset).tokenType === Newline) {
       offset += 1;
     }
-    const potentialElse = parser.LA(offset);
+    const potentialElse = parser.lookAhead(offset);
     if (potentialElse.tokenType === Else && tokenIndent(potentialElse) <= baseIndent) {
-      while (parser.LA(1).tokenType === Newline) {
-        parser.CONSUME(Newline);
+      while (parser.lookAhead(1).tokenType === Newline) {
+        parser.consumeToken(Newline);
       }
-      parser.CONSUME(Else);
+      parser.consumeToken(Else);
 
-      if (parser.LA(1).tokenType === If) {
-        alternate = parser.SUBRULE2(parser.ifExpression, { ARGS: [baseIndent] });
+      if (parser.lookAhead(1).tokenType === If) {
+        alternate = parser.invokeSubrule(parser.ifExpression, 2, { ARGS: [baseIndent] });
       } else {
         alternate = parser.parseIfExpressionBranch(baseIndent);
       }
     }
 
-    const endToken = parser.LA(0);
+    const endToken = parser.lookAhead(0);
     return createIfExpressionNode(test, consequent, alternate, ifToken, endToken);
   });
 }
 
 export function createForExpressionRule(parser: PineParser) {
-  return parser.RULE('forExpression', () => {
-    const forToken = parser.CONSUME(For);
+  return parser.defineRule('forExpression', () => {
+    const forToken = parser.consumeToken(For);
     return parser.parseForLoop(forToken);
   });
 }
 
 export function createWhileExpressionRule(parser: PineParser) {
-  return parser.RULE('whileExpression', () => {
-    const whileToken = parser.CONSUME(While);
+  return parser.defineRule('whileExpression', () => {
+    const whileToken = parser.consumeToken(While);
     return parser.parseWhileLoop(whileToken);
   });
 }
 
 export function createSwitchExpressionRule(parser: PineParser) {
-  return parser.RULE('switchExpression', () => {
-    const switchToken = parser.CONSUME(Switch);
+  return parser.defineRule('switchExpression', () => {
+    const switchToken = parser.consumeToken(Switch);
     return parser.parseSwitchStructure(switchToken);
   });
 }

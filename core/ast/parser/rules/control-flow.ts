@@ -86,7 +86,7 @@ function isForInLoopHeader(parser: PineParser): boolean {
   let bracketDepth = 0;
 
   while (true) {
-    const token = parser.LA(offset);
+    const token = parser.lookAhead(offset);
     const tokenType = token.tokenType;
 
     if (tokenType === EOF || tokenType === Newline) {
@@ -128,44 +128,44 @@ function parseSwitchCaseConsequent(
 ): { statements: StatementNode[]; endToken: IToken | undefined } {
   const statements: StatementNode[] = [];
 
-  const nextTokenType = parser.LA(1).tokenType;
+  const nextTokenType = parser.lookAhead(1).tokenType;
 
   if (nextTokenType === Newline) {
     const block = parser.parseIndentedBlock(caseIndent);
     statements.push(...block.body);
-    return { statements, endToken: parser.LA(0) };
+    return { statements, endToken: parser.lookAhead(0) };
   }
 
   if (isStatementTerminator(nextTokenType)) {
-    return { statements, endToken: parser.LA(0) };
+    return { statements, endToken: parser.lookAhead(0) };
   }
 
-  const expression = parser.SUBRULE(parser.expression);
+  const expression = parser.invokeSubrule(parser.expression);
   statements.push(createExpressionStatementNode(expression));
-  return { statements, endToken: parser.LA(0) };
+  return { statements, endToken: parser.lookAhead(0) };
 }
 
 export function createExpressionStatementRule(parser: PineParser) {
-  return parser.RULE('expressionStatement', () => {
-    const expression = parser.SUBRULE(parser.expression);
+  return parser.defineRule('expressionStatement', () => {
+    const expression = parser.invokeSubrule(parser.expression);
     return createExpressionStatementNode(expression);
   });
 }
 
 export function createTupleAssignmentStatementRule(parser: PineParser) {
-  return parser.RULE('tupleAssignmentStatement', () => {
-    const left = parser.SUBRULE(parser.bracketExpression, { ARGS: ['tuple'] });
-    const operator = parser.OR([
-      { ALT: () => parser.CONSUME(Equal) },
-      { ALT: () => parser.CONSUME(ColonEqual) },
-      { ALT: () => parser.CONSUME(PlusEqual) },
-      { ALT: () => parser.CONSUME(MinusEqual) },
-      { ALT: () => parser.CONSUME(StarEqual) },
-      { ALT: () => parser.CONSUME(SlashEqual) },
-      { ALT: () => parser.CONSUME(PercentEqual) },
+  return parser.defineRule('tupleAssignmentStatement', () => {
+    const left = parser.invokeSubrule(parser.bracketExpression, 1, { ARGS: ['tuple'] });
+    const operator = parser.choose<IToken>([
+      { ALT: () => parser.consumeToken(Equal) },
+      { ALT: () => parser.consumeToken(ColonEqual) },
+      { ALT: () => parser.consumeToken(PlusEqual) },
+      { ALT: () => parser.consumeToken(MinusEqual) },
+      { ALT: () => parser.consumeToken(StarEqual) },
+      { ALT: () => parser.consumeToken(SlashEqual) },
+      { ALT: () => parser.consumeToken(PercentEqual) },
     ]);
-    const right = parser.SUBRULE(parser.expression);
-    const endToken = parser.LA(0);
+    const right = parser.invokeSubrule(parser.expression);
+    const endToken = parser.lookAhead(0);
     const assignment = createAssignmentStatementNode(left, right, operator, endToken);
     const operatorImage = operator.image;
     if ((operatorImage === '=' || operatorImage === ':=') && right) {
@@ -180,19 +180,19 @@ export function createTupleAssignmentStatementRule(parser: PineParser) {
 }
 
 export function createAssignmentStatementRule(parser: PineParser) {
-  return parser.RULE('assignmentStatement', () => {
-    const left = parser.SUBRULE(parser.assignmentTarget);
-    const operator = parser.OR([
-      { ALT: () => parser.CONSUME(Equal) },
-      { ALT: () => parser.CONSUME(ColonEqual) },
-      { ALT: () => parser.CONSUME(PlusEqual) },
-      { ALT: () => parser.CONSUME(MinusEqual) },
-      { ALT: () => parser.CONSUME(StarEqual) },
-      { ALT: () => parser.CONSUME(SlashEqual) },
-      { ALT: () => parser.CONSUME(PercentEqual) },
+  return parser.defineRule('assignmentStatement', () => {
+    const left = parser.invokeSubrule(parser.assignmentTarget);
+    const operator = parser.choose<IToken>([
+      { ALT: () => parser.consumeToken(Equal) },
+      { ALT: () => parser.consumeToken(ColonEqual) },
+      { ALT: () => parser.consumeToken(PlusEqual) },
+      { ALT: () => parser.consumeToken(MinusEqual) },
+      { ALT: () => parser.consumeToken(StarEqual) },
+      { ALT: () => parser.consumeToken(SlashEqual) },
+      { ALT: () => parser.consumeToken(PercentEqual) },
     ]);
-    const right = parser.SUBRULE(parser.expression);
-    const endToken = parser.LA(0);
+    const right = parser.invokeSubrule(parser.expression);
+    const endToken = parser.lookAhead(0);
     const assignment = createAssignmentStatementNode(left, right, operator, endToken);
     const operatorImage = operator.image;
     if ((operatorImage === '=' || operatorImage === ':=') && right) {
@@ -207,41 +207,41 @@ export function createAssignmentStatementRule(parser: PineParser) {
 }
 
 export function createIfStatementRule(parser: PineParser) {
-  return parser.RULE('ifStatement', (indentOverride?: number) => {
-    const ifToken = parser.CONSUME(If);
-    const test = parser.SUBRULE(parser.expression);
+  return parser.defineRule('ifStatement', (indentOverride?: number) => {
+    const ifToken = parser.consumeToken(If);
+    const test = parser.invokeSubrule(parser.expression);
     const indent = indentOverride ?? tokenIndent(ifToken);
     const consequent = parser.parseIndentedBlock(indent);
 
     let alternate: StatementNode | null = null;
 
     let offset = 1;
-    while (parser.LA(offset).tokenType === Newline) {
+    while (parser.lookAhead(offset).tokenType === Newline) {
       offset += 1;
     }
-    const potentialElse = parser.LA(offset);
+    const potentialElse = parser.lookAhead(offset);
     if (potentialElse.tokenType === Else && tokenIndent(potentialElse) <= indent) {
-      while (parser.LA(1).tokenType === Newline) {
-        parser.CONSUME(Newline);
+      while (parser.lookAhead(1).tokenType === Newline) {
+        parser.consumeToken(Newline);
       }
-      const elseToken = parser.CONSUME(Else);
-      if (parser.LA(1).tokenType === If) {
-        alternate = parser.SUBRULE2(parser.ifStatement, { ARGS: [tokenIndent(elseToken)] });
-      } else if (parser.LA(1).tokenType === Newline) {
+      const elseToken = parser.consumeToken(Else);
+      if (parser.lookAhead(1).tokenType === If) {
+        alternate = parser.invokeSubrule(parser.ifStatement, 2, { ARGS: [tokenIndent(elseToken)] });
+      } else if (parser.lookAhead(1).tokenType === Newline) {
         alternate = parser.parseIndentedBlock(tokenIndent(elseToken));
       } else {
-        alternate = parser.SUBRULE2(parser.statement);
+        alternate = parser.invokeSubrule(parser.statement, 2);
       }
     }
 
-    const endToken = parser.LA(0);
+    const endToken = parser.lookAhead(0);
     return createIfStatementNode(test, consequent, alternate, ifToken, endToken);
   });
 }
 
 export function createForStatementRule(parser: PineParser) {
-  return parser.RULE('forStatement', () => {
-    const forToken = parser.CONSUME(For);
+  return parser.defineRule('forStatement', () => {
+    const forToken = parser.consumeToken(For);
     return parser.parseForLoop(forToken);
   });
 }
@@ -253,14 +253,14 @@ export function createParseForLoop(parser: PineParser) {
     let iterable: ExpressionNode | null = null;
 
     if (isForInLoopHeader(parser)) {
-      iterator = parser.SUBRULE(parser.forIteratorTarget);
-      parser.CONSUME(In);
-      iterable = parser.SUBRULE(parser.expression) ?? createPlaceholderExpression();
+      iterator = parser.invokeSubrule(parser.forIteratorTarget);
+      parser.consumeToken(In);
+      iterable = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
     } else {
       if (parser.isVariableDeclarationStart()) {
-        initializer = parser.SUBRULE(parser.variableDeclaration);
+        initializer = parser.invokeSubrule(parser.variableDeclaration);
       } else if (parser.isAssignmentStart()) {
-        initializer = parser.SUBRULE(parser.assignmentStatement);
+        initializer = parser.invokeSubrule(parser.assignmentStatement);
       }
     }
 
@@ -275,10 +275,10 @@ export function createParseForLoop(parser: PineParser) {
     let test: ExpressionNode | null = null;
     let update: ExpressionNode | null = null;
 
-    if (!iterable && parser.LA(1).tokenType === To) {
-      const toToken = parser.CONSUME(To);
-      const endExpression = parser.SUBRULE(parser.expression) ?? createPlaceholderExpression();
-      const endToken = parser.LA(0);
+    if (!iterable && parser.lookAhead(1).tokenType === To) {
+      const toToken = parser.consumeToken(To);
+      const endExpression = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
+      const endToken = parser.lookAhead(0);
 
       const testIdentifier = cloneIdentifierNode(loopIdentifier);
       if (testIdentifier) {
@@ -288,10 +288,10 @@ export function createParseForLoop(parser: PineParser) {
         test = endExpression;
       }
 
-      if (parser.LA(1).tokenType === By) {
-        const byToken = parser.CONSUME(By);
-        const stepExpression = parser.SUBRULE2(parser.expression) ?? createPlaceholderExpression();
-        const updateEndToken = parser.LA(0);
+      if (parser.lookAhead(1).tokenType === By) {
+        const byToken = parser.consumeToken(By);
+        const stepExpression = parser.invokeSubrule(parser.expression, 2) ?? createPlaceholderExpression();
+        const updateEndToken = parser.lookAhead(0);
         const updateIdentifier = cloneIdentifierNode(loopIdentifier);
         if (updateIdentifier) {
           const operatorToken = createSyntheticToken('+', Plus, byToken);
@@ -312,7 +312,7 @@ export function createParseForLoop(parser: PineParser) {
 
     const body = parser.parseIndentedBlock(tokenIndent(forToken));
     const result = extractLoopResult(body);
-    const endToken = parser.LA(0);
+    const endToken = parser.lookAhead(0);
     return createForStatementNode(
       initializer,
       iterator,
@@ -328,35 +328,35 @@ export function createParseForLoop(parser: PineParser) {
 }
 
 export function createForIteratorTargetRule(parser: PineParser) {
-  return parser.RULE('forIteratorTarget', (): ExpressionNode => {
-    const next = parser.LA(1);
+  return parser.defineRule('forIteratorTarget', (): ExpressionNode => {
+    const next = parser.lookAhead(1);
     if (next.tokenType === LBracket) {
-      const tuple = parser.SUBRULE(parser.bracketExpression, { ARGS: ['tuple'] });
+      const tuple = parser.invokeSubrule(parser.bracketExpression, 1, { ARGS: ['tuple'] });
       return tuple ?? createPlaceholderExpression();
     }
 
-    const identifierToken = parser.CONSUME(IdentifierToken);
+    const identifierToken = parser.consumeToken(IdentifierToken);
     return createIdentifierNode(identifierToken);
   });
 }
 
 export function createSwitchStatementRule(parser: PineParser) {
-  return parser.RULE('switchStatement', () => parser.SUBRULE(parser.switchExpression));
+  return parser.defineRule('switchStatement', () => parser.invokeSubrule(parser.switchExpression));
 }
 
 export function createSwitchCaseRule(parser: PineParser) {
-  return parser.RULE('switchCase', () => {
-    const startToken = parser.LA(1);
+  return parser.defineRule('switchCase', () => {
+    const startToken = parser.lookAhead(1);
     let test: ExpressionNode | null = null;
 
     if (startToken.tokenType === FatArrow) {
-      const arrowToken = parser.CONSUME(FatArrow);
+      const arrowToken = parser.consumeToken(FatArrow);
       const { statements, endToken } = parseSwitchCaseConsequent(parser, tokenIndent(startToken));
       return createSwitchCaseNode(test, statements, startToken, arrowToken, endToken);
     }
 
-    test = parser.SUBRULE(parser.expression);
-    const arrowToken = parser.CONSUME(FatArrow);
+    test = parser.invokeSubrule(parser.expression);
+    const arrowToken = parser.consumeToken(FatArrow);
     const { statements, endToken } = parseSwitchCaseConsequent(parser, tokenIndent(startToken));
     return createSwitchCaseNode(test, statements, startToken, arrowToken, endToken);
   });
@@ -364,21 +364,21 @@ export function createSwitchCaseRule(parser: PineParser) {
 
 export function createParseSwitchStructure(parser: PineParser) {
   return (switchToken: IToken): SwitchStatementNode => {
-    const discriminant = parser.SUBRULE(parser.expression) ?? createPlaceholderExpression();
+    const discriminant = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
     let indent = tokenIndent(switchToken);
     const cases: SwitchCaseNode[] = [];
 
     let lastToken: IToken | undefined;
 
-    if (parser.LA(1).tokenType === Newline) {
-      lastToken = parser.CONSUME(Newline);
+    if (parser.lookAhead(1).tokenType === Newline) {
+      lastToken = parser.consumeToken(Newline);
     }
 
     let lookaheadOffset = 1;
-    let lookahead = parser.LA(lookaheadOffset);
+    let lookahead = parser.lookAhead(lookaheadOffset);
     while (lookahead.tokenType === Newline) {
       lookaheadOffset += 1;
-      lookahead = parser.LA(lookaheadOffset);
+      lookahead = parser.lookAhead(lookaheadOffset);
     }
     if (lookahead.tokenType !== EOF) {
       const lookaheadIndent = tokenIndent(lookahead);
@@ -389,20 +389,20 @@ export function createParseSwitchStructure(parser: PineParser) {
 
     let shouldBreak = false;
     while (!shouldBreak) {
-      let next = parser.LA(1);
+      let next = parser.lookAhead(1);
 
       while (next.tokenType === Newline) {
         let innerOffset = 2;
-        let innerLookahead = parser.LA(innerOffset);
+        let innerLookahead = parser.lookAhead(innerOffset);
         while (innerLookahead.tokenType === Newline) {
           innerOffset += 1;
-          innerLookahead = parser.LA(innerOffset);
+          innerLookahead = parser.lookAhead(innerOffset);
         }
 
         if (innerLookahead.tokenType === EOF) {
-          const newlineToken = parser.CONSUME(Newline);
+          const newlineToken = parser.consumeToken(Newline);
           lastToken = newlineToken;
-          next = parser.LA(1);
+          next = parser.lookAhead(1);
           continue;
         }
 
@@ -411,83 +411,83 @@ export function createParseSwitchStructure(parser: PineParser) {
           break;
         }
 
-        const newlineToken = parser.CONSUME(Newline);
+        const newlineToken = parser.consumeToken(Newline);
         lastToken = newlineToken;
-        next = parser.LA(1);
+        next = parser.lookAhead(1);
       }
 
       if (shouldBreak) {
         break;
       }
 
-      next = parser.LA(1);
+      next = parser.lookAhead(1);
       if (next.tokenType === EOF || tokenIndent(next) <= indent) {
         break;
       }
 
-      const caseNode = parser.SUBRULE(parser.switchCase);
+      const caseNode = parser.invokeSubrule(parser.switchCase);
       cases.push(caseNode);
-      lastToken = parser.LA(0);
+      lastToken = parser.lookAhead(0);
     }
 
-    const endToken = parser.LA(0) ?? lastToken ?? switchToken;
+    const endToken = parser.lookAhead(0) ?? lastToken ?? switchToken;
     return createSwitchStatementNode(discriminant, cases, switchToken, endToken);
   };
 }
 
 export function createWhileStatementRule(parser: PineParser) {
-  return parser.RULE('whileStatement', () => {
-    const whileToken = parser.CONSUME(While);
+  return parser.defineRule('whileStatement', () => {
+    const whileToken = parser.consumeToken(While);
     return parser.parseWhileLoop(whileToken);
   });
 }
 
 export function createParseWhileLoop(parser: PineParser) {
   return (whileToken: IToken) => {
-    const test = parser.SUBRULE(parser.expression) ?? createPlaceholderExpression();
+    const test = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
     const body = parser.parseIndentedBlock(tokenIndent(whileToken));
     const result = extractLoopResult(body);
-    const endToken = parser.LA(0);
+    const endToken = parser.lookAhead(0);
     return createWhileStatementNode(test, body, result, whileToken, endToken);
   };
 }
 
 export function createRepeatStatementRule(parser: PineParser) {
-  return parser.RULE('repeatStatement', () => {
-    const repeatToken = parser.CONSUME(Repeat);
+  return parser.defineRule('repeatStatement', () => {
+    const repeatToken = parser.consumeToken(Repeat);
     const body = parser.parseIndentedBlock(tokenIndent(repeatToken));
     const result = extractLoopResult(body);
-    parser.MANY(() => parser.CONSUME(Newline));
-    const untilToken = parser.CONSUME(Until);
-    const test = parser.SUBRULE(parser.expression) ?? createPlaceholderExpression();
-    const endToken = parser.LA(0);
+    parser.repeatMany(() => parser.consumeToken(Newline));
+    const untilToken = parser.consumeToken(Until);
+    const test = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
+    const endToken = parser.lookAhead(0);
     return createRepeatStatementNode(body, test, result, repeatToken, endToken ?? untilToken);
   });
 }
 
 export function createReturnStatementRule(parser: PineParser) {
-  return parser.RULE('returnStatement', () => {
-    const returnToken = parser.CONSUME(Return);
+  return parser.defineRule('returnStatement', () => {
+    const returnToken = parser.consumeToken(Return);
     let argument: ExpressionNode | null = null;
-    const nextTokenType = parser.LA(1).tokenType;
+    const nextTokenType = parser.lookAhead(1).tokenType;
     if (!isStatementTerminator(nextTokenType)) {
-      argument = parser.SUBRULE(parser.expression) ?? null;
+      argument = parser.invokeSubrule(parser.expression) ?? null;
     }
-    const endToken = argument ? parser.LA(0) : returnToken;
+    const endToken = argument ? parser.lookAhead(0) : returnToken;
     return createReturnStatementNode(returnToken, argument, endToken);
   });
 }
 
 export function createBreakStatementRule(parser: PineParser) {
-  return parser.RULE('breakStatement', () => {
-    const token = parser.CONSUME(Break);
+  return parser.defineRule('breakStatement', () => {
+    const token = parser.consumeToken(Break);
     return createBreakStatementNode(token);
   });
 }
 
 export function createContinueStatementRule(parser: PineParser) {
-  return parser.RULE('continueStatement', () => {
-    const token = parser.CONSUME(Continue);
+  return parser.defineRule('continueStatement', () => {
+    const token = parser.consumeToken(Continue);
     return createContinueStatementNode(token);
   });
 }

@@ -1,5 +1,6 @@
-import { EmbeddedActionsParser } from 'chevrotain';
+import { EmbeddedActionsParser, type IToken } from 'chevrotain';
 import { AllTokens, LBracket } from './tokens';
+import type { ExpressionNode, IfExpressionNode, IfStatementNode } from '../nodes';
 
 import {
   createAssignmentStartGuard,
@@ -72,6 +73,14 @@ import {
   createWhileStatementRule,
 } from './rules/control-flow';
 
+type ConsumeMethod = (tokenType: any, options?: unknown) => IToken;
+type SubruleMethod = (...args: any[]) => any;
+type DslMethod = (...args: any[]) => any;
+type RuleMethod<T> = (...args: any[]) => T;
+type OrAlternative<T> = { ALT: () => T } & Record<string, unknown>;
+type ActionMethod = (callback: () => void) => void;
+type BacktrackMethod = <T>(production: () => T) => () => T;
+
 export class PineParser extends EmbeddedActionsParser {
   private lineIndentCache = new Map<number, number>();
 
@@ -125,7 +134,7 @@ export class PineParser extends EmbeddedActionsParser {
 
   public assignmentStatement = createAssignmentStatementRule(this);
 
-  public ifStatement = createIfStatementRule(this);
+  public ifStatement: RuleMethod<IfStatementNode> = createIfStatementRule(this);
 
   public forStatement = createForStatementRule(this);
 
@@ -178,9 +187,9 @@ export class PineParser extends EmbeddedActionsParser {
     return this.SUBRULE(this.memberExpression);
   });
 
-  public expression = createExpressionRule(this);
+  public expression: RuleMethod<ExpressionNode> = createExpressionRule(this);
 
-  public conditionalExpression = createConditionalExpressionRule(this);
+  public conditionalExpression: RuleMethod<ExpressionNode> = createConditionalExpressionRule(this);
 
   public nullishCoalescingExpression = createNullishCoalescingExpressionRule(this);
 
@@ -196,7 +205,7 @@ export class PineParser extends EmbeddedActionsParser {
 
   public multiplicativeExpression = createMultiplicativeExpressionRule(this);
 
-  public unaryExpression = createUnaryExpressionRule(this);
+  public unaryExpression: RuleMethod<ExpressionNode> = createUnaryExpressionRule(this);
 
   public callTypeReference = createCallTypeReferenceRule(this);
 
@@ -214,11 +223,72 @@ export class PineParser extends EmbeddedActionsParser {
 
   public identifierExpression = createIdentifierExpressionRule(this);
 
-  public ifExpression = createIfExpressionRule(this);
+  public ifExpression: RuleMethod<IfExpressionNode> = createIfExpressionRule(this);
 
   public forExpression = createForExpressionRule(this);
 
   public whileExpression = createWhileExpressionRule(this);
 
   public switchExpression = createSwitchExpressionRule(this);
+
+  private getDslMethod<T extends (...args: any[]) => any>(baseName: string, occurrence: number): T {
+    const methodName = occurrence <= 1 ? baseName : `${baseName}${occurrence}`;
+    const bound = (this as Record<string, unknown>)[methodName];
+    if (typeof bound !== 'function') {
+      throw new Error(`Parser method ${methodName} is not available.`);
+    }
+    return bound.bind(this) as T;
+  }
+
+  public lookAhead(offset: number): IToken {
+    return this.LA(offset);
+  }
+
+  public getInputTokens(): IToken[] {
+    return this.input;
+  }
+
+  public consumeToken(tokenType: any, occurrence = 1, options?: unknown): IToken {
+    const method = this.getDslMethod<ConsumeMethod>('CONSUME', occurrence);
+    return options === undefined ? method(tokenType) : method(tokenType, options);
+  }
+
+  public invokeSubrule<R extends (...args: any[]) => any>(
+    rule: R,
+    occurrence = 1,
+    options?: unknown,
+  ): ReturnType<R> {
+    const method = this.getDslMethod<SubruleMethod>('SUBRULE', occurrence);
+    const result = options === undefined ? method(rule) : method(rule, options);
+    return result as ReturnType<R>;
+  }
+
+  public optional<T>(callback: () => T, occurrence = 1): T | undefined {
+    const method = this.getDslMethod<DslMethod>('OPTION', occurrence);
+    return method(callback) as T | undefined;
+  }
+
+  public repeatMany(callback: () => void, occurrence = 1): void {
+    const method = this.getDslMethod<DslMethod>('MANY', occurrence);
+    method(callback);
+  }
+
+  public choose<T>(alternatives: OrAlternative<T>[], occurrence = 1): T {
+    const method = this.getDslMethod<DslMethod>('OR', occurrence);
+    return method(alternatives) as T;
+  }
+
+  public defineRule<R extends RuleMethod<any>>(name: string, implementation: R): R {
+    return this.RULE(name, implementation) as R;
+  }
+
+  public runAction(callback: () => void): void {
+    const method = this.getDslMethod<ActionMethod>('ACTION', 1);
+    method(callback);
+  }
+
+  public backtrack<T>(production: () => T): () => T {
+    const method = this.getDslMethod<BacktrackMethod>('BACKTRACK', 1);
+    return method(production);
+  }
 }
