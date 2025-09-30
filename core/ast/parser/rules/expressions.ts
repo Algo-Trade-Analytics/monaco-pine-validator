@@ -23,6 +23,8 @@ import {
   For,
   Greater,
   GreaterEqual,
+  Increment,
+  Decrement,
   Identifier as IdentifierToken,
   If,
   LBracket,
@@ -31,6 +33,14 @@ import {
   Minus,
   NaToken,
   Newline,
+  InvalidLogicalAnd,
+  InvalidLogicalOr,
+  StrictEqual,
+  StrictNotEqual,
+  BitwiseOr,
+  BitwiseAnd,
+  BitwiseXor,
+  Bang,
   Not,
   NotEqual,
   NullishCoalescing,
@@ -209,7 +219,10 @@ export function createLogicalOrExpressionRule(parser: PineParser) {
   return parser.createRule('logicalOrExpression', () => {
     let expression = parser.invokeSubrule(parser.logicalAndExpression);
     parser.repeatMany(() => {
-      const operator = parser.consumeToken(Or);
+      const operator = parser.choose<IToken>([
+        { ALT: () => parser.consumeToken(Or) },
+        { ALT: () => parser.consumeToken(InvalidLogicalOr) },
+      ]);
       const right = parser.invokeSubrule(parser.logicalAndExpression, 2);
       const endToken = parser.lookAhead(0);
       expression = createBinaryExpressionNode(expression, operator, right, endToken);
@@ -222,7 +235,10 @@ export function createLogicalAndExpressionRule(parser: PineParser) {
   return parser.createRule('logicalAndExpression', () => {
     let expression = parser.invokeSubrule(parser.equalityExpression);
     parser.repeatMany(() => {
-      const operator = parser.consumeToken(And);
+      const operator = parser.choose<IToken>([
+        { ALT: () => parser.consumeToken(And) },
+        { ALT: () => parser.consumeToken(InvalidLogicalAnd) },
+      ]);
       const right = parser.invokeSubrule(parser.equalityExpression, 2);
       const endToken = parser.lookAhead(0);
       expression = createBinaryExpressionNode(expression, operator, right, endToken);
@@ -238,6 +254,8 @@ export function createEqualityExpressionRule(parser: PineParser) {
       const operator = parser.choose<IToken>([
         { ALT: () => parser.consumeToken(EqualEqual) },
         { ALT: () => parser.consumeToken(NotEqual) },
+        { ALT: () => parser.consumeToken(StrictEqual) },
+        { ALT: () => parser.consumeToken(StrictNotEqual) },
       ]);
       const right = parser.invokeSubrule(parser.relationalExpression, 2);
       const endToken = parser.lookAhead(0);
@@ -272,6 +290,8 @@ export function createAdditiveExpressionRule(parser: PineParser) {
       const operator = parser.choose<IToken>([
         { ALT: () => parser.consumeToken(Plus) },
         { ALT: () => parser.consumeToken(Minus) },
+        { ALT: () => parser.consumeToken(BitwiseOr) },
+        { ALT: () => parser.consumeToken(BitwiseXor) },
       ]);
       const right = parser.invokeSubrule(parser.multiplicativeExpression, 2);
       const endToken = parser.lookAhead(0);
@@ -289,6 +309,7 @@ export function createMultiplicativeExpressionRule(parser: PineParser) {
         { ALT: () => parser.consumeToken(Star) },
         { ALT: () => parser.consumeToken(Slash) },
         { ALT: () => parser.consumeToken(Percent) },
+        { ALT: () => parser.consumeToken(BitwiseAnd) },
       ]);
       const right = parser.invokeSubrule(parser.unaryExpression, 2);
       const endToken = parser.lookAhead(0);
@@ -308,6 +329,21 @@ export function createUnaryExpressionRule(parser: PineParser) {
     }
     if (lookahead === Minus) {
       const operator = parser.consumeToken(Minus);
+      const argument = parser.invokeSubrule(parser.unaryExpression);
+      return createUnaryExpressionNode(operator, argument);
+    }
+    if (lookahead === Increment) {
+      const operator = parser.consumeToken(Increment);
+      const argument = parser.invokeSubrule(parser.unaryExpression);
+      return createUnaryExpressionNode(operator, argument);
+    }
+    if (lookahead === Decrement) {
+      const operator = parser.consumeToken(Decrement);
+      const argument = parser.invokeSubrule(parser.unaryExpression);
+      return createUnaryExpressionNode(operator, argument);
+    }
+    if (lookahead === Bang) {
+      const operator = parser.consumeToken(Bang);
       const argument = parser.invokeSubrule(parser.unaryExpression);
       return createUnaryExpressionNode(operator, argument);
     }

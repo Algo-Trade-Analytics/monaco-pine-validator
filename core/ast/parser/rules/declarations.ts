@@ -9,6 +9,8 @@ import {
   FatArrow,
   LParen,
   Colon,
+  Less,
+  Greater,
   Identifier as IdentifierToken,
   Import,
   Indicator,
@@ -63,12 +65,49 @@ export function createParameterRule(parser: PineParser) {
   return parser.createRule('parameter', () => {
     const tokens = parser.collectParameterTokens(1);
     const { typeTokens } = splitDeclarationTokens(tokens);
-    const typeAnnotation = buildTypeReferenceFromTokens(typeTokens);
+    let typeAnnotation = buildTypeReferenceFromTokens(typeTokens);
 
     const consumedTypeTokens = typeTokens.map((token) => parser.consumeToken(token.tokenType));
 
     const identifierToken = parser.consumeToken(IdentifierToken);
     const identifier = createIdentifierNode(identifierToken);
+
+    if (
+      identifier.name === 'this' &&
+      !typeAnnotation &&
+      parser.lookAhead(1).tokenType === Less
+    ) {
+      parser.consumeToken(Less);
+      const genericTokens: IToken[] = [];
+      let depth = 1;
+      while (depth > 0) {
+        const next = parser.lookAhead(1);
+        const nextType = next?.tokenType;
+        if (!nextType || nextType === EOF_TOKEN) {
+          break;
+        }
+        if (nextType === Less) {
+          genericTokens.push(parser.consumeToken(Less));
+          depth += 1;
+          continue;
+        }
+        if (nextType === Greater) {
+          depth -= 1;
+          if (depth === 0) {
+            parser.consumeToken(Greater);
+            break;
+          }
+          genericTokens.push(parser.consumeToken(Greater));
+          continue;
+        }
+        genericTokens.push(parser.consumeToken(nextType));
+      }
+
+      const genericType = buildTypeReferenceFromTokens(genericTokens);
+      if (genericType) {
+        typeAnnotation = genericType;
+      }
+    }
 
     let defaultValue: ExpressionNode | undefined;
     if (parser.lookAhead(1).tokenType === Equal) {
@@ -310,6 +349,13 @@ export function createTypeDeclarationRule(parser: PineParser) {
       }
 
       if (tokenIndent(next) <= baseIndent) {
+        break;
+      }
+
+      if (
+        next.tokenType === IdentifierToken &&
+        (next.image ?? '').toLowerCase() === 'method'
+      ) {
         break;
       }
 

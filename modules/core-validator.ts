@@ -56,6 +56,7 @@ import type {
   VariableDeclarationNode,
   VersionDirectiveNode,
   WhileStatementNode,
+  ReturnStatementNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 import type { TypeMetadata } from '../core/ast/types';
@@ -180,6 +181,7 @@ export class CoreValidator implements ValidationModule {
   private astHistoryReferenceWarnedLines = new Set<number>();
   private astReassignmentErrorSites = new Set<string>();
   private astCompoundAssignmentErrorSites = new Set<string>();
+  private astThisAssignmentLines = new Set<string>();
   private astTypeFieldLines = new Set<number>();
 
   private scopeStack: ScopeInfo[] = [];
@@ -268,6 +270,7 @@ export class CoreValidator implements ValidationModule {
     this.astHistoryReferenceWarnedLines.clear();
     this.astReassignmentErrorSites.clear();
     this.astCompoundAssignmentErrorSites.clear();
+    this.astThisAssignmentLines.clear();
     this.sawBrace = false;
     this.sawTabIndent = false;
     this.sawSpaceIndent = false;
@@ -319,6 +322,30 @@ export class CoreValidator implements ValidationModule {
 
       const withoutStrings = this.stripStringsAndLineComment(line);
       this.updateBracketDepths(withoutStrings, lineNumber);
+
+      if (process.env.DEBUG_PS016 === '1' && line.includes('this')) {
+        console.log('[PS016 debug] raw line', { line: lineNumber, content: line });
+        console.log('[PS016 debug] stripped line', { content: withoutStrings });
+      }
+
+      const thisAssignmentMatch = withoutStrings.match(/\bthis\.(?<field>[A-Za-z_]\w*)\s*=(?!=)/);
+      if (thisAssignmentMatch) {
+        const field = thisAssignmentMatch.groups?.field ?? '?';
+        const key = `${lineNumber}:${field}`;
+        if (!this.astThisAssignmentLines.has(key)) {
+          this.astThisAssignmentLines.add(key);
+          const column = (thisAssignmentMatch.index ?? 0) + 1;
+          if (process.env.DEBUG_PS016 === '1') {
+            console.log('[PS016 debug] textual detection', { line: lineNumber, field });
+          }
+          this.addError(
+            lineNumber,
+            column,
+            `Use ':=' to assign to 'this.${field}'. '=' is reserved for the first assignment.`,
+            'PS016',
+          );
+        }
+      }
 
       const indent = leading.length;
       const trimmed = line.trim();
@@ -374,6 +401,44 @@ export class CoreValidator implements ValidationModule {
       AssignmentStatement: {
         enter: (path) => {
           this.processAstAssignmentStatement(path.node as AssignmentStatementNode);
+        },
+      },
+      ReturnStatement: {
+        enter: (path) => {
+          const node = path.node as ReturnStatementNode;
+          const argument = node.argument;
+          if (process.env.DEBUG_PS016 === '1') {
+            console.log('[PS016 debug] visiting return statement');
+          }
+          if (!argument) {
+            return;
+          }
+
+          if (process.env.DEBUG_PS016 === '1') {
+            if (argument.kind === 'BinaryExpression') {
+              const binary = argument as BinaryExpressionNode;
+              console.log('[PS016 debug] return binary', {
+                operator: binary.operator,
+                leftKind: binary.left.kind,
+              });
+            } else {
+              console.log('[PS016 debug] return argument kind', argument.kind);
+            }
+          }
+
+          if (argument.kind !== 'BinaryExpression') {
+            return;
+          }
+
+          const binary = argument as BinaryExpressionNode;
+          if (!this.isAssignmentOperator(binary.operator)) {
+            return;
+          }
+
+          const left = binary.left;
+          const line = binary.loc.start.line;
+          const column = left.loc.start.column;
+          this.processAstAssignment(left, binary.operator, binary.right, line, column, null);
         },
       },
       CallExpression: {
@@ -446,7 +511,7 @@ export class CoreValidator implements ValidationModule {
       },
       BinaryExpression: {
         enter: (path) => {
-          this.processAstBinaryExpression(path.node as BinaryExpressionNode);
+          this.processAstBinaryExpression(path as NodePath<BinaryExpressionNode>);
         },
       },
       UnaryExpression: {
@@ -557,86 +622,9 @@ export class CoreValidator implements ValidationModule {
     const left = statement.left;
     const operator = (statement.operator as AssignmentOperator) ?? '=';
     const rhsExpression = statement.right;
+    const column = left.loc.start.column;
 
-    if (left.kind === 'TupleExpression') {
-      this.processAstTupleDestructuring(statement, left as TupleExpressionNode, operator);
-      return;
-    }
-
-    if (left.kind === 'MemberExpression') {
-      const member = left as MemberExpressionNode;
-      if (this.isThisMemberExpression(member)) {
-        if (operator === '=') {
-          this.addError(
-            line,
-            member.loc.start.column,
-            `Use ':=' to assign to 'this.${member.property.name}'. '=' is reserved for the first assignment.`,
-            'PS016',
-          );
-        }
-        return;
-      }
-      return;
-    }
-
-    if (left.kind !== 'Identifier') {
-      return;
-    }
-
-    const identifier = left as IdentifierNode;
-    const name = identifier.name;
-    const column = identifier.loc.start.column;
-    const isParameter = this.isAstFunctionParameter(name);
-
-    if (this.constNames.has(name)) {
-      this.addError(line, column, `Cannot reassign const '${name}' with '${operator}'.`, 'PS019');
-      return;
-    }
-
-    if (isReservedKeyword(name)) {
-      return;
-    }
-
-    if (operator === ':=') {
-      if (!this.declared.has(name) && !isParameter) {
-        const siteKey = `${line}:${name}`;
-        if (!this.astReassignmentErrorSites.has(siteKey)) {
-          this.astReassignmentErrorSites.add(siteKey);
-          this.addError(
-            line,
-            column,
-            `Variable '${name}' not declared before ':='. Use '=' on first assignment.`,
-            'PS016',
-          );
-        }
-        return;
-      }
-      return;
-    }
-
-    if (operator !== '=') {
-      if (!this.declared.has(name) && !isParameter) {
-        const siteKey = `${line}:${name}`;
-        if (!this.astCompoundAssignmentErrorSites.has(siteKey)) {
-          this.astCompoundAssignmentErrorSites.add(siteKey);
-          this.addError(
-            line,
-            column,
-            `Variable '${name}' not declared before '${operator}'. Use '=' for first assignment or declare it.`,
-            'PS017',
-          );
-        }
-      }
-      return;
-    }
-
-    if (!this.declared.has(name)) {
-      this.handleNewVar(name, line, column);
-    }
-
-    if (rhsExpression) {
-      this.registerTypeHeuristic(name, rhsExpression, line, column, false);
-    }
+    this.processAstAssignment(left, operator, rhsExpression, line, column, statement);
   }
 
   private processAstTupleDestructuring(
@@ -999,11 +987,24 @@ export class CoreValidator implements ValidationModule {
   }
 
   private processAstMemberExpression(path: NodePath<MemberExpressionNode>): void {
+    const parent = path.parent;
+    if (parent?.node.kind === 'BinaryExpression' && parent.key === 'left') {
+      const binary = parent.node as BinaryExpressionNode;
+      if (this.isThisMemberExpression(path.node) && binary.operator === '=') {
+        this.addError(
+          path.node.loc.start.line,
+          path.node.loc.start.column,
+          `Use ':=' to assign to 'this.${path.node.property.kind === 'Identifier' ? path.node.property.name : '?'}'. '=' is reserved for the first assignment.`,
+          'PS016',
+        );
+        return;
+      }
+    }
+
     if (this.scriptType !== 'indicator') {
       return;
     }
 
-    const parent = path.parent;
     if (parent?.node.kind === 'CallExpression' && parent.key === 'callee') {
       return;
     }
@@ -1061,7 +1062,29 @@ export class CoreValidator implements ValidationModule {
     }
   }
 
-  private processAstBinaryExpression(expression: BinaryExpressionNode): void {
+  private processAstBinaryExpression(path: NodePath<BinaryExpressionNode>): void {
+    const expression = path.node;
+
+    if (this.isAssignmentOperator(expression.operator)) {
+      const parent = path.parent?.node ?? null;
+          if (!parent || parent.kind !== 'AssignmentStatement') {
+        if (process.env.DEBUG_PS016 === '1') {
+          console.log('[PS016 debug] binary expression visited');
+        }
+        if (process.env.DEBUG_PS016 === '1') {
+          console.log('[PS016 debug] assignment binary', {
+            operator: expression.operator,
+            parentKind: parent?.kind ?? 'none',
+            leftKind: expression.left.kind,
+          });
+        }
+        const left = expression.left;
+        const line = expression.loc.start.line;
+        const column = left.loc.start.column;
+        this.processAstAssignment(left, expression.operator, expression.right, line, column, null);
+      }
+    }
+
     const invalidOperatorMessage = this.getAstInvalidBinaryOperatorMessage(expression.operator);
     if (invalidOperatorMessage) {
       const { line, column } = expression.loc.start;
@@ -1072,7 +1095,11 @@ export class CoreValidator implements ValidationModule {
       return;
     }
 
-    if (!this.isIdentifierNamed(expression.left, 'na') && !this.isIdentifierNamed(expression.right, 'na')) {
+    // Check if either side is na (either as Identifier or NullLiteral)
+    const leftIsNa = this.isIdentifierNamed(expression.left, 'na') || expression.left.kind === 'NullLiteral';
+    const rightIsNa = this.isIdentifierNamed(expression.right, 'na') || expression.right.kind === 'NullLiteral';
+    
+    if (!leftIsNa && !rightIsNa) {
       return;
     }
 
@@ -1133,6 +1160,124 @@ export class CoreValidator implements ValidationModule {
     });
 
     return assignmentLocation;
+  }
+
+  private isAssignmentOperator(operator: string): operator is AssignmentOperator {
+    return (
+      operator === '=' ||
+      operator === ':=' ||
+      operator === '+=' ||
+      operator === '-=' ||
+      operator === '*=' ||
+      operator === '/=' ||
+      operator === '%='
+    );
+  }
+
+  private processAstAssignment(
+    left: ExpressionNode,
+    operator: AssignmentOperator,
+    rhsExpression: ExpressionNode | null,
+    line: number,
+    column: number,
+    statement: AssignmentStatementNode | null,
+  ): void {
+    if (process.env.DEBUG_PS016 === '1') {
+      console.log('[PS016 debug] processAstAssignment', {
+        leftKind: left.kind,
+        operator,
+        line,
+        column,
+      });
+    }
+
+    if (left.kind === 'TupleExpression' && statement) {
+      this.processAstTupleDestructuring(statement, left as TupleExpressionNode, operator);
+      return;
+    }
+
+    if (left.kind === 'MemberExpression') {
+      const member = left as MemberExpressionNode;
+      if (process.env.DEBUG_PS016 === '1') {
+        const objectKind = member.object.kind;
+        const objectName = objectKind === 'Identifier' ? (member.object as IdentifierNode).name : 'n/a';
+        const propertyName = member.property.kind === 'Identifier' ? (member.property as IdentifierNode).name : 'n/a';
+        console.log('[PS016 debug] member expression', {
+          objectKind,
+          objectName,
+          propertyKind: member.property.kind,
+          propertyName,
+          operator,
+        });
+      }
+      if (this.isThisMemberExpression(member) && operator === '=') {
+        this.addError(
+          line,
+          member.loc.start.column,
+          `Use ':=' to assign to 'this.${member.property.kind === 'Identifier' ? member.property.name : '?'}'. '=' is reserved for the first assignment.`,
+          'PS016',
+        );
+      }
+      return;
+    }
+
+    if (left.kind !== 'Identifier') {
+      return;
+    }
+
+    const identifier = left as IdentifierNode;
+    const name = identifier.name;
+    const isParameter = this.isAstFunctionParameter(name);
+
+    if (this.constNames.has(name)) {
+      this.addError(line, column, `Cannot reassign const '${name}' with '${operator}'.`, 'PS019');
+      return;
+    }
+
+    if (isReservedKeyword(name)) {
+      return;
+    }
+
+    if (operator === ':=') {
+      if (!this.declared.has(name) && !isParameter) {
+        const siteKey = `${line}:${name}`;
+        if (!this.astReassignmentErrorSites.has(siteKey)) {
+          this.astReassignmentErrorSites.add(siteKey);
+          this.addError(
+            line,
+            column,
+            `Variable '${name}' not declared before ':='. Use '=' on first assignment.`,
+            'PS016',
+          );
+        }
+        return;
+      }
+      return;
+    }
+
+    if (operator !== '=') {
+      if (!this.declared.has(name) && !isParameter) {
+        const siteKey = `${line}:${name}`;
+        if (!this.astCompoundAssignmentErrorSites.has(siteKey)) {
+          this.astCompoundAssignmentErrorSites.add(siteKey);
+          this.addError(
+            line,
+            column,
+            `Variable '${name}' not declared before '${operator}'. Use '=' for first assignment or declare it.`,
+            'PS017',
+          );
+        }
+      }
+      return;
+    }
+
+    if (!this.declared.has(name)) {
+      this.handleNewVar(name, line, column);
+    }
+
+    if (rhsExpression) {
+      this.registerTypeHeuristic(name, rhsExpression, line, column, false);
+    }
   }
 
   private processAstLoopPerformanceCall(call: CallExpressionNode): void {
@@ -1196,6 +1341,10 @@ export class CoreValidator implements ValidationModule {
         return "Operator '===' is not valid in Pine Script.";
       case '!==':
         return "Operator '!==' is not valid in Pine Script.";
+      case '|':
+        return "Operator '|' is not valid in Pine Script.";
+      case '&':
+        return "Operator '&' is not valid in Pine Script.";
       case '^':
         return "Operator '^' is not valid in Pine Script.";
       default:
@@ -1211,6 +1360,8 @@ export class CoreValidator implements ValidationModule {
         return "Operator '--' is not valid in Pine Script.";
       case '~':
         return "Operator '~' is not valid in Pine Script.";
+      case '!':
+        return "Operator '!' is not valid in Pine Script. Use 'not' instead.";
       default:
         return null;
     }

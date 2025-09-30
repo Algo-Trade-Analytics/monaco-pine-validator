@@ -1278,4 +1278,35 @@ describe('Chevrotain parser', () => {
       expect(program.body).toHaveLength(0);
     }
   });
+
+  it('parses method parameter generics for this<Type>', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      '',
+      'type Point',
+      '    float x',
+      '    float y',
+      '',
+      '    method setX(this<Point>, float value) =>',
+      '        this.x = value',
+      '',
+      'p = Point.new(0.0, 0.0)',
+      'p.setX(1.0)',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: false });
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    const method = program.body.find(
+      (node): node is FunctionDeclarationNode => node.kind === 'FunctionDeclaration',
+    );
+
+    expect(method).toBeDefined();
+    expect(method?.params[0]?.identifier.name).toBe('this');
+    expect(method?.params[0]?.typeAnnotation?.name.name).toBe('Point');
+  });
 });

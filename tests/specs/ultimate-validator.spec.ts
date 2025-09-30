@@ -204,7 +204,21 @@ type Point
 p = Point.new(0.0, 0.0)
 p.setX(1.0)
 plot(close)`;
-    const { codes } = run(code);
+    const validator = new EnhancedModularValidator();
+    const result = validator.validate(code);
+    const context = validator.getContext();
+    console.log('ENV DEBUG', process.env.DEBUG_PS016);
+    console.log('AST exists', !!context.ast);
+    console.log('Diagnostics', context.astDiagnostics);
+    if (context.ast) {
+      console.log(JSON.stringify(context.ast.body, null, 2));
+    }
+    const codes = {
+      errors: result.errors.map(e => e.code || ''),
+      warnings: result.warnings.map(e => e.code || ''),
+      info: result.info.map(e => e.code || ''),
+    };
+    console.log('UDT field errors', codes.errors);
     expectHas(codes, { errors: ['PS016'] });
   });
 });

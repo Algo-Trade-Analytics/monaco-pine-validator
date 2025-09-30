@@ -53,6 +53,8 @@ export const SlashEqual = createToken({ name: 'SlashEqual', pattern: /\/=/ });
 export const PercentEqual = createToken({ name: 'PercentEqual', pattern: /%=/ });
 export const ColonEqual = createToken({ name: 'ColonEqual', pattern: /:=/ });
 export const Colon = createToken({ name: 'Colon', pattern: /:/ });
+export const Increment = createToken({ name: 'Increment', pattern: /\+\+/ });
+export const Decrement = createToken({ name: 'Decrement', pattern: /--/ });
 export const Plus = createToken({ name: 'Plus', pattern: /\+/ });
 export const Minus = createToken({ name: 'Minus', pattern: /-/ });
 export const Star = createToken({ name: 'Star', pattern: /\*/ });
@@ -60,14 +62,22 @@ export const Slash = createToken({ name: 'Slash', pattern: /\// });
 export const Percent = createToken({ name: 'Percent', pattern: /%/ });
 export const NullishCoalescing = createToken({ name: 'NullishCoalescing', pattern: /\?\?/ });
 export const Question = createToken({ name: 'Question', pattern: /\?/ });
+export const InvalidLogicalAnd = createToken({ name: 'InvalidLogicalAnd', pattern: /&&/ });
+export const InvalidLogicalOr = createToken({ name: 'InvalidLogicalOr', pattern: /\|\|/ });
 export const LessEqual = createToken({ name: 'LessEqual', pattern: /<=/ });
 export const GreaterEqual = createToken({ name: 'GreaterEqual', pattern: />=/ });
 export const Less = createToken({ name: 'Less', pattern: /</ });
 export const Greater = createToken({ name: 'Greater', pattern: />/ });
 export const EqualEqual = createToken({ name: 'EqualEqual', pattern: /==/ });
 export const NotEqual = createToken({ name: 'NotEqual', pattern: /!=/ });
+export const StrictEqual = createToken({ name: 'StrictEqual', pattern: /===/ });
+export const StrictNotEqual = createToken({ name: 'StrictNotEqual', pattern: /!==/ });
 export const FatArrow = createToken({ name: 'FatArrow', pattern: /=>/ });
 export const Equal = createToken({ name: 'Equal', pattern: /=/ });
+export const BitwiseOr = createToken({ name: 'BitwiseOr', pattern: /\|/ });
+export const BitwiseAnd = createToken({ name: 'BitwiseAnd', pattern: /&/ });
+export const BitwiseXor = createToken({ name: 'BitwiseXor', pattern: /\^/ });
+export const Bang = createToken({ name: 'Bang', pattern: /!/ });
 export const And = createToken({ name: 'And', pattern: /and/, longer_alt: Identifier });
 export const Or = createToken({ name: 'Or', pattern: /or/, longer_alt: Identifier });
 export const Not = createToken({ name: 'Not', pattern: /not/, longer_alt: Identifier });
@@ -255,12 +265,18 @@ export const AllTokens = [
   RBracket,
   Comma,
   Dot,
+  StrictEqual,
+  StrictNotEqual,
+  InvalidLogicalAnd,
+  InvalidLogicalOr,
   LessEqual,
   GreaterEqual,
   EqualEqual,
   NotEqual,
   Less,
   Greater,
+  Increment,
+  Decrement,
   PlusEqual,
   MinusEqual,
   StarEqual,
@@ -268,6 +284,9 @@ export const AllTokens = [
   PercentEqual,
   ColonEqual,
   Colon,
+  BitwiseOr,
+  BitwiseAnd,
+  BitwiseXor,
   Plus,
   Minus,
   Star,
@@ -277,6 +296,7 @@ export const AllTokens = [
   Question,
   FatArrow,
   Equal,
+  Bang,
   And,
   Or,
   Not,

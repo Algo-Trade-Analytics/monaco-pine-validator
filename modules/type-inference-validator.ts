@@ -156,6 +156,16 @@ export class TypeInferenceValidator implements ValidationModule {
       );
     }
 
+    // Check if initializer is a request function call that can return na
+    if (this.isRequestFunctionCall(initializer)) {
+      this.addWarning(
+        line,
+        column,
+        "Request functions can return 'na' values. Ensure proper null-checking or use nz() for safety.",
+        'PSV6-TYPE-SAFETY-NA-FUNCTION',
+      );
+    }
+
     if (!declaredType || declaredType === 'unknown') {
       if (!initializerType || initializerType === 'unknown') {
         this.addWarning(
@@ -261,6 +271,16 @@ export class TypeInferenceValidator implements ValidationModule {
         line,
         column,
         "Assigning 'na' directly can lead to ambiguous comparisons. Prefer using na() helpers for checks.",
+        'PSV6-TYPE-SAFETY-NA-FUNCTION',
+      );
+    }
+
+    // Check if right side is a request function call that can return na
+    if (this.isRequestFunctionCall(right)) {
+      this.addWarning(
+        line,
+        column,
+        "Request functions can return 'na' values. Ensure proper null-checking or use nz() for safety.",
         'PSV6-TYPE-SAFETY-NA-FUNCTION',
       );
     }
@@ -720,7 +740,39 @@ export class TypeInferenceValidator implements ValidationModule {
   }
 
   private isNaExpression(expression: ExpressionNode): boolean {
+    // Check for both Identifier('na') and NullLiteral (which the parser uses for na)
+    if (expression.kind === 'NullLiteral') {
+      return true;
+    }
     return expression.kind === 'Identifier' && (expression as IdentifierNode).name === 'na';
+  }
+
+  private isRequestFunctionCall(expression: ExpressionNode): boolean {
+    if (expression.kind !== 'CallExpression') {
+      return false;
+    }
+    
+    const callExpr = expression as CallExpressionNode;
+    const callee = callExpr.callee;
+    
+    if (callee.kind === 'MemberExpression') {
+      const member = callee as MemberExpressionNode;
+      if (member.object.kind === 'Identifier') {
+        const objName = (member.object as IdentifierNode).name;
+        const propName = (member.property as IdentifierNode).name;
+        
+        // Check if it's a request.* function
+        if (objName === 'request') {
+          const requestFunctions = new Set([
+            'security', 'security_lower_tf', 'financial', 'economic',
+            'quandl', 'dividends', 'splits', 'earnings', 'seed', 'currency_rate'
+          ]);
+          return requestFunctions.has(propName);
+        }
+      }
+    }
+    
+    return false;
   }
 
   private isNumericType(type: string | null): boolean {

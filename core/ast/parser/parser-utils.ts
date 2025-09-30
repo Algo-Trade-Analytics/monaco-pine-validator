@@ -9,7 +9,7 @@ import {
   type VariableDeclarationKind,
   type VariableDeclarationNode,
 } from '../nodes';
-import { Dot, Identifier as IdentifierToken } from './tokens';
+import { Dot, Identifier as IdentifierToken, Less } from './tokens';
 
 function hasIdentifierCategory(token: IToken): boolean {
   const categories = (token.tokenType as unknown as { CATEGORIES?: unknown[] })?.CATEGORIES;
@@ -81,6 +81,15 @@ export function toDeclarationKind(image: string | undefined): VariableDeclaratio
 export function splitDeclarationTokens(
   tokens: IToken[],
 ): { typeTokens: IToken[]; identifierToken: IToken | undefined } {
+  if (
+    tokens.length >= 2 &&
+    tokens[0]?.tokenType === IdentifierToken &&
+    (tokens[0]?.image ?? '').toLowerCase() === 'this' &&
+    tokens[1]?.tokenType === Less
+  ) {
+    return { typeTokens: [], identifierToken: tokens[0] };
+  }
+
   let lastIdentifierIndex = -1;
   for (let index = tokens.length - 1; index >= 0; index -= 1) {
     const token = tokens[index];

@@ -121,6 +121,15 @@ export class EnhancedStrategyValidator implements ValidationModule {
     };
 
     visit(program, {
+      ScriptDeclaration: {
+        enter: (path) => {
+          const node = path.node as ScriptDeclarationNode;
+          if (node.scriptType === 'strategy') {
+            const namedArgs = this.collectNamedArguments(node.arguments);
+            data.strategyCalls.push({ node: node as any, namedArgs });
+          }
+        },
+      },
       Identifier: {
         enter: (path) => {
           if (RISK_IDENTIFIER_NAMES.has(path.node.name)) {
@@ -146,6 +155,8 @@ export class EnhancedStrategyValidator implements ValidationModule {
     }
 
     const namedArgs = this.collectNamedArguments(node.args);
+    
+    // Support CallExpression-based strategy() calls (for backwards compatibility with tests)
     if (qualifiedName === 'strategy') {
       data.strategyCalls.push({ node, namedArgs });
       return;

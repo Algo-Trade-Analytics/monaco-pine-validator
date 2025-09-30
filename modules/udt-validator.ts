@@ -184,10 +184,24 @@ export class UDTValidator implements ValidationModule {
   private handleAstTypeDeclaration(node: TypeDeclarationNode): void {
     const udtName = node.identifier.name;
     const fields: Array<{ name: string; type: string }> = [];
+    const seenFieldNames = new Set<string>();
 
     for (const field of node.fields) {
       const fieldName = field.identifier.name;
       const typeString = field.typeAnnotation ? this.stringifyAstTypeReference(field.typeAnnotation) : 'unknown';
+      
+      // Check for duplicate field names
+      if (seenFieldNames.has(fieldName)) {
+        this.addError(
+          field.loc.start.line,
+          field.loc.start.column,
+          `Duplicate field '${fieldName}' in UDT '${udtName}'`,
+          'PSV6-UDT-DUPLICATE-FIELD',
+        );
+        continue; // Skip adding this duplicate field
+      }
+      seenFieldNames.add(fieldName);
+      
       fields.push({ name: fieldName, type: typeString });
 
       const parsedType = this.parseFieldType(typeString);
@@ -248,7 +262,8 @@ export class UDTValidator implements ValidationModule {
     const fullName = node.identifier.name;
     const firstParam = node.params[0] ?? null;
     const hasThis = Boolean(firstParam && firstParam.identifier.name === 'this');
-    const isMethodCandidate = fullName.includes('.') || hasThis;
+    const hasMethodModifier = node.modifiers?.includes('method') ?? false;
+    const isMethodCandidate = fullName.includes('.') || hasThis || hasMethodModifier;
 
     if (!isMethodCandidate) {
       return;
@@ -482,7 +497,11 @@ export class UDTValidator implements ValidationModule {
     }
 
     const parent = path.parent;
-    if (parent && parent.node.kind === 'CallExpression' && parent.key === 'callee') {
+    if (
+      parent &&
+      parent.node.kind === 'CallExpression' &&
+      (parent.key === 'callee' || parent.key === 'expression')
+    ) {
       return;
     }
 
