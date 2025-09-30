@@ -212,6 +212,7 @@ describe('AST fixtures', () => {
                 "offset": 46,
               },
             },
+            "modifiers": [],
             "params": [
               {
                 "defaultValue": null,
@@ -495,6 +496,7 @@ describe('AST fixtures', () => {
                 16,
               ],
             },
+            "initializerOperator": "=",
             "kind": "VariableDeclaration",
             "loc": {
               "end": {
@@ -597,6 +599,7 @@ describe('AST fixtures', () => {
                 58,
               ],
             },
+            "initializerOperator": "=",
             "kind": "VariableDeclaration",
             "loc": {
               "end": {
@@ -849,6 +852,7 @@ describe('AST fixtures', () => {
                       119,
                     ],
                   },
+                  "initializerOperator": "=",
                   "kind": "VariableDeclaration",
                   "loc": {
                     "end": {
@@ -1032,6 +1036,7 @@ describe('AST fixtures', () => {
                 "raw": "0",
                 "value": 0,
               },
+              "initializerOperator": "=",
               "kind": "VariableDeclaration",
               "loc": {
                 "end": {

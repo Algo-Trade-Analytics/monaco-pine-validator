@@ -60,6 +60,7 @@ describe('buildScopeGraph', () => {
       typeAnnotation: null,
       initializer: fooInitializer,
       annotations: [],
+      initializerOperator: '=',
       loc: locFrom(10, 17),
       range: createRange(10, 17),
     };
@@ -88,6 +89,7 @@ describe('buildScopeGraph', () => {
       typeAnnotation: null,
       initializer: identifier('foo', 50),
       annotations: [],
+      initializerOperator: '=',
       loc: locFrom(45, 53),
       range: createRange(45, 53),
     };
@@ -109,6 +111,7 @@ describe('buildScopeGraph', () => {
       export: false,
       returnType: null,
       annotations: [],
+      modifiers: [],
       loc: locFrom(30, 70),
       range: createRange(30, 70),
     };
@@ -251,6 +254,7 @@ describe('buildScopeGraph', () => {
       typeAnnotation: null,
       initializer: identifier('loopGuard', 170),
       annotations: [],
+      initializerOperator: '=',
       loc: locFrom(165, 175),
       range: createRange(165, 175),
     };
@@ -281,6 +285,7 @@ describe('buildScopeGraph', () => {
       typeAnnotation: null,
       initializer: numberLiteral(0, 210),
       annotations: [],
+      initializerOperator: '=',
       loc: locFrom(205, 215),
       range: createRange(205, 215),
     };
@@ -394,6 +399,7 @@ describe('buildScopeGraph', () => {
       typeAnnotation: null,
       initializer: arrowExpression,
       annotations: [],
+      initializerOperator: '=',
       loc: locFrom(5, 50),
       range: createRange(5, 50),
     };

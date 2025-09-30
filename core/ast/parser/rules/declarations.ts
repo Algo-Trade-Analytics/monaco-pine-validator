@@ -102,9 +102,11 @@ export function createFunctionDeclarationRule(parser: PineParser) {
       startToken = exportToken;
     }
 
+    const modifiers: string[] = [];
     while (isFunctionModifierToken(parser.lookAhead(1))) {
       const modifierToken = parser.consumeToken(IdentifierToken);
       startToken = startToken ?? modifierToken;
+      modifiers.push(modifierToken.image.toLowerCase());
     }
 
     const collected = parser.collectFunctionHeadTokens(1);
@@ -157,6 +159,7 @@ export function createFunctionDeclarationRule(parser: PineParser) {
       body,
       Boolean(exportToken),
       typeAnnotation,
+      modifiers,
       functionStartToken,
     );
   });
@@ -362,6 +365,7 @@ export function createVariableDeclarationRule(parser: PineParser) {
       identifierToken,
       typeAnnotation,
       initializer,
+      operatorToken ? ((operatorToken.image === ':=' ? ':=' : '=') as '=' | ':=') : null,
       startToken,
     );
     if (

@@ -41,6 +41,7 @@ import {
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 import { ensureAstContext } from '../core/ast/context-utils';
+import { getNodeSource } from '../core/ast/source-utils';
 
 interface TextboxCall {
   functionName: string;
@@ -96,20 +97,20 @@ export class EnhancedTextboxValidator implements ValidationModule {
     this.context = context;
     this.config = config;
 
-    if ((!this.context.lines || this.context.lines.length === 0) && this.context.cleanLines && this.context.cleanLines.length > 0) {
-      this.context.lines = [...this.context.cleanLines];
-    }
-    if ((!this.context.rawLines || this.context.rawLines.length === 0) && this.context.cleanLines && this.context.cleanLines.length > 0) {
-      this.context.rawLines = [...this.context.cleanLines];
-    }
-
     this.astContext = this.getAstContext(config);
-
-    if (this.astContext?.ast) {
-      this.collectTextboxDataAst(this.astContext.ast);
-    } else {
-      this.collectTextboxDataFromText();
+    const ast = this.astContext?.ast;
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: this.context.typeMap ?? new Map(),
+        scriptType: null,
+      };
     }
+
+    this.collectTextboxDataAst(ast);
 
     // Post-process validations
     this.validateTextboxPerformance();
@@ -243,381 +244,6 @@ export class EnhancedTextboxValidator implements ValidationModule {
     if (inLoop) {
       this.warnTextboxInLoop(line, column);
     }
-  }
-
-  private collectTextboxDataFromText(): void {
-    const lines = (this.context.cleanLines && this.context.cleanLines.length > 0)
-      ? this.context.cleanLines
-      : (this.context.lines && this.context.lines.length > 0)
-        ? this.context.lines
-        : this.context.rawLines ?? [];
-
-    if (lines.length === 0) {
-      return;
-    }
-
-    type Frame = { indent: number; type: 'loop' | 'conditional'; hasExpensive?: boolean };
-    const stack: Frame[] = [];
-    const loopRegex = /^\s*(for|while)\b/;
-    const conditionalRegex = /^\s*if\b/;
-    const drawingRegex = /\b(?:label|linefill|line|polyline|table)\./;
-    const callRegex = /(box\.(?:new|set_text|set_text_color|set_text_size|set_text_halign|set_text_valign|set_text_wrap|set_text_style))\s*\(/g;
-
-    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-      const rawLine = lines[lineIndex];
-      const indent = rawLine.length - rawLine.replace(/^\s+/, '').length;
-      const trimmed = rawLine.trim();
-
-      if (process.env.DEBUG_ENH_TEXTBOX === '1') {
-        console.log('[EnhancedTextboxValidator] line', lineIndex + 1, trimmed);
-      }
-
-      while (stack.length > 0 && indent <= stack[stack.length - 1].indent) {
-        stack.pop();
-      }
-
-      if (loopRegex.test(trimmed)) {
-        stack.push({ indent, type: 'loop' });
-      } else if (conditionalRegex.test(trimmed)) {
-        stack.push({ indent, type: 'conditional', hasExpensive: this.lineHasExpensiveCalculation(trimmed) });
-      }
-
-      if (drawingRegex.test(trimmed)) {
-        this.hasDrawingObjects = true;
-      }
-
-      callRegex.lastIndex = 0;
-      let match: RegExpExecArray | null;
-      while ((match = callRegex.exec(trimmed)) !== null) {
-        const qualifiedName = match[1];
-        const openParenGlobalIndex = rawLine.indexOf('(', match.index >= 0 ? match.index : 0);
-        const argsSection = this.extractArgumentsSection(lines, lineIndex, openParenGlobalIndex + 1);
-        const args = this.splitArguments(argsSection);
-
-        const inLoop = stack.some(frame => frame.type === 'loop');
-        const conditionalFrame = [...stack].reverse().find(frame => frame.type === 'conditional');
-        const hasExpensiveCondition = Boolean(conditionalFrame?.hasExpensive);
-
-        if (qualifiedName === 'box.new') {
-          const textParam = this.findParameter(args, 'text');
-          const hasTextParameters = textParam !== undefined || this.hasTextRelatedParameters(args);
-
-       const textboxCall: TextboxCall = {
-          functionName: 'box.new',
-          line: lineIndex + 1,
-          column: openParenGlobalIndex >= 0 ? openParenGlobalIndex + 1 : 1,
-          arguments: args,
-          textContent: textParam,
-          hasTextParameters,
-        };
-
-        if (process.env.DEBUG_ENH_TEXTBOX === '1') {
-          console.log('[EnhancedTextboxValidator] parsed call', textboxCall);
-        }
-
-        this.textboxCalls.push(textboxCall);
-
-        if (hasTextParameters) {
-          this.textboxCount++;
-          this.validateBoxNewWithText(textboxCall);
-        }
-
-        if (inLoop && hasTextParameters) {
-          this.warnTextboxInLoop(textboxCall.line, textboxCall.column);
-        }
-
-          continue;
-        }
-
-        if (!BOX_TEXT_FUNCTIONS.has(qualifiedName)) {
-          continue;
-        }
-
-        const textboxCall: TextboxCall = {
-          functionName: qualifiedName,
-          line: lineIndex + 1,
-          column: openParenGlobalIndex >= 0 ? openParenGlobalIndex + 1 : 1,
-          arguments: args,
-          hasTextParameters: true,
-        };
-
-        if (process.env.DEBUG_ENH_TEXTBOX === '1') {
-          console.log('[EnhancedTextboxValidator] parsed call', textboxCall);
-        }
-
-        this.textboxCalls.push(textboxCall);
-        this.validateBoxTextFunction(textboxCall);
-
-        if (inLoop) {
-          this.warnTextboxInLoop(textboxCall.line, textboxCall.column);
-        }
-      }
-    }
-  }
-
-  private extractArgumentsSection(lines: string[], startLine: number, startColumn: number): string {
-    let buffer = '';
-    let depth = 1;
-    let lineIndex = startLine;
-    let columnIndex = startColumn;
-    let inString = false;
-    let stringDelimiter: string | null = null;
-
-    while (lineIndex < lines.length && depth > 0) {
-      const line = lines[lineIndex];
-      for (let i = columnIndex; i < line.length; i++) {
-        const char = line[i];
-
-        if (inString) {
-          buffer += char;
-          if (char === stringDelimiter && line[i - 1] !== '\\') {
-            inString = false;
-            stringDelimiter = null;
-          }
-          continue;
-        }
-
-        if (char === '"' || char === "'") {
-          inString = true;
-          stringDelimiter = char;
-          buffer += char;
-          continue;
-        }
-
-        if (char === '(') {
-          depth += 1;
-          buffer += char;
-          continue;
-        }
-        if (char === ')') {
-          depth -= 1;
-          if (depth === 0) {
-            return buffer.trim();
-          }
-          buffer += char;
-          continue;
-        }
-
-        buffer += char;
-      }
-
-      buffer += ' ';
-      lineIndex += 1;
-      columnIndex = 0;
-    }
-
-    return buffer.trim();
-  }
-
-  private splitArguments(text: string): string[] {
-    const args: string[] = [];
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar: string | null = null;
-
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-
-      if (inString) {
-        current += char;
-        if (char === stringChar && text[i - 1] !== '\\') {
-          inString = false;
-          stringChar = null;
-        }
-        continue;
-      }
-
-      if (char === '"' || char === "'") {
-        inString = true;
-        stringChar = char;
-        current += char;
-        continue;
-      }
-
-      if (char === '(') {
-        depth += 1;
-        current += char;
-        continue;
-      }
-      if (char === ')') {
-        depth -= 1;
-        current += char;
-        continue;
-      }
-      if (char === ',' && depth === 0) {
-        if (current.trim().length > 0) {
-          args.push(current.trim());
-        }
-        current = '';
-        continue;
-      }
-      current += char;
-    }
-
-    if (current.trim().length > 0) {
-      args.push(current.trim());
-    }
-
-    return args;
-  }
-
-  private lineHasExpensiveCalculation(line: string): boolean {
-    return Array.from(EXPENSIVE_CALCULATION_FUNCTIONS).some((func) => line.includes(func));
-  }
-
-  private validateBoxNewWithText(textboxCall: TextboxCall): void {
-    const args = textboxCall.arguments;
-    
-    // Validate text parameter type
-    const textParam = this.findParameter(args, 'text');
-    if (textParam) {
-      const looksString = this.isStringExpression(textParam);
-      if (!looksString) {
-        this.addError(
-          textboxCall.line,
-          textboxCall.column,
-          'text parameter must be a string expression',
-          'PSV6-TEXTBOX-TEXT-TYPE'
-        );
-        if (this.hasDanglingQuote(textParam) || this.hasUnbalancedQuotes(textParam)) {
-          this.addError(
-            textboxCall.line,
-            textboxCall.column,
-            'Malformed text parameter: unbalanced quotes',
-            'PSV6-TEXTBOX-MALFORMED-TEXT'
-          );
-        }
-      } else if (this.hasDanglingQuote(textParam) || this.hasUnbalancedQuotes(textParam)) {
-        this.addError(
-          textboxCall.line,
-          textboxCall.column,
-          'Malformed text parameter: unbalanced quotes',
-          'PSV6-TEXTBOX-MALFORMED-TEXT'
-        );
-      } else {
-        this.analyzeTextContent(textParam, textboxCall.line, textboxCall.column);
-      }
-    }
-
-    // Validate text_color parameter
-    const textColorParam = this.findParameter(args, 'text_color');
-    if (textColorParam && !this.isColorExpression(textColorParam)) {
-      this.addError(
-        textboxCall.line,
-        textboxCall.column,
-        'text_color must be a valid color expression',
-        'PSV6-TEXTBOX-COLOR-TYPE'
-      );
-    }
-
-    // Validate text_size parameter (accepts size constants or numeric points)
-    const textSizeParam = this.findParameter(args, 'text_size');
-    if (textSizeParam && !this.isValidTextSize(textSizeParam)) {
-      this.addError(
-        textboxCall.line,
-        textboxCall.column,
-        'text_size must be a valid size constant',
-        'PSV6-TEXTBOX-SIZE-TYPE'
-      );
-    }
-
-    // Validate text_font parameter
-    const textFontParam = this.findParameter(args, 'text_font');
-    if (textFontParam && !this.isValidTextFont(textFontParam)) {
-      this.addError(
-        textboxCall.line,
-        textboxCall.column,
-        'text_font must be a valid font constant',
-        'PSV6-TEXTBOX-FONT-TYPE'
-      );
-    }
-
-    // Validate text alignment parameters
-    const textHalignParam = this.findParameter(args, 'text_halign');
-    if (textHalignParam && !this.isValidTextAlignment(textHalignParam)) {
-      this.addError(
-        textboxCall.line,
-        textboxCall.column,
-        'text_halign must be a valid alignment constant',
-        'PSV6-TEXTBOX-ALIGN-TYPE'
-      );
-    }
-
-    const textValignParam = this.findParameter(args, 'text_valign');
-    if (textValignParam && !this.isValidTextAlignment(textValignParam)) {
-      this.addError(
-        textboxCall.line,
-        textboxCall.column,
-        'text_valign must be a valid alignment constant',
-        'PSV6-TEXTBOX-ALIGN-TYPE'
-      );
-    }
-
-    // Validate text_wrap parameter
-    const textWrapParam = this.findParameter(args, 'text_wrap');
-    if (textWrapParam && !this.isValidTextWrap(textWrapParam)) {
-      this.addError(
-        textboxCall.line,
-        textboxCall.column,
-        'text_wrap must be a valid wrap constant',
-        'PSV6-TEXTBOX-WRAP-TYPE'
-      );
-    }
-
-    // Check for simple text box that could be a label
-    this.checkLabelSuggestion(args, textboxCall.line, textboxCall.column);
-
-    // Validate text_style (bold/italic/underline) if provided
-    const textStyleParam = this.findParameter(args, 'text_style');
-    if (textStyleParam && !this.isValidTextStyle(textStyleParam)) {
-      this.addError(
-        textboxCall.line,
-        textboxCall.column,
-        'text_style must be a valid text style constant',
-        'PSV6-TEXTBOX-STYLE-TYPE'
-      );
-    }
-  }
-
-  private hasUnbalancedQuotes(value: string): boolean {
-    const dbl = (value.match(/\"/g) || []).length; // escaped quotes
-    const rawDbl = (value.match(/"/g) || []).length - dbl;
-    const rawSgl = (value.match(/'/g) || []).length;
-    // Ignore perfectly quoted literals
-    if (/^\s*"[^"]*"\s*$/.test(value) || /^\s*'[^']*'\s*$/.test(value)) return false;
-    // Unbalanced if odd count of quotes present
-    return (rawDbl % 2 === 1) || (rawSgl % 2 === 1);
-  }
-
-  private hasDanglingQuote(value: string): boolean {
-    const trimmed = value.trim();
-    // Quick exits for clean literals and identifiers
-    if (trimmed.length === 0) return false;
-    if (/^"[^"\\]*(?:\\.[^"\\]*)*"$/.test(trimmed) || /^'[^'\\]*(?:\\.[^'\\]*)*'$/.test(trimmed)) {
-      return false;
-    }
-
-    const unescapedDouble = trimmed.replace(/\\"/g, '').split('"').length - 1;
-    const unescapedSingle = trimmed.replace(/\\'/g, '').split("'").length - 1;
-
-    // Lone quote or trailing/leading quote without its pair
-    if (unescapedDouble === 1 || unescapedSingle === 1) {
-      return true;
-    }
-
-    const endsWithQuote = trimmed.endsWith('"') || trimmed.endsWith("'");
-    const startsWithQuote = trimmed.startsWith('"') || trimmed.startsWith("'");
-    if (endsWithQuote !== startsWithQuote) {
-      return true;
-    }
-
-    // Mixed usage like foo"bar or "bar)" should still flag
-    if (/^[^"']+["']$/.test(trimmed) || /^["'][^"']+[)\]\}]?$/.test(trimmed)) {
-      return true;
-    }
-
-    return false;
   }
 
   private validateBoxTextFunction(textboxCall: TextboxCall): void {
@@ -894,6 +520,153 @@ export class EnhancedTextboxValidator implements ValidationModule {
     }
   }
 
+  private validateBoxNewWithText(textboxCall: TextboxCall): void {
+    const args = textboxCall.arguments;
+    const textParam = textboxCall.textContent ?? this.findParameter(args, 'text');
+
+    if (textParam !== undefined) {
+      const looksString = this.isStringExpression(textParam);
+      if (!looksString) {
+        this.addError(
+          textboxCall.line,
+          textboxCall.column,
+          'text parameter must be a string expression',
+          'PSV6-TEXTBOX-TEXT-TYPE'
+        );
+        if (this.hasDanglingQuote(textParam) || this.hasUnbalancedQuotes(textParam)) {
+          this.addError(
+            textboxCall.line,
+            textboxCall.column,
+            'Malformed text parameter: unbalanced quotes',
+            'PSV6-TEXTBOX-MALFORMED-TEXT'
+          );
+        }
+      } else if (this.hasDanglingQuote(textParam) || this.hasUnbalancedQuotes(textParam)) {
+        this.addError(
+          textboxCall.line,
+          textboxCall.column,
+          'Malformed text parameter: unbalanced quotes',
+          'PSV6-TEXTBOX-MALFORMED-TEXT'
+        );
+      } else {
+        this.analyzeTextContent(textParam, textboxCall.line, textboxCall.column);
+      }
+    }
+
+    const textColorParam = this.findParameter(args, 'text_color');
+    if (textColorParam && !this.isColorExpression(textColorParam)) {
+      this.addError(
+        textboxCall.line,
+        textboxCall.column,
+        'text_color must be a valid color expression',
+        'PSV6-TEXTBOX-COLOR-TYPE'
+      );
+    }
+
+    const textSizeParam = this.findParameter(args, 'text_size');
+    if (textSizeParam && !this.isValidTextSize(textSizeParam)) {
+      this.addError(
+        textboxCall.line,
+        textboxCall.column,
+        'text_size must be a valid size constant',
+        'PSV6-TEXTBOX-SIZE-TYPE'
+      );
+    }
+
+    const textFontParam = this.findParameter(args, 'text_font');
+    if (textFontParam && !this.isValidTextFont(textFontParam)) {
+      this.addError(
+        textboxCall.line,
+        textboxCall.column,
+        'text_font must be a valid font constant',
+        'PSV6-TEXTBOX-FONT-TYPE'
+      );
+    }
+
+    const textHalignParam = this.findParameter(args, 'text_halign');
+    if (textHalignParam && !this.isValidTextAlignment(textHalignParam)) {
+      this.addError(
+        textboxCall.line,
+        textboxCall.column,
+        'text_halign must be a valid alignment constant',
+        'PSV6-TEXTBOX-ALIGN-TYPE'
+      );
+    }
+
+    const textValignParam = this.findParameter(args, 'text_valign');
+    if (textValignParam && !this.isValidTextAlignment(textValignParam)) {
+      this.addError(
+        textboxCall.line,
+        textboxCall.column,
+        'text_valign must be a valid alignment constant',
+        'PSV6-TEXTBOX-ALIGN-TYPE'
+      );
+    }
+
+    const textWrapParam = this.findParameter(args, 'text_wrap');
+    if (textWrapParam && !this.isValidTextWrap(textWrapParam)) {
+      this.addError(
+        textboxCall.line,
+        textboxCall.column,
+        'text_wrap must be a valid wrap constant',
+        'PSV6-TEXTBOX-WRAP-TYPE'
+      );
+    }
+
+    this.checkLabelSuggestion(args, textboxCall.line, textboxCall.column);
+
+    const textStyleParam = this.findParameter(args, 'text_style');
+    if (textStyleParam && !this.isValidTextStyle(textStyleParam)) {
+      this.addError(
+        textboxCall.line,
+        textboxCall.column,
+        'text_style must be a valid text style constant',
+        'PSV6-TEXTBOX-STYLE-TYPE'
+      );
+    }
+  }
+
+  private hasUnbalancedQuotes(value: string): boolean {
+    const trimmed = value.trim();
+    if (/^"[^"]*"$/.test(trimmed) || /^'[^']*'$/.test(trimmed)) {
+      return false;
+    }
+
+    const doubleQuotes = (trimmed.match(/"/g) ?? []).length - (trimmed.match(/\\"/g) ?? []).length;
+    const singleQuotes = (trimmed.match(/'/g) ?? []).length - (trimmed.match(/\\'/g) ?? []).length;
+
+    return doubleQuotes % 2 !== 0 || singleQuotes % 2 !== 0;
+  }
+
+  private hasDanglingQuote(value: string): boolean {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return false;
+    }
+
+    if (/^"[^"\\]*(?:\\.[^"\\]*)*"$/.test(trimmed) || /^'[^'\\]*(?:\\.[^'\\]*)*'$/.test(trimmed)) {
+      return false;
+    }
+
+    const endsWithQuote = trimmed.endsWith('"') || trimmed.endsWith("'");
+    const startsWithQuote = trimmed.startsWith('"') || trimmed.startsWith("'");
+    if (endsWithQuote !== startsWithQuote) {
+      return true;
+    }
+
+    const unescapedDouble = trimmed.replace(/\\"/g, '').split('"').length - 1;
+    if (unescapedDouble === 1) {
+      return true;
+    }
+
+    const unescapedSingle = trimmed.replace(/\\'/g, '').split("'").length - 1;
+    if (unescapedSingle === 1) {
+      return true;
+    }
+
+    return false;
+  }
+
   // Helper methods
   private findParameter(args: string[], paramName: string): string | undefined {
     for (const rawArg of args) {
@@ -989,33 +762,11 @@ export class EnhancedTextboxValidator implements ValidationModule {
   }
 
   private argumentToString(argument: ArgumentNode): string {
-    const valueText = this.getNodeSource(argument.value).trim();
+    const valueText = getNodeSource(this.context, argument.value).trim();
     if (argument.name) {
       return `${argument.name.name}=${valueText}`;
     }
     return valueText;
-  }
-
-  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
-    const lines = this.context.lines ?? [];
-    if (!node.loc) {
-      return '';
-    }
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
   }
 
   private getExpressionQualifiedName(expression: ExpressionNode): string | null {

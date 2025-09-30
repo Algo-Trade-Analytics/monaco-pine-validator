@@ -35,6 +35,7 @@ import {
 import { visit } from '../core/ast/traversal';
 import { NS_MEMBERS } from '../core/constants';
 import { ensureAstContext } from '../core/ast/context-utils';
+import { getNodeSource } from '../core/ast/source-utils';
 
 interface LinefillFunctionCall {
   name: string;
@@ -89,19 +90,11 @@ export class LinefillValidator implements ValidationModule {
 
     const ast = this.astContext?.ast;
     if (!ast) {
-      if (this.containsLinefillSyntax()) {
-        this.addError(
-          1,
-          1,
-          'Unable to parse linefill expression. Check linefill syntax.',
-          'PSV6-LINEFILL-SYNTAX'
-        );
-      }
       return {
-        isValid: this.errors.length === 0,
-        errors: this.errors,
-        warnings: this.warnings,
-        info: this.info,
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
         typeMap: new Map(),
         scriptType: context.scriptType,
       };
@@ -152,11 +145,6 @@ export class LinefillValidator implements ValidationModule {
     this.hasCacheSuggestion = false;
     this.hasCleanupSuggestion = false;
     this.hasTransparencySuggestion = false;
-  }
-
-  private containsLinefillSyntax(): boolean {
-    const lines = this.context.cleanLines?.length ? this.context.cleanLines : this.context.lines ?? [];
-    return lines.some((line) => line.includes('linefill.'));
   }
 
   private collectLinefillDataFromAst(program: ProgramNode): void {
@@ -632,42 +620,16 @@ export class LinefillValidator implements ValidationModule {
       case 'MemberExpression': {
         const member = expression as MemberExpressionNode;
         if (member.computed) {
-          return this.getNodeSource(member);
+          return getNodeSource(this.context, member);
         }
         const objectText = this.getExpressionText(member.object);
         return `${objectText}.${member.property.name}`;
       }
       case 'CallExpression':
-        return this.getNodeSource(expression);
+        return getNodeSource(this.context, expression);
       default:
-        return this.getNodeSource(expression);
+        return getNodeSource(this.context, expression);
     }
-  }
-
-  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode | MemberExpressionNode): string {
-    const sourceLines = (this.context.lines && this.context.lines.length > 0)
-      ? this.context.lines
-      : (this.context.cleanLines && this.context.cleanLines.length > 0)
-        ? this.context.cleanLines
-        : [];
-    if (!node.loc) {
-      return '';
-    }
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-    if (startLineIndex === endLineIndex) {
-      const line = sourceLines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-    const parts: string[] = [];
-    const firstLine = sourceLines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(sourceLines[index] ?? '');
-    }
-    const lastLine = sourceLines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
   }
 
   private isLinefillNamespace(expression: ExpressionNode): boolean {

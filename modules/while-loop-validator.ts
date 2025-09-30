@@ -45,11 +45,19 @@ export class WhileLoopValidator implements ValidationModule {
     this.reset();
 
     const astContext = this.getAstContext(context, config);
-    if (astContext?.ast) {
-      this.validateWhileLoopsAst(astContext.ast);
+    const ast = astContext?.ast;
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: context.scriptType,
+      };
     }
 
-    this.validateWhileLoopsTextual(context);
+    this.validateWhileLoopsAst(ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -142,50 +150,6 @@ export class WhileLoopValidator implements ValidationModule {
         maxDepth.column,
         `While loop nesting depth is ${maxDepth.depth}. Consider refactoring.`,
         'PSV6-WHILE-DEEP-NESTING',
-      );
-    }
-  }
-
-  private validateWhileLoopsTextual(context: ValidationContext): void {
-    const lines = context.cleanLines ?? [];
-    const whileStack: Array<{ indent: number; line: number }> = [];
-
-    for (let index = 0; index < lines.length; index++) {
-      const line = lines[index] ?? '';
-      const trimmed = line.trim();
-      const lineNumber = index + 1;
-
-      if (/^while\b/i.test(trimmed)) {
-        const condition = trimmed.slice(5).trim();
-        const column = line.indexOf('while') + 1;
-
-        if (condition === '' || condition.startsWith('//')) {
-          this.addError(
-            lineNumber,
-            column,
-            'While loop requires a condition.',
-            'PSV6-WHILE-EMPTY-CONDITION',
-          );
-        }
-
-        const indent = line.match(/^\s*/)?.[0].length ?? 0;
-        whileStack.push({ indent, line: lineNumber });
-        continue;
-      }
-
-      if (/^end\b/i.test(trimmed)) {
-        if (whileStack.length > 0) {
-          whileStack.pop();
-        }
-      }
-    }
-
-    for (const entry of whileStack) {
-      this.addError(
-        entry.line,
-        1,
-        'While loop missing end statement.',
-        'PSV6-WHILE-MISSING-END',
       );
     }
   }

@@ -5,20 +5,26 @@ We are moving the validator stack to rely exclusively on the Chevrotain-generate
 
 ## Tasks
 
-1. **CoreValidator (In Progress)**  
-   Replace the remaining `cleanLines`/regex passes—indentation, tuple destructuring, parameter usage, reassignment checks—with AST traversal logic so every PS0xx/PSV6 warning originates from structured nodes.
+1. **CoreValidator (Complete)**  
+   All diagnostics now originate from AST traversals; the legacy line scanner has been removed and indentation/assignment checks run on structured scopes.
 
-2. **TypeInferenceValidator**  
-   Move type-compatibility/ambiguity detection off line heuristics and into AST visitors, aligning parameter inference, conditional diagnostics, and safety checks with the new pipeline.
+2. **TypeInferenceValidator (Complete)**  
+   Type compatibility, ambiguity, and parameter inference use AST visitors exclusively; text heuristics were deleted.
 
-3. **TA / Style / Performance Validators**  
-   Port modules such as `ta-functions-validator`, `style-validator`, and `performance-validator` away from text fallbacks (loop detection, nested TA call scans, etc.) and onto AST data.
+3. **TA / Style / Performance Validators (Complete)**  
+   `ta-functions-validator`, `style-validator`, `performance`-oriented modules, and math validator now rely on AST data for loop/performance hints and naming checks.
 
-4. **Residual Helpers**  
-   Sweep the rest of the validator catalog (inputs, linefill, etc.) for any lingering text helpers, removing or re-implementing them with AST structures.
+4. **Residual Helpers (Complete)**  
+   Inputs, UDT/enum/function validators, strategy order limits, enhanced textbox handling, and related helpers no longer touch `cleanLines` except for syntax pre-checks.
+
+## Remaining Reliance on Raw Lines
+
+- **SyntaxValidator** – now tokenises the source for its fallback brace matching, but it still pulls the original text from `context` arrays to feed the lexer when no AST exists.
+- **ModularUltimateValidator** – the lightweight CLI wrapper performs minimal structure/syntax checks on raw lines before delegating to the module pipeline; this predates the full AST-driven flow.
+- **BaseValidator custom rules** – raw-line scans are still available for legacy rules, though they can now be disabled (`enableCustomRuleRawScan`) or replaced with AST visitors.
+- **Context glue** – helpers such as `EnhancedModularValidator` and `ensureAstContext` simply normalise any supplied `cleanLines`. They no longer drive diagnostics but remain for compatibility.
 
 ## Execution Plan
-- Work through the tasks sequentially, validating with `yarn test:ast` (and targeted suites) after each major change.
-- Adjust compatibility fixtures where necessary once diagnostics originate solely from AST visitors.
-- Update this map as tasks complete.
-
+- All tasks validated with `yarn test:ast`; follow-up suites (e.g. `yarn test:validator`) remain a useful final sanity check.
+- The remaining raw-line consumers above are intentional; we will now evaluate whether each can be replaced or gated behind AST-aware logic.
+- Introduced shared AST source helpers so `CoreValidator`, `FunctionValidator`, `MathFunctionsValidator`, and `ArrayValidator` slice diagnostics directly from node ranges instead of `context.lines` arrays.

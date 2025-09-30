@@ -47,6 +47,7 @@ function mergeValidatorConfig(layers: ConfigLayer[]): { config: ValidatorConfig;
     enableTypeChecking: true,
     enableControlFlowAnalysis: true,
     enablePerformanceAnalysis: false,
+    enableCustomRuleRawScan: true,
     customRules: [],
     ignoredCodes: [],
   };
@@ -194,6 +195,7 @@ export abstract class BaseValidator {
       lines: [],
       cleanLines: [],
       rawLines: [],
+      sourceText: '',
       typeMap: this.typeMap,
       usedVars: this.used,
       declaredVars: this.declared,
@@ -341,6 +343,7 @@ export abstract class BaseValidator {
     code = code.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
 
     const context = this.context;
+    context.sourceText = code;
     context.rawLines = code.split('\n');
     context.lines = context.rawLines.slice();
     context.cleanLines = this.stripLineCommentsKeepingStrings(code).split('\n');
@@ -540,18 +543,53 @@ export abstract class BaseValidator {
    * Apply custom rules
    */
   protected applyCustomRules(): void {
-    for (const rule of (this.config.customRules || [])) {
-      for (let i = 0; i < this.context.cleanLines.length; i++) {
-        const line = this.context.cleanLines[i];
-        const lineNum = i + 1;
-        let match = false;
-        if (rule.pattern instanceof RegExp) {
-          match = rule.pattern.test(line);
-        } else {
-          match = rule.pattern(line, lineNum, this.context);
+    const rules = this.config.customRules || [];
+    if (rules.length === 0) {
+      return;
+    }
+
+    const enableRawScan = this.config.enableCustomRuleRawScan !== false;
+    const astContext = this.context.ast ? this.context : null;
+
+    for (const rule of rules) {
+      const inferredMode: 'raw' | 'ast' | 'both' = rule.mode
+        ? rule.mode
+        : rule.visitAst && rule.pattern
+          ? 'both'
+          : rule.visitAst
+            ? 'ast'
+            : 'raw';
+
+      if (enableRawScan && rule.pattern && (inferredMode === 'raw' || inferredMode === 'both')) {
+        for (let i = 0; i < this.context.cleanLines.length; i++) {
+          const line = this.context.cleanLines[i];
+          const lineNum = i + 1;
+          let match = false;
+          if (rule.pattern instanceof RegExp) {
+            match = rule.pattern.test(line);
+          } else {
+            match = rule.pattern(line, lineNum, this.context);
+          }
+          if (match) {
+            this.addBySeverity(rule.severity, lineNum, 1, rule.message, rule.id, rule.suggestion);
+          }
         }
-        if (match) {
-          this.addBySeverity(rule.severity, lineNum, 1, rule.message, rule.id, rule.suggestion);
+      }
+
+      if (astContext && astContext.ast && rule.visitAst && (inferredMode === 'ast' || inferredMode === 'both')) {
+        const matches = rule.visitAst(astContext.ast, astContext) ?? [];
+        for (const match of matches) {
+          const line = match.line ?? 1;
+          const column = match.column ?? 1;
+          const message = match.message ?? rule.message;
+          const severity = match.severity ?? rule.severity;
+          const suggestion = match.suggestion ?? rule.suggestion;
+          const code = match.code ?? rule.id;
+          if (severity === 'info') {
+            this.addInfo(line, column, message, code, suggestion);
+          } else {
+            this.addBySeverity(severity, line, column, message, code, suggestion);
+          }
         }
       }
     }

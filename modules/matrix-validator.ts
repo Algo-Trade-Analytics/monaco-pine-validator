@@ -26,6 +26,7 @@ import {
   type VariableDeclarationNode,
 } from '../core/ast/nodes';
 import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
+import { getNodeSource } from '../core/ast/source-utils';
 
 const VALID_MATRIX_ELEMENT_TYPES = new Set(['int', 'float', 'bool', 'string', 'color']);
 
@@ -79,7 +80,6 @@ export class MatrixValidator implements ValidationModule {
     const ast = this.astContext?.ast;
 
     if (!ast) {
-      this.collectMatrixDataText();
       return this.buildResult(context.scriptType);
     }
 
@@ -599,66 +599,6 @@ export class MatrixValidator implements ValidationModule {
     }
   }
 
-  private collectMatrixDataText(): void {
-    const lines = this.context.rawLines?.length
-      ? this.context.rawLines
-      : this.context.cleanLines?.length
-        ? this.context.cleanLines
-        : this.context.lines ?? [];
-
-    if (!Array.isArray(lines) || lines.length === 0) {
-      return;
-    }
-
-    const genericCallRegex = /matrix\.new\s*<([^>]*)>\s*\(([^)]*)\)/gi;
-
-    for (let index = 0; index < lines.length; index++) {
-      const line = lines[index];
-      genericCallRegex.lastIndex = 0;
-      let match: RegExpExecArray | null;
-
-      while ((match = genericCallRegex.exec(line)) !== null) {
-        const typeFragment = (match[1] ?? '').trim();
-        const argsFragment = match[2] ?? '';
-        const column = match.index + 1;
-        const lineNumber = index + 1;
-
-        if (typeFragment.length === 0) {
-          this.addError(
-            lineNumber,
-            column,
-            'Matrix declarations must specify a valid element type, e.g. matrix.new<float>(rows, cols).',
-            'PSV6-MATRIX-INVALID-SYNTAX',
-          );
-        } else if (!VALID_MATRIX_ELEMENT_TYPES.has(typeFragment)) {
-          this.addError(
-            lineNumber,
-            column,
-            `Unknown matrix element type '${typeFragment}'. Supported types: ${Array.from(VALID_MATRIX_ELEMENT_TYPES).join(', ')}.`,
-            'PSV6-MATRIX-INVALID-SYNTAX',
-          );
-        }
-
-        const rawArgs = argsFragment
-          .split(',')
-          .map((part) => part.trim())
-          .filter((part) => part.length > 0);
-
-        const hasExplicitInitialValue = rawArgs.length >= 3;
-        const dimensionCount = hasExplicitInitialValue ? 2 : rawArgs.length;
-
-        if (dimensionCount < 2) {
-          this.addError(
-            lineNumber,
-            column,
-            'Matrix declarations must provide both row and column dimensions.',
-            'PSV6-MATRIX-INVALID-SYNTAX',
-          );
-        }
-      }
-    }
-  }
-
   private buildResult(scriptType: ValidationContext['scriptType']): ValidationResult {
     return {
       isValid: this.errors.length === 0,
@@ -902,37 +842,14 @@ export class MatrixValidator implements ValidationModule {
       case 'MemberExpression': {
         const member = expression as MemberExpressionNode;
         if (member.computed) {
-          return this.getNodeSource(member);
+          return getNodeSource(this.context, member);
         }
         const objectText = this.getExpressionText(member.object);
         return `${objectText}.${member.property.name}`;
       }
       default:
-        return this.getNodeSource(expression);
+        return getNodeSource(this.context, expression);
     }
-  }
-
-  private getNodeSource(node: { loc: { start: { line: number; column: number }; end: { line: number; column: number } } }): string {
-    const lines = this.context.lines ?? [];
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
   }
 
   private areTypesCompatible(expectedType: string, actualType: string): boolean {

@@ -20,7 +20,6 @@ import {
   type ValidationResult,
   type TypeInfo,
 } from '../core/types';
-import { IDENT } from '../core/constants';
 import {
   type ArgumentNode,
   type AssignmentStatementNode,
@@ -32,6 +31,7 @@ import {
   type VariableDeclarationNode,
 } from '../core/ast/nodes';
 import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
+import { getNodeSource } from '../core/ast/source-utils';
 
 interface InputFunctionCall {
   name: string;
@@ -246,17 +246,12 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private recordInputFunctionCall(call: InputFunctionCall): void {
-    const line = call.line;
-    const sourceLine = this.context.cleanLines[line - 1] ?? '';
-    const assignedName = call.assignedName ?? this.extractAssignedNameFromLine(sourceLine);
-
     this.inputFunctionCalls.push({
       ...call,
-      assignedName,
       arguments: [...call.arguments],
       parameters: new Map(call.parameters),
     });
-    this.registerInputVariableType(assignedName, call.name, call.line, call.column);
+    this.registerInputVariableType(call.assignedName, call.name, call.line, call.column);
     this.inputCount++;
   }
 
@@ -749,7 +744,7 @@ export class InputFunctionsValidator implements ValidationModule {
     const poorNames = new Set(['a', 'b', 'c', 'x', 'y', 'z', 'temp', 'flag', 'val', 'value']);
 
     for (const call of this.inputFunctionCalls) {
-      const variableName = call.assignedName ?? this.extractAssignedNameFromLine(this.context.cleanLines[call.line - 1] ?? '');
+      const variableName = call.assignedName;
       if (variableName && poorNames.has(variableName)) {
         this.addInfo(call.line, call.column,
           `Consider using a more descriptive name instead of '${variableName}'`,
@@ -836,34 +831,7 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
-    const lines = this.context.lines ?? [];
-    if (!node.loc) {
-      return '';
-    }
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
-  }
-
-  private extractAssignedNameFromLine(line: string): string | null {
-    if (!line) {
-      return null;
-    }
-    const pattern = new RegExp(`(${IDENT.source})\\s*=\\s*input\\.`);
-    const match = line.match(pattern);
-    return match ? match[1] : null;
+    return getNodeSource(this.context, node);
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {

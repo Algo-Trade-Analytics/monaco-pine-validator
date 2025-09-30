@@ -16,6 +16,7 @@ import {
 } from '../core/ast/nodes';
 import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
 import { ensureAstContext } from '../core/ast/context-utils';
+import { getNodeSource } from '../core/ast/source-utils';
 
 type AssignmentOperator = '=' | ':=' | '+=' | '-=' | '*=' | '/=' | '%=';
 
@@ -47,7 +48,6 @@ export class VaripValidator implements ValidationModule {
 
   private astVaripDeclarations: VaripDeclarationInfo[] = [];
   private astVaripNames = new Set<string>();
-  private astHandledVaripLines = new Set<number>();
   private astAssignmentErrorSites = new Set<string>();
   private astBarstateWarningSites = new Set<string>();
 
@@ -61,11 +61,18 @@ export class VaripValidator implements ValidationModule {
     this.astContext = this.getAstContext(config);
     const ast = this.astContext?.ast;
 
-    if (ast) {
-      this.validateWithAst(ast);
-    } else {
-      this.validateWithoutAst();
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: context.typeMap,
+        scriptType: context.scriptType,
+      };
     }
+
+    this.validateWithAst(ast);
 
     return {
       isValid: this.errors.length === 0,
@@ -83,7 +90,6 @@ export class VaripValidator implements ValidationModule {
     this.info = [];
     this.astVaripDeclarations = [];
     this.astVaripNames.clear();
-    this.astHandledVaripLines.clear();
     this.astAssignmentErrorSites.clear();
     this.astBarstateWarningSites.clear();
   }
@@ -103,10 +109,9 @@ export class VaripValidator implements ValidationModule {
   private validateWithAst(program: ProgramNode): void {
     this.collectVaripDeclarations(program);
     this.validateVaripDeclarationsAst();
-    this.validateVaripScopeAst();
-    this.validateVaripAssignmentsAst(program);
-    this.validateVaripPerformanceAst();
-    this.validateVaripSyntaxFallbackAst();
+   this.validateVaripScopeAst();
+   this.validateVaripAssignmentsAst(program);
+   this.validateVaripPerformanceAst();
   }
 
   private collectVaripDeclarations(program: ProgramNode): void {
@@ -135,7 +140,6 @@ export class VaripValidator implements ValidationModule {
             inLoop,
           });
           this.astVaripNames.add(name);
-          this.astHandledVaripLines.add(line);
         },
       },
     });
@@ -287,7 +291,7 @@ export class VaripValidator implements ValidationModule {
       return true;
     }
 
-    const source = this.getNodeSource(statement);
+    const source = getNodeSource(this.context, statement);
     return this.lineHasBarstateGuard(source);
   }
 
@@ -355,7 +359,7 @@ export class VaripValidator implements ValidationModule {
       );
     }
 
-    const scriptType = this.context.scriptType ?? this.detectScriptTypeTextual();
+    const scriptType = this.context.scriptType ?? null;
 
     if (scriptType === 'strategy' && varipCount > 5) {
       this.addWarning(
@@ -364,97 +368,6 @@ export class VaripValidator implements ValidationModule {
         'Strategy scripts should minimize varip usage for better backtesting accuracy',
         'PSV6-VARIP-STRATEGY',
       );
-    }
-  }
-
-  private validateWithoutAst(): void {
-    const varipCount = this.countVaripDeclarationsTextual();
-
-    if (varipCount > 10) {
-      this.addWarning(
-        1,
-        1,
-        `High number of varip variables (${varipCount}). Consider if all are necessary for performance`,
-        'PSV6-VARIP-PERFORMANCE',
-      );
-    }
-
-    const scriptType = this.detectScriptTypeTextual();
-    if (scriptType === 'strategy' && varipCount > 5) {
-      this.addWarning(
-        1,
-        1,
-        'Strategy scripts should minimize varip usage for better backtesting accuracy',
-        'PSV6-VARIP-STRATEGY',
-      );
-    }
-
-    this.validateVaripSyntaxFallbackAst();
-  }
-
-  private countVaripDeclarationsTextual(): number {
-    const lines = this.context.cleanLines ?? [];
-    let count = 0;
-    for (const line of lines) {
-      if (/^\s*varip\b/i.test(line)) {
-        count += 1;
-      }
-    }
-    return count;
-  }
-
-  private detectScriptTypeTextual(): 'indicator' | 'strategy' | 'library' | null {
-    if (this.context.scriptType) {
-      return this.context.scriptType;
-    }
-
-    const lines = this.context.cleanLines ?? [];
-    for (const rawLine of lines) {
-      const line = rawLine.trim().toLowerCase();
-      if (line.startsWith('strategy(')) {
-        return 'strategy';
-      }
-      if (line.startsWith('indicator(')) {
-        return 'indicator';
-      }
-      if (line.startsWith('library(')) {
-        return 'library';
-      }
-    }
-    return null;
-  }
-
-  private validateVaripSyntaxFallbackAst(): void {
-    const handledLines = this.astHandledVaripLines;
-
-    for (let index = 0; index < this.context.cleanLines.length; index++) {
-      const lineNumber = index + 1;
-      if (handledLines.has(lineNumber)) {
-        continue;
-      }
-
-      const line = this.context.cleanLines[index] ?? '';
-      if (!/^\s*varip\b/.test(line)) {
-        continue;
-      }
-
-      const hasValidTypedDeclaration = /^\s*varip\s+[A-Za-z_][A-Za-z0-9_]*\s+[A-Za-z_][A-Za-z0-9_]*\s*=/.test(line);
-      const hasValidUntypedDeclaration = /^\s*varip\s+[A-Za-z_][A-Za-z0-9_]*\s*=/.test(line);
-
-      if (hasValidTypedDeclaration || hasValidUntypedDeclaration) {
-        continue;
-      }
-
-      this.addError(
-        lineNumber,
-        1,
-        'Invalid varip declaration syntax. Expected: varip <type> <name> = <value>',
-        'PSV6-VARIP-SYNTAX',
-      );
-
-      if (!line.includes('=')) {
-        this.addError(lineNumber, 1, 'varip declaration must include an initial value', 'PSV6-VARIP-INITIAL-VALUE');
-      }
     }
   }
 
@@ -468,7 +381,7 @@ export class VaripValidator implements ValidationModule {
       return fromLine;
     }
 
-    const source = this.getNodeSource(statement);
+    const source = getNodeSource(this.context, statement);
     const match = source.match(/(:=|\+=|-=|\*=|\/=|%=|=)/);
     if (!match || match.index === undefined) {
       return null;
@@ -509,29 +422,6 @@ export class VaripValidator implements ValidationModule {
       default:
         return false;
     }
-  }
-
-  private getNodeSource(node: { loc: { start: { line: number; column: number }; end: { line: number; column: number } } }): string {
-    const lines = this.context.rawLines ?? this.context.lines ?? [];
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {

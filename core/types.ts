@@ -48,6 +48,7 @@ export interface ValidationContext {
   lines: string[];
   cleanLines: string[];
   rawLines: string[];
+  sourceText?: string;
   typeMap: Map<string, TypeInfo>;
   usedVars: Set<string>;
   declaredVars: Map<string, number>;
@@ -80,17 +81,33 @@ export interface ValidatorConfig {
   enableStyleChecks?: boolean;
   enableWarnings?: boolean;
   enableInfo?: boolean;
+  enableCustomRuleRawScan?: boolean;
   customRules: ValidationRule[];
   ignoredCodes: string[];
   ast?: AstConfig;
 }
 
+export type RawRuleMatcher = (line: string, lineNum: number, ctx: ValidationContext) => boolean;
+
+export interface AstRuleMatch {
+  line: number;
+  column: number;
+  message?: string;
+  severity?: 'error' | 'warning' | 'info';
+  suggestion?: string;
+  code?: string;
+}
+
+export type AstRuleEvaluator = (program: ProgramNode, ctx: AstValidationContext) => AstRuleMatch[] | void;
+
 export interface ValidationRule {
   id: string;
   severity: 'error' | 'warning' | 'info';
   message: string;
-  pattern: RegExp | ((line: string, lineNum: number, ctx: ValidationContext) => boolean);
+  pattern?: RegExp | RawRuleMatcher;
+  visitAst?: AstRuleEvaluator;
   suggestion?: string;
+  mode?: 'raw' | 'ast' | 'both';
 }
 
 export interface ValidationModule {

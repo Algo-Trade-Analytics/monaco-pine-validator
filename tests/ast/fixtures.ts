@@ -194,9 +194,15 @@ export function createFunctionDeclaration(
     export?: boolean;
     returnType?: TypeReferenceNode | null;
     annotations?: CompilerAnnotationNode[];
+    modifiers?: string[];
   } = {},
 ): FunctionDeclarationNode {
-  const { export: isExport = false, returnType = null, annotations = [] } = options;
+  const {
+    export: isExport = false,
+    returnType = null,
+    annotations = [],
+    modifiers = [],
+  } = options;
   return {
     kind: 'FunctionDeclaration',
     identifier,
@@ -205,6 +211,7 @@ export function createFunctionDeclaration(
     export: isExport,
     returnType,
     annotations,
+    modifiers,
     ...createSpan({ start, end, lineStart, lineEnd }),
   };
 }
@@ -339,6 +346,7 @@ export function createVariableDeclaration(
     initializer?: ExpressionNode | null;
     typeAnnotation?: TypeReferenceNode | null;
     annotations?: CompilerAnnotationNode[];
+    initializerOperator?: '=' | ':=' | null;
   } = {},
 ): VariableDeclarationNode {
   const {
@@ -346,6 +354,7 @@ export function createVariableDeclaration(
     initializer = null,
     typeAnnotation = null,
     annotations = [],
+    initializerOperator = initializer ? '=' : null,
   } = options;
   return {
     kind: 'VariableDeclaration',
@@ -354,6 +363,7 @@ export function createVariableDeclaration(
     typeAnnotation,
     initializer,
     annotations,
+    initializerOperator,
     ...createSpan({ start, end, lineStart: line }),
   };
 }
@@ -364,11 +374,13 @@ export function createAssignmentStatement(
   start: number,
   end: number,
   line = 1,
+  operator = '=',
 ): AssignmentStatementNode {
   return {
     kind: 'AssignmentStatement',
     left,
     right,
+    operator,
     ...createSpan({ start, end, lineStart: line }),
   };
 }
@@ -663,6 +675,7 @@ export function createNamespaceAccessFixture(): ProgramNode {
   const timeframeVar = createVariableDeclaration(createIdentifier('tf', 20, 1), 20, 36, 1, {
     declarationKind: 'var',
     initializer: timeframePeriod,
+    initializerOperator: '=',
   });
 
   const timeframeNamespace2 = createIdentifier('timeframe', 40, 2);
@@ -671,6 +684,7 @@ export function createNamespaceAccessFixture(): ProgramNode {
   const boolVar = createVariableDeclaration(createIdentifier('isDaily', 60, 2), 60, 82, 2, {
     declarationKind: 'var',
     initializer: isDailyMember,
+    initializerOperator: '=',
   });
 
   return {
@@ -704,7 +718,7 @@ export function createControlFlowFixture(): ProgramNode {
   const loopInitializer = createIdentifier('loopGuard', 110, 5);
   const whileBody = createBlock(
     [
-      createVariableDeclaration(loopVar, 100, 112, 5, { declarationKind: 'var', initializer: loopInitializer }),
+      createVariableDeclaration(loopVar, 100, 112, 5, { declarationKind: 'var', initializer: loopInitializer, initializerOperator: '=' }),
     ],
     98,
     120,
@@ -839,6 +853,12 @@ export function createSwitchMatrixFixture(): ProgramNode {
   };
 }
 export function createBuiltinConstantsProgram(): ProgramNode {
+  const versionDirective = createVersionDirective(6, 0, 12, 1);
+
+  const indicatorName = createStringLiteral('Builtin AST', '"Builtin AST"', 10, 2);
+  const indicatorArgument = createArgument(indicatorName, 9, 25, 2);
+  const scriptDeclaration = createScriptDeclaration('indicator', null, [indicatorArgument], 0, 26, 2);
+
   const timeframeDecl = createVariableDeclaration(
     createIdentifier('tfDaily', 4, 3),
     4,
@@ -977,8 +997,9 @@ export function createBuiltinConstantsProgram(): ProgramNode {
 
   return {
     kind: 'Program',
-    directives: [],
+    directives: [versionDirective],
     body: [
+      scriptDeclaration,
       timeframeDecl,
       displayDecl,
       extendDecl,
@@ -1080,6 +1101,7 @@ export function createHistoryReferencingProgram(): ProgramNode {
     typeAnnotation,
     initializer: typedInitializer,
     annotations: [],
+    initializerOperator: '=',
     ...createSpan({ start: 4, end: 28, lineStart: 9 }),
   };
 

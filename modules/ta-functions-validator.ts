@@ -6,7 +6,7 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
-import { IDENT, NS_MEMBERS, BUILTIN_FUNCTIONS_V6_RULES } from '../core/constants';
+import { NS_MEMBERS, BUILTIN_FUNCTIONS_V6_RULES } from '../core/constants';
 import {
   type ArgumentNode,
   type AssignmentStatementNode,
@@ -19,6 +19,7 @@ import {
   type VariableDeclarationNode,
 } from '../core/ast/nodes';
 import { visit, findAncestor, type NodePath } from '../core/ast/traversal';
+import { getNodeSource } from '../core/ast/source-utils';
 
 interface TAFunctionInfo {
   name: string;
@@ -49,6 +50,7 @@ export class TAFunctionsValidator implements ValidationModule {
   private taFunctionCalls: Map<string, TAFunctionInfo> = new Map();
   private taFunctionCount = 0;
   private complexTAExpressions = 0;
+  private taCallSignaturesByLine: Map<number, Map<string, number>> = new Map();
 
   getDependencies(): string[] {
     return ['TypeValidator', 'ScopeValidator'];
@@ -62,23 +64,16 @@ export class TAFunctionsValidator implements ValidationModule {
       return this.buildResult();
     }
 
-    this.markSeriesLikeIdentifiers();
-
     this.astContext = this.getAstContext(config);
-    const program = this.astContext?.ast;
-
+    const program = this.astContext?.ast ?? null;
     if (!program) {
-      this.collectTAFunctionDataText();
       return this.buildResult();
     }
 
     this.collectTAFunctionDataAst(program);
     this.emitAstLineWarnings();
     this.validateBooleanAssignmentsAst(program);
-    for (const line of this.astTaCallLines) {
-      const sourceLine = this.context.cleanLines[line - 1] ?? '';
-      this.validateTAComplexity(sourceLine, line);
-    }
+    this.emitAstCacheSuggestions();
 
     this.validateTAPerformance();
     this.validateTABestPractices();
@@ -108,75 +103,8 @@ export class TAFunctionsValidator implements ValidationModule {
     this.taFunctionCalls.clear();
     this.taFunctionCount = 0;
     this.complexTAExpressions = 0;
+    this.taCallSignaturesByLine.clear();
     this.seriesLikeIdentifiers.clear();
-  }
-
-  private collectTAFunctionDataText(): void {
-    const lines = this.getSourceLines();
-    if (lines.length === 0) {
-      return;
-    }
-
-    for (let index = 0; index < lines.length; index++) {
-      const rawLine = lines[index];
-      const lineWithoutComment = this.stripInlineComment(rawLine);
-      if (!lineWithoutComment.includes('ta.')) {
-        continue;
-      }
-
-      const matches = lineWithoutComment.match(/ta\.[A-Za-z_]+\s*\(/g);
-      if (matches && matches.length > 1) {
-        const column = lineWithoutComment.indexOf('ta.') + 1;
-        this.addWarning(
-          index + 1,
-          column > 0 ? column : 1,
-          'PSV6-TA-PERF-NESTED',
-          'Multiple TA operations on one line',
-        );
-      }
-    }
-  }
-
-  private markSeriesLikeIdentifiers(): void {
-    this.seriesLikeIdentifiers.clear();
-
-    const lines = this.getSourceLines();
-    if (lines.length === 0) {
-      return;
-    }
-
-    const assignmentRegex = /^\s*(?:var|varip|const|let|int|float|bool)?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/;
-
-    for (const rawLine of lines) {
-      const withoutComment = this.stripInlineComment(rawLine).trim();
-      if (!withoutComment) {
-        continue;
-      }
-
-      const match = withoutComment.match(assignmentRegex);
-      if (!match) {
-        continue;
-      }
-
-      const [, identifier, expression] = match;
-      if (!identifier || !expression) {
-        continue;
-      }
-
-      if (/\?.*?:/.test(expression) && /(barstate\.|ta\.|security\.|request\.)/.test(expression)) {
-        this.seriesLikeIdentifiers.add(identifier);
-        continue;
-      }
-
-      if (/(?:ta\.crossover|ta\.crossunder|ta\.valuewhen|request\.)/.test(expression)) {
-        this.seriesLikeIdentifiers.add(identifier);
-        continue;
-      }
-
-      if (/(?:ta\.|security\.|request\.)/.test(expression) && /\b(?:and|or)\b/.test(expression)) {
-        this.seriesLikeIdentifiers.add(identifier);
-      }
-    }
   }
 
   private collectTAFunctionDataAst(program: ProgramNode): void {
@@ -234,10 +162,16 @@ export class TAFunctionsValidator implements ValidationModule {
     this.taFunctionCount++;
     const parameters = node.args.map((argument) => this.argumentToString(argument));
     const returnType = this.getTAReturnType(qualifiedName);
-    const isComplex = this.isComplexTAFunction(qualifiedName, parameters);
+    const hasNestedTaCall = node.args.some((argument) => this.expressionContainsTaCall(argument.value));
+    const isComplex = this.isComplexTAFunction(qualifiedName, parameters) || hasNestedTaCall;
     if (isComplex) {
       this.complexTAExpressions++;
     }
+
+    const signatureKey = `${qualifiedName}(${parameters.join(',')})`;
+    const lineSignatures = this.taCallSignaturesByLine.get(line) ?? new Map<string, number>();
+    lineSignatures.set(signatureKey, (lineSignatures.get(signatureKey) ?? 0) + 1);
+    this.taCallSignaturesByLine.set(line, lineSignatures);
 
     this.recordTAFunctionCall({
       name: qualifiedName,
@@ -251,21 +185,26 @@ export class TAFunctionsValidator implements ValidationModule {
 
     this.validateTAParameterTypes(qualifiedName, parameters, line, column);
     this.validatePivotParameters(qualifiedName, parameters, line, column);
-    this.trackBooleanAssignment(path, returnType, qualifiedName);
+    this.trackAssignmentTargets(path, returnType, qualifiedName);
   }
 
   private recordTAFunctionCall(info: TAFunctionInfo): void {
     this.taFunctionCalls.set(info.name, { ...info });
   }
 
-  private trackBooleanAssignment(
+  private trackAssignmentTargets(
     path: NodePath<CallExpressionNode>,
     returnType: string,
     functionName: string,
   ): void {
-    if (returnType !== 'bool') {
-      return;
-    }
+    const registerIdentifier = (identifier: string): void => {
+      if (returnType === 'bool') {
+        this.boolAssignmentTargets.set(identifier, { callName: functionName });
+      }
+      if (returnType === 'series') {
+        this.seriesLikeIdentifiers.add(identifier);
+      }
+    };
 
     const assignment = findAncestor(path, (ancestor): ancestor is NodePath<AssignmentStatementNode> => {
       return ancestor.node.kind === 'AssignmentStatement';
@@ -273,7 +212,7 @@ export class TAFunctionsValidator implements ValidationModule {
     if (assignment && (assignment.node as AssignmentStatementNode).right === path.node) {
       const left = (assignment.node as AssignmentStatementNode).left;
       if (left.kind === 'Identifier') {
-        this.boolAssignmentTargets.set((left as IdentifierNode).name, { callName: functionName });
+        registerIdentifier((left as IdentifierNode).name);
       }
     }
 
@@ -282,7 +221,7 @@ export class TAFunctionsValidator implements ValidationModule {
     });
     if (declaration && (declaration.node as VariableDeclarationNode).initializer === path.node) {
       const identifier = (declaration.node as VariableDeclarationNode).identifier;
-      this.boolAssignmentTargets.set(identifier.name, { callName: functionName });
+      registerIdentifier(identifier.name);
     }
   }
 
@@ -290,6 +229,22 @@ export class TAFunctionsValidator implements ValidationModule {
     for (const [line, count] of this.astLineCallCounts) {
       if (count > 1) {
         this.addWarning(line, 1, 'PSV6-TA-PERF-NESTED', 'Multiple TA operations on one line');
+      }
+    }
+  }
+
+  private emitAstCacheSuggestions(): void {
+    for (const [line, signatures] of this.taCallSignaturesByLine) {
+      for (const count of signatures.values()) {
+        if (count > 1) {
+          this.addInfo(
+            line,
+            1,
+            'PSV6-TA-CACHE-SUGGESTION',
+            'Consider caching repeated TA calculations to improve performance.',
+          );
+          break;
+        }
       }
     }
   }
@@ -452,40 +407,6 @@ export class TAFunctionsValidator implements ValidationModule {
     });
   }
 
-  private validateTAComplexity(line: string, lineNumber: number): void {
-    // Count nested TA function calls
-    const nestedTARegex = /\bta\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*ta\./g;
-    const nestedMatches = line.match(nestedTARegex);
-    
-    if (nestedMatches && nestedMatches.length > 2) {
-      this.addWarning(
-        lineNumber,
-        1,
-        'PSV6-TA-COMPLEXITY',
-        'Complex nested TA function calls detected. Consider breaking into separate variables for better performance.'
-      );
-    }
-
-    // Check for repeated TA calculations
-    const taFunctionRegex = /\bta\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-    const functionCalls: string[] = [];
-    let match: RegExpExecArray | null;
-    
-    while ((match = taFunctionRegex.exec(line)) !== null) {
-      functionCalls.push(match[0]);
-    }
-    
-    // Check for repeated identical function calls
-    const uniqueCalls = new Set(functionCalls);
-    if (functionCalls.length > uniqueCalls.size) {
-      this.addInfo(
-        lineNumber,
-        1,
-        'PSV6-TA-CACHE-SUGGESTION',
-        'Consider caching repeated TA calculations to improve performance.'
-      );
-    }
-  }
 
   private validateTAPerformance(): void {
     // Check for too many TA function calls (lower threshold for tests)
@@ -672,33 +593,11 @@ export class TAFunctionsValidator implements ValidationModule {
   }
 
   private argumentToString(argument: ArgumentNode): string {
-    const valueText = this.getNodeSource(argument.value).trim();
+    const valueText = getNodeSource(this.context, argument.value).trim();
     if (argument.name) {
       return `${argument.name.name}=${valueText}`;
     }
     return valueText;
-  }
-
-  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
-    const lines = this.context.lines ?? [];
-    if (!node.loc) {
-      return '';
-    }
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
   }
 
   private getExpressionQualifiedName(expression: ExpressionNode): string | null {
@@ -717,6 +616,28 @@ export class TAFunctionsValidator implements ValidationModule {
       return `${objectName}.${member.property.name}`;
     }
     return null;
+  }
+
+  private expressionContainsTaCall(expression: ExpressionNode): boolean {
+    let found = false;
+
+    visit(expression, {
+      CallExpression: {
+        enter: (path) => {
+          if (found) {
+            return false;
+          }
+          const qualified = this.getExpressionQualifiedName(path.node.callee);
+          if (qualified && qualified.startsWith('ta.')) {
+            found = true;
+            return false;
+          }
+          return;
+        },
+      },
+    });
+
+    return found;
   }
 
   private expressionContainsIdentifier(expression: ExpressionNode, identifier: string): boolean {
@@ -757,23 +678,6 @@ export class TAFunctionsValidator implements ValidationModule {
     };
   }
 
-  private getSourceLines(): string[] {
-    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
-      return [...this.context.cleanLines];
-    }
-    if (Array.isArray(this.context.lines) && this.context.lines.length > 0) {
-      return [...this.context.lines];
-    }
-    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length > 0) {
-      return [...this.context.rawLines];
-    }
-    return [];
-  }
-
-  private stripInlineComment(line: string): string {
-    const idx = line.indexOf('//');
-    return idx >= 0 ? line.slice(0, idx) : line;
-  }
 
   private addError(line: number, column: number, code: string, message: string): void {
     // Only generate errors for clearly invalid cases

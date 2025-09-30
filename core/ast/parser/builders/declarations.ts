@@ -63,6 +63,7 @@ export function createFunctionDeclarationNode(
   body: BlockStatementNode,
   isExported: boolean,
   returnType: TypeReferenceNode | null,
+  modifiers: string[],
   startToken: IToken | undefined,
 ): FunctionDeclarationNode {
   const startPosition = startToken ? tokenStart(startToken) : identifier?.loc.start ?? body.loc.start;
@@ -75,6 +76,7 @@ export function createFunctionDeclarationNode(
     export: isExported,
     returnType,
     annotations: [],
+    modifiers,
     loc: createLocation(startPosition, body.loc.end),
     range: createRange(startOffset, body.range[1]),
   };
@@ -102,6 +104,7 @@ export function createVariableDeclarationNode(
   identifierToken: IToken,
   typeAnnotation: TypeReferenceNode | null,
   initializer: ExpressionNode | undefined,
+  initializerOperator: '=' | ':=' | null,
   startToken: IToken | undefined,
 ): VariableDeclarationNode {
   const safeStart = ensureToken(startToken, identifierToken);
@@ -113,6 +116,7 @@ export function createVariableDeclarationNode(
     typeAnnotation,
     initializer: initializer ?? null,
     annotations: [],
+    initializerOperator,
     loc: createLocation(tokenStart(safeStart), endNode.loc.end),
     range: createRange(safeStart.startOffset ?? 0, endNode.range[1]),
   };

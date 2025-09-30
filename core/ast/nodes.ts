@@ -205,6 +205,7 @@ export interface VariableDeclarationNode extends BaseNode {
   typeAnnotation: TypeReferenceNode | null;
   initializer: ExpressionNode | null;
   annotations: CompilerAnnotationNode[];
+  initializerOperator: '=' | ':=' | null;
 }
 
 export interface LoopResultBinding {
@@ -218,6 +219,7 @@ export interface AssignmentStatementNode extends BaseNode {
   kind: 'AssignmentStatement';
   left: ExpressionNode;
   right: ExpressionNode | null;
+  operator: string;
 }
 
 export interface TupleExpressionNode extends BaseNode {
@@ -266,6 +268,7 @@ export interface FunctionDeclarationNode extends BaseNode {
   export: boolean;
   returnType: TypeReferenceNode | null;
   annotations: CompilerAnnotationNode[];
+  modifiers: string[];
 }
 
 export interface ArrowFunctionExpressionNode extends BaseNode {

@@ -29,14 +29,23 @@ function ensureAstService(config: ValidatorConfig): ChevrotainAstService {
 }
 
 function getSourceFromContext(context: ValidationContext): string {
+  if (typeof context.sourceText === 'string' && context.sourceText.length > 0) {
+    return context.sourceText;
+  }
   if (Array.isArray(context.rawLines) && context.rawLines.length > 0) {
-    return context.rawLines.join('\n');
+    const joined = context.rawLines.join('\n');
+    context.sourceText = joined;
+    return joined;
   }
   if (Array.isArray(context.cleanLines) && context.cleanLines.length > 0) {
-    return context.cleanLines.join('\n');
+    const joined = context.cleanLines.join('\n');
+    context.sourceText = joined;
+    return joined;
   }
   if (Array.isArray(context.lines) && context.lines.length > 0) {
-    return context.lines.join('\n');
+    const joined = context.lines.join('\n');
+    context.sourceText = joined;
+    return joined;
   }
   return '';
 }

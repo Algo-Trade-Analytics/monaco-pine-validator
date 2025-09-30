@@ -21,6 +21,7 @@ import {
 import { IDENT } from '../../core/constants';
 import type { FunctionDeclarationNode, ParameterNode, ProgramNode, TypeReferenceNode } from '../../core/ast/nodes';
 import { visit } from '../../core/ast/traversal';
+import { getSourceLines } from '../../core/ast/source-utils';
 
 interface FunctionInfo {
   name: string;
@@ -70,7 +71,7 @@ export class FunctionDeclarationsValidator implements ValidationModule {
     }
 
     this.collectFunctionsFromAst(program);
-    this.collectStaticFunctionDeclarations(context.cleanLines);
+    this.collectStaticFunctionDeclarations(getSourceLines(context));
 
     // Update the shared context with function information
     if (this.context.functionNames) {

@@ -28,6 +28,7 @@ import {
   type VariableDeclarationNode,
 } from '../core/ast/nodes';
 import { visit } from '../core/ast/traversal';
+import { getSourceLine } from '../core/ast/source-utils';
 
 function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
   return 'ast' in context;
@@ -268,16 +269,7 @@ export class EnumValidator implements ValidationModule {
   }
 
   private getLine(lineNumber: number): string {
-    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length >= lineNumber) {
-      return this.context.rawLines[lineNumber - 1] ?? '';
-    }
-    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length >= lineNumber) {
-      return this.context.cleanLines[lineNumber - 1] ?? '';
-    }
-    if (Array.isArray(this.context.lines) && this.context.lines.length >= lineNumber) {
-      return this.context.lines[lineNumber - 1] ?? '';
-    }
-    return '';
+    return getSourceLine(this.context, lineNumber);
   }
 
   private recordFunctionDeclaration(node: FunctionDeclarationNode): void {

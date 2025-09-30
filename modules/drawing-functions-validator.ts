@@ -35,6 +35,7 @@ import {
   type VariableDeclarationNode,
 } from '../core/ast/nodes';
 import { visit, findAncestor, type NodePath } from '../core/ast/traversal';
+import { getNodeSource } from '../core/ast/source-utils';
 
 interface DrawingFunctionCall {
   namespace: string;
@@ -1162,36 +1163,14 @@ export class DrawingFunctionsValidator implements ValidationModule {
       case 'MemberExpression': {
         const member = expression as MemberExpressionNode;
         if (member.computed) {
-          return this.getNodeSource(member).trim();
+          return getNodeSource(this.context, member).trim();
         }
         const objectText = this.getExpressionText(member.object);
         return `${objectText}.${member.property.name}`;
       }
       default:
-        return this.getNodeSource(expression).trim();
+        return getNodeSource(this.context, expression).trim();
     }
-  }
-
-  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode | MemberExpressionNode): string {
-    const lines = this.context.lines ?? [];
-    if (!node.loc) {
-      return '';
-    }
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
   }
 
   private getNamespaceName(expression: ExpressionNode): string | null {

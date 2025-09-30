@@ -56,12 +56,11 @@ export class SwitchValidator implements ValidationModule {
     const ast = this.astContext?.ast;
 
     if (!ast) {
-      this.validateSwitchSyntaxText();
       return {
-        isValid: this.errors.length === 0,
-        errors: this.errors,
-        warnings: this.warnings,
-        info: this.info,
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
         typeMap: new Map(),
         scriptType: context.scriptType,
       };
@@ -531,9 +530,10 @@ export class SwitchValidator implements ValidationModule {
       return;
     }
 
+    const sourceLines = this.context.lines ?? [];
     const indentations = cases.map((caseNode) => {
       const line = caseNode.loc.start.line;
-      const sourceLine = this.context.cleanLines[line - 1] ?? '';
+      const sourceLine = sourceLines[line - 1] ?? '';
       return sourceLine.length - sourceLine.trimStart().length;
     });
 
@@ -564,76 +564,5 @@ export class SwitchValidator implements ValidationModule {
     );
   }
 
-  private validateSwitchSyntaxText(): void {
-    const lines = this.context.cleanLines ?? [];
-    const indentStack: number[] = [];
-    let maxDepth = 0;
-
-    let previousContent = '';
-
-    for (let index = 0; index < lines.length; index++) {
-      const rawLine = lines[index];
-      const withoutComment = rawLine.split('//')[0] ?? '';
-      const switchMatch = /\bswitch\b/.exec(withoutComment);
-      const switchIndex = switchMatch ? switchMatch.index : -1;
-      if (switchIndex === -1) {
-        const trimmedLine = withoutComment.trim();
-        if (trimmedLine.length > 0) {
-          previousContent = trimmedLine;
-        }
-        continue;
-      }
-
-      const indent = switchIndex;
-      const trimmedLine = withoutComment.trim();
-      const isCaseContinuation = previousContent.trim().endsWith('=>') || previousContent.trim().endsWith('=>');
-
-      const afterKeyword = withoutComment[switchIndex + switchMatch![0].length];
-      if (afterKeyword && /[A-Za-z0-9_]/.test(afterKeyword)) {
-        previousContent = trimmedLine;
-        continue;
-      }
-
-      if (!isCaseContinuation) {
-        while (indentStack.length > 0 && indent <= indentStack[indentStack.length - 1]) {
-          indentStack.pop();
-        }
-      }
-
-      const remaining = withoutComment
-        .slice(switchIndex + switchMatch![0].length)
-        .trimStart();
-      const hasExpression = remaining.length > 0 && !remaining.startsWith('=>');
-      if (!hasExpression) {
-        const column = switchIndex + 1;
-        this.addError(
-          index + 1,
-          column,
-          'Switch statement requires an expression.',
-          'PSV6-SWITCH-SYNTAX',
-        );
-      }
-
-      const depth = indentStack.length + 1;
-      if (depth > maxDepth) {
-        maxDepth = depth;
-      }
-
-      indentStack.push(indent);
-
-      if (trimmedLine.length > 0) {
-        previousContent = trimmedLine;
-      }
-    }
-
-    if (maxDepth > 2) {
-      this.addWarning(
-        1,
-        1,
-        `Switch statement has deep nesting (${maxDepth} levels), consider refactoring.`,
-        'PSV6-SWITCH-DEEP-NESTING',
-      );
-    }
-  }
 
 }

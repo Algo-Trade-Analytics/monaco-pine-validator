@@ -11,7 +11,7 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
-import { VERSION_RE, SCRIPT_START_RE, KEYWORDS, NAMESPACES, PSEUDO_VARS } from '../core/constants';
+import { VERSION_RE, KEYWORDS, NAMESPACES, PSEUDO_VARS } from '../core/constants';
 import { ensureAstContext } from '../core/ast/context-utils';
 import type { AstDiagnostics } from '../core/ast/types';
 import {
@@ -30,6 +30,8 @@ import {
   type VersionDirectiveNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
+import { PineLexer, LParen, RParen, LBracket, RBracket } from '../core/ast/parser/tokens';
+import type { ILexingError, IToken } from 'chevrotain';
 
 export class SyntaxValidator implements ValidationModule {
   name = 'SyntaxValidator';
@@ -78,7 +80,7 @@ export class SyntaxValidator implements ValidationModule {
 
   private validateWithAst(program: ProgramNode): void {
     this.validateVersionDirectivesAst(program.directives);
-    this.validateScriptDeclarationsAst(program.body);
+    this.validateScriptDeclarationsAst(program);
 
     visit(program, {
       FunctionDeclaration: {
@@ -141,8 +143,8 @@ export class SyntaxValidator implements ValidationModule {
     }
   }
 
-  private validateScriptDeclarationsAst(body: ProgramNode['body']): void {
-    const scriptDeclarations = body.filter(
+  private validateScriptDeclarationsAst(program: ProgramNode): void {
+    const scriptDeclarations = program.body.filter(
       (statement): statement is ScriptDeclarationNode => statement.kind === 'ScriptDeclaration',
     );
 
@@ -153,10 +155,10 @@ export class SyntaxValidator implements ValidationModule {
     const [primary, ...duplicates] = scriptDeclarations;
     this.context.scriptType = primary.scriptType;
 
-    const firstReal = this.context.cleanLines.findIndex((line) => line.trim() && !VERSION_RE.test(line));
-    if (firstReal > -1 && !this.hasScriptDeclStartingAtOrSoon(this.context, firstReal)) {
+    const firstStatement = this.getFirstStatementLine(program.body);
+    if (firstStatement !== null && primary.loc.start.line !== firstStatement) {
       this.addInfo(
-        firstReal + 1,
+        firstStatement,
         1,
         'Consider placing the script declaration at the top for clarity.',
         'PSI01',
@@ -216,11 +218,11 @@ export class SyntaxValidator implements ValidationModule {
       return;
     }
 
-    const operator = this.getAssignmentOperator(assignment);
+    const operator = assignment.operator ?? '=';
     const left = assignment.left;
 
     if (left.kind === 'TupleExpression') {
-      this.validateTupleAssignmentAst(assignment, operator ?? '');
+      this.validateTupleAssignmentAst(assignment, operator);
       return;
     }
 
@@ -266,7 +268,7 @@ export class SyntaxValidator implements ValidationModule {
           `Variable '${baseName}' not declared before ':=' on element.`,
           'PS016A',
         );
-      } else if (operator && operator.length === 2 && operator.endsWith('=')) {
+      } else if (operator.length === 2 && operator.endsWith('=')) {
         const op = operator[0];
         this.addError(
           assignment.loc.start.line,
@@ -276,6 +278,20 @@ export class SyntaxValidator implements ValidationModule {
         );
       }
     }
+  }
+
+  private getFirstStatementLine(body: ProgramNode['body']): number | null {
+    let firstLine: number | null = null;
+    for (const statement of body) {
+      const line = statement.loc?.start.line ?? null;
+      if (line === null) {
+        continue;
+      }
+      if (firstLine === null || line < firstLine) {
+        firstLine = line;
+      }
+    }
+    return firstLine;
   }
 
   private validateTupleAssignmentAst(assignment: AssignmentStatementNode, operator: string): void {
@@ -338,22 +354,15 @@ export class SyntaxValidator implements ValidationModule {
   }
 
   private validateOverallStructure(): void {
-    const hasContent = this.context.cleanLines.some((line) => line.trim() !== '');
+    const source = this.getSourceLines();
+    const hasContent = source.some((line) => line.trim() !== '');
     if (!hasContent) {
       this.addError(1, 1, 'Script is empty.', 'PS-EMPTY');
     }
   }
 
-  private hasScriptDeclStartingAtOrSoon(context: ValidationContext, idx: number, lookahead = 6): boolean {
-    for (let i = idx; i < Math.min(idx + lookahead, context.cleanLines.length); i++) {
-      if (SCRIPT_START_RE.test(context.cleanLines[i])) return true;
-      if (context.cleanLines[i].trim() && !/^[('"\s,)]/.test(context.cleanLines[i])) break;
-    }
-    return false;
-  }
-
   private onlyCommentsAbove(line: number): boolean {
-    const sourceLines = this.context.rawLines?.length ? this.context.rawLines : this.context.cleanLines;
+    const sourceLines = this.getSourceLines();
     return sourceLines.slice(0, Math.max(0, line - 1)).every((raw) => {
       const trimmed = (raw || '').trim();
       if (trimmed === '') return true;
@@ -364,8 +373,7 @@ export class SyntaxValidator implements ValidationModule {
   }
 
   private isMethodDeclaration(node: FunctionDeclarationNode): boolean {
-    const line = this.getLine(node.loc.start.line);
-    return line.trimStart().startsWith('method ');
+    return Array.isArray(node.modifiers) && node.modifiers.includes('method');
   }
 
   private getMemberRoot(member: MemberExpressionNode): string | null {
@@ -401,29 +409,6 @@ export class SyntaxValidator implements ValidationModule {
       }
     }
     return false;
-  }
-
-  private getAssignmentOperator(node: AssignmentStatementNode): string | null {
-    const startLine = node.loc.start.line;
-    const endLine = node.loc.end.line;
-    if (startLine !== endLine) {
-      return null;
-    }
-
-    const line = this.getLine(startLine);
-    if (!line) {
-      return null;
-    }
-
-    const leftEnd = node.left.loc?.end?.column ?? node.loc.start.column;
-    const rightStart = node.right?.loc?.start?.column ?? node.loc.end.column;
-    const slice = line.slice(Math.max(0, leftEnd - 1), Math.max(0, rightStart - 1));
-    return slice.replace(/\s+/g, '');
-  }
-
-  private getLine(lineNumber: number): string {
-    const lines = this.context.rawLines?.length ? this.context.rawLines : this.context.lines ?? [];
-    return lines[lineNumber - 1] ?? '';
   }
 
   private addError(line: number, column: number, message: string, code: string, suggestion?: string): void {
@@ -486,41 +471,92 @@ export class SyntaxValidator implements ValidationModule {
   }
 
   private validateTextFallback(): void {
-    const lines =
-      (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0
-        ? this.context.cleanLines
-        : Array.isArray(this.context.lines)
-          ? this.context.lines
-          : []) ?? [];
+    const source = this.getSourceText();
+    if (!source.trim()) {
+      return;
+    }
 
-    const stack: Array<{ line: number; column: number; char: '(' | '[' | '{' }> = [];
-    const matching: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
+    const lexResult = PineLexer.tokenize(source);
 
-    lines.forEach((line, index) => {
-      for (let columnIndex = 0; columnIndex < line.length; columnIndex++) {
-        const char = line[columnIndex];
-        if (char === '(' || char === '[' || char === '{') {
-          stack.push({ line: index + 1, column: columnIndex + 1, char });
-        } else if (char === ')' || char === ']' || char === '}') {
-          const expected = matching[char];
-          const last = stack.pop();
-          if (!last || last.char !== expected) {
-            this.addError(index + 1, columnIndex + 1, `Unexpected '${char}'.`, 'PSV6-SYNTAX-ERROR');
-          }
+    this.reportLexErrors(lexResult.errors as ILexingError[]);
+
+    type StackEntry = { token: IToken; char: '(' | '[' };
+    const stack: StackEntry[] = [];
+
+    for (const token of lexResult.tokens) {
+      const tokenType = token.tokenType;
+      if (tokenType === LParen) {
+        stack.push({ token, char: '(' });
+        continue;
+      }
+      if (tokenType === LBracket) {
+        stack.push({ token, char: '[' });
+        continue;
+      }
+      if (tokenType === RParen) {
+        const last = stack.pop();
+        if (!last || last.char !== '(') {
+          this.addError(
+            token.startLine ?? 1,
+            token.startColumn ?? 1,
+            "Unexpected ')'.",
+            'PSV6-SYNTAX-ERROR',
+          );
+        }
+        continue;
+      }
+      if (tokenType === RBracket) {
+        const last = stack.pop();
+        if (!last || last.char !== '[') {
+          this.addError(
+            token.startLine ?? 1,
+            token.startColumn ?? 1,
+            "Unexpected ']'.",
+            'PSV6-SYNTAX-ERROR',
+          );
         }
       }
-    });
+    }
 
     while (stack.length > 0) {
       const unmatched = stack.pop()!;
-      const closing = unmatched.char === '(' ? ')' : unmatched.char === '[' ? ']' : '}';
+      const closing = unmatched.char === '(' ? ')' : ']';
       this.addError(
-        unmatched.line,
-        unmatched.column,
+        unmatched.token.startLine ?? 1,
+        unmatched.token.startColumn ?? 1,
         `Missing closing '${closing}' for opening '${unmatched.char}'.`,
         'PSV6-SYNTAX-ERROR',
       );
     }
+  }
+
+  private reportLexErrors(errors: ILexingError[]): void {
+    if (!Array.isArray(errors) || errors.length === 0) {
+      return;
+    }
+    for (const error of errors) {
+      const line = error.line ?? 1;
+      const column = error.column ?? 1;
+      const message = error.message || 'Lexing error detected.';
+      this.addError(line, column, message, 'PSV6-LEXER-ERROR');
+    }
+  }
+
+  private getSourceLines(): string[] {
+    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length > 0) {
+      return this.context.rawLines;
+    }
+    if (Array.isArray(this.context.lines) && this.context.lines.length > 0) {
+      return this.context.lines;
+    }
+    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
+      return this.context.cleanLines;
+    }
+    return [];
+  }
+
+  private getSourceText(): string {
+    return this.getSourceLines().join('\n');
   }
 
   private buildResult(): ValidationResult {

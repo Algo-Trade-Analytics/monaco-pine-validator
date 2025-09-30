@@ -22,6 +22,7 @@ import {
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 import { BUILTIN_FUNCTIONS_V6_RULES, KEYWORDS, NAMESPACES, NS_MEMBERS } from '../core/constants';
+import { getNodeSource, getSourceLine, getSourceLines } from '../core/ast/source-utils';
 
 interface FunctionInfo {
   name: string;
@@ -53,6 +54,7 @@ interface FunctionCall {
   line: number;
   column: number;
   startIndex: number;
+  inLoop: boolean;
   astNode?: CallExpressionNode;
   astPath?: NodePath<CallExpressionNode>;
 }
@@ -486,7 +488,33 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private collectFunctionCallsFromAst(program: ProgramNode): void {
+    const loopStack: Array<'for' | 'while' | 'repeat'> = [];
+
     visit(program, {
+      ForStatement: {
+        enter: () => {
+          loopStack.push('for');
+        },
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      WhileStatement: {
+        enter: () => {
+          loopStack.push('while');
+        },
+        exit: () => {
+          loopStack.pop();
+        },
+      },
+      RepeatStatement: {
+        enter: () => {
+          loopStack.push('repeat');
+        },
+        exit: () => {
+          loopStack.pop();
+        },
+      },
       CallExpression: {
         enter: (path) => {
           const node = path.node as CallExpressionNode;
@@ -506,6 +534,7 @@ export class FunctionValidator implements ValidationModule {
             line,
             column,
             startIndex,
+            inLoop: loopStack.length > 0,
             astNode: node,
             astPath: path as NodePath<CallExpressionNode>,
           });
@@ -533,33 +562,11 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private argumentToString(argument: ArgumentNode): string {
-    const valueText = this.getNodeSource(argument.value).trim();
+    const valueText = getNodeSource(this.context, argument.value).trim();
     if (argument.name) {
       return `${argument.name.name}=${valueText}`;
     }
     return valueText;
-  }
-
-  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
-    const lines = this.context.lines ?? this.context.cleanLines ?? [];
-    if (!node.loc) {
-      return '';
-    }
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
   }
 
   private isArgumentCountCompatible(requiredParams: number, totalParams: number, implicitOffset: number, provided: number): boolean {
@@ -1245,13 +1252,14 @@ export class FunctionValidator implements ValidationModule {
   private isInlineFunctionDeclaration(name: string): boolean {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pattern = new RegExp(`^\\s*(?:export\\s+)?${escaped}\\s*\\([^)]*\\)\\s*=>`);
-    return this.context.cleanLines.some(line => pattern.test(line));
+    const lines = getSourceLines(this.context);
+    return lines.some(line => pattern.test(line));
   }
 
   private hasFunctionDocumentation(lineNum: number): boolean {
     // Check if there's a comment above the function
     if (lineNum > 1) {
-      const prevLine = this.context.cleanLines[lineNum - 2];
+      const prevLine = getSourceLine(this.context, lineNum - 1);
       return prevLine.trim().startsWith('//');
     }
     return false;
@@ -1582,7 +1590,7 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private validateReturnTypeUsageLegacy(funcName: string, call: FunctionCall, returnType: string): void {
-    const line = this.context.lines[call.line - 1];
+    const line = getSourceLine(this.context, call.line);
     if (!line) return;
 
     const funcCallStart = line.indexOf(funcName, call.startIndex);
@@ -1635,26 +1643,27 @@ export class FunctionValidator implements ValidationModule {
     // Check if this is a variable assignment
     const assignmentMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
     if (!assignmentMatch) return;
-    
+
     const varName = assignmentMatch[1];
     const expression = assignmentMatch[2];
-    
+
     // Check if the function call is the ONLY thing in the expression (direct assignment)
     const trimmedExpression = expression.trim();
     if (!trimmedExpression.includes(funcName)) return;
-    
+
     // Only check for boolean functions being used incorrectly
     if (!(returnType === 'bool' || this.isBooleanFunction(funcName))) return;
-    
+
     // Check if this variable is used incorrectly in subsequent lines
-    for (let i = call.line; i < this.context.lines.length; i++) {
-      const currentLine = this.context.lines[i];
+    const lines = getSourceLines(this.context);
+    for (let index = call.line; index < lines.length; index++) {
+      const currentLine = lines[index] ?? '';
       if (!currentLine.includes(varName)) continue;
-      
+
       // Check if the variable is used in arithmetic operations
       if (this.isVariableUsedInArithmetic(currentLine, varName)) {
-        this.addError(i + 1, 1, 
-          `Variable '${varName}' contains boolean result from '${funcName}' and cannot be used in arithmetic operations`, 
+        this.addError(index + 1, 1,
+          `Variable '${varName}' contains boolean result from '${funcName}' and cannot be used in arithmetic operations`,
           'PSV6-FUNCTION-RETURN-TYPE');
       }
     }
@@ -1820,102 +1829,67 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private validateInconsistentReturnTypes(): void {
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const funcMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*=>/);
-      if (funcMatch) {
-        const funcName = funcMatch[1];
-        const lineNum = i + 1;
-        
-        // Find the function body and analyze return types
-        const returnTypes = this.analyzeFunctionReturnTypes(funcName, i);
-        if (returnTypes.length > 1) {
-          this.addError(lineNum, 1, 
-            `Function '${funcName}' has inconsistent return types: ${returnTypes.join(', ')}`, 
-            'PSV6-FUNCTION-RETURN-TYPE');
-        }
-      }
+    if (!this.astContext?.ast) {
+      return;
     }
-  }
 
-  private analyzeFunctionReturnTypes(funcName: string, startLine: number): string[] {
-    const returnTypes = new Set<string>();
-    const baseIndent = this.getLineIndentation(this.context.cleanLines[startLine]);
-    
-    // Look for return statements in the function body
-    for (let i = startLine + 1; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineIndent = this.getLineIndentation(line);
-      
-      // Stop if we've unindented back to the function level or beyond
-      if (lineIndent <= baseIndent && line.trim() !== '') {
-        break;
-      }
-      
-      // Look for return values (expressions that are not assignments or control structures)
-      if (lineIndent > baseIndent) {
-        const trimmed = line.trim();
-        
-        // Skip control structures
-        if (/^(if|for|while|switch)\b/.test(trimmed)) {
+    const visited = new Set<FunctionDeclarationNode>();
+
+    for (const overloads of this.userFunctions.values()) {
+      for (const func of overloads) {
+        if (!func.node || visited.has(func.node)) {
           continue;
         }
-        
-        // Skip assignments
-        if (/^\s*[A-Za-z_][A-Za-z0-9_]*\s*=/.test(trimmed)) {
-          continue;
-        }
-        
-        // This looks like a return value - analyze its type
-        const returnType = this.inferReturnValueType(trimmed);
-        if (returnType !== 'unknown' && returnType !== 'void') {
-          returnTypes.add(returnType);
+
+        visited.add(func.node);
+        const returnTypes = this.collectFunctionReturnTypes(func.node);
+        const meaningful = Array.from(returnTypes).filter((kind) => kind !== 'unknown');
+        if (meaningful.length > 1) {
+          const location = func.identifier ?? func.node.identifier ?? func.node;
+          this.addError(
+            location.loc.start.line,
+            location.loc.start.column,
+            `Function '${func.name}' has inconsistent return types: ${meaningful.join(', ')}`,
+            'PSV6-FUNCTION-RETURN-TYPE',
+          );
         }
       }
     }
-    
-    return Array.from(returnTypes);
   }
 
-  private getLineIndentation(line: string): number {
-    return line.length - line.trimStart().length;
+  private collectFunctionReturnTypes(fn: FunctionDeclarationNode): Set<string> {
+    const types = new Set<string>();
+    let sawReturn = false;
+
+    visit(fn.body, {
+      FunctionDeclaration: {
+        enter: () => 'skip',
+      },
+      ReturnStatement: {
+        enter: (path) => {
+          sawReturn = true;
+          const kind = this.getNodeTypeKind(path.node.argument);
+          types.add(kind ?? 'unknown');
+        },
+      },
+    });
+
+    if (!sawReturn) {
+      types.add('void');
+    }
+
+    return types;
   }
 
-  private inferReturnValueType(expression: string): string {
-    const trimmed = expression.trim();
-    
-    // String literals
-    if (/^"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'$/.test(trimmed)) {
-      return 'string';
+  private getNodeTypeKind(node: ExpressionNode | null | undefined): string | null {
+    if (!node) {
+      return 'void';
     }
-    
-    // Numeric literals
-    if (/^[+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?$/.test(trimmed)) {
-      return trimmed.includes('.') || /[eE]/.test(trimmed) ? 'float' : 'int';
+    const metadata = this.astContext?.typeEnvironment.nodeTypes.get(node) ?? null;
+    if (!metadata) {
+      return 'unknown';
     }
-    
-    // Boolean literals
-    if (trimmed === 'true' || trimmed === 'false') {
-      return 'bool';
-    }
-    
-    // Function calls
-    if (trimmed.includes('(') && trimmed.includes(')')) {
-      const funcMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*\.?[A-Za-z_][A-Za-z0-9_]*)\s*\(/);
-      if (funcMatch) {
-        return this.getFunctionReturnType(funcMatch[1]);
-      }
-    }
-    
-    // Variable references
-    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
-      const typeInfo = this.context.typeMap.get(trimmed);
-      if (typeInfo) {
-        return typeInfo.type;
-      }
-    }
-    
-    return 'unknown';
+    return metadata.kind;
   }
 
   private findCorrectNamespace(funcName: string): string | null {
@@ -1942,7 +1916,8 @@ export class FunctionValidator implements ValidationModule {
 
   private isVariableAssignedUDTConstructor(varName: string): boolean {
     // Look through the code to see if this variable is assigned a UDT constructor
-    for (const line of this.context.cleanLines) {
+    const lines = getSourceLines(this.context);
+    for (const line of lines) {
       // Check for assignment pattern: varName = UDTType.new(...)
       const assignmentMatch = line.match(new RegExp(`^\\s*${varName}\\s*=\\s*([A-Z][A-Za-z0-9_]*)\.new\\s*\\(`));
       if (assignmentMatch) {
@@ -1959,7 +1934,8 @@ export class FunctionValidator implements ValidationModule {
 
   private isVariableAssignedFunction(varName: string): string | null {
     // Look through the code to see if this variable is assigned a function call
-    for (const line of this.context.cleanLines) {
+    const lines = getSourceLines(this.context);
+    for (const line of lines) {
       // Check for assignment pattern: varName = functionCall(...)
       const assignmentMatch = line.match(new RegExp(`^\\s*${varName}\\s*=\\s*([A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*)\\s*\\(`));
       if (assignmentMatch) {
@@ -2014,120 +1990,83 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private validateExpensiveFunctionsInLoops(): void {
-    const expensiveFunctions = new Set([
-      'ta.sma', 'ta.ema', 'ta.rsi', 'ta.macd', 'ta.stoch', 'ta.atr', 'ta.bb',
-      'ta.highest', 'ta.lowest', 'ta.sar', 'ta.roc', 'ta.mom', 'ta.change',
-      'ta.correlation', 'ta.dev', 'ta.linreg', 'ta.percentile_linear_interpolation',
-      'ta.percentile_nearest_rank', 'ta.percentrank', 'ta.pivothigh', 'ta.pivotlow',
-      'ta.range', 'ta.stdev', 'ta.variance', 'ta.wma', 'ta.alma', 'ta.vwma', 'ta.swma',
-      'ta.rma', 'ta.hma', 'ta.tsi', 'ta.cci', 'ta.cmo', 'ta.mfi', 'ta.obv', 'ta.pvt',
-      'ta.nvi', 'ta.pvi', 'ta.wad', 'request.security', 'request.security_lower_tf'
-    ]);
+    const expensiveFunctions = this.getExpensiveFunctionSet();
 
-    let inLoop = false;
-    let loopIndent = 0;
-
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-      const indent = this.getLineIndentation(line);
-      const trimmed = line.trim();
-
-      // Check for loop start
-      if (/^\s*for\s+\w+\s*=\s*\d+\s+to\s+\d+/.test(line) || /^\s*while\s+/.test(line)) {
-        inLoop = true;
-        loopIndent = indent;
+    for (const call of this.functionCalls) {
+      if (!expensiveFunctions.has(call.name) || !call.inLoop) {
         continue;
       }
-
-      // Check for loop end (unindent)
-      if (inLoop && indent <= loopIndent && trimmed !== '') {
-        inLoop = false;
-        loopIndent = 0;
-      }
-
-      // Check for expensive functions in loops
-      if (inLoop) {
-        for (const funcName of expensiveFunctions) {
-          if (line.includes(funcName)) {
-            this.addWarning(lineNum, 1, 
-              `Expensive function '${funcName}' called inside loop may impact performance`, 
-              'PSV6-FUNCTION-PERF-LOOP');
-          }
-        }
-      }
+      this.addWarning(
+        call.line,
+        call.column,
+        `Expensive function '${call.name}' called inside loop may impact performance`,
+        'PSV6-FUNCTION-PERF-LOOP',
+      );
     }
   }
 
   private validateNestedExpensiveFunctionCalls(): void {
-    const expensiveFunctions = new Set([
-      'ta.sma', 'ta.ema', 'ta.rsi', 'ta.macd', 'ta.stoch', 'ta.atr', 'ta.bb',
-      'ta.highest', 'ta.lowest', 'ta.sar', 'ta.roc', 'ta.mom', 'ta.change',
-      'ta.correlation', 'ta.dev', 'ta.linreg', 'ta.percentile_linear_interpolation',
-      'ta.percentile_nearest_rank', 'ta.percentrank', 'ta.pivothigh', 'ta.pivotlow',
-      'ta.range', 'ta.stdev', 'ta.variance', 'ta.wma', 'ta.alma', 'ta.vwma', 'ta.swma',
-      'ta.rma', 'ta.hma', 'ta.tsi', 'ta.cci', 'ta.cmo', 'ta.mfi', 'ta.obv', 'ta.pvt',
-      'ta.nvi', 'ta.pvi', 'ta.wad', 'request.security', 'request.security_lower_tf'
-    ]);
+    const expensiveFunctions = this.getExpensiveFunctionSet();
+    const countByLine = new Map<number, { count: number; column: number }>();
 
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-
-      // Count expensive function calls in this line
-      let expensiveCallCount = 0;
-      for (const funcName of expensiveFunctions) {
-        const regex = new RegExp(`\\b${funcName.replace('.', '\\.')}\\s*\\(`, 'g');
-        const matches = line.match(regex);
-        if (matches) {
-          expensiveCallCount += matches.length;
-        }
+    for (const call of this.functionCalls) {
+      if (!expensiveFunctions.has(call.name)) {
+        continue;
       }
+      const entry = countByLine.get(call.line) ?? { count: 0, column: call.column };
+      entry.count += 1;
+      entry.column = Math.min(entry.column, call.column);
+      countByLine.set(call.line, entry);
+    }
 
-      // Warn if more than 2 expensive function calls in one line
-      if (expensiveCallCount > 2) {
-        this.addWarning(lineNum, 1, 
-          `Multiple expensive function calls (${expensiveCallCount}) on one line may impact performance`, 
-          'PSV6-FUNCTION-PERF-NESTED');
+    for (const [line, info] of countByLine.entries()) {
+      if (info.count > 2) {
+        this.addWarning(
+          line,
+          info.column,
+          `Multiple expensive function calls (${info.count}) on one line may impact performance`,
+          'PSV6-FUNCTION-PERF-NESTED',
+        );
       }
     }
   }
 
   private validateDuplicateFunctionCalls(): void {
-    const functionCallSignatures = new Map<string, number>();
-    const functionCallLines = new Map<string, number[]>();
+    const signatureCounts = new Map<string, { count: number; line: number; column: number }>();
 
-    for (let i = 0; i < this.context.cleanLines.length; i++) {
-      const line = this.context.cleanLines[i];
-      const lineNum = i + 1;
-
-      // Find function calls with their full signatures (including parameters)
-      const functionCallRegex = /\b([A-Za-z_][A-Za-z0-9_]*\.?[A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/g;
-      let match;
-      while ((match = functionCallRegex.exec(line)) !== null) {
-        const funcName = match[1];
-        const params = match[2].trim();
-        const signature = `${funcName}(${params})`;
-        
-        if (!functionCallSignatures.has(signature)) {
-          functionCallSignatures.set(signature, 0);
-          functionCallLines.set(signature, []);
-        }
-        
-        functionCallSignatures.set(signature, functionCallSignatures.get(signature)! + 1);
-        functionCallLines.get(signature)!.push(lineNum);
+    for (const call of this.functionCalls) {
+      const signature = `${call.name}(${call.arguments.join(',')})`;
+      const entry = signatureCounts.get(signature);
+      if (entry) {
+        entry.count += 1;
+        entry.column = Math.min(entry.column, call.column);
+      } else {
+        signatureCounts.set(signature, { count: 1, line: call.line, column: call.column });
       }
     }
 
-    // Check for function calls with identical signatures called more than 2 times
-    for (const [signature, count] of functionCallSignatures.entries()) {
-      if (count > 2) {
-        const lines = functionCallLines.get(signature)!;
-        this.addWarning(lines[0], 1, 
-          `Function call '${signature}' is repeated ${count} times. Consider caching the result to improve performance`, 
-          'PSV6-FUNCTION-PERF-DUPLICATE');
+    for (const [signature, info] of signatureCounts.entries()) {
+      if (info.count > 2) {
+        this.addWarning(
+          info.line,
+          info.column,
+          `Function call '${signature}' is repeated ${info.count} times. Consider caching the result to improve performance`,
+          'PSV6-FUNCTION-PERF-DUPLICATE',
+        );
       }
     }
+  }
+
+  private getExpensiveFunctionSet(): Set<string> {
+    return new Set([
+      'ta.sma', 'ta.ema', 'ta.rsi', 'ta.macd', 'ta.stoch', 'ta.atr', 'ta.bb',
+      'ta.highest', 'ta.lowest', 'ta.sar', 'ta.roc', 'ta.mom', 'ta.change',
+      'ta.correlation', 'ta.dev', 'ta.linreg', 'ta.percentile_linear_interpolation',
+      'ta.percentile_nearest_rank', 'ta.percentrank', 'ta.pivothigh', 'ta.pivotlow',
+      'ta.range', 'ta.stdev', 'ta.variance', 'ta.wma', 'ta.alma', 'ta.vwma', 'ta.swma',
+      'ta.rma', 'ta.hma', 'ta.tsi', 'ta.cci', 'ta.cmo', 'ta.mfi', 'ta.obv', 'ta.pvt',
+      'ta.nvi', 'ta.pvi', 'ta.wad', 'request.security', 'request.security_lower_tf'
+    ]);
   }
 
 

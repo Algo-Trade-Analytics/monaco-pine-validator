@@ -38,6 +38,7 @@ import {
 } from '../core/ast/nodes';
 import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
 import { ensureAstContext } from '../core/ast/context-utils';
+import { getSourceLines } from '../core/ast/source-utils';
 
 interface ConditionalHistoricalCall {
   functionName: string;
@@ -719,13 +720,14 @@ export class LazyEvaluationValidator implements ValidationModule {
   }
 
   private getTextLines(context: ValidationContext): string[] {
-    if (context.cleanLines && context.cleanLines.length > 0) {
-      return [...context.cleanLines];
+    const lines = getSourceLines(context);
+    if (lines.length > 0) {
+      return [...lines];
     }
-    if (context.lines && context.lines.length > 0) {
-      return [...context.lines];
+    if (context.rawLines && context.rawLines.length > 0) {
+      return [...context.rawLines];
     }
-    return context.rawLines ? [...context.rawLines] : [];
+    return [];
   }
 
   private getHistoricalFunctionPattern(): RegExp {

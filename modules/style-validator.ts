@@ -51,14 +51,19 @@ export class StyleValidator implements ValidationModule {
     this.context = context;
     const astContext = this.getAstContext(config);
 
-    if (astContext?.ast) {
-      this.runAstAnalysis(astContext.ast);
-    } else {
-      this.analyzeFunctionComplexityTextual(this.context);
+    const program = astContext?.ast ?? null;
+    if (!program) {
+      return {
+        isValid: true,
+        errors: this.errors,
+        warnings: this.warnings,
+        info: this.info,
+        typeMap: context.typeMap,
+        scriptType: context.scriptType,
+      };
     }
 
-    // Textual style checks operate regardless of AST availability
-    this.analyzeCodeQualityTextual(this.context);
+    this.runAstAnalysis(program);
 
     return {
       isValid: this.errors.length === 0,
@@ -523,66 +528,6 @@ export class StyleValidator implements ValidationModule {
     return expression.kind === 'Identifier' && (expression as IdentifierNode).name === name;
   }
 
-  private analyzeCodeQualityTextual(context: ValidationContext): void {
-    this.checkCommentedCode(context);
-    this.checkLongLines(context);
-    this.checkIndentationConsistency(context);
-    this.checkDeadCode(context);
-  }
-
-  private analyzeFunctionComplexityTextual(context: ValidationContext): void {
-    const lines = context.cleanLines ?? [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*=>/);
-      if (!match) {
-        continue;
-      }
-
-      const name = match[1];
-      const baseIndent = line.match(/^\s*/)?.[0].length ?? 0;
-      let complexity = 0;
-
-      for (let j = i + 1; j < lines.length; j++) {
-        const bodyLine = lines[j];
-        if (bodyLine.trim() === '') {
-          continue;
-        }
-
-        const indent = bodyLine.match(/^\s*/)?.[0].length ?? 0;
-        if (indent <= baseIndent) {
-          break;
-        }
-
-        const trimmed = bodyLine.trim();
-        if (/^(if|for|while|switch)\b/i.test(trimmed)) {
-          complexity += 1;
-          if (/\belse\b/i.test(trimmed)) {
-            complexity += 1;
-          }
-        }
-        const logicalMatches = trimmed.match(/\b(and|or)\b/gi);
-        if (logicalMatches) {
-          complexity += logicalMatches.length;
-        }
-        if (trimmed.includes('?') && trimmed.includes(':')) {
-          complexity += 1;
-        }
-      }
-
-      if (complexity > 5) {
-        this.addWarning(
-          i + 1,
-          baseIndent + 1,
-          `Function '${name}' has high complexity (${complexity} conditions).`,
-          'PSV6-STYLE-COMPLEXITY',
-          'Consider breaking down complex functions into smaller, more focused functions.',
-        );
-      }
-    }
-  }
-
   private isPoorVariableName(name: string): boolean {
     if (name.length === 1 && !['i', 'j', 'k', 'x', 'y', 'z'].includes(name)) {
       return true;
@@ -603,103 +548,6 @@ export class StyleValidator implements ValidationModule {
       return false;
     }
     return magnitude >= 20;
-  }
-
-  private checkCommentedCode(context: ValidationContext): void {
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-      const lineNum = i + 1;
-
-      if (!line.trim().startsWith('//')) {
-        continue;
-      }
-
-      const uncommented = line.replace(/^\/\/\s*/, '').trim();
-      if (this.looksLikeCode(uncommented)) {
-        this.addInfo(
-          lineNum,
-          1,
-          'Commented code detected. Consider removing or documenting why it\'s commented.',
-          'PSV6-STYLE-COMMENTED-CODE',
-          'Remove commented code or add a comment explaining why it\'s kept.',
-        );
-      }
-    }
-  }
-
-  private checkLongLines(context: ValidationContext): void {
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-      const lineNum = i + 1;
-
-      if (line.length > 120) {
-        this.addInfo(
-          lineNum,
-          1,
-          `Line is quite long (${line.length} characters).`,
-          'PSV6-STYLE-LONG-LINE',
-          'Consider breaking long lines for better readability.',
-        );
-      }
-    }
-  }
-
-  private checkIndentationConsistency(context: ValidationContext): void {
-    let hasTabs = false;
-    let hasSpaces = false;
-
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-
-      if (line.startsWith('\t')) hasTabs = true;
-      if (line.startsWith(' ')) hasSpaces = true;
-    }
-
-    if (hasTabs && hasSpaces) {
-      this.addWarning(
-        1,
-        1,
-        'Mixed tabs and spaces for indentation detected.',
-        'PSV6-STYLE-MIXED-INDENTATION',
-        'Use consistent indentation (either tabs or spaces, but not both).',
-      );
-    }
-  }
-
-  private checkDeadCode(context: ValidationContext): void {
-    for (let i = 0; i < context.cleanLines.length; i++) {
-      const line = context.cleanLines[i];
-      const lineNum = i + 1;
-
-      if (!line.includes('return') || i >= context.cleanLines.length - 1) {
-        continue;
-      }
-
-      const nextLine = context.cleanLines[i + 1];
-      if (nextLine.trim() !== '' && !nextLine.match(/^\s*(else|elif)/)) {
-        this.addWarning(
-          lineNum + 1,
-          1,
-          'Code after return statement may be unreachable.',
-          'PSV6-STYLE-UNREACHABLE-CODE',
-          'Remove unreachable code or restructure the logic.',
-        );
-      }
-    }
-  }
-
-  private looksLikeCode(line: string): boolean {
-    const codePatterns = [
-      /^\w+\s*=/,
-      /^\w+\s*\(/,
-      /^\s*(if|for|while|switch)\b/,
-      /^\s*(var|const|varip)\b/,
-      /^\s*return\b/,
-      /^\s*plot\b/,
-      /^\s*strategy\./,
-    ];
-
-    return codePatterns.some((pattern) => pattern.test(line));
   }
 
   private addInfo(line: number, column: number, message: string, code: string, suggestion?: string): void {

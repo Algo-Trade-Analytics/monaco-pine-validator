@@ -31,6 +31,7 @@ import {
 } from '../../core/ast/nodes';
 import { visit, type NodePath } from '../../core/ast/traversal';
 import type { TypeMetadata } from '../../core/ast/types';
+import { getSourceLine } from '../../core/ast/source-utils';
 
 interface FunctionCall {
   name: string;
@@ -409,7 +410,7 @@ export class FunctionTypesValidator implements ValidationModule {
     const returnType = this.getFunctionReturnType(funcName);
     
     // Get the line where this function call occurs
-    const line = this.context.lines[call.line - 1];
+    const line = getSourceLine(this.context, call.line);
     if (!line) return;
     
     // Find the function call in the line

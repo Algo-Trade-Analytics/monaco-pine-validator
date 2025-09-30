@@ -16,6 +16,7 @@ import {
   type ProgramNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
+import { getNodeSource } from '../core/ast/source-utils';
 import { ensureAstContext } from '../core/ast/context-utils';
 
 interface StrategyFunctionInfo {
@@ -39,11 +40,13 @@ export class StrategyFunctionsValidator implements ValidationModule {
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private astStrategyCallLines: Set<number> = new Set();
 
   private strategyFunctionCalls: Map<string, StrategyFunctionInfo> = new Map();
   private strategyFunctionCount = 0;
   private complexStrategyExpressions = 0;
+  private hasStrategyRiskCall = false;
+  private strategyCallSignaturesByLine = new Map<number, Map<string, { count: number; column: number }>>();
+  private nestedStrategyCallsByLine = new Map<number, { count: number; column: number }>();
 
   getDependencies(): string[] {
     return ['TypeValidator', 'ScopeValidator'];
@@ -67,10 +70,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
     }
 
     this.collectStrategyDataAst(program);
-    for (const line of this.astStrategyCallLines) {
-      const sourceLine = this.context.cleanLines[line - 1] ?? '';
-      this.validateStrategyComplexity(sourceLine, line);
-    }
+    this.validateStrategyComplexity();
 
     try {
       this.validateStrategyPerformance();
@@ -103,10 +103,12 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.warnings = [];
     this.info = [];
     this.astContext = null;
-    this.astStrategyCallLines.clear();
     this.strategyFunctionCalls.clear();
     this.strategyFunctionCount = 0;
     this.complexStrategyExpressions = 0;
+    this.hasStrategyRiskCall = false;
+    this.strategyCallSignaturesByLine.clear();
+    this.nestedStrategyCallsByLine.clear();
   }
 
   private buildResult(typeMap: Map<string, unknown> = new Map()): ValidationResult {
@@ -185,10 +187,27 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.strategyFunctionCount++;
     const parameters = node.args.map((argument) => this.argumentToString(argument));
     const returnType = this.getStrategyReturnType(qualifiedName);
-    const isComplex = this.isComplexStrategyFunction(qualifiedName, parameters);
+    const nestedStrategyCalls = node.args.reduce(
+      (count, argument) => count + this.countStrategyCallsInExpression(argument.value),
+      0,
+    );
+    const isComplex = this.isComplexStrategyFunction(qualifiedName, parameters) || nestedStrategyCalls > 0;
     if (isComplex) {
       this.complexStrategyExpressions++;
     }
+
+    if (qualifiedName.startsWith('strategy.risk.')) {
+      this.hasStrategyRiskCall = true;
+    }
+
+    if (nestedStrategyCalls > 0) {
+      const entry = this.nestedStrategyCallsByLine.get(line) ?? { count: 0, column };
+      entry.count += nestedStrategyCalls;
+      entry.column = Math.min(entry.column, column);
+      this.nestedStrategyCallsByLine.set(line, entry);
+    }
+
+    this.recordStrategyCallSignature(line, column, qualifiedName, parameters);
 
     this.recordStrategyCall({
       name: qualifiedName,
@@ -213,8 +232,6 @@ export class StrategyFunctionsValidator implements ValidationModule {
     if (node.args.some((argument) => this.argumentContainsStrategyReference(argument.value))) {
       this.addWarning(line, column, 'PSV6-STRATEGY-PERF-NESTED', 'Nested strategy operations detected');
     }
-
-    this.astStrategyCallLines.add(line);
   }
 
   private recordStrategyCall(info: StrategyFunctionInfo): void {
@@ -235,6 +252,36 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.strategyFunctionCalls.set(info.name, { ...info });
   }
 
+  private recordStrategyCallSignature(
+    line: number,
+    column: number,
+    qualifiedName: string,
+    parameters: string[],
+  ): void {
+    const signature = `${qualifiedName}(${parameters.join(',')})`;
+    const lineSignatures = this.strategyCallSignaturesByLine.get(line) ?? new Map<string, { count: number; column: number }>();
+    const entry = lineSignatures.get(signature) ?? { count: 0, column };
+    entry.count += 1;
+    entry.column = Math.min(entry.column, column);
+    lineSignatures.set(signature, entry);
+    this.strategyCallSignaturesByLine.set(line, lineSignatures);
+  }
+
+  private countStrategyCallsInExpression(expression: ExpressionNode): number {
+    let count = 0;
+    visit(expression, {
+      CallExpression: {
+        enter: (path) => {
+          const qualified = this.getExpressionQualifiedName(path.node.callee);
+          if (qualified && qualified.startsWith('strategy.')) {
+            count += 1;
+          }
+        },
+      },
+    });
+    return count;
+  }
+
   private isKnownStrategyFunction(functionName: string): boolean {
     if (NS_MEMBERS.strategy && NS_MEMBERS.strategy.has(functionName)) {
       return true;
@@ -246,33 +293,11 @@ export class StrategyFunctionsValidator implements ValidationModule {
   }
 
   private argumentToString(argument: ArgumentNode): string {
-    const valueText = this.getNodeSource(argument.value).trim();
+    const valueText = getNodeSource(this.context, argument.value).trim();
     if (argument.name) {
       return `${argument.name.name}=${valueText}`;
     }
     return valueText;
-  }
-
-  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
-    const lines = this.context.lines ?? [];
-    if (!node.loc) {
-      return '';
-    }
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
   }
 
   private getExpressionQualifiedName(expression: ExpressionNode): string | null {
@@ -399,8 +424,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
     // Handle advanced sizing helpers explicitly to satisfy TDD expectations
     if (functionName === 'strategy.percent_of_equity') {
       // Allowed when script uses any strategy.risk.* controls; otherwise error as using constant as function
-      const hasRiskUsage = (this.context.cleanLines || []).some(l => /\bstrategy\.risk\./.test(l));
-      if (!hasRiskUsage) {
+      if (!this.hasStrategyRiskCall) {
         this.addError(lineNumber, column, 'PSV6-STRATEGY-CONSTANT-AS-FUNCTION',
           `${functionName} should not be used as a callable in this context. Use default_qty_type=${functionName} in strategy()`);
       }
@@ -528,38 +552,35 @@ export class StrategyFunctionsValidator implements ValidationModule {
     return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value) || value.includes('(') || value.includes('[');
   }
 
-  private validateStrategyComplexity(line: string, lineNumber: number): void {
-    // Count nested Strategy function calls
-    const nestedStrategyRegex = /\bstrategy\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*strategy\./g;
-    const nestedMatches = line.match(nestedStrategyRegex);
-    
-    if (nestedMatches && nestedMatches.length > 1) {
-      this.addWarning(
-        lineNumber,
-        1,
-        'PSV6-STRATEGY-COMPLEXITY',
-        'Complex nested Strategy function calls detected. Consider breaking into separate variables for better performance.'
-      );
+  private validateStrategyComplexity(): void {
+    for (const [line, info] of this.nestedStrategyCallsByLine.entries()) {
+      if (info.count > 1) {
+        this.addWarning(
+          line,
+          info.column,
+          'PSV6-STRATEGY-COMPLEXITY',
+          'Complex nested Strategy function calls detected. Consider breaking into separate variables for better performance.',
+        );
+      }
     }
 
-    // Check for repeated Strategy calculations
-    const strategyFunctionRegex = /\bstrategy\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-    const functionCalls: string[] = [];
-    let match;
-    
-    while ((match = strategyFunctionRegex.exec(line)) !== null) {
-      functionCalls.push(match[0]);
-    }
-    
-    // Check for repeated identical function calls
-    const uniqueCalls = new Set(functionCalls);
-    if (functionCalls.length > uniqueCalls.size) {
-      this.addInfo(
-        lineNumber,
-        1,
-        'PSV6-STRATEGY-CACHE-SUGGESTION',
-        'Consider caching repeated Strategy calculations to improve performance.'
-      );
+    for (const [line, signatures] of this.strategyCallSignaturesByLine.entries()) {
+      let hasDuplicate = false;
+      let column = Number.MAX_SAFE_INTEGER;
+      for (const entry of signatures.values()) {
+        if (entry.count > 1) {
+          hasDuplicate = true;
+          column = Math.min(column, entry.column);
+        }
+      }
+      if (hasDuplicate) {
+        this.addInfo(
+          line,
+          column === Number.MAX_SAFE_INTEGER ? 1 : column,
+          'PSV6-STRATEGY-CACHE-SUGGESTION',
+          'Consider caching repeated Strategy calculations to improve performance.',
+        );
+      }
     }
   }
 

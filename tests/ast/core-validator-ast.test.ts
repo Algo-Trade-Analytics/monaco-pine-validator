@@ -666,6 +666,7 @@ describe('CoreValidator AST integration', () => {
     const fooDeclaration = createVariableDeclaration(fooIdentifier, 10, 17, 3, {
       declarationKind: 'var',
       initializer: fooInitializer,
+      typeAnnotation: createTypeReference('const', 4, 3),
     });
 
     const program = createProgramFromSource(source, [directive], [scriptDeclaration, fooDeclaration]);
@@ -698,6 +699,7 @@ describe('CoreValidator AST integration', () => {
     const fooDeclaration = createVariableDeclaration(fooIdentifier, 4, 12, 3, {
       declarationKind: 'var',
       initializer: fooInitializer,
+      initializerOperator: ':=',
     });
 
     const program = createProgramFromSource(source, [directive], [scriptDeclaration, fooDeclaration]);
@@ -772,7 +774,7 @@ describe('CoreValidator AST integration', () => {
     const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
     const assignmentLeft = createIdentifier('foo', 0, 3);
     const assignmentRight = createNumberLiteral(1, '1', 7, 3);
-    const reassignment = createAssignmentStatement(assignmentLeft, assignmentRight, 0, 8, 3);
+    const reassignment = createAssignmentStatement(assignmentLeft, assignmentRight, 0, 8, 3, ':=');
     const plotCall = createCallExpression(createIdentifier('plot', 0, 4), [createArgument(createIdentifier('close', 5, 4), 5, 10, 4)], 0, 10, 4);
     const plotStatement = createExpressionStatement(plotCall, 0, 10, 4);
 
@@ -805,7 +807,7 @@ describe('CoreValidator AST integration', () => {
     const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 24, 2);
     const assignmentLeft = createIdentifier('foo', 0, 3);
     const assignmentRight = createNumberLiteral(1, '1', 7, 3);
-    const compoundAssignment = createAssignmentStatement(assignmentLeft, assignmentRight, 0, 8, 3);
+    const compoundAssignment = createAssignmentStatement(assignmentLeft, assignmentRight, 0, 8, 3, '+=');
     const plotCall = createCallExpression(createIdentifier('plot', 0, 4), [createArgument(createIdentifier('close', 5, 4), 5, 10, 4)], 0, 10, 4);
     const plotStatement = createExpressionStatement(plotCall, 0, 10, 4);
 
@@ -891,7 +893,7 @@ describe('CoreValidator AST integration', () => {
       18,
       4,
     );
-    const reassignment = createAssignmentStatement(assignmentLeft, assignmentRight, 0, 18, 4);
+    const reassignment = createAssignmentStatement(assignmentLeft, assignmentRight, 0, 18, 4, ':=');
 
     const program = createProgramFromSource(source, [directive], [scriptDeclaration, limitDeclaration, reassignment]);
     const service = new FunctionAstService(() => ({
@@ -929,7 +931,7 @@ describe('CoreValidator AST integration', () => {
     const timeframeArgument = createArgument(createStringLiteral('D', '"D"', 43, 3), 43, 47, 3);
     const closeArgument = createArgument(createIdentifier('close', 49, 3), 49, 54, 3);
     const requestCall = createCallExpression(requestMember, [tickerArgument, timeframeArgument, closeArgument], 15, 55, 3);
-    const assignment = createAssignmentStatement(tuplePattern, requestCall, 0, 55, 3);
+    const assignment = createAssignmentStatement(tuplePattern, requestCall, 0, 55, 3, ':=');
 
     const program = createProgramFromSource(source, [directive], [scriptDeclaration, assignment]);
     const service = new FunctionAstService(() => ({
@@ -966,7 +968,7 @@ describe('CoreValidator AST integration', () => {
     const shiftMember = createMemberExpression(arrayNamespace, shiftProperty, 18, 27, 3);
     const arrayArgument = createArgument(createIdentifier('myArray', 29, 3), 29, 36, 3);
     const shiftCall = createCallExpression(shiftMember, [arrayArgument], 18, 37, 3);
-    const assignment = createAssignmentStatement(tuplePattern, shiftCall, 0, 37, 3);
+    const assignment = createAssignmentStatement(tuplePattern, shiftCall, 0, 37, 3, ':=');
 
     const program = createProgramFromSource(source, [directive], [scriptDeclaration, assignment]);
     const service = new FunctionAstService(() => ({

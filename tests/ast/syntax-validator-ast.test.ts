@@ -220,7 +220,7 @@ describe('SyntaxValidator AST integration', () => {
     const elementC = createIdentifier('c', 5, 3);
     const tuple = createTupleExpression([elementA, null, elementC], 0, 6, 3);
     const rhs = createIdentifier('result', 11, 3);
-    const assignment = createAssignmentStatement(tuple, rhs, 0, 16, 3);
+    const assignment = createAssignmentStatement(tuple, rhs, 0, 16, 3, ':=');
 
     const program = createProgramFromSource(source, [directive], [scriptDeclaration, assignment]);
     const service = new FunctionAstService(() => ({
@@ -261,17 +261,17 @@ describe('SyntaxValidator AST integration', () => {
     const memberObject = createIdentifier('foo', 0, 4);
     const memberProperty = createIdentifier('bar', 4, 4);
     const fieldMember = createMemberExpression(memberObject, memberProperty, 0, 7, 4);
-    const fieldAssignment = createAssignmentStatement(fieldMember, createNumberLiteral(2, '2', 10, 4), 0, 11, 4);
+    const fieldAssignment = createAssignmentStatement(fieldMember, createNumberLiteral(2, '2', 10, 4), 0, 11, 4, '=');
 
     const bazIdentifier = createIdentifier('baz', 0, 5);
     const bazIndex = createNumberLiteral(0, '0', 4, 5);
     const bazIndexExpression = createIndexExpression(bazIdentifier, bazIndex, 0, 6, 5);
-    const bazAssignment = createAssignmentStatement(bazIndexExpression, createNumberLiteral(1, '1', 10, 5), 0, 11, 5);
+    const bazAssignment = createAssignmentStatement(bazIndexExpression, createNumberLiteral(1, '1', 10, 5), 0, 11, 5, ':=');
 
     const quxIdentifier = createIdentifier('qux', 0, 6);
     const quxIndex = createNumberLiteral(1, '1', 4, 6);
     const quxIndexExpression = createIndexExpression(quxIdentifier, quxIndex, 0, 6, 6);
-    const quxAssignment = createAssignmentStatement(quxIndexExpression, createNumberLiteral(2, '2', 10, 6), 0, 11, 6);
+    const quxAssignment = createAssignmentStatement(quxIndexExpression, createNumberLiteral(2, '2', 10, 6), 0, 11, 6, '+=');
 
     const program = createProgramFromSource(source, [directive], [scriptDeclaration, fooDeclaration, fieldAssignment, bazAssignment, quxAssignment]);
     const service = new FunctionAstService(() => ({

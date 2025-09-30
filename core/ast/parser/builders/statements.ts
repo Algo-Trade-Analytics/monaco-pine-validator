@@ -211,10 +211,12 @@ export function createAssignmentStatementNode(
 ): AssignmentStatementNode {
   const leftNode = left ?? createPlaceholderExpression();
   const safeEnd = ensureToken(endToken, operatorToken);
+  const operator = operatorToken?.image ?? '=';
   return {
     kind: 'AssignmentStatement',
     left: leftNode,
     right: right ?? null,
+    operator,
     ...spanFromNodes(leftNode, safeEnd),
   };
 }

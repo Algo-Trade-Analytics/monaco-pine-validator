@@ -41,6 +41,7 @@ import {
 } from '../core/ast/nodes';
 import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
 import { ensureAstContext } from '../core/ast/context-utils';
+import { getNodeSource } from '../core/ast/source-utils';
 
 interface MapDeclarationInfo {
   name: string;
@@ -100,9 +101,6 @@ export class MapValidator implements ValidationModule {
 
     const ast = this.astContext?.ast;
     if (!ast) {
-      this.collectMapDataText();
-      this.validateMapPerformanceAst();
-      this.validateMapBestPracticesAst();
       return this.buildModuleResult(context.scriptType);
     }
 
@@ -265,118 +263,6 @@ export class MapValidator implements ValidationModule {
         },
       },
     });
-  }
-
-  private collectMapDataText(_mergeOnly = false): void {
-    // Limited textual fallback for scenarios where Chevrotain parsing fails (e.g. type annotations).
-    const lines = Array.isArray(this.context.cleanLines) ? this.context.cleanLines : [];
-    if (lines.length === 0) {
-      return;
-    }
-
-    const declarationPattern = /^(?:var\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*map<([^>]+)>)?\s*=\s*map\.new<([^>]*)>/i;
-
-    for (let i = 0; i < lines.length; i++) {
-      const rawLine = lines[i];
-      const commentIndex = rawLine.indexOf('//');
-      const line = (commentIndex >= 0 ? rawLine.slice(0, commentIndex) : rawLine).trim();
-      if (!line) {
-        continue;
-      }
-
-      const match = line.match(declarationPattern);
-      if (!match) {
-        continue;
-      }
-
-      const [, name, annotationRaw, callRaw] = match;
-      const lineNumber = i + 1;
-      const column = rawLine.indexOf(name) + 1;
-
-      const annotationTypes = this.parseAnnotationTypes(annotationRaw);
-      const callTypes = this.parseMapNewGenericsText(callRaw);
-
-      if (callTypes.error) {
-        this.addError(
-          lineNumber,
-          column,
-          callTypes.error,
-          'PSV6-MAP-DECLARATION',
-          'Provide a single value type to map.new<valueType>()',
-        );
-      }
-
-      const keyType = this.normalizeKeyType(callTypes.keyType ?? annotationTypes.keyType);
-      const valueType = this.normalizeValueType(callTypes.valueType ?? annotationTypes.valueType);
-
-      if (
-        annotationTypes.valueType &&
-        valueType !== 'unknown' &&
-        annotationTypes.valueType !== valueType
-      ) {
-        this.addError(
-          lineNumber,
-          column,
-          `Type annotation map<${annotationTypes.valueType}> does not match map.new<${valueType}>`,
-          'PSV6-MAP-TYPE-MISMATCH',
-          'Ensure map annotation matches map.new type parameter',
-        );
-      }
-
-      this.mapDeclarations.set(name, {
-        name,
-        keyType,
-        valueType,
-        line: lineNumber,
-        column,
-        isInitialized: false,
-      });
-      this.mapAllocations += 1;
-      this.setVariableType(name, lineNumber, column, {
-        type: 'map',
-        keyType,
-        valueType,
-      });
-    }
-  }
-
-  private parseAnnotationTypes(raw: string | undefined | null): { keyType: string | null; valueType: string | null } {
-    if (!raw) {
-      return { keyType: null, valueType: null };
-    }
-
-    const tokens = this.splitTopLevelCsv(raw.trim());
-    if (tokens.length === 0) {
-      return { keyType: null, valueType: null };
-    }
-
-    if (tokens.length === 1) {
-      return { keyType: 'string', valueType: tokens[0] ?? null };
-    }
-
-    return {
-      keyType: tokens[0] ?? null,
-      valueType: tokens[tokens.length - 1] ?? null,
-    };
-  }
-
-  private parseMapNewGenericsText(raw: string | undefined | null): { keyType?: string; valueType?: string; error?: string } {
-    const content = (raw ?? '').trim();
-    if (!content) {
-      return { error: 'map.new<valueType>() requires a value type parameter' };
-    }
-
-    const tokens = this.splitTopLevelCsv(content);
-    if (tokens.length > 1) {
-      return {
-        valueType: tokens[tokens.length - 1],
-        error: 'map.new<valueType>() accepts exactly one type parameter',
-      };
-    }
-
-    return {
-      valueType: tokens[0],
-    };
   }
 
   private handleMapPutAst(path: NodePath<CallExpressionNode>, loopMultiplier: number): void {
@@ -1081,30 +967,7 @@ export class MapValidator implements ValidationModule {
   }
 
   private getExpressionText(expression: ExpressionNode): string {
-    return this.getNodeSource(expression);
-  }
-
-  private getNodeSource(node: { loc: { start: { line: number; column: number }; end: { line: number; column: number } } }): string {
-    const lines = this.context.lines ?? [];
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
+    return getNodeSource(this.context, expression);
   }
 
   private recordMapUsage(mapName: string, kind: 'put' | 'clear', line: number): void {
@@ -1156,7 +1019,7 @@ export class MapValidator implements ValidationModule {
   }
 
   private estimateForLoopIterations(loop: ForStatementNode): number | null {
-    const loopSource = this.getNodeSource(loop);
+    const loopSource = getNodeSource(this.context, loop);
     const rangeMatch = /for\s+\w+\s*=\s*(-?\d+(?:\.\d+)?)\s+to\s+(-?\d+(?:\.\d+)?)/i.exec(loopSource);
     if (rangeMatch) {
       const start = Number(rangeMatch[1]);
@@ -1179,7 +1042,7 @@ export class MapValidator implements ValidationModule {
   }
 
   private estimateRepeatIterations(loop: RepeatStatementNode): number | null {
-    const loopSource = this.getNodeSource(loop);
+    const loopSource = getNodeSource(this.context, loop);
     const match = /repeat\s+(-?\d+(?:\.\d+)?)/i.exec(loopSource);
     if (match) {
       const iterations = Number(match[1]);
@@ -1188,42 +1051,6 @@ export class MapValidator implements ValidationModule {
       }
     }
     return null;
-  }
-
-  private splitTopLevelCsv(content: string): string[] {
-    const parts: string[] = [];
-    let depth = 0;
-    let current = '';
-
-    for (const char of content) {
-      if (char === '<') {
-        depth += 1;
-        current += char;
-        continue;
-      }
-
-      if (char === '>') {
-        depth = Math.max(0, depth - 1);
-        current += char;
-        continue;
-      }
-
-      if (char === ',' && depth === 0) {
-        if (current.trim().length > 0) {
-          parts.push(current.trim());
-        }
-        current = '';
-        continue;
-      }
-
-      current += char;
-    }
-
-    if (current.trim().length > 0) {
-      parts.push(current.trim());
-    }
-
-    return parts;
   }
 
   private unwrapMapValueType(valueType: string | null | undefined): string | null {

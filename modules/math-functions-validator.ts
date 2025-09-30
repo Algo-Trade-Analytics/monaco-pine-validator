@@ -26,6 +26,7 @@ import {
   type UnaryExpressionNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
+import { getNodeSource } from '../core/ast/source-utils';
 
 interface MathFunctionInfo {
   name: string;
@@ -63,14 +64,21 @@ export class MathFunctionsValidator implements ValidationModule {
     this.reset();
     this.context = context;
     this.astContext = this.getAstContext(config);
-    if (this.astContext?.ast) {
-      this.collectMathDataAst(this.astContext.ast);
-      this.validateMathPerformanceAst();
-      this.validateMathBestPractices();
-    } else {
-      this.collectMathDataText();
-      this.validateMathPerformanceText();
+    const ast = this.astContext?.ast;
+    if (!ast) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: new Map(),
+        scriptType: null,
+      };
     }
+
+    this.collectMathDataAst(ast);
+    this.validateMathPerformanceAst();
+    this.validateMathBestPractices();
 
     const typeMap = new Map();
     for (const [funcName, funcInfo] of this.mathFunctionCalls) {
@@ -228,26 +236,6 @@ export class MathFunctionsValidator implements ValidationModule {
       this.addWarning(
         0,
         0,
-        'PSV6-MATH-PERF-NESTED',
-        `Too many complex Math expressions (${this.complexMathExpressions}). Consider simplifying for better performance.`,
-      );
-    }
-  }
-
-  private validateMathPerformanceText(): void {
-    if (this.mathFunctionCount > 3) {
-      this.addWarning(
-        1,
-        1,
-        'PSV6-MATH-PERF-MANY',
-        `Too many Math function calls (${this.mathFunctionCount}). Consider optimizing for better performance.`,
-      );
-    }
-
-    if (this.complexMathExpressions > 1) {
-      this.addWarning(
-        1,
-        1,
         'PSV6-MATH-PERF-NESTED',
         `Too many complex Math expressions (${this.complexMathExpressions}). Consider simplifying for better performance.`,
       );
@@ -427,33 +415,11 @@ export class MathFunctionsValidator implements ValidationModule {
   }
 
   private argumentToString(argument: ArgumentNode): string {
-    const valueText = this.getNodeSource(argument.value).trim();
+    const valueText = getNodeSource(this.context, argument.value).trim();
     if (argument.name) {
       return `${argument.name.name}=${valueText}`;
     }
     return valueText;
-  }
-
-  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
-    const lines = this.context.lines ?? [];
-    if (!node.loc) {
-      return '';
-    }
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
   }
 
   private getExpressionQualifiedName(expression: ExpressionNode): string | null {
@@ -484,34 +450,6 @@ export class MathFunctionsValidator implements ValidationModule {
     return this.context as AstValidationContext;
   }
 
-  private collectMathDataText(): void {
-    const lines = this.context.cleanLines ?? this.context.lines ?? [];
-    if (!lines.length) {
-      return;
-    }
-
-    let callCount = 0;
-    let complexCount = 0;
-    const complexFunctions = new Set(['math.pow', 'math.sum', 'math.avg']);
-
-    for (const line of lines) {
-      const matches = line.match(/math\.[A-Za-z_]+/g);
-      if (!matches) {
-        continue;
-      }
-
-      callCount += matches.length;
-      for (const match of matches) {
-        if (complexFunctions.has(match)) {
-          complexCount += 1;
-        }
-      }
-    }
-
-    this.mathFunctionCount = Math.max(this.mathFunctionCount, callCount);
-    this.complexMathExpressions = Math.max(this.complexMathExpressions, complexCount);
-  }
-
   private extractNumericValue(param: string, node?: ExpressionNode): number | null {
     if (node) {
       if (node.kind === 'NumberLiteral') {
@@ -519,7 +457,7 @@ export class MathFunctionsValidator implements ValidationModule {
       }
       if (node.kind === 'UnaryExpression') {
         const unary = node as UnaryExpressionNode;
-        const value = this.extractNumericValue(this.getNodeSource(unary.argument), unary.argument);
+        const value = this.extractNumericValue(getNodeSource(this.context, unary.argument), unary.argument);
         if (value === null) {
           return null;
         }
@@ -587,7 +525,7 @@ export class MathFunctionsValidator implements ValidationModule {
       }
       if (node.kind === 'UnaryExpression') {
         const unary = node as UnaryExpressionNode;
-        return this.inferParameterType(this.getNodeSource(unary.argument), unary.argument);
+        return this.inferParameterType(getNodeSource(this.context, unary.argument), unary.argument);
       }
       if (node.kind === 'BooleanLiteral') {
         return 'bool';
