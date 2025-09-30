@@ -415,11 +415,29 @@ export class CoreValidator implements ValidationModule {
           const fn = path.node as FunctionDeclarationNode;
           const paramNames = new Set(fn.params.map((param) => param.identifier.name));
           this.astFunctionStack.push({ name: fn.identifier?.name ?? null, params: paramNames });
+          this.pushAstScope(paramNames, fn.identifier?.name ?? null);
           this.processAstFunctionDeclaration(fn);
           this.processAstFunctionControlFlow(fn);
         },
         exit: () => {
+          this.popScope();
           this.astFunctionStack.pop();
+        },
+      },
+      BlockStatement: {
+        enter: (path) => {
+          const parent = path.parent?.node;
+          if (parent && parent.kind === 'FunctionDeclaration') {
+            return;
+          }
+          this.pushAstScope(new Set(), this.currentAstFunctionName());
+        },
+        exit: (path) => {
+          const parent = path.parent?.node;
+          if (parent && parent.kind === 'FunctionDeclaration') {
+            return;
+          }
+          this.popScope();
         },
       },
       TypeDeclaration: {
@@ -491,7 +509,16 @@ export class CoreValidator implements ValidationModule {
     }
 
     if (left.kind === 'MemberExpression') {
-      if (operator === ':=' && this.isThisMemberExpression(left as MemberExpressionNode)) {
+      const member = left as MemberExpressionNode;
+      if (this.isThisMemberExpression(member)) {
+        if (operator === '=') {
+          this.addError(
+            line,
+            member.loc.start.column,
+            `Use ':=' to assign to 'this.${member.property.name}'. '=' is reserved for the first assignment.`,
+            'PS016',
+          );
+        }
         return;
       }
       return;
@@ -504,7 +531,8 @@ export class CoreValidator implements ValidationModule {
     const identifier = left as IdentifierNode;
     const name = identifier.name;
     const column = identifier.loc.start.column;
-    const isParameter = this.isAstFunctionParameter(name) || this.isMethodParameter(name, line);
+    const hasAst = !!this.astContext?.ast;
+    const isParameter = this.isAstFunctionParameter(name) || (!hasAst && this.isMethodParameter(name, line));
 
     if (this.constNames.has(name)) {
       this.addError(line, column, `Cannot reassign const '${name}' with '${operator}'.`, 'PS019');
@@ -1731,6 +1759,10 @@ export class CoreValidator implements ValidationModule {
   }
 
   private handleVariableDeclarationsAstSupplement(line: string, lineNum: number, strippedNoStrings: string): void {
+    if (this.astContext?.ast) {
+      return;
+    }
+
     if (/^\s*(if|for|while)\b/.test(strippedNoStrings)) {
       return;
     }
@@ -2771,8 +2803,23 @@ export class CoreValidator implements ValidationModule {
     return null;
   }
 
-  private currentScope() {
-      return this.scopeStack[this.scopeStack.length - 1];
+  private currentScope(): ScopeInfo {
+    return this.scopeStack[this.scopeStack.length - 1];
+  }
+
+  private pushAstScope(params: Set<string>, fnName: string | null): void {
+    this.scopeStack.push({ indent: 0, params, fnName, variables: new Set() });
+  }
+
+  private popScope(): void {
+    if (this.scopeStack.length > 1) {
+      this.scopeStack.pop();
+    }
+  }
+
+  private currentAstFunctionName(): string | null {
+    const top = this.astFunctionStack[this.astFunctionStack.length - 1];
+    return top?.name ?? null;
   }
 
   private stripStringsAndLineComment(line: string): string {

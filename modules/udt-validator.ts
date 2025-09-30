@@ -84,11 +84,19 @@ export class UDTValidator implements ValidationModule {
     this.context = context;
 
     const astContext = this.getAstContext(config);
-    if (astContext?.ast) {
-      this.validateWithAst(astContext.ast);
+    const program = astContext?.ast ?? null;
+    if (!program) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: context.typeMap ?? new Map(),
+        scriptType: context.scriptType ?? null,
+      };
     }
 
-    this.validateWithText();
+    this.validateWithAst(program);
 
     return {
       isValid: this.errors.length === 0,
@@ -153,15 +161,6 @@ export class UDTValidator implements ValidationModule {
     this.validateMethodCallsAndFieldsAst(program);
   }
 
-  private validateWithText(): void {
-    const lines = this.getSourceLines();
-    if (lines.length === 0) {
-      return;
-    }
-
-    this.collectUdtDataFromText(lines);
-  }
-
   private collectUdtDataFromAst(program: ProgramNode): void {
     this.udtDeclarations = [];
     this.udtTypes.clear();
@@ -180,107 +179,6 @@ export class UDTValidator implements ValidationModule {
         },
       },
     });
-  }
-
-  private collectUdtDataFromText(lines: string[]): void {
-    interface TextTypeContext {
-      name: string;
-      indent: number;
-      fields: Map<string, number>;
-    }
-
-    let currentType: TextTypeContext | null = null;
-
-    const typeRegex = /^type\s+([A-Za-z_][A-Za-z0-9_]*)/;
-    const methodRegex = /^method\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/;
-    const fieldRegex = /^([A-Za-z_][A-Za-z0-9_<>,]*)\s+([A-Za-z_][A-Za-z0-9_]*)\b/;
-
-    for (let index = 0; index < lines.length; index++) {
-      const rawLine = lines[index];
-      const withoutComment = this.stripInlineComment(rawLine);
-      const trimmed = withoutComment.trim();
-      if (!trimmed) {
-        continue;
-      }
-
-      const indent = withoutComment.length - withoutComment.trimStart().length;
-
-      const typeMatch = trimmed.match(typeRegex);
-      if (typeMatch) {
-        currentType = {
-          name: typeMatch[1],
-          indent,
-          fields: new Map(),
-        };
-        continue;
-      }
-
-      if (currentType && indent <= currentType.indent && !trimmed.startsWith('method ')) {
-        currentType = null;
-      }
-
-      const methodMatch = trimmed.match(methodRegex);
-      if (methodMatch) {
-        const methodName = methodMatch[1];
-        const params = methodMatch[2] ?? '';
-        const lineNumber = index + 1;
-        const columnNumber = indent + 1;
-
-        const thisMatch = params.match(/this\s*<\s*([A-Za-z_][A-Za-z0-9_]*)\s*>/);
-        const thisType = thisMatch?.[1] ?? null;
-        const expectedType = currentType?.name ?? null;
-
-        if (!thisMatch || (expectedType && thisType !== expectedType)) {
-          this.addError(lineNumber, columnNumber, `Method '${methodName}' must declare this parameter referencing its UDT type`, 'PSV6-METHOD-THIS');
-          this.addError(lineNumber, columnNumber, `Method '${methodName}' is missing a valid this parameter`, 'PS016');
-          this.addWarning(lineNumber, columnNumber, `Method '${methodName}' declared without explicit type context`, 'PSU03');
-        }
-
-        continue;
-      }
-
-      if (currentType) {
-        const fieldMatch = trimmed.match(fieldRegex);
-        if (fieldMatch) {
-          const fieldName = fieldMatch[2];
-          const existingLine = currentType.fields.get(fieldName);
-          if (existingLine !== undefined) {
-            this.addError(
-              index + 1,
-              indent + 1,
-              `Duplicate field '${fieldName}' in type ${currentType.name}`,
-              'PSV6-UDT-DUPLICATE-FIELD',
-            );
-          } else {
-            currentType.fields.set(fieldName, index + 1);
-          }
-        }
-      } else if (trimmed.startsWith('method ')) {
-        const lineNumber = index + 1;
-        const columnNumber = indent + 1;
-        this.addError(lineNumber, columnNumber, 'Method declarations outside type blocks must include this<T> parameter', 'PSV6-METHOD-THIS');
-        this.addError(lineNumber, columnNumber, 'Method declaration missing this parameter', 'PS016');
-        this.addWarning(lineNumber, columnNumber, 'Method declared without UDT context', 'PSU03');
-      }
-    }
-  }
-
-  private getSourceLines(): string[] {
-    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
-      return [...this.context.cleanLines];
-    }
-    if (Array.isArray(this.context.lines) && this.context.lines.length > 0) {
-      return [...this.context.lines];
-    }
-    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length > 0) {
-      return [...this.context.rawLines];
-    }
-    return [];
-  }
-
-  private stripInlineComment(line: string): string {
-    const idx = line.indexOf('//');
-    return idx >= 0 ? line.slice(0, idx) : line;
   }
 
   private handleAstTypeDeclaration(node: TypeDeclarationNode): void {

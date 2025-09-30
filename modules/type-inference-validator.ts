@@ -80,7 +80,7 @@ export class TypeInferenceValidator implements ValidationModule {
       this.validateWithAst(ast);
     }
 
-    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
+    if (!ast && Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
       this.validateTypeCompatibility();
       this.validateTypeInference();
       this.validateTypeSafety();
@@ -1409,7 +1409,28 @@ export class TypeInferenceValidator implements ValidationModule {
 
   private getVariableType(varName: string): string | null {
     const typeInfo = this.context.typeMap.get(varName);
-    return typeInfo ? typeInfo.type : null;
+    if (!typeInfo) {
+      return null;
+    }
+
+    if (typeInfo.type === 'udt' && typeInfo.udtName) {
+      const alias = typeInfo.udtName.toLowerCase();
+      const primitiveAliases = new Map<string, string>([
+        ['color', 'color'],
+        ['line', 'line'],
+        ['label', 'label'],
+        ['box', 'box'],
+        ['table', 'table'],
+        ['linefill', 'linefill'],
+        ['polyline', 'polyline'],
+        ['chart.point', 'chart.point'],
+      ]);
+      if (primitiveAliases.has(alias)) {
+        return primitiveAliases.get(alias)!;
+      }
+    }
+
+    return typeInfo.type;
   }
 
   private getVariableAssignedFunctionType(varName: string): string | null {

@@ -115,11 +115,19 @@ export class EnumValidator implements ValidationModule {
 
     this.astContext = isAstValidationContext(context) && context.ast ? context : null;
 
-    if (this.astContext?.ast) {
-      this.validateWithAst(this.astContext.ast);
-    } else {
-      this.validateWithText();
+    const program = this.astContext?.ast ?? null;
+    if (!program) {
+      return {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        info: [],
+        typeMap: context.typeMap,
+        scriptType: context.scriptType,
+      };
     }
+
+    this.validateWithAst(program);
 
     return {
       isValid: this.errors.length === 0,
@@ -203,108 +211,6 @@ export class EnumValidator implements ValidationModule {
         },
       },
     });
-  }
-
-  private validateWithText(): void {
-    const lines = Array.isArray(this.context.rawLines)
-      ? this.context.rawLines
-      : Array.isArray(this.context.cleanLines)
-        ? this.context.cleanLines
-        : this.context.lines ?? [];
-
-    if (lines.length === 0) {
-      return;
-    }
-
-    const enumNames = new Set<string>();
-    const functionParams = new Map<string, string[]>();
-
-    for (const rawLine of lines) {
-      const enumMatch = rawLine.match(/^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)/i);
-      if (enumMatch) {
-        enumNames.add(enumMatch[1]);
-      }
-    }
-
-    for (const rawLine of lines) {
-      const funcMatch = rawLine.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*=>/);
-      if (!funcMatch) {
-        continue;
-      }
-
-      const [, name, params] = funcMatch;
-      const paramNames = params
-        .split(',')
-        .map((segment) => segment.split('=')[0]?.trim())
-        .filter((segment): segment is string => Boolean(segment));
-      functionParams.set(name, paramNames);
-    }
-
-    const callPattern = /([A-Za-z_][A-Za-z0-9_]*)\s*\(([^()]*)\)/g;
-
-    lines.forEach((rawLine, index) => {
-      let match: RegExpExecArray | null;
-      while ((match = callPattern.exec(rawLine)) !== null) {
-        const [, name, argsString] = match;
-        const params = functionParams.get(name);
-        if (!params || params.length === 0) {
-          continue;
-        }
-
-        const args = argsString.split(',').map((arg) => arg.trim());
-        for (let i = 0; i < Math.min(args.length, params.length); i += 1) {
-          const arg = args[i];
-          const enumMatch = arg.match(/^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/);
-          if (!enumMatch) {
-            continue;
-          }
-
-          const actualEnum = enumMatch[1];
-          const expectedEnum = this.inferEnumFromParam(params[i], enumNames);
-          if (!expectedEnum || expectedEnum === actualEnum) {
-            continue;
-          }
-
-          const column = (match.index ?? 0) + 1;
-          this.addError(
-            index + 1,
-            column,
-            `Function parameter type mismatch: expected ${expectedEnum}, got ${actualEnum}`,
-            'PSV6-ENUM-FUNCTION-TYPE-MISMATCH',
-          );
-        }
-      }
-    });
-
-    const hasUdtType = lines.some((line) => /^\s*type\s+/i.test(line));
-    const usesMathSqrt = lines.some((line) => line.includes('math.sqrt'));
-    const usesMathPow = lines.some((line) => line.includes('math.pow'));
-
-    if (hasUdtType && usesMathSqrt && usesMathPow && !this.warnings.some((warning) => warning.code === 'PSV6-ENUM-COMPARISON-TYPE-MISMATCH')) {
-      this.addWarning(
-        1,
-        1,
-        'Comparing enum values from different types',
-        'PSV6-ENUM-COMPARISON-TYPE-MISMATCH',
-      );
-    }
-  }
-
-  private inferEnumFromParam(paramName: string, enumNames: Set<string>): string | null {
-    if (!paramName) {
-      return null;
-    }
-
-    if (enumNames.has(paramName)) {
-      return paramName;
-    }
-
-    const capitalized = paramName.charAt(0).toUpperCase() + paramName.slice(1);
-    if (enumNames.has(capitalized)) {
-      return capitalized;
-    }
-
-    return null;
   }
 
   private processEnumDeclaration(node: EnumDeclarationNode): void {
