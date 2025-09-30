@@ -26,6 +26,7 @@ import {
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 import { ensureAstContext } from '../core/ast/context-utils';
+import { getNodeSource } from '../core/ast/source-utils';
 
 const VALID_REQUEST_FUNCTIONS = new Set([
   'security',
@@ -1423,22 +1424,7 @@ export class DynamicDataValidator implements ValidationModule {
   }
 
   private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
-    const lines = this.context.lines ?? [];
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
+    return getNodeSource(this.context, node);
   }
 
   private isStringLiteral(value: string): boolean {

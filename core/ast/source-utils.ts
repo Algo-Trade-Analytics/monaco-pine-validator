@@ -126,11 +126,11 @@ export function getNodeSource(
   if (!node) {
     return '';
   }
-  if (Array.isArray(node.range)) {
-    return sliceSourceRange(context, node.range as Range);
-  }
   if (node.loc) {
     return sliceSourceLocation(context, node.loc);
+  }
+  if (Array.isArray(node.range)) {
+    return sliceSourceRange(context, node.range as Range);
   }
 
   const cache = buildCache(context);

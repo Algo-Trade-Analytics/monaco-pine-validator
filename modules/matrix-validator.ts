@@ -652,7 +652,7 @@ export class MatrixValidator implements ValidationModule {
       return this.formatTypeReference(generic);
     }
 
-    const source = this.getNodeSource(type).trim();
+    const source = getNodeSource(this.context, type).trim();
     const match = source.match(/^matrix\s*<\s*([^>]+)\s*>/i);
     if (match) {
       return match[1];

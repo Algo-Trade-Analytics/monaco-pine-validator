@@ -13,6 +13,7 @@ import {
 } from '../core/types';
 import { VERSION_RE, KEYWORDS, NAMESPACES, PSEUDO_VARS } from '../core/constants';
 import { ensureAstContext } from '../core/ast/context-utils';
+import { getSourceLines as computeSourceLines } from '../core/ast/source-utils';
 import type { AstDiagnostics } from '../core/ast/types';
 import {
   type AssignmentStatementNode,
@@ -543,16 +544,7 @@ export class SyntaxValidator implements ValidationModule {
   }
 
   private getSourceLines(): string[] {
-    if (Array.isArray(this.context.rawLines) && this.context.rawLines.length > 0) {
-      return this.context.rawLines;
-    }
-    if (Array.isArray(this.context.lines) && this.context.lines.length > 0) {
-      return this.context.lines;
-    }
-    if (Array.isArray(this.context.cleanLines) && this.context.cleanLines.length > 0) {
-      return this.context.cleanLines;
-    }
-    return [];
+    return computeSourceLines(this.context);
   }
 
   private getSourceText(): string {

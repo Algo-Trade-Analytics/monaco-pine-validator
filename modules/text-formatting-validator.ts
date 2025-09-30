@@ -21,6 +21,7 @@ import {
   type StringLiteralNode,
 } from '../core/ast/nodes';
 import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
+import { getNodeSource as extractNodeSource } from '../core/ast/source-utils';
 
 export class TextFormattingValidator implements ValidationModule {
   name = 'TextFormattingValidator';
@@ -462,7 +463,7 @@ export class TextFormattingValidator implements ValidationModule {
   }
 
   private argumentToString(argument: ArgumentNode): string {
-    const valueText = this.getNodeSource(argument.value).trim();
+    const valueText = extractNodeSource(this.context, argument.value).trim();
     if (argument.name) {
       return `${argument.name.name}=${valueText}`;
     }
@@ -470,25 +471,7 @@ export class TextFormattingValidator implements ValidationModule {
   }
 
   private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
-    const lines = this.context.lines ?? [];
-    if (!node.loc) {
-      return '';
-    }
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
+    return extractNodeSource(this.context, node);
   }
 
   private getExpressionQualifiedName(expression: ExpressionNode): string | null {

@@ -31,6 +31,7 @@ import {
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 import { ensureAstContext } from '../core/ast/context-utils';
+import { getNodeSource as extractNodeSource, getSourceLines } from '../core/ast/source-utils';
 
 interface StrategyOrderCall {
   functionName: string;
@@ -194,7 +195,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
   }
 
   private detectScriptTypeFromLines(context: ValidationContext): 'indicator' | 'strategy' | 'library' | null {
-    const lines = context.lines ?? context.rawLines ?? [];
+    const lines = getSourceLines(context);
     for (const rawLine of lines) {
       const line = rawLine.trim();
       if (line.startsWith('strategy(')) {
@@ -856,36 +857,11 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
   }
 
   private argumentToString(argument: ArgumentNode): string {
-    const valueText = this.getNodeSource(argument.value).trim();
+    const valueText = extractNodeSource(this.context, argument.value).trim();
     if (argument.name) {
       return `${argument.name.name}=${valueText}`;
     }
     return valueText;
-  }
-
-  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
-    const lines = this.context.lines ?? this.context.rawLines ?? [];
-    if (!node.loc) {
-      return '';
-    }
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(
-        Math.max(0, node.loc.start.column - 1),
-        Math.max(0, node.loc.end.column - 1),
-      );
-    }
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(Math.max(0, node.loc.start.column - 1)));
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
   }
 
   private getExpressionQualifiedName(expression: ExpressionNode): string | null {

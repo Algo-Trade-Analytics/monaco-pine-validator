@@ -256,13 +256,6 @@ export class TypeInferenceValidator implements ValidationModule {
     const right = node.right;
     const { line, column } = right.loc.start;
 
-    if (node.left.kind === 'Identifier') {
-      const name = (node.left as IdentifierNode).name;
-      if (name === 'bullMain' || name === 'bearMain' || name === 'barCol') {
-        console.log('DEBUG assignment', name, 'type:', this.getExpressionType(right));
-      }
-    }
-
     if (this.isNaExpression(right)) {
       this.addWarning(
         line,
@@ -284,9 +277,6 @@ export class TypeInferenceValidator implements ValidationModule {
 
     if (node.left.kind === 'Identifier') {
       const identifier = node.left as IdentifierNode;
-      if (identifier.name === 'barCol') {
-        console.log('DEBUG barCol inferred type:', valueType);
-      }
       if (valueType && valueType !== 'unknown') {
         this.registerVariableTypeInfo(
           identifier.name,
@@ -591,7 +581,6 @@ export class TypeInferenceValidator implements ValidationModule {
       const consequentType = this.getExpressionType(conditional.consequent);
       const alternateType = conditional.alternate ? this.getExpressionType(conditional.alternate) : null;
       const merged = this.mergeConditionalTypes(consequentType, alternateType);
-      console.log('DEBUG conditional types', consequentType, alternateType, 'merged ->', merged);
       if (merged) {
         return merged;
       }

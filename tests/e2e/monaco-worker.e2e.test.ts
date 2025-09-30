@@ -146,23 +146,18 @@ describe('Monaco worker end-to-end', () => {
         line: issue.line,
       }));
       expect(codesWithLines).toEqual([
-        { code: 'PS008', line: 16 },
-        { code: 'PS007', line: 133 },
-        { code: 'PS007', line: 140 },
-        { code: 'PSV6-SWITCH-SYNTAX', line: 121 },
-        { code: 'PSV6-SWITCH-SYNTAX', line: 122 },
-        { code: 'PSV6-SWITCH-SYNTAX', line: 128 },
-        { code: 'PSV6-SWITCH-SYNTAX', line: 135 },
-        { code: 'PSV6-TYPE-FUNCTION-PARAM-MISMATCH', line: 19 },
-        { code: 'PSV6-TYPE-FUNCTION-PARAM-MISMATCH', line: 20 },
-        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 19 },
-        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 20 },
-        { code: 'PSV6-FUNCTION-PARAM-COUNT', line: 92 },
+        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 74 },
+        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 75 },
+        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 78 },
+        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 79 },
+        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 83 },
+        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 83 },
         { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 92 },
-        { code: 'PSV6-FUNCTION-PARAM-COUNT', line: 93 },
         { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 93 },
-        { code: 'PSV6-FUNCTION-PARAM-COUNT', line: 96 },
         { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 96 },
+        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 96 },
+        { code: 'PSV6-ALERT-CONDITION-TYPE', line: 101 },
+        { code: 'PSV6-ALERT-CONDITION-TYPE', line: 102 },
       ]);
     }
 

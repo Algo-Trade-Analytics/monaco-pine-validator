@@ -23,6 +23,7 @@ import {
   type StringLiteralNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
+import { getNodeSource as extractNodeSource } from '../core/ast/source-utils';
 
 export class TickerFunctionsValidator implements ValidationModule {
   name = 'TickerFunctionsValidator';
@@ -437,38 +438,16 @@ export class TickerFunctionsValidator implements ValidationModule {
       case 'MemberExpression': {
         const member = expression as MemberExpressionNode;
         if (member.computed) {
-          return this.getNodeSource(member);
+          return extractNodeSource(this.context, member);
         }
         const objectText = this.getExpressionText(member.object);
         return `${objectText}.${member.property.name}`;
       }
       case 'CallExpression':
-        return this.getNodeSource(expression);
+        return extractNodeSource(this.context, expression);
       default:
-        return this.getNodeSource(expression);
+        return extractNodeSource(this.context, expression);
     }
-  }
-
-  private getNodeSource(node: ExpressionNode | ArgumentNode | CallExpressionNode): string {
-    const lines = this.context.lines ?? [];
-    if (!node.loc) {
-      return '';
-    }
-    const startLineIndex = Math.max(0, node.loc.start.line - 1);
-    const endLineIndex = Math.max(0, node.loc.end.line - 1);
-    if (startLineIndex === endLineIndex) {
-      const line = lines[startLineIndex] ?? '';
-      return line.slice(node.loc.start.column - 1, Math.max(node.loc.start.column - 1, node.loc.end.column - 1));
-    }
-    const parts: string[] = [];
-    const firstLine = lines[startLineIndex] ?? '';
-    parts.push(firstLine.slice(node.loc.start.column - 1));
-    for (let index = startLineIndex + 1; index < endLineIndex; index++) {
-      parts.push(lines[index] ?? '');
-    }
-    const lastLine = lines[endLineIndex] ?? '';
-    parts.push(lastLine.slice(0, Math.max(0, node.loc.end.column - 1)));
-    return parts.join('\n');
   }
 
   private getExpressionQualifiedName(expression: ExpressionNode): string | null {

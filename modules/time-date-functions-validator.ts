@@ -686,7 +686,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     }
     this.timeComparisonEmissions.add(key);
 
-    const comparedText = this.getNodeSource(compared).trim() || 'value';
+    const comparedText = getNodeSource(this.context, compared).trim() || 'value';
     this.addWarning(
       loc.line,
       loc.column,

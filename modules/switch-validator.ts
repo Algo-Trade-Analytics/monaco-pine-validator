@@ -33,6 +33,7 @@ import type {
 import { visit } from '../core/ast/traversal';
 import type { TypeMetadata } from '../core/ast/types';
 import { ensureAstContext } from '../core/ast/context-utils';
+import { getSourceLines } from '../core/ast/source-utils';
 
 export class SwitchValidator implements ValidationModule {
   name = 'SwitchValidator';
@@ -530,7 +531,7 @@ export class SwitchValidator implements ValidationModule {
       return;
     }
 
-    const sourceLines = this.context.lines ?? [];
+    const sourceLines = getSourceLines(this.context);
     const indentations = cases.map((caseNode) => {
       const line = caseNode.loc.start.line;
       const sourceLine = sourceLines[line - 1] ?? '';
