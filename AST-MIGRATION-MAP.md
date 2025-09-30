@@ -27,4 +27,4 @@ We are moving the validator stack to rely exclusively on the Chevrotain-generate
 ## Execution Plan
 - All tasks validated with `yarn test:ast`; follow-up suites (e.g. `yarn test:validator`) remain a useful final sanity check.
 - The remaining raw-line consumers above are intentional; we will now evaluate whether each can be replaced or gated behind AST-aware logic.
-- Introduced shared AST source helpers so validators now slice diagnostics from AST ranges rather than `context.lines`, covering `CoreValidator`, `FunctionValidator`, `MathFunctionsValidator`, `ArrayValidator`, and the remaining drawing/string/time/input/ticker/dynamic modules.
+- Introduced shared AST source helpers so validators now slice diagnostics from AST ranges rather than `context.lines`, covering `CoreValidator`, `FunctionValidator`, `MathFunctionsValidator`, `ArrayValidator`, and the remaining drawing/string/time/input/ticker/dynamic modules; the last raw-line fallback (lazy evaluation) has been removed.

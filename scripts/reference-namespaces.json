@@ -1,0 +1,17 @@
+{
+  "Map Validation": {
+    "specs": ["tests/specs/map-validation.spec.ts"],
+    "namespace": "map",
+    "category": "functions"
+  },
+  "Array Validation": {
+    "specs": ["tests/specs/array-validation.spec.ts"],
+    "namespace": "array",
+    "category": "functions"
+  },
+  "Matrix Validation": {
+    "specs": ["tests/specs/matrix-validation.spec.ts"],
+    "namespace": "matrix",
+    "category": "functions"
+  }
+}

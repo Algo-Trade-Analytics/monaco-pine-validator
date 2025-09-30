@@ -28,6 +28,7 @@ import {
   Dot,
   Equal,
   FatArrow,
+  Colon,
   Greater,
   Identifier as IdentifierToken,
   LBracket,
@@ -126,6 +127,12 @@ export function createCollectDeclarationTokensHelper(parser: PineParser) {
         tokenType === Greater ||
         tokenType === Comma
       ) {
+        tokens.push(token);
+        offset += 1;
+        continue;
+      }
+
+      if (tokenType === Colon) {
         tokens.push(token);
         offset += 1;
         continue;

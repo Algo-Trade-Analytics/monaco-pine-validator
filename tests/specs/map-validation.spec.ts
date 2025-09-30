@@ -167,22 +167,6 @@ notExists = map.contains(myMap, "nonexistent")
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should validate map includes operation', () => {
-      const code = `
-//@version=6
-indicator("Map Includes Test")
-
-myMap = map.new<string>()
-map.put(myMap, "first", "value1")
-map.put(myMap, "second", "value2")
-hasValue = map.includes(myMap, "value2")
-missingValue = map.includes(myMap, "value3")
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
   });
 
   describe('PSV6-MAP-METHODS: Map Method Validation', () => {

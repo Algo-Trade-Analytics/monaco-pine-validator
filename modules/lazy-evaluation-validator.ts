@@ -721,13 +721,7 @@ export class LazyEvaluationValidator implements ValidationModule {
 
   private getTextLines(context: ValidationContext): string[] {
     const lines = getSourceLines(context);
-    if (lines.length > 0) {
-      return [...lines];
-    }
-    if (context.rawLines && context.rawLines.length > 0) {
-      return [...context.rawLines];
-    }
-    return [];
+    return lines.length > 0 ? [...lines] : [];
   }
 
   private getHistoricalFunctionPattern(): RegExp {

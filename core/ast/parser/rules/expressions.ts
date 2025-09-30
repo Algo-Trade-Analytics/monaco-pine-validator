@@ -380,10 +380,12 @@ export function createCallExpressionRule(parser: PineParser) {
       if (tokenType === Less) {
         const canParseGenericCall = parser.backtrack(() => {
           parser.consumeToken(Less);
-          parser.invokeSubrule(parser.callTypeReference);
-          while (parser.lookAhead(1).tokenType === Comma) {
-            parser.consumeToken(Comma);
-            parser.invokeSubrule(parser.callTypeReference, 2);
+          if (parser.lookAhead(1).tokenType !== Greater) {
+            parser.invokeSubrule(parser.callTypeReference);
+            while (parser.lookAhead(1).tokenType === Comma) {
+              parser.consumeToken(Comma);
+              parser.invokeSubrule(parser.callTypeReference, 2);
+            }
           }
           parser.consumeToken(Greater);
           while (parser.lookAhead(1).tokenType === Newline) {
@@ -400,10 +402,12 @@ export function createCallExpressionRule(parser: PineParser) {
         const typeArgumentTokenGroups: IToken[][] = [];
 
         parser.consumeToken(Less);
-        typeArgumentTokenGroups.push(parser.invokeSubrule(parser.callTypeReference));
-        while (parser.lookAhead(1).tokenType === Comma) {
-          parser.consumeToken(Comma);
-          typeArgumentTokenGroups.push(parser.invokeSubrule(parser.callTypeReference, 2));
+        if (parser.lookAhead(1).tokenType !== Greater) {
+          typeArgumentTokenGroups.push(parser.invokeSubrule(parser.callTypeReference));
+          while (parser.lookAhead(1).tokenType === Comma) {
+            parser.consumeToken(Comma);
+            typeArgumentTokenGroups.push(parser.invokeSubrule(parser.callTypeReference, 2));
+          }
         }
         parser.consumeToken(Greater);
 

@@ -91,6 +91,15 @@ plot(close)`;
       context.cleanLines = code.split('\n');
 
       const result = validator.validate(context, config);
+      if (process.env.DEBUG_ARRAY === '1') {
+        // eslint-disable-next-line no-console
+        console.log('invalid array result', {
+          isValid: result.isValid,
+          errors: result.errors.map(err => ({ line: err.line, code: err.code })),
+          warnings: result.warnings.map(err => ({ line: err.line, code: err.code })),
+          astDiagnostics: result.astDiagnostics ?? validator.context?.astDiagnostics,
+        });
+      }
       expect(result.isValid).toBe(false);
       expectHas(result, { errors: ['PSV6-ARRAY-INVALID-SYNTAX'] });
     });

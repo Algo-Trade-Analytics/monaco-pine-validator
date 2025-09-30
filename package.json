@@ -9,7 +9,9 @@
     "test:validator": "node tests/run-all-tests.js",
     "test:validator:full": "node tests/run-all-tests.js --full",
     "test:e2e": "vitest run tests/e2e",
-    "test:playwright": "npm --prefix playground run build && npx playwright install --with-deps && playwright test"
+    "test:playwright": "npm --prefix playground run build && npx playwright install --with-deps && playwright test",
+    "check:map-reference": "node --loader ts-node/esm --experimental-specifier-resolution=node scripts/check-map-spec-reference.ts",
+    "check:reference": "node --loader ts-node/esm --experimental-specifier-resolution=node scripts/check-reference-namespace.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.1",

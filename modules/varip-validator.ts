@@ -16,7 +16,7 @@ import {
 } from '../core/ast/nodes';
 import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
 import { ensureAstContext } from '../core/ast/context-utils';
-import { getNodeSource } from '../core/ast/source-utils';
+import { getNodeSource, getSourceLine } from '../core/ast/source-utils';
 
 type AssignmentOperator = '=' | ':=' | '+=' | '-=' | '*=' | '/=' | '%=';
 
@@ -286,7 +286,7 @@ export class VaripValidator implements ValidationModule {
       current = current.parent;
     }
 
-    const rawLine = this.context.rawLines?.[statement.loc.start.line - 1] ?? '';
+    const rawLine = getSourceLine(this.context, statement.loc.start.line);
     if (this.lineHasBarstateGuard(rawLine)) {
       return true;
     }
@@ -375,7 +375,7 @@ export class VaripValidator implements ValidationModule {
     statement: AssignmentStatementNode,
     left: ExpressionNode,
   ): { operator: AssignmentOperator; rhs: string } | null {
-    const rawLine = this.context.rawLines?.[statement.loc.start.line - 1] ?? '';
+    const rawLine = getSourceLine(this.context, statement.loc.start.line);
     const fromLine = this.resolveAssignmentOperatorFromLine(rawLine, left.loc.end.column);
     if (fromLine) {
       return fromLine;

@@ -179,6 +179,18 @@ export class MapValidator implements ValidationModule {
             return;
           }
 
+          if (process.env.DEBUG_MAP_VALIDATOR === '1') {
+            const typeArgs = Array.isArray(call.typeArguments)
+              ? call.typeArguments.map((arg) => this.describeTypeReference(arg))
+              : null;
+            console.log('[MapValidator] call', {
+              qualifiedName,
+              args: call.args.length,
+              typeArgs,
+              loc: call.loc,
+            });
+          }
+
           if (qualifiedName === 'map.new') {
             const target = this.extractMapAssignmentTarget(callPath);
             if (!target) {
@@ -204,6 +216,27 @@ export class MapValidator implements ValidationModule {
             const targetValueType = target.annotationValueType ?? null;
             const keyType = this.normalizeKeyType(callTypes.keyType ?? targetKeyType);
             const valueType = this.normalizeValueType(callTypes.valueType ?? targetValueType);
+
+            const normalizedAnnotationValue = targetValueType ? this.normalizeValueType(targetValueType) : null;
+            const normalizedCallValue = callTypes.valueType ? this.normalizeValueType(callTypes.valueType) : null;
+
+            if (
+              targetValueType &&
+              callTypes.valueType &&
+              normalizedAnnotationValue &&
+              normalizedCallValue &&
+              normalizedAnnotationValue !== 'unknown' &&
+              normalizedCallValue !== 'unknown' &&
+              normalizedAnnotationValue !== normalizedCallValue
+            ) {
+              this.addError(
+                target.line,
+                target.column,
+                `Map '${target.name}' declares values of type ${normalizedAnnotationValue} but map.new<${callTypes.valueType}>() was provided`,
+                'PSV6-MAP-TYPE-MISMATCH',
+                `Use map.new<${normalizedAnnotationValue}>() or update the type annotation`,
+              );
+            }
 
             this.mapDeclarations.set(target.name, {
               name: target.name,

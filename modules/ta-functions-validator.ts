@@ -48,6 +48,7 @@ export class TAFunctionsValidator implements ValidationModule {
   private seriesLikeIdentifiers: Set<string> = new Set();
 
   private taFunctionCalls: Map<string, TAFunctionInfo> = new Map();
+  private taFunctionCallList: TAFunctionInfo[] = [];
   private taFunctionCount = 0;
   private complexTAExpressions = 0;
   private taCallSignaturesByLine: Map<number, Map<string, number>> = new Map();
@@ -101,6 +102,7 @@ export class TAFunctionsValidator implements ValidationModule {
     this.boolAssignmentTargets.clear();
     this.reportedBooleanUsages.clear();
     this.taFunctionCalls.clear();
+    this.taFunctionCallList = [];
     this.taFunctionCount = 0;
     this.complexTAExpressions = 0;
     this.taCallSignaturesByLine.clear();
@@ -189,7 +191,10 @@ export class TAFunctionsValidator implements ValidationModule {
   }
 
   private recordTAFunctionCall(info: TAFunctionInfo): void {
-    this.taFunctionCalls.set(info.name, { ...info });
+    this.taFunctionCallList.push({ ...info });
+    if (!this.taFunctionCalls.has(info.name)) {
+      this.taFunctionCalls.set(info.name, { ...info });
+    }
   }
 
   private trackAssignmentTargets(
@@ -444,6 +449,32 @@ export class TAFunctionsValidator implements ValidationModule {
 
     // Check for TA function combinations
     this.checkTACombinations();
+
+    // Suggest caching when identical TA signatures appear multiple times in the script
+    this.suggestCachingRepeatedCalls();
+  }
+
+  private suggestCachingRepeatedCalls(): void {
+    const signatureCounts = new Map<string, TAFunctionInfo[]>();
+    for (const info of this.taFunctionCallList) {
+      const signature = `${info.name}(${info.parameters.join(',')})`;
+      const list = signatureCounts.get(signature) ?? [];
+      list.push(info);
+      signatureCounts.set(signature, list);
+    }
+
+    for (const infos of signatureCounts.values()) {
+      if (infos.length > 1) {
+        for (const info of infos) {
+          this.addInfo(
+            info.line,
+            info.column,
+            'PSV6-TA-CACHE-SUGGESTION',
+            `Function '${info.name}' is called repeatedly with the same parameters. Cache the result for performance.`,
+          );
+        }
+      }
+    }
   }
 
   private checkTAParameterRanges(funcName: string, funcInfo: TAFunctionInfo): void {

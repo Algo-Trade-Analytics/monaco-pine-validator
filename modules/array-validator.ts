@@ -272,6 +272,17 @@ export class ArrayValidator implements ValidationModule {
     call: CallExpressionNode,
     path: NodePath<CallExpressionNode>,
   ): void {
+    if (process.env.DEBUG_ARRAY === '1') {
+      // eslint-disable-next-line no-console
+      console.log('[ArrayValidator] creation', {
+        qualifiedName,
+        args: call.args.map(arg => this.getExpressionText(arg.value)),
+        typeArguments: Array.isArray(call.typeArguments)
+          ? call.typeArguments.map(arg => this.formatTypeReference(arg))
+          : null,
+        loc: call.loc,
+      });
+    }
     this.arrayAllocations++;
 
     const target = this.extractArrayAssignmentTarget(path);

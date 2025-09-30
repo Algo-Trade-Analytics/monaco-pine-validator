@@ -124,7 +124,10 @@ export function ensureAstContext(
     if (process.env.DEBUG_MODULE_HARNESS === '1') {
       console.log('[ensureAstContext] parsing source snippet', source.slice(0, 80));
     }
-    const serviceResult = service.parse(source, { filename: DEFAULT_AST_FILENAME });
+    const serviceResult = service.parse(source, {
+      filename: DEFAULT_AST_FILENAME,
+      allowErrors: true,
+    });
     const result = ensureAstParseResult(serviceResult);
     astContext.ast = result.ast;
     astContext.astDiagnostics = result.diagnostics;

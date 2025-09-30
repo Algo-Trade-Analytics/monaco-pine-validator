@@ -8,6 +8,7 @@ import {
   Equal,
   FatArrow,
   LParen,
+  Colon,
   Identifier as IdentifierToken,
   Import,
   Indicator,
@@ -337,8 +338,11 @@ export function createVariableDeclarationRule(parser: PineParser) {
 
     const collected = parser.collectDeclarationTokens(1);
     const tokens = collected?.tokens ?? [];
-    const { typeTokens } = splitDeclarationTokens(tokens);
-    const typeAnnotation = buildTypeReferenceFromTokens(typeTokens);
+    const colonIndex = tokens.findIndex((token) => token.tokenType === Colon);
+    const prefixTokens = colonIndex >= 0 ? tokens.slice(0, colonIndex) : tokens;
+    const colonTypeTokens = colonIndex >= 0 ? tokens.slice(colonIndex + 1) : [];
+    const { typeTokens } = splitDeclarationTokens(prefixTokens);
+    let typeAnnotation = buildTypeReferenceFromTokens(typeTokens);
 
     for (const token of typeTokens) {
       parser.consumeToken(token.tokenType);
@@ -346,6 +350,19 @@ export function createVariableDeclarationRule(parser: PineParser) {
 
     const identifierToken = parser.consumeToken(IdentifierToken);
     const identifier = createIdentifierNode(identifierToken);
+
+    const debugMode = process.env.DEBUG_PARSER === '1' && !(parser as any).RECORDING_PHASE;
+
+    if (colonIndex >= 0) {
+      parser.consumeToken(Colon);
+      for (const token of colonTypeTokens) {
+        parser.consumeToken(token.tokenType);
+      }
+      const colonTypeAnnotation = buildTypeReferenceFromTokens(colonTypeTokens);
+      if (colonTypeAnnotation) {
+        typeAnnotation = colonTypeAnnotation;
+      }
+    }
 
     let initializer: ExpressionNode | undefined;
     let operatorToken: IToken | undefined;
@@ -368,6 +385,17 @@ export function createVariableDeclarationRule(parser: PineParser) {
       operatorToken ? ((operatorToken.image === ':=' ? ':=' : '=') as '=' | ':=') : null,
       startToken,
     );
+
+    if (debugMode) {
+      console.log('[Parser] variableDeclaration', {
+        identifier: identifier.name,
+        hasPrefixType: Boolean(typeTokens.length > 0),
+        hasColonType: Boolean(colonIndex >= 0),
+        initializerPresent: Boolean(initializer),
+        operator: operatorToken?.image ?? null,
+      });
+    }
+
     if (
       initializer &&
       operatorToken &&

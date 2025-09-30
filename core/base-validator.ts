@@ -278,7 +278,9 @@ export abstract class BaseValidator {
     this.astConfig.service = service;
 
     try {
-      const result = ensureAstParseResult(service.parse(source, { filename: DEFAULT_AST_FILENAME }));
+      const result = ensureAstParseResult(
+        service.parse(source, { filename: DEFAULT_AST_FILENAME, allowErrors: true }),
+      );
       this.context.ast = result.ast;
       this.context.astDiagnostics = result.diagnostics;
       if (result.ast) {
