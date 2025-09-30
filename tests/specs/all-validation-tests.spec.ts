@@ -18,6 +18,7 @@ const SMOKE_SUITES: SuiteDefinition[] = [
 
 const FULL_SUITES: SuiteDefinition[] = [
   { name: 'Array Validation', importModule: () => import('./array-validation.spec') },
+  { name: 'Array Utility Functions Validation', importModule: () => import('./array-utility-functions-validation.spec') },
   { name: 'Map Validation', importModule: () => import('./map-validation.spec') },
   { name: 'String Functions Validation', importModule: () => import('./string-functions-validation.spec') },
   { name: 'Input Functions Validation', importModule: () => import('./input-functions-validation.spec') },
@@ -37,6 +38,9 @@ const FULL_SUITES: SuiteDefinition[] = [
   { name: 'Function Validation', importModule: () => import('./function-validation.spec') },
   { name: 'History Referencing Validation', importModule: () => import('./history-referencing-validation.spec') },
   { name: 'Matrix Validation', importModule: () => import('./matrix-validation.spec') },
+  { name: 'Matrix Functions Validation', importModule: () => import('./matrix-functions-validation.spec') },
+  { name: 'Chart Functions Validation', importModule: () => import('./chart-functions-validation.spec') },
+  { name: 'Strategy Properties Validation', importModule: () => import('./strategy-properties-validation.spec') },
   { name: 'Migration Verification', importModule: () => import('./migration-verification.spec') },
   { name: 'Switch Statement Validation', importModule: () => import('./switch-statement-validation.spec') },
   { name: 'Text Formatting Validation', importModule: () => import('./text-formatting-validation.spec') },

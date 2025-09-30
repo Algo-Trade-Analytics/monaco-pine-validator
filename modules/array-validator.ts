@@ -73,6 +73,7 @@ const ARRAY_METHOD_SPECS: Array<{ name: string; params?: number; description: st
   { name: 'array.from_example', description: 'array.from_example(id, example)' },
   { name: 'array.indexof', params: 2, description: 'array.indexof(id, value)' },
   { name: 'array.lastindexof', params: 2, description: 'array.lastindexof(id, value)' },
+  { name: 'array.includes', params: 2, description: 'array.includes(id, value)' },
   { name: 'array.binary_search', description: 'array.binary_search(id, value, comparator?)' },
   { name: 'array.binary_search_leftmost', description: 'array.binary_search_leftmost(id, value)' },
   { name: 'array.binary_search_rightmost', description: 'array.binary_search_rightmost(id, value)' },

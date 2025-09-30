@@ -9,6 +9,7 @@ import {
 import { ensureAstContext } from '../core/ast/context-utils';
 import {
   type ArgumentNode,
+  type AssignmentStatementNode,
   type BinaryExpressionNode,
   type CallExpressionNode,
   type ExpressionNode,
@@ -19,6 +20,7 @@ import {
   type ProgramNode,
   type TypeReferenceNode,
   type UnaryExpressionNode,
+  type VariableDeclarationNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 import { BUILTIN_FUNCTIONS_V6_RULES, KEYWORDS, NAMESPACES, NS_MEMBERS } from '../core/constants';
@@ -59,6 +61,10 @@ interface FunctionCall {
   astPath?: NodePath<CallExpressionNode>;
 }
 
+interface BooleanAssignmentInfo {
+  funcName: string;
+}
+
 export class FunctionValidator implements ValidationModule {
   name = 'FunctionValidator';
   priority = 85; // High priority - functions are core to Pine Script
@@ -81,6 +87,8 @@ export class FunctionValidator implements ValidationModule {
   private paramUsage = new Map<string, Set<string>>();
   private userFunctions: Map<string, FunctionInfo[]> = new Map();
   private functionCalls: FunctionCall[] = [];
+  private booleanFunctionAssignments = new Map<string, BooleanAssignmentInfo>();
+  private astProgram: ProgramNode | null = null;
   private seriesLikeIdentifiers = new Set<string>();
   private static readonly BUILTIN_SERIES_IDENTIFIERS = new Set([
     'open',
@@ -293,6 +301,8 @@ export class FunctionValidator implements ValidationModule {
     this.paramUsage.clear();
     this.userFunctions.clear();
     this.functionCalls = [];
+    this.booleanFunctionAssignments.clear();
+    this.astProgram = null;
     this.astContext = null;
     this.errorKeys.clear();
     this.warningKeys.clear();
@@ -485,9 +495,12 @@ export class FunctionValidator implements ValidationModule {
     for (const call of this.functionCalls) {
       this.validateSingleFunctionCall(call);
     }
+
+    this.validateBooleanVariableUsagesAst();
   }
 
   private collectFunctionCallsFromAst(program: ProgramNode): void {
+    this.astProgram = program;
     const loopStack: Array<'for' | 'while' | 'repeat'> = [];
 
     visit(program, {
@@ -1519,8 +1532,6 @@ export class FunctionValidator implements ValidationModule {
         return;
       }
     }
-
-    this.validateReturnTypeUsageLegacy(funcName, call, returnType);
   }
 
   private validateReturnTypeUsageAst(funcName: string, call: FunctionCall, returnType: string): boolean {
@@ -1532,6 +1543,47 @@ export class FunctionValidator implements ValidationModule {
     const location = call.astNode?.loc?.start ?? { line: call.line, column: call.column };
     const parent = path.parent;
     if (!parent) {
+      return false;
+    }
+
+    if (parent.node.kind === 'VariableDeclaration' && parent.key === 'initializer') {
+      const declaration = parent.node as VariableDeclarationNode;
+      if (
+        declaration.identifier.kind === 'Identifier'
+        && (returnType === 'bool' || this.isBooleanFunction(funcName))
+      ) {
+        this.booleanFunctionAssignments.set(declaration.identifier.name, {
+          funcName,
+        });
+      } else if (declaration.identifier.kind === 'Identifier') {
+        this.booleanFunctionAssignments.delete(declaration.identifier.name);
+      }
+      return false;
+    }
+
+    if (parent.node.kind === 'AssignmentStatement' && parent.key === 'right') {
+      const assignment = parent.node as AssignmentStatementNode;
+      if (assignment.left.kind === 'Identifier') {
+        const identifier = assignment.left as IdentifierNode;
+        const operator = assignment.operator ?? '=';
+        if (operator !== '=' && (returnType === 'bool' || this.isBooleanFunction(funcName))) {
+          this.addError(
+            location.line,
+            location.column,
+            `Boolean function '${funcName}' cannot be used in arithmetic operations`,
+            'PSV6-FUNCTION-RETURN-TYPE',
+          );
+          return true;
+        }
+
+        if (operator === '=' && (returnType === 'bool' || this.isBooleanFunction(funcName))) {
+          this.booleanFunctionAssignments.set(identifier.name, {
+            funcName,
+          });
+        } else if (operator === '=') {
+          this.booleanFunctionAssignments.delete(identifier.name);
+        }
+      }
       return false;
     }
 
@@ -1589,88 +1641,94 @@ export class FunctionValidator implements ValidationModule {
     return false;
   }
 
-  private validateReturnTypeUsageLegacy(funcName: string, call: FunctionCall, returnType: string): void {
-    const line = getSourceLine(this.context, call.line);
-    if (!line) return;
-
-    const funcCallStart = line.indexOf(funcName, call.startIndex);
-    if (funcCallStart === -1) return;
-
-    let funcCallEnd = funcCallStart + funcName.length;
-    let parenCount = 0;
-    let inString = false;
-    let stringChar = '';
-
-    for (let i = funcCallStart; i < line.length; i++) {
-      const char = line[i];
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-      } else if (inString && char === stringChar) {
-        inString = false;
-      } else if (!inString && char === '(') {
-        parenCount++;
-      } else if (!inString && char === ')') {
-        parenCount--;
-        if (parenCount === 0) {
-          funcCallEnd = i + 1;
-          break;
-        }
-      }
+  private validateBooleanVariableUsagesAst(): void {
+    if (!this.astProgram || this.booleanFunctionAssignments.size === 0) {
+      return;
     }
 
-    const beforeCall = line.substring(0, funcCallStart).trim();
-    const afterCall = line.substring(funcCallEnd).trim();
+    const warned = new Set<string>();
 
-    if ((returnType === 'bool') || this.isBooleanFunction(funcName)) {
-      if (this.isArithmeticContext(beforeCall, afterCall)) {
-        this.addError(call.line, call.column,
-          `Boolean function '${funcName}' cannot be used in arithmetic operations`,
-          'PSV6-FUNCTION-RETURN-TYPE');
-      }
-    }
+    visit(this.astProgram, {
+      Identifier: {
+        enter: (path: NodePath<IdentifierNode>) => {
+          const name = path.node.name;
+          const assignmentInfo = this.booleanFunctionAssignments.get(name);
+          if (!assignmentInfo) {
+            return;
+          }
 
-    if (returnType !== 'string' && this.isStringContext(beforeCall, afterCall)) {
-      this.addError(call.line, call.column,
-        `Function '${funcName}' returns ${returnType}, cannot be used in string operations`,
-        'PSV6-FUNCTION-RETURN-TYPE');
-    }
+          if (this.isIdentifierAssignmentTarget(path)) {
+            return;
+          }
 
-    this.checkVariableAssignmentUsage(funcName, returnType, call, line, funcCallStart, funcCallEnd);
+          const parent = path.parent;
+          if (!parent) {
+            return;
+          }
+
+          const usageKey = `${name}:${path.node.loc.start.line}:${path.node.loc.start.column}`;
+
+          if (parent.node.kind === 'BinaryExpression') {
+            const binary = parent.node as BinaryExpressionNode;
+            if (!this.isBooleanArithmeticOperator(binary.operator)) {
+              return;
+            }
+            if (warned.has(usageKey)) {
+              return;
+            }
+            warned.add(usageKey);
+            this.addError(
+              path.node.loc.start.line,
+              path.node.loc.start.column,
+              `Variable '${name}' contains boolean result from '${assignmentInfo.funcName}' and cannot be used in arithmetic operations`,
+              'PSV6-FUNCTION-RETURN-TYPE',
+            );
+            return;
+          }
+
+          if (parent.node.kind === 'UnaryExpression') {
+            const unary = parent.node as UnaryExpressionNode;
+            if (unary.operator === '+' || unary.operator === '-') {
+              if (warned.has(usageKey)) {
+                return;
+              }
+              warned.add(usageKey);
+              this.addError(
+                path.node.loc.start.line,
+                path.node.loc.start.column,
+                `Variable '${name}' contains boolean result from '${assignmentInfo.funcName}' and cannot be used in arithmetic operations`,
+                'PSV6-FUNCTION-RETURN-TYPE',
+              );
+            }
+          }
+        },
+      },
+    });
   }
 
-  private checkVariableAssignmentUsage(funcName: string, returnType: string, call: FunctionCall, line: string, funcCallStart: number, funcCallEnd: number): void {
-    // Check if this is a variable assignment
-    const assignmentMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
-    if (!assignmentMatch) return;
+  private isBooleanArithmeticOperator(operator: string): boolean {
+    return operator === '+' || operator === '-' || operator === '*' || operator === '/' || operator === '%' || operator === '^' || operator === '|' || operator === '&';
+  }
 
-    const varName = assignmentMatch[1];
-    const expression = assignmentMatch[2];
-
-    // Check if the function call is the ONLY thing in the expression (direct assignment)
-    const trimmedExpression = expression.trim();
-    if (!trimmedExpression.includes(funcName)) return;
-
-    // Only check for boolean functions being used incorrectly
-    if (!(returnType === 'bool' || this.isBooleanFunction(funcName))) return;
-
-    // Check if this variable is used incorrectly in subsequent lines
-    const lines = getSourceLines(this.context);
-    for (let index = call.line; index < lines.length; index++) {
-      const currentLine = lines[index] ?? '';
-      if (!currentLine.includes(varName)) continue;
-
-      // Check if the variable is used in arithmetic operations
-      if (this.isVariableUsedInArithmetic(currentLine, varName)) {
-        this.addError(index + 1, 1,
-          `Variable '${varName}' contains boolean result from '${funcName}' and cannot be used in arithmetic operations`,
-          'PSV6-FUNCTION-RETURN-TYPE');
-      }
+  private isIdentifierAssignmentTarget(path: NodePath<IdentifierNode>): boolean {
+    const parent = path.parent;
+    if (!parent) {
+      return false;
     }
+
+    if (parent.node.kind === 'VariableDeclaration' && parent.key === 'identifier') {
+      return true;
+    }
+
+    if (parent.node.kind === 'AssignmentStatement' && parent.key === 'left') {
+      return true;
+    }
+
+    return false;
   }
 
   private isArithmeticOperator(operator: string, otherOperand: ExpressionNode): boolean {
-    const arithmeticOperators = new Set(['+', '-', '*', '/', '%', '^']);
+    const arithmeticOperators = new Set(['+', '-', '*', '/', '%', '^', '|', '&']);
     if (!arithmeticOperators.has(operator)) {
       return false;
     }
@@ -1711,86 +1769,11 @@ export class FunctionValidator implements ValidationModule {
     return null;
   }
 
-  private isVariableUsedInArithmetic(line: string, varName: string): boolean {
-    // Check if the variable is used with arithmetic operators
-    const arithmeticOps = ['+', '-', '*', '/', '%', '^'];
-    
-    for (const op of arithmeticOps) {
-      // Check for patterns like: varName + something, something + varName, varName - something, etc.
-      const patterns = [
-        new RegExp(`\\b${varName}\\s*\\${op}`),
-        new RegExp(`\\${op}\\s*\\b${varName}\\b`)
-      ];
-      
-      for (const pattern of patterns) {
-        if (pattern.test(line)) {
-          return true;
-        }
-      }
-    }
-    
-    return false;
-  }
-
   private isBooleanFunction(funcName: string): boolean {
     const booleanFunctions = [
       'ta.crossover', 'ta.crossunder', 'ta.rising', 'ta.falling'
     ];
     return booleanFunctions.includes(funcName);
-  }
-
-  private isArithmeticContext(before: string, after: string): boolean {
-    // Remove comments from the strings
-    const beforeClean = before.replace(/\/\/.*$/, '').trim();
-    const afterClean = after.replace(/\/\/.*$/, '').trim();
-    
-    // Check for arithmetic operators around the function call
-    const arithmeticOps = ['+', '-', '*', '/', '%', '^'];
-    
-    // Check if there's an arithmetic operator before or after
-    for (const op of arithmeticOps) {
-      if (beforeClean.endsWith(op) || afterClean.startsWith(op)) {
-        return true;
-      }
-    }
-    
-    // Check for compound assignment operators
-    const compoundOps = ['+=', '-=', '*=', '/=', '%='];
-    for (const op of compoundOps) {
-      if (beforeClean.endsWith(op) || afterClean.startsWith(op)) {
-        return true;
-      }
-    }
-    
-    return false;
-  }
-
-  private isStringContext(before: string, after: string): boolean {
-    // Check for string operations - be more specific to avoid false positives
-    const stringOps = ['str.', 'tostring'];
-    
-    for (const op of stringOps) {
-      if (before.endsWith(op) || after.startsWith(op)) {
-        return true;
-      }
-    }
-    
-    // Only flag + as string context if it's clearly a string concatenation
-    // (e.g., if immediate neighbor is a string literal or str.*)
-    if (before.trimEnd().endsWith('+')) {
-      const afterTrim = after.trimStart();
-      if (afterTrim.startsWith('"') || afterTrim.startsWith("'")) return true;
-      if (/^str\./.test(afterTrim)) return true;
-    }
-    if (after.trimStart().startsWith('+')) {
-      const beforeTrim = before.trimEnd();
-      // get the last token before +
-      const lastChar = beforeTrim.slice(-1);
-      if (lastChar === '"' || lastChar === "'") return true;
-      if (/str\.[A-Za-z_]/.test(beforeTrim.slice(-15))) return true;
-    }
-    
-    return false;
   }
 
   private validateDuplicateFunctions(): void {

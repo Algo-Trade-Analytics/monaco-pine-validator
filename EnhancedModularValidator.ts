@@ -35,6 +35,7 @@ import { EnumValidator } from './modules/enum-validator';
 import { ArrayValidator } from './modules/array-validator';
 import { MatrixValidator } from './modules/matrix-validator';
 import { MapValidator } from './modules/map-validator';
+import { ChartValidator } from './modules/chart-validator';
 import { StringFunctionsValidator } from './modules/string-functions-validator';
 import { InputFunctionsValidator } from './modules/input-functions-validator';
 import { DrawingFunctionsValidator } from './modules/drawing-functions-validator';
@@ -76,6 +77,7 @@ export class EnhancedModularValidator extends BaseValidator {
     this.registerModule(new ArrayValidator());          // Array validation (priority 90) - must run before FunctionValidator
     this.registerModule(new MatrixValidator());         // Matrix validation (priority 90) - must run before FunctionValidator
             this.registerModule(new MapValidator());            // Map validation (priority 88) - must run before FunctionValidator
+            this.registerModule(new ChartValidator());          // Chart validation (priority 70) - handles chart.point.* functions
             this.registerModule(new StringFunctionsValidator()); // String functions validation (priority 85) - essential for Pine Script
             this.registerModule(new InputFunctionsValidator());  // Input functions validation (priority 87) - essential for Pine Script
             this.registerModule(new DrawingFunctionsValidator()); // Drawing functions validation (priority 86) - essential for Pine Script

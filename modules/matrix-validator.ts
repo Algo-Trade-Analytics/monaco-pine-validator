@@ -31,15 +31,75 @@ import { getNodeSource } from '../core/ast/source-utils';
 const VALID_MATRIX_ELEMENT_TYPES = new Set(['int', 'float', 'bool', 'string', 'color']);
 
 const MATRIX_METHOD_SPECS: Array<{ name: string; params: number; description: string }> = [
+  // Basic operations
   { name: 'matrix.set', params: 4, description: 'matrix.set(id, row, col, value)' },
   { name: 'matrix.get', params: 3, description: 'matrix.get(id, row, col)' },
   { name: 'matrix.rows', params: 1, description: 'matrix.rows(id)' },
   { name: 'matrix.columns', params: 1, description: 'matrix.columns(id)' },
   { name: 'matrix.copy', params: 1, description: 'matrix.copy(id)' },
   { name: 'matrix.fill', params: 2, description: 'matrix.fill(id, value)' },
+  { name: 'matrix.elements_count', params: 1, description: 'matrix.elements_count(id)' },
+  
+  // Row/Column manipulation
+  { name: 'matrix.add_row', params: 3, description: 'matrix.add_row(id, row_num, values)' },
+  { name: 'matrix.add_col', params: 3, description: 'matrix.add_col(id, col_num, values)' },
+  { name: 'matrix.remove_row', params: 2, description: 'matrix.remove_row(id, row_num)' },
+  { name: 'matrix.remove_col', params: 2, description: 'matrix.remove_col(id, col_num)' },
+  
+  // Math operations
+  { name: 'matrix.sum', params: 1, description: 'matrix.sum(id)' },
+  { name: 'matrix.avg', params: 1, description: 'matrix.avg(id)' },
+  { name: 'matrix.min', params: 1, description: 'matrix.min(id)' },
+  { name: 'matrix.max', params: 1, description: 'matrix.max(id)' },
+  { name: 'matrix.median', params: 1, description: 'matrix.median(id)' },
+  { name: 'matrix.mode', params: 1, description: 'matrix.mode(id)' },
+  { name: 'matrix.add', params: 2, description: 'matrix.add(id1, id2)' },
+  { name: 'matrix.sub', params: 2, description: 'matrix.sub(id1, id2)' },
+  { name: 'matrix.mult', params: 2, description: 'matrix.mult(id1, id2)' },
+  { name: 'matrix.div', params: 2, description: 'matrix.div(id1, id2)' },
+  { name: 'matrix.pow', params: 2, description: 'matrix.pow(id, power)' },
+  { name: 'matrix.sqrt', params: 1, description: 'matrix.sqrt(id)' },
+  { name: 'matrix.abs', params: 1, description: 'matrix.abs(id)' },
+  { name: 'matrix.diff', params: 2, description: 'matrix.diff(id1, id2)' },
+  
+  // Statistical operations
+  { name: 'matrix.variance', params: 1, description: 'matrix.variance(id)' },
+  { name: 'matrix.stdev', params: 1, description: 'matrix.stdev(id)' },
+  { name: 'matrix.covariance', params: 2, description: 'matrix.covariance(id1, id2)' },
+  { name: 'matrix.percentile_linear_interpolation', params: 2, description: 'matrix.percentile_linear_interpolation(id, percentage)' },
+  { name: 'matrix.percentile_nearest_rank', params: 2, description: 'matrix.percentile_nearest_rank(id, percentage)' },
+  
+  // Linear algebra
+  { name: 'matrix.det', params: 1, description: 'matrix.det(id)' },
+  { name: 'matrix.inv', params: 1, description: 'matrix.inv(id)' },
+  { name: 'matrix.pinv', params: 1, description: 'matrix.pinv(id)' },
+  { name: 'matrix.rank', params: 1, description: 'matrix.rank(id)' },
+  { name: 'matrix.transpose', params: 1, description: 'matrix.transpose(id)' },
+  { name: 'matrix.eigenvalues', params: 1, description: 'matrix.eigenvalues(id)' },
+  { name: 'matrix.eigenvectors', params: 1, description: 'matrix.eigenvectors(id)' },
+  
+  // Transformations
+  { name: 'matrix.reshape', params: 3, description: 'matrix.reshape(id, rows, columns)' },
+  { name: 'matrix.reverse', params: 1, description: 'matrix.reverse(id)' },
+  { name: 'matrix.concat', params: 3, description: 'matrix.concat(id1, id2, axis)' },
+  
+  // Helper functions
+  { name: 'matrix.is_square', params: 1, description: 'matrix.is_square(id)' },
+  { name: 'matrix.is_identity', params: 1, description: 'matrix.is_identity(id)' },
+  { name: 'matrix.is_symmetric', params: 1, description: 'matrix.is_symmetric(id)' },
 ];
 
-const EXPENSIVE_MATRIX_METHODS = new Set(['matrix.fill', 'matrix.copy']);
+const EXPENSIVE_MATRIX_METHODS = new Set([
+  'matrix.fill', 
+  'matrix.copy',
+  'matrix.mult',
+  'matrix.inv',
+  'matrix.pinv',
+  'matrix.eigenvalues',
+  'matrix.eigenvectors',
+  'matrix.det',
+  'matrix.reshape',
+]);
 
 type MatrixInfo = {
   elementType: string;
@@ -296,6 +356,7 @@ export class MatrixValidator implements ValidationModule {
     const matrixArgument = args[0]?.value ?? null;
     const matrixName = matrixArgument ? this.validateMatrixVariableAst(matrixArgument, line, column) : null;
 
+    // Existing validations
     if (qualifiedName === 'matrix.get' && matrixName && args[1] && args[2]) {
       this.validateMatrixIndexAst(matrixName, args[1], args[2], line, column);
     }
@@ -315,13 +376,192 @@ export class MatrixValidator implements ValidationModule {
       this.recordMatrixUsage(matrixName, 'fill', line);
     }
 
+    // Linear algebra validations
+    if (qualifiedName === 'matrix.inv' || qualifiedName === 'matrix.det') {
+      this.validateSquareMatrix(matrixName, line, column, qualifiedName);
+    }
+
+    if (qualifiedName === 'matrix.eigenvalues' || qualifiedName === 'matrix.eigenvectors') {
+      this.validateSquareMatrix(matrixName, line, column, qualifiedName);
+    }
+
+    // Matrix multiplication dimension check
+    if (qualifiedName === 'matrix.mult' && args.length >= 2) {
+      this.validateMatrixMultiplicationDimensions(args[0], args[1], line, column);
+    }
+
+    // Reshape validation
+    if (qualifiedName === 'matrix.reshape' && matrixName && args.length >= 3) {
+      this.validateReshapeDimensions(matrixName, args[1], args[2], line, column);
+    }
+
+    // Row/Column operations
+    if (qualifiedName === 'matrix.add_row' || qualifiedName === 'matrix.remove_row') {
+      this.validateRowOperation(matrixName, args[1], line, column, qualifiedName);
+    }
+
+    if (qualifiedName === 'matrix.add_col' || qualifiedName === 'matrix.remove_col') {
+      this.validateColOperation(matrixName, args[1], line, column, qualifiedName);
+    }
+
+    // Covariance validation (requires compatible dimensions)
+    if (qualifiedName === 'matrix.covariance' && args.length >= 2) {
+      this.validateCovarianceDimensions(args[0], args[1], line, column);
+    }
+
+    // Performance warning for expensive operations in loops
     if (inLoop && EXPENSIVE_MATRIX_METHODS.has(qualifiedName)) {
       this.addWarning(
         line,
         column,
-        `Expensive matrix operation '${qualifiedName}' detected in loop`,
+        `Expensive matrix operation '${qualifiedName}' detected in loop. Consider moving outside loop if possible.`,
         'PSV6-MATRIX-PERF-LOOP',
       );
+    }
+  }
+
+  private validateSquareMatrix(matrixName: string | null, line: number, column: number, operation: string): void {
+    if (!matrixName) return;
+    
+    const info = this.matrixDeclarations.get(matrixName);
+    if (!info) return;
+    
+    if (info.rows !== null && info.cols !== null && info.rows !== info.cols) {
+      this.addError(
+        line,
+        column,
+        `${operation} requires a square matrix, but '${matrixName}' is ${info.rows}x${info.cols}`,
+        'PSV6-MATRIX-NOT-SQUARE',
+      );
+    }
+  }
+
+  private validateMatrixMultiplicationDimensions(
+    arg1: ArgumentNode,
+    arg2: ArgumentNode,
+    line: number,
+    column: number
+  ): void {
+    const matrix1Name = arg1.value.kind === 'Identifier' ? (arg1.value as IdentifierNode).name : null;
+    const matrix2Name = arg2.value.kind === 'Identifier' ? (arg2.value as IdentifierNode).name : null;
+    
+    if (!matrix1Name || !matrix2Name) return;
+    
+    const info1 = this.matrixDeclarations.get(matrix1Name);
+    const info2 = this.matrixDeclarations.get(matrix2Name);
+    
+    if (info1?.cols !== null && info2?.rows !== null && info1.cols !== info2.rows) {
+      this.addError(
+        line,
+        column,
+        `Matrix multiplication dimension mismatch: '${matrix1Name}' columns (${info1.cols}) must equal '${matrix2Name}' rows (${info2.rows})`,
+        'PSV6-MATRIX-DIMENSION-MISMATCH',
+      );
+    }
+  }
+
+  private validateReshapeDimensions(
+    matrixName: string | null,
+    rowsArg: ArgumentNode,
+    colsArg: ArgumentNode,
+    line: number,
+    column: number
+  ): void {
+    if (!matrixName) return;
+    
+    const info = this.matrixDeclarations.get(matrixName);
+    if (!info || info.rows === null || info.cols === null) return;
+    
+    const newRows = this.extractNumericLiteral(rowsArg.value);
+    const newCols = this.extractNumericLiteral(colsArg.value);
+    
+    if (newRows !== null && newCols !== null) {
+      const originalElements = info.rows * info.cols;
+      const newElements = newRows * newCols;
+      
+      if (originalElements !== newElements) {
+        this.addError(
+          line,
+          column,
+          `Reshape dimension mismatch: original matrix has ${originalElements} elements but reshape requires ${newElements} elements`,
+          'PSV6-MATRIX-RESHAPE-MISMATCH',
+        );
+      }
+    }
+  }
+
+  private validateRowOperation(
+    matrixName: string | null,
+    rowArg: ArgumentNode | undefined,
+    line: number,
+    column: number,
+    operation: string
+  ): void {
+    if (!matrixName || !rowArg) return;
+    
+    const info = this.matrixDeclarations.get(matrixName);
+    if (!info || info.rows === null) return;
+    
+    const rowNum = this.extractNumericLiteral(rowArg.value);
+    if (rowNum !== null && (rowNum < 0 || rowNum > info.rows)) {
+      this.addError(
+        line,
+        column,
+        `${operation}: row index ${rowNum} is out of bounds for matrix with ${info.rows} rows`,
+        'PSV6-MATRIX-INDEX-OUT-OF-BOUNDS',
+      );
+    }
+  }
+
+  private validateColOperation(
+    matrixName: string | null,
+    colArg: ArgumentNode | undefined,
+    line: number,
+    column: number,
+    operation: string
+  ): void {
+    if (!matrixName || !colArg) return;
+    
+    const info = this.matrixDeclarations.get(matrixName);
+    if (!info || info.cols === null) return;
+    
+    const colNum = this.extractNumericLiteral(colArg.value);
+    if (colNum !== null && (colNum < 0 || colNum > info.cols)) {
+      this.addError(
+        line,
+        column,
+        `${operation}: column index ${colNum} is out of bounds for matrix with ${info.cols} columns`,
+        'PSV6-MATRIX-INDEX-OUT-OF-BOUNDS',
+      );
+    }
+  }
+
+  private validateCovarianceDimensions(
+    arg1: ArgumentNode,
+    arg2: ArgumentNode,
+    line: number,
+    column: number
+  ): void {
+    const matrix1Name = arg1.value.kind === 'Identifier' ? (arg1.value as IdentifierNode).name : null;
+    const matrix2Name = arg2.value.kind === 'Identifier' ? (arg2.value as IdentifierNode).name : null;
+    
+    if (!matrix1Name || !matrix2Name) return;
+    
+    const info1 = this.matrixDeclarations.get(matrix1Name);
+    const info2 = this.matrixDeclarations.get(matrix2Name);
+    
+    if (info1 && info2) {
+      const size1 = info1.rows !== null && info1.cols !== null ? info1.rows * info1.cols : null;
+      const size2 = info2.rows !== null && info2.cols !== null ? info2.rows * info2.cols : null;
+      
+      if (size1 !== null && size2 !== null && size1 !== size2) {
+        this.addWarning(
+          line,
+          column,
+          `Covariance calculation: matrices should have the same number of elements for meaningful results`,
+          'PSV6-MATRIX-COVARIANCE-SIZE',
+        );
+      }
     }
   }
 
