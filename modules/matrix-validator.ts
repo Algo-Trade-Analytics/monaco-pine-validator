@@ -89,6 +89,10 @@ const MATRIX_METHOD_SPECS: Array<{ name: string; params: number; description: st
   { name: 'matrix.is_symmetric', params: 1, description: 'matrix.is_symmetric(id)' },
 ];
 
+const MATRIX_METHOD_RETURNS: Record<string, { type: 'matrix' | 'array' | 'int' | 'float' | 'bool' | 'series'; elementFromInput?: boolean; elementType?: string }> = {
+  'matrix.eigenvalues': { type: 'array', elementType: 'float' },
+};
+
 const EXPENSIVE_MATRIX_METHODS = new Set([
   'matrix.fill', 
   'matrix.copy',
@@ -208,7 +212,7 @@ export class MatrixValidator implements ValidationModule {
           if (qualifiedName === 'matrix.new') {
             this.handleMatrixCreationAst(call, path);
           } else {
-            this.handleMatrixMethodCallAst(qualifiedName, call, loopStack.length > 0);
+            this.handleMatrixMethodCallAst(qualifiedName, call, path as NodePath<CallExpressionNode>, loopStack.length > 0);
           }
         },
       },
@@ -337,12 +341,18 @@ export class MatrixValidator implements ValidationModule {
     }
   }
 
-  private handleMatrixMethodCallAst(qualifiedName: string, call: CallExpressionNode, inLoop: boolean): void {
+  private handleMatrixMethodCallAst(
+    qualifiedName: string,
+    call: CallExpressionNode,
+    path: NodePath<CallExpressionNode>,
+    inLoop: boolean,
+  ): void {
 
     const line = call.loc.start.line;
     const column = call.loc.start.column;
     const spec = MATRIX_METHOD_SPECS.find((entry) => entry.name === qualifiedName);
     const args = call.args;
+    const assignmentTarget = this.extractMatrixAssignmentTarget(path);
 
     if (spec && args.length !== spec.params) {
       this.addError(
@@ -418,6 +428,73 @@ export class MatrixValidator implements ValidationModule {
         'PSV6-MATRIX-PERF-LOOP',
       );
     }
+
+    if (assignmentTarget) {
+      this.registerMatrixMethodReturnType(qualifiedName, assignmentTarget, matrixName);
+    }
+  }
+
+  private registerMatrixMethodReturnType(
+    qualifiedName: string,
+    target: { name: string; line: number; column: number },
+    sourceMatrix: string | null,
+  ): void {
+    const returnInfo = MATRIX_METHOD_RETURNS[qualifiedName];
+    if (!returnInfo) {
+      return;
+    }
+
+    const { name, line, column } = target;
+
+    if (returnInfo.type === 'array') {
+      const elementType = returnInfo.elementType
+        ?? (returnInfo.elementFromInput && sourceMatrix
+          ? this.matrixDeclarations.get(sourceMatrix)?.elementType ?? 'unknown'
+          : 'unknown');
+
+      this.context.typeMap.set(name, {
+        type: 'array',
+        isConst: false,
+        isSeries: false,
+        declaredAt: { line, column },
+        usages: [],
+        elementType,
+      });
+      return;
+    }
+
+    if (returnInfo.type === 'matrix') {
+      const elementType = returnInfo.elementFromInput && sourceMatrix
+        ? this.matrixDeclarations.get(sourceMatrix)?.elementType ?? 'unknown'
+        : returnInfo.elementType ?? 'unknown';
+
+      this.matrixDeclarations.set(name, {
+        elementType,
+        rows: null,
+        cols: null,
+        line,
+        column,
+      });
+
+      this.context.typeMap.set(name, {
+        type: 'matrix',
+        isConst: false,
+        isSeries: false,
+        declaredAt: { line, column },
+        usages: [],
+        elementType,
+      });
+      return;
+    }
+
+    const isSeries = returnInfo.type === 'series';
+    this.context.typeMap.set(name, {
+      type: returnInfo.type,
+      isConst: false,
+      isSeries,
+      declaredAt: { line, column },
+      usages: [],
+    });
   }
 
   private validateSquareMatrix(matrixName: string | null, line: number, column: number, operation: string): void {
