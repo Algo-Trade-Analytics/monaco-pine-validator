@@ -128,7 +128,7 @@ describe('MatrixValidator (AST)', () => {
     const result = harness.validate(source);
     const errorCodes = result.errors.map((error) => error.code);
 
-    expect(errorCodes).toContain('PSV6-MATRIX-METHOD-PARAMS');
+    expect(errorCodes).toContain('PSV6-FUNCTION-PARAM-COUNT');
   });
 
   it('warns about expensive matrix operations running inside loops', () => {

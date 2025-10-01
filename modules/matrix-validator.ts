@@ -359,7 +359,7 @@ export class MatrixValidator implements ValidationModule {
         line,
         column,
         `Invalid parameter count for ${qualifiedName}. Expected ${spec.params}, got ${args.length}. Usage: ${spec.description}`,
-        'PSV6-MATRIX-METHOD-PARAMS',
+        'PSV6-FUNCTION-PARAM-COUNT',
       );
     }
 
@@ -578,6 +578,18 @@ export class MatrixValidator implements ValidationModule {
   ): void {
     if (!matrixName || !rowArg) return;
     
+    // Validate parameter type - row_num should be int
+    const rowType = this.inferExpressionTypeAst(rowArg.value);
+    if (rowType === 'string' || rowType === 'bool' || rowType === 'color') {
+      this.addError(
+        line,
+        column,
+        `${operation}: row parameter must be an integer, got ${rowType}`,
+        'PSV6-FUNCTION-PARAM-TYPE',
+      );
+      return;
+    }
+    
     const info = this.matrixDeclarations.get(matrixName);
     if (!info || info.rows === null) return;
     
@@ -776,6 +788,12 @@ export class MatrixValidator implements ValidationModule {
     }
 
     const valueType = this.inferExpressionTypeAst(expression);
+    
+    // For matrix.fill(), an array parameter is acceptable (it will fill the matrix with array values)
+    if (operation === 'fill' && valueType === 'array') {
+      return; // Array is valid for fill operation
+    }
+    
     if (!this.areTypesCompatible(info.elementType, valueType)) {
       const action = operation === 'set' ? 'set' : 'fill';
       this.addError(
@@ -1085,6 +1103,14 @@ export class MatrixValidator implements ValidationModule {
 
         if (qualified.startsWith('math.')) {
           return 'float';
+        }
+
+        // Handle array functions that return arrays
+        if (qualified.startsWith('array.')) {
+          const arrayCreators = ['array.new', 'array.from', 'array.from_example', 'array.copy', 'array.slice', 'array.concat'];
+          if (arrayCreators.some(creator => qualified.startsWith(creator))) {
+            return 'array';
+          }
         }
 
         return 'unknown';

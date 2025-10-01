@@ -2294,10 +2294,13 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
     parameters: [
       { name: 'defval', type: 'string', qualifier: 'simple', required: true },
       { name: 'title', type: 'string', qualifier: 'simple', required: false },
+      { name: 'options', type: 'array', qualifier: 'simple', required: false },
       { name: 'group', type: 'string', qualifier: 'simple', required: false },
       { name: 'tooltip', type: 'string', qualifier: 'simple', required: false },
       { name: 'inline', type: 'string', qualifier: 'simple', required: false },
-      { name: 'confirm', type: 'bool', qualifier: 'simple', required: false }
+      { name: 'confirm', type: 'bool', qualifier: 'simple', required: false },
+      { name: 'display', type: 'string', qualifier: 'simple', required: false },
+      { name: 'active', type: 'bool', qualifier: 'input', required: false }
     ],
     returnType: 'string'
   },
@@ -2305,10 +2308,13 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
     parameters: [
       { name: 'defval', type: 'string', qualifier: 'simple', required: true },
       { name: 'title', type: 'string', qualifier: 'simple', required: false },
+      { name: 'options', type: 'array', qualifier: 'simple', required: false },
       { name: 'tooltip', type: 'string', qualifier: 'simple', required: false },
       { name: 'group', type: 'string', qualifier: 'simple', required: false },
       { name: 'inline', type: 'string', qualifier: 'simple', required: false },
-      { name: 'confirm', type: 'bool', qualifier: 'simple', required: false }
+      { name: 'confirm', type: 'bool', qualifier: 'simple', required: false },
+      { name: 'display', type: 'string', qualifier: 'simple', required: false },
+      { name: 'active', type: 'bool', qualifier: 'input', required: false }
     ],
     returnType: 'string'
   },
@@ -2319,7 +2325,9 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
       { name: 'group', type: 'string', qualifier: 'simple', required: false },
       { name: 'tooltip', type: 'string', qualifier: 'simple', required: false },
       { name: 'inline', type: 'string', qualifier: 'simple', required: false },
-      { name: 'confirm', type: 'bool', qualifier: 'simple', required: false }
+      { name: 'confirm', type: 'bool', qualifier: 'simple', required: false },
+      { name: 'display', type: 'string', qualifier: 'simple', required: false },
+      { name: 'active', type: 'bool', qualifier: 'input', required: false }
     ],
     returnType: 'string'
   },
