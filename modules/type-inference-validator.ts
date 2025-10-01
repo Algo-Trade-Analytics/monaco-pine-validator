@@ -254,6 +254,21 @@ export class TypeInferenceValidator implements ValidationModule {
       return;
     }
 
+    // Check for series qualifier mismatch
+    // Example: int len = barstate.islast ? 20 : 10 (series cannot be assigned to simple)
+    const initializerIsSeries = this.isSeriesExpression(initializer);
+    const declaredTypeIsSimple = declaredType && declaredType !== 'series' && !node.typeAnnotation?.name.name.includes('series');
+    
+    if (initializerIsSeries && declaredTypeIsSimple) {
+      this.addError(
+        line,
+        column,
+        `Cannot assign series expression to simple ${declaredType} variable '${node.identifier.name}'. Series values change on every bar and cannot be stored in simple variables.`,
+        'PSV6-FUNCTION-PARAM-TYPE', // Using existing error code per test expectation
+      );
+      return;
+    }
+
     if (!this.areTypesCompatible(declaredType, initializerType)) {
       this.addError(
         line,
@@ -700,8 +715,17 @@ export class TypeInferenceValidator implements ValidationModule {
       const conditional = expression as ConditionalExpressionNode;
       const consequentType = this.getExpressionType(conditional.consequent);
       const alternateType = conditional.alternate ? this.getExpressionType(conditional.alternate) : null;
+      
+      // IMPORTANT: If the condition is series, the result is always series
+      // Example: barstate.islast ? 20 : 10 produces series int, not simple int
+      const conditionIsSeries = this.isSeriesExpression(conditional.test);
+      
       const merged = this.mergeConditionalTypes(consequentType, alternateType);
       if (merged) {
+        // If condition is series, force result to be series
+        if (conditionIsSeries && merged !== 'series') {
+          return 'series';
+        }
         return merged;
       }
     }
@@ -716,6 +740,71 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     return null;
+  }
+
+  /**
+   * Determines if an expression produces a series value.
+   * Series expressions include: series identifiers (close, high, etc.),
+   * built-in series variables (barstate.*, syminfo.*, etc.),
+   * and any expression that depends on series values.
+   */
+  private isSeriesExpression(expression: ExpressionNode | null | undefined): boolean {
+    if (!expression) {
+      return false;
+    }
+
+    // Check series identifiers (close, high, low, etc.)
+    if (expression.kind === 'Identifier') {
+      const name = (expression as IdentifierNode).name;
+      if (SERIES_IDENTIFIERS.has(name)) {
+        return true;
+      }
+      
+      // Check if variable is registered as series in typeMap
+      const typeInfo = this.context.typeMap.get(name);
+      if (typeInfo?.isSeries) {
+        return true;
+      }
+    }
+
+    // Check member expressions (barstate.islast, syminfo.ticker, etc.)
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (member.object.kind === 'Identifier') {
+        const objectName = (member.object as IdentifierNode).name;
+        // barstate.* members are all series
+        if (objectName === 'barstate') {
+          return true;
+        }
+        // syminfo.* members are series
+        if (objectName === 'syminfo') {
+          return true;
+        }
+      }
+    }
+
+    // Check for call expressions - some functions return series
+    if (expression.kind === 'CallExpression') {
+      const call = expression as CallExpressionNode;
+      // ta.* functions typically return series
+      if (call.callee.kind === 'MemberExpression') {
+        const callee = call.callee as MemberExpressionNode;
+        if (callee.object.kind === 'Identifier') {
+          const objectName = (callee.object as IdentifierNode).name;
+          if (objectName === 'ta' || objectName === 'math') {
+            return true;
+          }
+        }
+      }
+    }
+
+    // Binary expressions with series operands are series
+    if (expression.kind === 'BinaryExpression') {
+      const binary = expression as BinaryExpressionNode;
+      return this.isSeriesExpression(binary.left) || this.isSeriesExpression(binary.right);
+    }
+
+    return false;
   }
 
   private mergeIdentifierTypes(existing: string, candidate: string): string {
