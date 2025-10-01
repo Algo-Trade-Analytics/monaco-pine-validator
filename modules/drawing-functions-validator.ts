@@ -185,6 +185,9 @@ export class DrawingFunctionsValidator implements ValidationModule {
     if (code === 'PSV6-LABEL-TEXT-STYLE' || code === 'PSV6-LABEL-TEXT-SIZE') {
       return true;
     }
+    if (code === 'PSV6-LINE-STYLE-TYPE') {
+      return true;
+    }
     
     // For performance and best practice issues, generate warnings
     return false;
@@ -424,7 +427,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
     }
 
     if (!this.isLineStyleConstant(args[1])) {
-      this.addWarning(lineNum, column, 'line.set_style() style should be a line style constant', 'PSV6-LINE-STYLE-TYPE');
+      this.addError(lineNum, column, 'line.set_style() style should be a line style constant', 'PSV6-LINE-STYLE-TYPE');
     }
   }
 
@@ -480,7 +483,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
       } else if (arg.includes('style=')) {
         const styleValue = arg.split('=')[1].trim();
         if (!this.isLineStyleConstant(styleValue)) {
-          this.addWarning(lineNum, column, 'line.new() style should be a line style constant', 'PSV6-LINE-STYLE-TYPE');
+          this.addError(lineNum, column, 'line.new() style should be a line style constant', 'PSV6-LINE-STYLE-TYPE');
         }
       }
     }
@@ -1169,10 +1172,14 @@ export class DrawingFunctionsValidator implements ValidationModule {
   private isLineStyleConstant(value: string): boolean {
     const trimmed = value.trim();
     const lineStyles = [
-      'line.style_solid', 'line.style_dashed', 'line.style_dotted',
-      'line.style_arrow_left', 'line.style_arrow_right'
+      'line.style_solid',
+      'line.style_dashed',
+      'line.style_dotted',
+      'line.style_arrow_left',
+      'line.style_arrow_right',
+      'line.style_arrow_both'
     ];
-    return lineStyles.some(style => trimmed.includes(style));
+    return lineStyles.includes(trimmed);
   }
 
   private isPositionConstant(value: string): boolean {

@@ -70,6 +70,120 @@ interface BooleanAssignmentInfo {
   funcName: string;
 }
 
+const PARAM_ENUM_NAMESPACE_ALLOWLIST: Record<string, Record<string, string[]>> = {
+  'plot': {
+    style: ['plot'],
+    display: ['display'],
+  },
+  'plotshape': {
+    style: ['shape'],
+    location: ['location'],
+    size: ['size'],
+    display: ['display'],
+  },
+  'plotchar': {
+    location: ['location'],
+    size: ['size'],
+    display: ['display'],
+  },
+  'plotcandle': {
+    display: ['display'],
+  },
+  'plotbar': {
+    display: ['display'],
+  },
+  'hline': {
+    linestyle: ['line'],
+    display: ['display'],
+  },
+  'bgcolor': {
+    display: ['display'],
+  },
+  'barcolor': {
+    display: ['display'],
+  },
+  'fill': {
+    display: ['display'],
+  },
+  'label.new': {
+    style: ['label'],
+    size: ['size'],
+    yloc: ['yloc'],
+    xloc: ['xloc'],
+    textalign: ['text'],
+    textcolor: ['color'],
+  },
+  'label.set_style': {
+    style: ['label'],
+  },
+  'label.set_size': {
+    size: ['size'],
+  },
+  'label.set_textalign': {
+    textalign: ['text'],
+  },
+  'label.set_textcolor': {
+    textcolor: ['color'],
+  },
+  'label.set_yloc': {
+    yloc: ['yloc'],
+  },
+  'label.set_xloc': {
+    xloc: ['xloc'],
+  },
+  'line.new': {
+    style: ['line'],
+    extend: ['extend'],
+    xloc: ['xloc'],
+  },
+  'line.set_style': {
+    style: ['line'],
+  },
+  'line.set_extend': {
+    extend: ['extend'],
+  },
+  'line.set_xloc': {
+    xloc: ['xloc'],
+  },
+  'box.new': {
+    text_halign: ['text'],
+    text_valign: ['text'],
+    text_size: ['size'],
+  },
+  'box.set_text_halign': {
+    text_halign: ['text'],
+  },
+  'box.set_text_valign': {
+    text_valign: ['text'],
+  },
+  'box.set_text_size': {
+    text_size: ['size'],
+  },
+  'box.set_extend': {
+    extend: ['extend'],
+  },
+  'table.new': {
+    position: ['position'],
+  },
+  'table.set_position': {
+    position: ['position'],
+  },
+  'table.cell': {
+    text_halign: ['text'],
+    text_valign: ['text'],
+    text_size: ['size'],
+  },
+  'table.cell_set_text_halign': {
+    text_halign: ['text'],
+  },
+  'table.cell_set_text_valign': {
+    text_valign: ['text'],
+  },
+  'table.cell_set_text_size': {
+    text_size: ['size'],
+  },
+};
+
 export class FunctionValidator implements ValidationModule {
   name = 'FunctionValidator';
   priority = 85; // High priority - functions are core to Pine Script
@@ -1025,7 +1139,7 @@ export class FunctionValidator implements ValidationModule {
     }
 
     // Validate parameter type
-    if (param.type && !this.isValidParameterType(argValue, param.type)) {
+    if (param.type && !this.isValidParameterType(argValue, param.type, funcName, param.name)) {
       this.addError(line, column, 
         `Parameter '${param.name}' of '${funcName}' should be ${param.type}, got ${this.inferArgumentType(argValue)}`, 
         'PSV6-FUNCTION-PARAM-TYPE');
@@ -1322,7 +1436,7 @@ export class FunctionValidator implements ValidationModule {
   }
 
   // Helper methods
-  private isValidParameterType(arg: string, expectedType: string): boolean {
+  private isValidParameterType(arg: string, expectedType: string, funcName: string, paramName: string): boolean {
     const actualType = this.inferArgumentType(arg);
     // Direct type match
     if (expectedType === actualType) return true;
@@ -1332,7 +1446,7 @@ export class FunctionValidator implements ValidationModule {
     if ((expectedType === 'array' || expectedType === 'polyline') && actualType === 'unknown') return true;
     // Treat 'na' as compatible with numeric/series parameters
     if (actualType === 'na' && (expectedType === 'float' || expectedType === 'int' || expectedType === 'series' || expectedType === 'any')) return true;
-    if (expectedType === 'series' && (actualType === 'series' || actualType === 'float' || actualType === 'int' || actualType === 'literal')) return true;
+    if (expectedType === 'series' && (actualType === 'series' || actualType === 'float' || actualType === 'int' || actualType === 'bool' || actualType === 'literal')) return true;
     if (expectedType === 'series' && actualType === 'unknown') {
       const identifierMatch = arg.trim().match(/^[A-Za-z_][A-Za-z0-9_]*$/);
       if (identifierMatch) {
@@ -1356,14 +1470,24 @@ export class FunctionValidator implements ValidationModule {
     // Accept specialized drawing/object ids (e.g., line, label, box, table, polyline)
     const objectTypes = new Set(['line','label','box','table','polyline','linefill']);
     if (objectTypes.has(expectedType) && objectTypes.has(actualType)) return true;
-    
-    // Accept common enum-like dotted constants for int parameters (e.g., line.style_solid, label.style_label_up, size.normal, location.top)
-    if (expectedType === 'int') {
-      const trimmed = arg.trim();
-      if (/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
-        const ns = trimmed.split('.')[0];
-        const enumLikeNamespaces = new Set(['line', 'label', 'size', 'location', 'shape', 'table', 'text', 'display']);
-        if (enumLikeNamespaces.has(ns)) return true;
+
+    const trimmed = arg.trim();
+    const dottedMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (dottedMatch) {
+      const namespace = dottedMatch[1];
+      const allowed = PARAM_ENUM_NAMESPACE_ALLOWLIST[funcName]?.[paramName];
+      if (allowed) {
+        return allowed.includes(namespace);
+      }
+
+      const fallbackIntNamespaces = new Set(['line', 'plot', 'size', 'location', 'shape', 'text', 'display', 'position', 'extend', 'xloc', 'yloc', 'order', 'table']);
+      const fallbackStringNamespaces = new Set(['text', 'display', 'session', 'timeframe']);
+
+      if (expectedType === 'int' && fallbackIntNamespaces.has(namespace)) {
+        return true;
+      }
+      if (expectedType === 'string' && fallbackStringNamespaces.has(namespace)) {
+        return true;
       }
     }
 
@@ -2026,10 +2150,6 @@ export class FunctionValidator implements ValidationModule {
     }
     const metadata = this.astContext?.typeEnvironment.nodeTypes.get(node) ?? null;
     if (!metadata) {
-      return this.inferLiteralKindFromNode(node);
-    }
-
-    if (metadata.kind === 'literal') {
       return this.inferLiteralKindFromNode(node);
     }
 

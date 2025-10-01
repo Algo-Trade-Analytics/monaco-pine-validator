@@ -235,6 +235,7 @@ export class FinalConstantsValidator implements ValidationModule {
       'line.style',
       'label.style',
       'plot.style',
+      'hline.style',
       'location.',
       'shape.',
       'order.',
@@ -283,8 +284,11 @@ export class FinalConstantsValidator implements ValidationModule {
 
     for (const constantSet of STYLE_CONSTANT_SETS) {
       if (constantSet.has(constant)) {
+        if (process.env.DEBUG_FINAL_CONSTANTS === '1') {
+          console.log('[FinalConstantsValidator] recognized style constant', constant);
+        }
         this.incrementUsage(this.styleConstantUsage, constant);
-        this.addConstantInfo(Codes.STYLE_CONSTANT, `Style constant '${constant}' detected`, line, column);
+        this.addConstantInfo(Codes.STYLE_CONSTANT, `Style constant '${constant}' detected`, line, column, `style:${constant}`);
         return true;
       }
     }

@@ -158,11 +158,11 @@ export const NS_MEMBERS: Record<string, Set<string>> = {
   ]),
   matrix: new Set([
     'new','get','set','rows','columns','copy','fill','sort','reverse','transpose','det','inv','pow',
-    'add_col','add_row','avg','col','concat','diff','eigenvalues','eigenvectors','elements_count',
+    'add_col','add_row','abs','avg','col','concat','diff','eigenvalues','eigenvectors','elements_count',
     'is_antidiagonal','is_antisymmetric','is_binary','is_diagonal','is_identity','is_square',
     'is_stochastic','is_symmetric','is_triangular','is_zero','kron','max','median','min','mode',
-    'mult','pinv','rank','remove_col','remove_row','reshape','row','submatrix','sum','swap_columns',
-    'swap_rows','trace'
+    'mult','pinv','rank','remove_col','remove_row','reshape','row','sqrt','stdev','submatrix','sum','swap_columns',
+    'swap_rows','trace','variance','covariance','percentile_linear_interpolation','percentile_nearest_rank'
   ]),
   map: new Set(['new','get','put','remove','size','clear','keys','values','contains','includes','copy','put_all']),
   linefill: new Set(['new','set_color','delete','get_line1','get_line2','all']),
@@ -717,7 +717,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   },
   'plotshape': {
     parameters: [
-      { name: 'condition', type: 'bool', qualifier: 'series', required: true },
+      { name: 'series', type: 'series', qualifier: 'series', required: true },
       { name: 'title', type: 'string', qualifier: 'simple', required: false },
       { name: 'style', type: 'int', qualifier: 'simple', required: false },
       { name: 'location', type: 'int', qualifier: 'simple', required: false },
@@ -2380,6 +2380,14 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
     ],
     returnType: 'chart.point'
   },
+  'chart.point.from_index': {
+    parameters: [
+      { name: 'point_id', type: 'chart.point', qualifier: 'simple', required: false },
+      { name: 'index', type: 'int', qualifier: 'series', required: true },
+      { name: 'price', type: 'float', qualifier: 'series', required: true }
+    ],
+    returnType: 'chart.point'
+  },
   'chart.point.now': {
     parameters: [
       { name: 'price', type: 'float', qualifier: 'series', required: true }
@@ -2965,6 +2973,12 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
     ],
     returnType: 'void'
   },
+  'matrix.abs': {
+    parameters: [
+      { name: 'id', type: 'matrix', qualifier: 'any', required: true }
+    ],
+    returnType: 'matrix'
+  },
   'matrix.avg': {
     parameters: [
       { name: 'id', type: 'matrix', qualifier: 'any', required: true }
@@ -3099,7 +3113,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
     parameters: [
       { name: 'id', type: 'matrix', qualifier: 'any', required: true }
     ],
-    returnType: 'series'
+    returnType: 'float'
   },
   'matrix.min': {
     parameters: [
@@ -3111,7 +3125,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
     parameters: [
       { name: 'id', type: 'matrix', qualifier: 'any', required: true }
     ],
-    returnType: 'series'
+    returnType: 'float'
   },
   'matrix.mult': {
     parameters: [
@@ -3180,10 +3194,51 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   },
   'matrix.sum': {
     parameters: [
-      { name: 'id1', type: 'matrix', qualifier: 'any', required: true },
-      { name: 'id2', type: 'any', qualifier: 'any', required: true }
+      { name: 'id', type: 'matrix', qualifier: 'any', required: true }
+    ],
+    returnType: 'float'
+  },
+  'matrix.sqrt': {
+    parameters: [
+      { name: 'id', type: 'matrix', qualifier: 'any', required: true }
     ],
     returnType: 'matrix'
+  },
+  'matrix.variance': {
+    parameters: [
+      { name: 'id', type: 'matrix', qualifier: 'any', required: true },
+      { name: 'biased', type: 'bool', qualifier: 'simple', required: false }
+    ],
+    returnType: 'float'
+  },
+  'matrix.stdev': {
+    parameters: [
+      { name: 'id', type: 'matrix', qualifier: 'any', required: true },
+      { name: 'biased', type: 'bool', qualifier: 'simple', required: false }
+    ],
+    returnType: 'float'
+  },
+  'matrix.covariance': {
+    parameters: [
+      { name: 'x', type: 'matrix', qualifier: 'any', required: true },
+      { name: 'y', type: 'matrix', qualifier: 'any', required: true },
+      { name: 'biased', type: 'bool', qualifier: 'simple', required: false }
+    ],
+    returnType: 'float'
+  },
+  'matrix.percentile_linear_interpolation': {
+    parameters: [
+      { name: 'id', type: 'matrix', qualifier: 'any', required: true },
+      { name: 'percentage', type: 'int', qualifier: 'simple', required: true }
+    ],
+    returnType: 'float'
+  },
+  'matrix.percentile_nearest_rank': {
+    parameters: [
+      { name: 'id', type: 'matrix', qualifier: 'any', required: true },
+      { name: 'percentage', type: 'int', qualifier: 'simple', required: true }
+    ],
+    returnType: 'float'
   },
   'matrix.swap_columns': {
     parameters: [

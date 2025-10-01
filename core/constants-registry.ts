@@ -102,7 +102,7 @@ export const SIZE_CONSTANTS = new Set<string>([
 export const PLOT_STYLE_CONSTANTS = new Set<string>([
   'plot.style_line', 'plot.style_stepline', 'plot.style_stepline_diamond',
   'plot.style_histogram', 'plot.style_cross', 'plot.style_area', 'plot.style_areabr',
-  'plot.style_columns', 'plot.style_circles', 'plot.style_linebr', 'plot.style_steplinebr'
+  'plot.style_columns', 'plot.style_circles', 'plot.style_linebr', 'plot.style_linebreak', 'plot.style_steplinebr'
 ]);
 
 export const LINE_STYLE_CONSTANTS = new Set<string>([
