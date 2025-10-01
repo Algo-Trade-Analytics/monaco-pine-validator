@@ -548,11 +548,7 @@ complexFunc() =>
             6
     else
         7`;
-        const { codes, result } = run(code);
-        // eslint-disable-next-line no-console
-        console.log('complexity warnings', codes);
-        // eslint-disable-next-line no-console
-        console.log('complexity detail', result.warnings);
+        const { codes } = run(code);
         expectHas(codes, { warnings: ['PSV6-QUALITY-COMPLEXITY'] });
       });
 
@@ -581,11 +577,7 @@ deepFunc() =>
                     if macd > 0
                         if stoch > 20
                             1`;
-        const { codes, result } = run(code);
-        // eslint-disable-next-line no-console
-        console.log('depth warnings', codes);
-        // eslint-disable-next-line no-console
-        console.log('depth detail', result.warnings);
+        const { codes } = run(code);
         expectHas(codes, { warnings: ['PSV6-QUALITY-DEPTH'] });
       });
 

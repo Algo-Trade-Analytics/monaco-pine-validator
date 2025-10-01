@@ -24,6 +24,14 @@ import {
 } from '../core/ast/nodes';
 import { visit } from '../core/ast/traversal';
 
+interface TextFunctionBlock {
+  name: string;
+  startLine: number;
+  startColumn: number;
+  indent: number;
+  body: Array<{ text: string; lineNumber: number; indent: number }>;
+}
+
 export class EnhancedQualityValidator implements ValidationModule {
   name = 'EnhancedQualityValidator';
   priority = 60; // Run after other validations
@@ -56,11 +64,17 @@ export class EnhancedQualityValidator implements ValidationModule {
     this.astContext = this.getAstContext(config);
     const ast = this.astContext?.ast ?? null;
     if (!ast) {
+      const fallbackLines = this.context.cleanLines?.length
+        ? this.context.cleanLines
+        : this.context.lines ?? [];
+      if (fallbackLines.length > 0) {
+        this.validateWithText(fallbackLines);
+      }
       return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
+        isValid: this.errors.length === 0,
+        errors: this.errors,
+        warnings: this.warnings,
+        info: this.info,
         typeMap: new Map(),
         scriptType: context.scriptType ?? null,
       };
@@ -85,6 +99,12 @@ export class EnhancedQualityValidator implements ValidationModule {
     this.validateScriptComplexityAst(program);
     this.validateFunctionMetricsAst(program);
     this.validateNestingDepthAst(program);
+  }
+
+  private validateWithText(lines: string[]): void {
+    this.validateScriptComplexityText(lines);
+    this.validateFunctionMetricsText(lines);
+    this.validateNestingDepthText(lines);
   }
 
   private validateScriptComplexityAst(program: ProgramNode): void {
@@ -250,6 +270,158 @@ export class EnhancedQualityValidator implements ValidationModule {
     return endLine - startLine + 1;
   }
 
+  private validateScriptComplexityText(lines: string[]): void {
+    const complexity = this.calculateScriptComplexityText(lines);
+    if (complexity >= 6) {
+      this.addWarning(
+        1,
+        0,
+        `Script has high cyclomatic complexity (${complexity}). Consider breaking it into smaller functions.`,
+        'PSV6-QUALITY-COMPLEXITY',
+        'Refactor script to reduce complexity below 8',
+      );
+    }
+  }
+
+  private calculateScriptComplexityText(lines: string[]): number {
+    let complexity = 0;
+    for (const rawLine of lines) {
+      const line = this.stripLineComment(rawLine);
+      if (!line) {
+        continue;
+      }
+      const tokens = line.split(/\b/);
+      for (const token of tokens) {
+        switch (token.trim()) {
+          case 'if':
+          case 'for':
+          case 'while':
+          case 'switch':
+            complexity += 1;
+            break;
+          default:
+            break;
+        }
+      }
+      if (/(?:\sand\s|\sor\s)/.test(line)) {
+        complexity += 1;
+      }
+      if (line.includes('?') && line.includes(':')) {
+        complexity += 1;
+      }
+    }
+    return complexity;
+  }
+
+  private validateFunctionMetricsText(lines: string[]): void {
+    const functions = this.extractFunctionBlocks(lines);
+    for (const fn of functions) {
+      const complexity = this.calculateFunctionComplexityText(fn);
+      if (complexity >= 6) {
+        this.addWarning(
+          fn.startLine,
+          fn.startColumn,
+          `Function '${fn.name}' has high cyclomatic complexity (${complexity}). Consider breaking it into smaller functions.`,
+          'PSV6-QUALITY-COMPLEXITY',
+          'Refactor function to reduce complexity below 8',
+        );
+      }
+
+      const length = this.calculateFunctionLengthText(fn);
+      if (length > 50) {
+        this.addWarning(
+          fn.startLine,
+          fn.startColumn,
+          `Function '${fn.name}' is very long (${length} lines). Consider breaking it into smaller functions.`,
+          'PSV6-QUALITY-LENGTH',
+          'Refactor function to reduce length below 50 lines',
+        );
+      }
+    }
+  }
+
+  private calculateFunctionComplexityText(fn: TextFunctionBlock): number {
+    let complexity = 0;
+    for (const entry of fn.body) {
+      const line = this.stripLineComment(entry.text);
+      if (!line) {
+        continue;
+      }
+      if (/\b(if|for|while|switch)\b/.test(line)) {
+        complexity += 1;
+      }
+      if (/(?:\sand\s|\sor\s)/.test(line)) {
+        complexity += 1;
+      }
+      if (line.includes('?') && line.includes(':')) {
+        complexity += 1;
+      }
+    }
+    return complexity;
+  }
+
+  private calculateFunctionLengthText(fn: TextFunctionBlock): number {
+    let count = 0;
+    for (const entry of fn.body) {
+      if (entry.text.trim().length > 0) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  private validateNestingDepthText(lines: string[]): void {
+    const { depth, line, column } = this.calculateMaxNestingDepthText(lines);
+    if (depth >= 4) {
+      this.addWarning(
+        line,
+        column,
+        `Excessive nesting depth detected (${depth} levels). Consider extracting nested logic into separate functions.`,
+        'PSV6-QUALITY-DEPTH',
+        'Refactor nested code to reduce depth below 3 levels',
+      );
+    }
+  }
+
+  private calculateMaxNestingDepthText(lines: string[]): { depth: number; line: number; column: number } {
+    let maxDepth = 0;
+    let depthLine = 1;
+    let depthColumn = 0;
+
+    interface StackEntry {
+      indent: number;
+      line: number;
+      column: number;
+    }
+
+    const stack: StackEntry[] = [];
+
+    const functions = this.extractFunctionBlocks(lines);
+    for (const fn of functions) {
+      stack.length = 0;
+      for (const entry of fn.body) {
+        const trimmed = this.stripLineComment(entry.text).trim();
+        if (!trimmed) {
+          continue;
+        }
+        const indent = entry.indent;
+        while (stack.length && indent <= stack[stack.length - 1].indent) {
+          stack.pop();
+        }
+        if (/^(if|for|while|switch)\b/.test(trimmed)) {
+          stack.push({ indent, line: entry.lineNumber, column: indent + 1 });
+          if (stack.length > maxDepth) {
+            maxDepth = stack.length;
+            depthLine = entry.lineNumber;
+            depthColumn = indent + 1;
+          }
+        }
+      }
+    }
+
+    return { depth: maxDepth, line: depthLine, column: depthColumn };
+  }
+
   private validateNestingDepthAst(program: ProgramNode): void {
     const { depth, line, column } = this.calculateMaxNestingDepthAst(program);
     if (depth >= 4) {
@@ -365,6 +537,72 @@ export class EnhancedQualityValidator implements ValidationModule {
       return null;
     }
     return this.context as AstValidationContext;
+  }
+
+  private extractFunctionBlocks(lines: string[]): TextFunctionBlock[] {
+    const blocks: TextFunctionBlock[] = [];
+    const pattern = /^(\s*)([A-Za-z_][A-Za-z0-9_\.]*)\s*\([^)]*\)\s*=>\s*$/;
+    const total = lines.length;
+
+    let index = 0;
+    while (index < total) {
+      const line = lines[index];
+      const match = pattern.exec(line);
+      if (!match) {
+        index += 1;
+        continue;
+      }
+
+      const indent = this.getIndentWidth(match[1] ?? '');
+      const name = match[2];
+      const startLine = index + 1;
+      const startColumn = indent + 1;
+
+      const body: Array<{ text: string; lineNumber: number; indent: number }> = [];
+      let cursor = index + 1;
+      while (cursor < total) {
+        const bodyLine = lines[cursor];
+        const bodyIndent = this.getIndentWidth(bodyLine);
+        const trimmed = bodyLine.trim();
+        if (trimmed.length === 0) {
+          body.push({ text: bodyLine, lineNumber: cursor + 1, indent: bodyIndent });
+          cursor += 1;
+          continue;
+        }
+        if (bodyIndent <= indent) {
+          break;
+        }
+        body.push({ text: bodyLine, lineNumber: cursor + 1, indent: bodyIndent });
+        cursor += 1;
+      }
+
+      blocks.push({ name, startLine, startColumn, indent, body });
+      index = cursor;
+    }
+
+    return blocks;
+  }
+
+  private getIndentWidth(line: string): number {
+    let width = 0;
+    for (const char of line) {
+      if (char === ' ') {
+        width += 1;
+      } else if (char === '\t') {
+        width += 4;
+      } else {
+        break;
+      }
+    }
+    return width;
+  }
+
+  private stripLineComment(line: string): string {
+    const commentIndex = line.indexOf('//');
+    if (commentIndex === -1) {
+      return line;
+    }
+    return line.slice(0, commentIndex);
   }
 }
 
