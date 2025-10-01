@@ -494,14 +494,18 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   // Time functions
   'timestamp': {
     parameters: [
-      { name: 'year', type: 'int', qualifier: 'simple', required: true, min: 1970, max: 2100 },
-      { name: 'month', type: 'int', qualifier: 'simple', required: true, min: 1, max: 12 },
-      { name: 'day', type: 'int', qualifier: 'simple', required: true, min: 1, max: 31 },
+      // Overload 1: timestamp(dateString) - single string parameter
+      { name: 'dateString', type: 'string', qualifier: 'simple', required: false },
+      // Overload 2: timestamp(year, month, day, hour, minute, second, [timezone])
+      { name: 'year', type: 'int', qualifier: 'simple', required: false, min: 1970, max: 2100 },
+      { name: 'month', type: 'int', qualifier: 'simple', required: false, min: 1, max: 12 },
+      { name: 'day', type: 'int', qualifier: 'simple', required: false, min: 1, max: 31 },
       { name: 'hour', type: 'int', qualifier: 'simple', required: false, min: 0, max: 23 },
       { name: 'minute', type: 'int', qualifier: 'simple', required: false, min: 0, max: 59 },
       { name: 'second', type: 'int', qualifier: 'simple', required: false, min: 0, max: 59 },
       { name: 'timezone', type: 'string', qualifier: 'simple', required: false }
     ],
+    parameterCounts: [1, 6, 7], // Accept 1 string OR 6-7 numeric parameters
     returnType: 'int',
     v6Changes: 'Adds timezone support plus stricter bounds for date components.'
   },
@@ -1749,6 +1753,135 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
     ],
     returnType: 'void'
   },
+  'array.includes': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' },
+      { name: 'value', type: 'any', qualifier: 'simple' }
+    ],
+    returnType: 'bool'
+  },
+  'array.binary_search': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' },
+      { name: 'value', type: 'any', qualifier: 'simple' }
+    ],
+    returnType: 'int'
+  },
+  'array.binary_search_leftmost': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' },
+      { name: 'value', type: 'any', qualifier: 'simple' }
+    ],
+    returnType: 'int'
+  },
+  'array.binary_search_rightmost': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' },
+      { name: 'value', type: 'any', qualifier: 'simple' }
+    ],
+    returnType: 'int'
+  },
+  'array.min': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.max': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.sum': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.avg': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.median': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.mode': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.variance': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.stdev': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.range': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.covariance': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' },
+      { name: 'id2', type: 'array', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.percentile_linear_interpolation': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' },
+      { name: 'percentage', type: 'simple', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.percentile_nearest_rank': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' },
+      { name: 'percentage', type: 'simple', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.percentrank': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' },
+      { name: 'value', type: 'simple', qualifier: 'simple' }
+    ],
+    returnType: 'series'
+  },
+  'array.first': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' }
+    ],
+    returnType: 'element'
+  },
+  'array.last': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' }
+    ],
+    returnType: 'element'
+  },
+  'array.join': {
+    parameters: [
+      { name: 'id', type: 'array', qualifier: 'simple' },
+      { name: 'separator', type: 'string', qualifier: 'simple', required: false }
+    ],
+    returnType: 'string'
+  },
   'matrix.new': {
     parameters: [
       { name: 'type', type: 'string', qualifier: 'simple', optional: true },
@@ -2025,7 +2158,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'input.int': {
     parameters: [
       { name: 'defval', type: 'int', qualifier: 'simple', required: true },
-      { name: 'title', type: 'string', qualifier: 'simple', required: true },
+      { name: 'title', type: 'string', qualifier: 'simple', required: false },
       { name: 'minval', type: 'int', qualifier: 'simple', required: false },
       { name: 'maxval', type: 'int', qualifier: 'simple', required: false },
       { name: 'step', type: 'int', qualifier: 'simple', required: false },
@@ -2039,7 +2172,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'input.float': {
     parameters: [
       { name: 'defval', type: 'float', qualifier: 'simple', required: true },
-      { name: 'title', type: 'string', qualifier: 'simple', required: true },
+      { name: 'title', type: 'string', qualifier: 'simple', required: false },
       { name: 'minval', type: 'float', qualifier: 'simple', required: false },
       { name: 'maxval', type: 'float', qualifier: 'simple', required: false },
       { name: 'step', type: 'float', qualifier: 'simple', required: false },
@@ -2053,7 +2186,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'input.bool': {
     parameters: [
       { name: 'defval', type: 'bool', qualifier: 'simple', required: true },
-      { name: 'title', type: 'string', qualifier: 'simple', required: true },
+      { name: 'title', type: 'string', qualifier: 'simple', required: false },
       { name: 'group', type: 'string', qualifier: 'simple', required: false },
       { name: 'tooltip', type: 'string', qualifier: 'simple', required: false },
       { name: 'inline', type: 'string', qualifier: 'simple', required: false },
@@ -2064,7 +2197,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'input.string': {
     parameters: [
       { name: 'defval', type: 'string', qualifier: 'simple', required: true },
-      { name: 'title', type: 'string', qualifier: 'simple', required: true },
+      { name: 'title', type: 'string', qualifier: 'simple', required: false },
       { name: 'options', type: 'array', qualifier: 'simple', required: false },
       { name: 'group', type: 'string', qualifier: 'simple', required: false },
       { name: 'tooltip', type: 'string', qualifier: 'simple', required: false },
@@ -2077,7 +2210,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'input.color': {
     parameters: [
       { name: 'defval', type: 'color', qualifier: 'simple', required: true },
-      { name: 'title', type: 'string', qualifier: 'simple', required: true },
+      { name: 'title', type: 'string', qualifier: 'simple', required: false },
       { name: 'group', type: 'string', qualifier: 'simple', required: false },
       { name: 'tooltip', type: 'string', qualifier: 'simple', required: false },
       { name: 'inline', type: 'string', qualifier: 'simple', required: false },
@@ -2088,7 +2221,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'input.source': {
     parameters: [
       { name: 'defval', type: 'series', qualifier: 'simple', required: true },
-      { name: 'title', type: 'string', qualifier: 'simple', required: true },
+      { name: 'title', type: 'string', qualifier: 'simple', required: false },
       { name: 'group', type: 'string', qualifier: 'simple', required: false },
       { name: 'tooltip', type: 'string', qualifier: 'simple', required: false },
       { name: 'inline', type: 'string', qualifier: 'simple', required: false },
@@ -2099,7 +2232,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'input.timeframe': {
     parameters: [
       { name: 'defval', type: 'string', qualifier: 'simple', required: true },
-      { name: 'title', type: 'string', qualifier: 'simple', required: true },
+      { name: 'title', type: 'string', qualifier: 'simple', required: false },
       { name: 'group', type: 'string', qualifier: 'simple', required: false },
       { name: 'tooltip', type: 'string', qualifier: 'simple', required: false },
       { name: 'inline', type: 'string', qualifier: 'simple', required: false },
@@ -2110,7 +2243,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'input.session': {
     parameters: [
       { name: 'defval', type: 'string', qualifier: 'simple', required: true },
-      { name: 'title', type: 'string', qualifier: 'simple', required: true },
+      { name: 'title', type: 'string', qualifier: 'simple', required: false },
       { name: 'tooltip', type: 'string', qualifier: 'simple', required: false },
       { name: 'group', type: 'string', qualifier: 'simple', required: false },
       { name: 'inline', type: 'string', qualifier: 'simple', required: false },
@@ -2121,7 +2254,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'input.symbol': {
     parameters: [
       { name: 'defval', type: 'string', qualifier: 'simple', required: true },
-      { name: 'title', type: 'string', qualifier: 'simple', required: true },
+      { name: 'title', type: 'string', qualifier: 'simple', required: false },
       { name: 'group', type: 'string', qualifier: 'simple', required: false },
       { name: 'tooltip', type: 'string', qualifier: 'simple', required: false },
       { name: 'inline', type: 'string', qualifier: 'simple', required: false },

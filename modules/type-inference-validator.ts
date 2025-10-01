@@ -196,9 +196,12 @@ export class TypeInferenceValidator implements ValidationModule {
 
       // Register inferred type from function call or collection info
       if (initializerType && initializerType !== 'unknown') {
+        if (process.env.DEBUG_TYPE_INFERENCE === '1' && node.identifier.name === 'idx') {
+          console.log(`[TypeInference] Registering ${node.identifier.name} with type:`, initializerType);
+        }
         this.registerVariableTypeInfo(
           node.identifier.name,
-          initializerType,
+          this.normalizeType(initializerType),
           collectionInfo?.elementType,
           collectionInfo?.keyType,
           collectionInfo?.valueType,
@@ -207,9 +210,12 @@ export class TypeInferenceValidator implements ValidationModule {
           node.declarationKind === 'const',
         );
       } else if (collectionInfo) {
+        if (process.env.DEBUG_TYPE_INFERENCE === '1' && node.identifier.name === 'idx') {
+          console.log(`[TypeInference] Registering ${node.identifier.name} with collectionInfo:`, collectionInfo);
+        }
         this.registerVariableTypeInfo(
           node.identifier.name,
-          collectionInfo.type,
+          this.normalizeType(collectionInfo.type),
           collectionInfo.elementType,
           collectionInfo.keyType,
           collectionInfo.valueType,
@@ -321,7 +327,7 @@ export class TypeInferenceValidator implements ValidationModule {
       if (valueType && valueType !== 'unknown') {
         this.registerVariableTypeInfo(
           identifier.name,
-          valueType,
+          this.normalizeType(valueType),
           undefined,
           undefined,
           undefined,
@@ -334,7 +340,7 @@ export class TypeInferenceValidator implements ValidationModule {
       if (inferredCollection) {
         this.registerVariableTypeInfo(
           identifier.name,
-          inferredCollection.type,
+          this.normalizeType(inferredCollection.type),
           inferredCollection.elementType,
           inferredCollection.keyType,
           inferredCollection.valueType,
@@ -994,7 +1000,7 @@ export class TypeInferenceValidator implements ValidationModule {
 
   private registerVariableTypeInfo(
     name: string,
-    type: TypeInfo['type'],
+    type: TypeInfo['type'] | 'unknown',
     elementType: string | undefined,
     keyType: string | undefined,
     valueType: string | undefined,
@@ -1006,6 +1012,16 @@ export class TypeInferenceValidator implements ValidationModule {
       return;
     }
 
+    if (process.env.DEBUG_TYPE_INFERENCE === '1' && name === 'idx') {
+      console.log(`[TypeInference] registerVariableTypeInfo for ${name}:`, {
+        type,
+        elementType,
+        keyType,
+        valueType,
+        existingType: this.context.typeMap.get(name)?.type,
+      });
+    }
+
     const normalizedElement = elementType && elementType !== 'unknown' ? elementType : undefined;
     const normalizedValue = valueType && valueType !== 'unknown' ? valueType : undefined;
     const normalizedKey = keyType && keyType !== 'unknown' ? keyType : type === 'map' ? 'string' : undefined;
@@ -1015,10 +1031,14 @@ export class TypeInferenceValidator implements ValidationModule {
       const updated: TypeInfo = { ...existing };
       let changed = false;
 
+      // Always update type if we have a more specific value (not 'unknown' or missing)
+      // This ensures function return types override initial inferences
       if (!updated.type) {
-        updated.type = type;
-        updated.isSeries = type === 'series' || updated.isSeries;
-        changed = true;
+        if (updated.type !== type) {
+          updated.type = type;
+          updated.isSeries = type === 'series' || updated.isSeries;
+          changed = true;
+        }
       }
 
       if (normalizedElement && (!updated.elementType || updated.elementType === 'unknown')) {
@@ -1037,6 +1057,9 @@ export class TypeInferenceValidator implements ValidationModule {
       }
 
       if (changed) {
+        if (process.env.DEBUG_TYPE_INFERENCE === '1' && name === 'idx') {
+          console.log(`[TypeInference] Updated ${name} type from ${existing.type} to ${updated.type}`);
+        }
         this.context.typeMap.set(name, updated);
       }
       return;

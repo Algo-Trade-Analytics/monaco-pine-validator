@@ -132,7 +132,7 @@ export class LazyEvaluationValidator implements ValidationModule {
 
     const typeMap = new Map();
     typeMap.set('conditional_historical_functions', {
-      type: 'analysis',
+      type: 'unknown',
       isConst: false,
       isSeries: false,
       count: this.conditionalHistoricalCount,
@@ -685,7 +685,7 @@ export class LazyEvaluationValidator implements ValidationModule {
             continue;
           }
           const contextType = this.resolveTextContext(withoutComment, trimmed, indent, blockStack, ifStack, hasTernary);
-          if (!contextType || contextType === 'switch') {
+          if (!contextType || contextType === 'switch' || contextType === 'method') {
             continue;
           }
           pendingUserCalls.push({

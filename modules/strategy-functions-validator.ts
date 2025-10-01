@@ -5,6 +5,7 @@ import {
   type ValidatorConfig,
   type ValidationError,
   type ValidationResult,
+  type TypeInfo,
 } from '../core/types';
 import { Codes } from '../core/codes';
 import { IDENT, NS_MEMBERS, BUILTIN_FUNCTIONS_V6_RULES } from '../core/constants';
@@ -111,7 +112,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.nestedStrategyCallsByLine.clear();
   }
 
-  private buildResult(typeMap: Map<string, unknown> = new Map()): ValidationResult {
+  private buildResult(typeMap: Map<string, TypeInfo> = new Map()): ValidationResult {
     return {
       isValid: this.errors.length === 0,
       errors: this.errors,
@@ -128,14 +129,14 @@ export class StrategyFunctionsValidator implements ValidationModule {
 
     visit(program, {
       ForStatement: {
-        enter: () => loopStack.push('for'),
-        exit: () => {
+        enter: (): void => { loopStack.push('for'); },
+        exit: (): void => {
           loopStack.pop();
         },
       },
       WhileStatement: {
-        enter: () => loopStack.push('while'),
-        exit: () => {
+        enter: (): void => { loopStack.push('while'); },
+        exit: (): void => {
           loopStack.pop();
         },
       },

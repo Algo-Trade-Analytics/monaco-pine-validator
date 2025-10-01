@@ -53,6 +53,9 @@ const INPUT_RETURN_TYPES: Record<string, { type: TypeInfo['type']; isSeries?: bo
   session: { type: 'string' },
   symbol: { type: 'string' },
   resolution: { type: 'string' },
+  time: { type: 'int' },
+  text_area: { type: 'string' },
+  price: { type: 'float' },
 };
 
 export class InputFunctionsValidator implements ValidationModule {
@@ -240,6 +243,15 @@ export class InputFunctionsValidator implements ValidationModule {
       case 'resolution':
         this.validateInputResolution(args, parameters, lineNum, column);
         break;
+      case 'time':
+        this.validateInputTime(args, parameters, lineNum, column);
+        break;
+      case 'text_area':
+        this.validateInputTextArea(args, parameters, lineNum, column);
+        break;
+      case 'price':
+        this.validateInputPrice(args, parameters, lineNum, column);
+        break;
       default:
         this.addError(lineNum, column, `Unknown input function: input.${functionName}`, 'PSV6-INPUT-UNKNOWN-FUNCTION');
     }
@@ -314,9 +326,9 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputFloat(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    // input.float() requires at least 2 parameters (default value and title) or named defval+title
-    if (args.length < 2 && !(parameters.has('defval') && parameters.has('title'))) {
-      this.addError(lineNum, column, 'input.float() requires at least 2 parameters (default, title)', 'PSV6-FUNCTION-PARAM-COUNT');
+    // input.float() requires at least 1 parameter (default value)
+    if (args.length < 1 && !parameters.has('defval')) {
+      this.addError(lineNum, column, 'input.float() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -337,8 +349,8 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputBool(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 2 && !(parameters.has('defval') && parameters.has('title'))) {
-      this.addError(lineNum, column, 'input.bool() requires at least 2 parameters (default, title)', 'PSV6-FUNCTION-PARAM-COUNT');
+    if (args.length < 1 && !parameters.has('defval')) {
+      this.addError(lineNum, column, 'input.bool() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -359,8 +371,8 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputString(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 2 && !(parameters.has('defval') && parameters.has('title'))) {
-      this.addError(lineNum, column, 'input.string() requires at least 2 parameters (default, title)', 'PSV6-FUNCTION-PARAM-COUNT');
+    if (args.length < 1 && !parameters.has('defval')) {
+      this.addError(lineNum, column, 'input.string() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -379,8 +391,8 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputColor(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 2 && !(parameters.has('defval') && parameters.has('title'))) {
-      this.addError(lineNum, column, 'input.color() requires at least 2 parameters (default, title)', 'PSV6-FUNCTION-PARAM-COUNT');
+    if (args.length < 1 && !parameters.has('defval')) {
+      this.addError(lineNum, column, 'input.color() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -396,8 +408,8 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputSource(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 2 && !(parameters.has('defval') && parameters.has('title'))) {
-      this.addError(lineNum, column, 'input.source() requires at least 2 parameters (default, title)', 'PSV6-FUNCTION-PARAM-COUNT');
+    if (args.length < 1 && !parameters.has('defval')) {
+      this.addError(lineNum, column, 'input.source() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -413,8 +425,8 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputTimeframe(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 2 && !(parameters.has('defval') && parameters.has('title'))) {
-      this.addError(lineNum, column, 'input.timeframe() requires at least 2 parameters (default, title)', 'PSV6-FUNCTION-PARAM-COUNT');
+    if (args.length < 1 && !parameters.has('defval')) {
+      this.addError(lineNum, column, 'input.timeframe() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -429,8 +441,8 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputSession(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 2 && !(parameters.has('defval') && parameters.has('title'))) {
-      this.addError(lineNum, column, 'input.session() requires at least 2 parameters (default, title)', 'PSV6-FUNCTION-PARAM-COUNT');
+    if (args.length < 1 && !parameters.has('defval')) {
+      this.addError(lineNum, column, 'input.session() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -445,8 +457,8 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputSymbol(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 2 && !(parameters.has('defval') && parameters.has('title'))) {
-      this.addError(lineNum, column, 'input.symbol() requires at least 2 parameters (default, title)', 'PSV6-FUNCTION-PARAM-COUNT');
+    if (args.length < 1 && !parameters.has('defval')) {
+      this.addError(lineNum, column, 'input.symbol() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -460,8 +472,8 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputResolution(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 2 && !(parameters.has('defval') && parameters.has('title'))) {
-      this.addError(lineNum, column, 'input.resolution() requires at least 2 parameters (default, title)', 'PSV6-FUNCTION-PARAM-COUNT');
+    if (args.length < 1 && !parameters.has('defval')) {
+      this.addError(lineNum, column, 'input.resolution() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -472,6 +484,66 @@ export class InputFunctionsValidator implements ValidationModule {
 
     // Validate parameters
     this.validateInputParameters(parameters, lineNum, column, 'resolution', args[0]);
+  }
+
+  private validateInputTime(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
+    if (args.length < 1 && !parameters.has('defval')) {
+      this.addError(lineNum, column, 'input.time() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
+      return;
+    }
+
+    // Default value should be an int (timestamp) or timestamp() call
+    const defaultValue = parameters.get('defval') ?? args[0];
+    if (defaultValue && !this.isNumericOrTimestamp(defaultValue)) {
+      this.addWarning(lineNum, column, 'Default value should be a timestamp or timestamp() call', 'PSV6-INPUT-DEFAULT-TYPE');
+    }
+
+    // Validate parameters
+    this.validateInputParameters(parameters, lineNum, column, 'time', defaultValue);
+  }
+
+  private validateInputTextArea(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
+    if (args.length < 1 && !parameters.has('defval')) {
+      this.addError(lineNum, column, 'input.text_area() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
+      return;
+    }
+
+    // Validate default value (should be string literal)
+    const defaultValue = parameters.get('defval') ?? args[0];
+    if (defaultValue && !this.isStringLiteral(defaultValue)) {
+      this.addWarning(lineNum, column, 'Default value should be a string literal', 'PSV6-INPUT-DEFAULT-TYPE');
+    }
+
+    // Validate parameters
+    this.validateInputParameters(parameters, lineNum, column, 'text_area', defaultValue);
+  }
+
+  private validateInputPrice(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
+    if (args.length < 1 && !parameters.has('defval')) {
+      this.addError(lineNum, column, 'input.price() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
+      return;
+    }
+
+    // Validate default value (should be numeric)
+    const defaultValue = parameters.get('defval') ?? args[0];
+    if (defaultValue && !this.isNumericLike(defaultValue)) {
+      this.addWarning(lineNum, column, 'Default value should be a numeric expression', 'PSV6-INPUT-DEFAULT-TYPE');
+    }
+
+    // Validate parameters
+    this.validateInputParameters(parameters, lineNum, column, 'price', defaultValue);
+  }
+
+  private isNumericOrTimestamp(value: string): boolean {
+    return this.isNumericLike(value) || value.trim().startsWith('timestamp(');
+  }
+
+  private isNumericLike(value: string): boolean {
+    const trimmed = value.trim();
+    // Check if it's a number literal, variable, or numeric function call
+    return /^-?\d+(\.\d+)?$/.test(trimmed) || // number literal
+           /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed) || // variable
+           /^[a-zA-Z_][a-zA-Z0-9_]*\(/.test(trimmed); // function call
   }
 
   private validateInputParameters(parameters: Map<string, string>, lineNum: number, column: number, inputType: string, defaultArg?: string): void {

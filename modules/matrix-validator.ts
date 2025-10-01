@@ -450,7 +450,9 @@ export class MatrixValidator implements ValidationModule {
     const info1 = this.matrixDeclarations.get(matrix1Name);
     const info2 = this.matrixDeclarations.get(matrix2Name);
     
-    if (info1?.cols !== null && info2?.rows !== null && info1.cols !== info2.rows) {
+    if (!info1 || !info2) return;
+    
+    if (info1.cols !== null && info2.rows !== null && info1.cols !== info2.rows) {
       this.addError(
         line,
         column,

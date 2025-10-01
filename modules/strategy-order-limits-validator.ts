@@ -27,6 +27,7 @@ import {
   type CallExpressionNode,
   type ExpressionNode,
   type MemberExpressionNode,
+  type NumberLiteralNode,
   type ProgramNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
@@ -136,7 +137,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     // Build analysis results for other validators
     const typeMap = this.context.typeMap ?? new Map();
     typeMap.set('strategy_order_analysis', {
-      type: 'analysis',
+      type: 'unknown',
       isConst: false,
       isSeries: false,
       declaredAt: { line: 1, column: 1 },

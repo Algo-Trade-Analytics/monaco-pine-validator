@@ -120,13 +120,11 @@ export class EnhancedTextboxValidator implements ValidationModule {
     // Build analysis results for other validators
     const typeMap = this.context.typeMap ?? new Map();
     typeMap.set('textbox_analysis', {
-      type: 'analysis',
+      type: 'unknown',
       isConst: false,
       isSeries: false,
       declaredAt: { line: 1, column: 1 },
-      usages: [],
-      textboxCount: this.textboxCount,
-      hasTextContent: this.textContents.size > 0
+      usages: []
     });
 
     this.context.typeMap = typeMap;
@@ -165,14 +163,14 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     visit(program, {
       ForStatement: {
-        enter: () => loopStack.push('for'),
-        exit: () => {
+        enter: (): void => { loopStack.push('for'); },
+        exit: (): void => {
           loopStack.pop();
         },
       },
       WhileStatement: {
-        enter: () => loopStack.push('while'),
-        exit: () => {
+        enter: (): void => { loopStack.push('while'); },
+        exit: (): void => {
           loopStack.pop();
         },
       },

@@ -687,7 +687,10 @@ export class FunctionValidator implements ValidationModule {
         arguments: originalCall.arguments,
         line: originalCall.line,
         column: originalCall.column,
-        startIndex: originalCall.startIndex
+        startIndex: originalCall.startIndex,
+        inLoop: originalCall.inLoop,
+        astNode: originalCall.astNode,
+        astPath: originalCall.astPath,
       };
       this.validateUserFunctionCall(qualifiedCall);
       return;
@@ -709,7 +712,10 @@ export class FunctionValidator implements ValidationModule {
       arguments: originalCall.arguments,
       line: originalCall.line,
       column: originalCall.column,
-      startIndex: originalCall.startIndex
+      startIndex: originalCall.startIndex,
+      inLoop: originalCall.inLoop,
+      astNode: originalCall.astNode,
+      astPath: originalCall.astPath,
     };
 
     this.validateUserFunctionCall(methodCall);

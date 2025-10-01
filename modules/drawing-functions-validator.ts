@@ -195,14 +195,14 @@ export class DrawingFunctionsValidator implements ValidationModule {
 
     visit(program, {
       ForStatement: {
-        enter: () => loopStack.push('for'),
-        exit: () => {
+        enter: (): void => { loopStack.push('for'); },
+        exit: (): void => {
           loopStack.pop();
         },
       },
       WhileStatement: {
-        enter: () => loopStack.push('while'),
-        exit: () => {
+        enter: (): void => { loopStack.push('while'); },
+        exit: (): void => {
           loopStack.pop();
         },
       },

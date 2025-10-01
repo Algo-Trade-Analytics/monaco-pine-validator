@@ -308,7 +308,7 @@ export function createWhileStatement(
 }
 
 export function createForStatement(
-  initializer: VariableDeclarationNode | StatementNode | null,
+  initializer: VariableDeclarationNode | AssignmentStatementNode | null,
   test: ExpressionNode | null,
   update: ExpressionNode | null,
   body: BlockStatementNode,

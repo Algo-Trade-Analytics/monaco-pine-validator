@@ -375,8 +375,20 @@ export class TimeDateFunctionsValidator implements ValidationModule {
   }
 
   private validateTimestamp(args: string[], lineNum: number, column: number): void {
+    // timestamp() can accept either:
+    // 1. A single string parameter like "2020-01-01 00:00 +0000"
+    // 2. 6-7 parameters: year, month, day, hour, minute, second, [timezone]
+    if (args.length === 1) {
+      // Single string parameter - validate it's a string
+      const arg = args[0].trim();
+      if (!this.isStringLiteral(arg)) {
+        this.addWarning(lineNum, column, 'timestamp() with single parameter expects a date string literal', 'PSV6-TIMESTAMP-FORMAT');
+      }
+      return;
+    }
+
     if (args.length < 6) {
-      this.addError(lineNum, column, 'timestamp requires at least 6 parameters: year, month, day, hour, minute, second', 'PSV6-TIMESTAMP-PARAMS');
+      this.addError(lineNum, column, 'timestamp() requires either 1 date string or 6+ parameters (year, month, day, hour, minute, second, [timezone])', 'PSV6-TIMESTAMP-PARAMS');
       return;
     }
 

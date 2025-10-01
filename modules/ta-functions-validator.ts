@@ -5,6 +5,7 @@ import {
   type ValidatorConfig,
   type ValidationError,
   type ValidationResult,
+  type TypeInfo,
 } from '../core/types';
 import { NS_MEMBERS, BUILTIN_FUNCTIONS_V6_RULES } from '../core/constants';
 import {
@@ -698,7 +699,7 @@ export class TAFunctionsValidator implements ValidationModule {
     return !!NS_MEMBERS.ta?.has(functionName);
   }
 
-  private buildResult(typeMap: Map<string, unknown> = new Map()): ValidationResult {
+  private buildResult(typeMap: Map<string, TypeInfo> = new Map()): ValidationResult {
     return {
       isValid: this.errors.length === 0,
       errors: this.errors,

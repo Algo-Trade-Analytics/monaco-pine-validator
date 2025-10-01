@@ -128,6 +128,7 @@ describe('buildScopeGraph', () => {
       kind: 'CallExpression',
       callee: identifier('compute', 80),
       args: [callArgument],
+      typeArguments: [],
       loc: locFrom(80, 91),
       range: createRange(80, 91),
     };
