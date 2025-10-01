@@ -2157,7 +2157,7 @@ export class CoreValidator implements ValidationModule {
     else if (/^[+\-]?\d[\d_]*(?:\.\d[\d_]*)?(?:e[+\-]?\d+)?\b/i.test(s)) {
         ty = s.includes('.') || /e[+\-]/i.test(s) ? 'float' : 'int';
     }
-    else if (/\bcolor\.(?:\w+)\b|\bcolor\.new\s*\(/.test(s)) ty = 'color';
+    else if (/^color\.(?:\w+)\b/.test(s) || /^color\.new\s*\(/.test(s)) ty = 'color';
     else if (/\b(line|label|box|table)\.new\s*\(/.test(s)) ty = s.match(/\b(line|label|box|table)\.new/)![1] as any;
     else if (/\barray\./.test(s)) ty = 'array';
     else if (/\bmatrix\./.test(s)) ty = 'matrix';

@@ -714,7 +714,7 @@ exports[`LuxAlgo Volume Bubbles script > captures current validator output 1`] =
       "message": "Function call 'point.new(na,x,y)' is repeated 3 times. Consider caching the result to improve performance",
     },
     {
-      "code": "PSV6-FUNCTION-STYLE-COMPLEXITY",
+      "code": "PSV6-STYLE-COMPLEXITY",
       "column": 1,
       "line": 262,
       "message": "Function 'drawHistogram' has high complexity (19). Consider breaking it into smaller functions",

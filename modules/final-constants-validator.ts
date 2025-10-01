@@ -28,6 +28,7 @@ import {
 } from '../core/types';
 import {
   DRAW_TABLE_EXTRA_CONSTANTS,
+  DISPLAY_CONSTANTS_EXTENDED,
   STRATEGY_RISK_EXTRA_CONSTANTS,
   STRATEGY_COMMISSION_EXTRA_CONSTANTS,
   PLOT_STYLE_CONSTANTS,
@@ -35,8 +36,14 @@ import {
   LABEL_STYLE_CONSTANTS,
   HLINE_STYLE_CONSTANTS,
   ORDER_CONSTANTS,
-  POSITION_CONSTANTS
+  POSITION_CONSTANTS,
+  XLOC_YLOC_CONSTANTS,
+  EXTEND_CONSTANTS,
+  LOCATION_CONSTANTS,
+  SHAPE_CONSTANTS,
+  SIZE_CONSTANTS
 } from '../core/constants-registry';
+import { TEXT_ALIGNMENT_CONSTANTS, TEXT_SIZE_CONSTANTS } from '../core/constants';
 import { Codes } from '../core/codes';
 import { visit } from '../core/ast/traversal';
 import type { ExpressionNode, MemberExpressionNode, ProgramNode } from '../core/ast/nodes';
@@ -94,6 +101,7 @@ export class FinalConstantsValidator implements ValidationModule {
   private orderConstantUsage: Map<string, number> = new Map();
   private positionConstantUsage: Map<string, number> = new Map();
   private specializedConstantUsage: Map<string, number> = new Map();
+  private infoKeys = new Set<string>();
 
   getDependencies(): string[] {
     return ['CoreValidator'];
@@ -139,6 +147,7 @@ export class FinalConstantsValidator implements ValidationModule {
     this.orderConstantUsage.clear();
     this.positionConstantUsage.clear();
     this.specializedConstantUsage.clear();
+    this.infoKeys.clear();
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
@@ -157,10 +166,17 @@ export class FinalConstantsValidator implements ValidationModule {
             return;
           }
 
+          if (!this.shouldInspectConstant(constant)) {
+            return;
+          }
+
           const position = node.property.loc?.start ?? node.loc.start;
           const line = position.line ?? 1;
           const column = position.column ?? 1;
-          this.recordConstantUsage(constant, line, column);
+          const recognized = this.recordConstantUsage(constant, line, column);
+          if (!recognized) {
+            this.flagInvalidConstant(constant, line, column);
+          }
         },
       },
     });
@@ -200,17 +216,61 @@ export class FinalConstantsValidator implements ValidationModule {
     return null;
   }
 
+  private shouldInspectConstant(constant: string): boolean {
+    if (MATH_CONSTANTS.has(constant)) {
+      return true;
+    }
+
+    if (ALL_SPECIALIZED_CONSTANTS.has(constant)) {
+      return true;
+    }
+
+    const prefixes = [
+      'position.',
+      'xloc.',
+      'yloc.',
+      'text.align',
+      'size.',
+      'extend.',
+      'line.style',
+      'label.style',
+      'plot.style',
+      'location.',
+      'shape.',
+      'order.',
+      'display.',
+    ];
+
+    return prefixes.some((prefix) => constant.startsWith(prefix));
+  }
+
   private incrementUsage(map: Map<string, number>, constant: string): void {
     map.set(constant, (map.get(constant) || 0) + 1);
   }
 
-  private addConstantInfo(code: string, message: string, line: number, column: number): void {
+  private addConstantInfo(code: string, message: string, line: number, column: number, key?: string): void {
+    const dedupeKey = key ?? code;
+    if (this.infoKeys.has(dedupeKey)) {
+      return;
+    }
+    this.infoKeys.add(dedupeKey);
     this.info.push({
       code,
       message,
       line,
       column,
       severity: 'info'
+    });
+  }
+
+  private addError(line: number, column: number, message: string, code: string, suggestion?: string): void {
+    this.errors.push({
+      line,
+      column,
+      message,
+      severity: 'error',
+      code,
+      suggestion,
     });
   }
 
@@ -241,13 +301,204 @@ export class FinalConstantsValidator implements ValidationModule {
       return true;
     }
 
+    if (XLOC_YLOC_CONSTANTS.has(constant)) {
+      this.addConstantInfo(Codes.CONST_XYLOC_INVALID, `Location constant '${constant}' detected`, line, column);
+      return true;
+    }
+
+    if (TEXT_ALIGNMENT_CONSTANTS.has(constant)) {
+      this.addConstantInfo(Codes.CONST_TEXT_ALIGN_INVALID, `Text alignment constant '${constant}' detected`, line, column);
+      return true;
+    }
+
+    if (TEXT_SIZE_CONSTANTS.has(constant) || SIZE_CONSTANTS.has(constant)) {
+      this.addConstantInfo(Codes.CONST_SIZE_INVALID, `Size constant '${constant}' detected`, line, column);
+      return true;
+    }
+
+    if (EXTEND_CONSTANTS.has(constant)) {
+      // The built-in variables validator already surfaces extend constant usage.
+      // We still mark the constant as recognised so invalid variants continue to
+      // flow through to the error handling below, but avoid emitting a second
+      // info message that would duplicate the existing PSV6-EXTEND-CONSTANT
+      // diagnostic.
+      return true;
+    }
+
+    if (LOCATION_CONSTANTS.has(constant)) {
+      this.addConstantInfo(Codes.CONST_LOCATION_INVALID, `Shape location constant '${constant}' detected`, line, column);
+      return true;
+    }
+
+    if (SHAPE_CONSTANTS.has(constant)) {
+      this.addConstantInfo(Codes.CONST_SHAPE_INVALID, `Shape constant '${constant}' detected`, line, column);
+      return true;
+    }
+
+    if (DISPLAY_CONSTANTS_EXTENDED.has(constant)) {
+      // Display constants are also covered by the built-in variables validator.
+      // Recognise the constant to keep invalid-path guarding, but do not emit a
+      // duplicate PSV6-DISPLAY-CONSTANT info diagnostic from this module.
+      return true;
+    }
+
     if (ALL_SPECIALIZED_CONSTANTS.has(constant)) {
       this.incrementUsage(this.specializedConstantUsage, constant);
-      this.addConstantInfo(Codes.SPECIALIZED_CONSTANT, `Specialized constant '${constant}' detected`, line, column);
+      this.addConstantInfo(Codes.SPECIALIZED_CONSTANT, `Specialized constant '${constant}' detected`, line, column, `special:${constant}:${line}:${column}`);
       return true;
     }
 
     return false;
+  }
+
+  private flagInvalidConstant(constant: string, line: number, column: number): void {
+    if (process.env.DEBUG_FINAL_CONSTANTS === '1') {
+      console.log('[FinalConstantsValidator] invalid constant detected', constant, { line, column });
+    }
+    const prefix = constant.split('.')[0];
+    const validList = (set: Set<string>): string => Array.from(set).sort().join(', ');
+
+    if (constant.startsWith('position.')) {
+      this.addError(
+        line,
+        column,
+        `Unknown table position constant '${constant}'.`,
+        Codes.CONST_POSITION_INVALID,
+        `Use one of: ${validList(POSITION_CONSTANTS)}`,
+      );
+      return;
+    }
+
+    if (constant.startsWith('xloc.') || constant.startsWith('yloc.')) {
+      this.addError(
+        line,
+        column,
+        `Unknown location constant '${constant}'.`,
+        Codes.CONST_XYLOC_INVALID,
+        `Use one of: ${validList(XLOC_YLOC_CONSTANTS)}`,
+      );
+      return;
+    }
+
+    if (constant.startsWith('text.align')) {
+      this.addError(
+        line,
+        column,
+        `Unknown text alignment constant '${constant}'.`,
+        Codes.CONST_TEXT_ALIGN_INVALID,
+        `Use one of: ${validList(TEXT_ALIGNMENT_CONSTANTS)}`,
+      );
+      return;
+    }
+
+    if (constant.startsWith('size.')) {
+      this.addError(
+        line,
+        column,
+        `Unknown size constant '${constant}'.`,
+        Codes.CONST_SIZE_INVALID,
+        `Use one of: ${validList(SIZE_CONSTANTS)}`,
+      );
+      return;
+    }
+
+    if (constant.startsWith('extend.')) {
+      this.addError(
+        line,
+        column,
+        `Unknown extend constant '${constant}'.`,
+        Codes.CONST_EXTEND_INVALID,
+        `Use one of: ${validList(EXTEND_CONSTANTS)}`,
+      );
+      return;
+    }
+
+    if (constant.startsWith('line.style')) {
+      this.addError(
+        line,
+        column,
+        `Unknown line style constant '${constant}'.`,
+        Codes.CONST_LINE_STYLE_INVALID,
+        `Use one of: ${validList(LINE_STYLE_CONSTANTS)}`,
+      );
+      return;
+    }
+
+    if (constant.startsWith('label.style')) {
+      this.addError(
+        line,
+        column,
+        `Unknown label style constant '${constant}'.`,
+        Codes.CONST_LABEL_STYLE_INVALID,
+        `Use one of: ${validList(LABEL_STYLE_CONSTANTS)}`,
+      );
+      return;
+    }
+
+    if (constant.startsWith('plot.style')) {
+      this.addError(
+        line,
+        column,
+        `Unknown plot style constant '${constant}'.`,
+        Codes.CONST_PLOT_STYLE_INVALID,
+        `Use one of: ${validList(PLOT_STYLE_CONSTANTS)}`,
+      );
+      return;
+    }
+
+    if (constant.startsWith('location.')) {
+      this.addError(
+        line,
+        column,
+        `Unknown shape location constant '${constant}'.`,
+        Codes.CONST_LOCATION_INVALID,
+        `Use one of: ${validList(LOCATION_CONSTANTS)}`,
+      );
+      return;
+    }
+
+    if (constant.startsWith('shape.')) {
+      this.addError(
+        line,
+        column,
+        `Unknown shape constant '${constant}'.`,
+        Codes.CONST_SHAPE_INVALID,
+        `Use one of: ${validList(SHAPE_CONSTANTS)}`,
+      );
+      return;
+    }
+
+    if (constant.startsWith('order.')) {
+      this.addError(
+        line,
+        column,
+        `Unknown order constant '${constant}'.`,
+        Codes.CONST_ORDER_INVALID,
+        `Use one of: ${validList(ORDER_CONSTANTS)}`,
+      );
+      return;
+    }
+
+    if (constant.startsWith('display.')) {
+      this.addError(
+        line,
+        column,
+        `Unknown display constant '${constant}'.`,
+        Codes.CONST_DISPLAY_INVALID,
+        `Use one of: ${validList(DISPLAY_CONSTANTS_EXTENDED)}`,
+      );
+      return;
+    }
+
+    if (prefix === 'text') {
+      this.addError(
+        line,
+        column,
+        `Unknown text constant '${constant}'.`,
+        Codes.CONST_TEXT_ALIGN_INVALID,
+        'Check the Pine Script reference for supported text constants.',
+      );
+    }
   }
 
   private analyzeFinalConstantUsage(): void {
