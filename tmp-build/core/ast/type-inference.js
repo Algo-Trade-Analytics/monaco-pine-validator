@@ -1,0 +1,632 @@
+import { cloneTypeMetadata, createEmptyTypeEnvironment, createTypeMetadata, } from './types';
+import { STRATEGY_ORDER_FUNCTIONS } from '../constants';
+const NUMERIC_BINARY_OPERATORS = new Set(['+', '-', '*', '/', '%', '^']);
+const STRING_COMPATIBLE_OPERATORS = new Set(['+']);
+const COMPARISON_OPERATORS = new Set(['==', '!=', '>=', '<=', '>', '<']);
+const LOGICAL_OPERATORS = new Set(['and', 'or', '&&', '||']);
+const BOOLEAN_UNARY_OPERATORS = new Set(['not', '!']);
+const NUMERIC_UNARY_OPERATORS = new Set(['+', '-']);
+const SERIES_IDENTIFIERS = new Set(['open', 'high', 'low', 'close', 'volume']);
+const TA_BOOLEAN_RETURN_FUNCTIONS = new Set(['ta.cross', 'ta.crossover', 'ta.crossunder']);
+const TA_INTEGER_RETURN_FUNCTIONS = new Set(['ta.barssince']);
+const STRATEGY_SERIES_RETURN_FUNCTIONS = new Set([
+    'strategy.position_size',
+    'strategy.position_avg_price',
+    'strategy.openprofit',
+    'strategy.netprofit',
+    'strategy.equity',
+]);
+const BUILTIN_CALL_RETURN_TYPES = {
+    nz: { kind: 'series' },
+    sma: { kind: 'series' },
+    ema: { kind: 'series' },
+    'ta.cross': { kind: 'bool', certainty: 'certain' },
+    'ta.crossover': { kind: 'bool', certainty: 'certain' },
+    'ta.crossunder': { kind: 'bool', certainty: 'certain' },
+    'ta.valuewhen': { kind: 'series' },
+    'ta.sma': { kind: 'series' },
+    'ta.ema': { kind: 'series' },
+    'ta.rsi': { kind: 'series' },
+    'ta.macd': { kind: 'series' },
+    'ta.atr': { kind: 'series' },
+    'ta.highest': { kind: 'series' },
+    'ta.lowest': { kind: 'series' },
+    'ta.barssince': { kind: 'int' },
+    'math.round': { kind: 'float' },
+    'math.floor': { kind: 'float' },
+    'math.ceil': { kind: 'float' },
+    plot: { kind: 'void', certainty: 'certain' },
+    'strategy.entry': { kind: 'void', certainty: 'certain' },
+    'strategy.order': { kind: 'void', certainty: 'certain' },
+    'strategy.exit': { kind: 'void', certainty: 'certain' },
+    'strategy.close': { kind: 'void', certainty: 'certain' },
+    'strategy.close_all': { kind: 'void', certainty: 'certain' },
+    'strategy.cancel': { kind: 'void', certainty: 'certain' },
+    'strategy.cancel_all': { kind: 'void', certainty: 'certain' },
+    'strategy.percent_of_equity': { kind: 'float', certainty: 'certain' },
+    'strategy.position_size': { kind: 'series', certainty: 'certain' },
+    'strategy.position_avg_price': { kind: 'series', certainty: 'certain' },
+    'strategy.risk.allow_entry_in': { kind: 'void', certainty: 'certain' },
+    'strategy.risk.max_position_size': { kind: 'void', certainty: 'certain' },
+    'strategy.risk.max_drawdown': { kind: 'void', certainty: 'certain' },
+    'strategy.risk.max_intraday_loss': { kind: 'void', certainty: 'certain' },
+    'strategy.risk.max_intraday_filled_orders': { kind: 'void', certainty: 'certain' },
+    'strategy.risk.max_cons_loss_days': { kind: 'void', certainty: 'certain' },
+};
+function resolveQualifiedName(expression) {
+    if (expression.kind === 'Identifier') {
+        return expression.name;
+    }
+    if (expression.kind === 'MemberExpression') {
+        const memberExpression = expression;
+        if (memberExpression.computed) {
+            return null;
+        }
+        const objectName = resolveQualifiedName(memberExpression.object);
+        if (!objectName) {
+            return null;
+        }
+        return `${objectName}.${memberExpression.property.name}`;
+    }
+    return null;
+}
+function createBuiltinCallMetadata(name, argumentTypes) {
+    const override = BUILTIN_CALL_RETURN_TYPES[name];
+    if (override) {
+        return createTypeMetadata(override.kind, `call:builtin:${name}`, override.certainty ?? 'inferred');
+    }
+    if (name.startsWith('ta.')) {
+        if (TA_BOOLEAN_RETURN_FUNCTIONS.has(name)) {
+            return createTypeMetadata('bool', `call:builtin:${name}`, 'certain');
+        }
+        if (TA_INTEGER_RETURN_FUNCTIONS.has(name)) {
+            return createTypeMetadata('int', `call:builtin:${name}`);
+        }
+        return createTypeMetadata('series', `call:builtin:${name}`);
+    }
+    if (name.startsWith('strategy.')) {
+        if (STRATEGY_ORDER_FUNCTIONS.has(name) || name.startsWith('strategy.risk.')) {
+            return createTypeMetadata('void', `call:builtin:${name}`, 'certain');
+        }
+        if (STRATEGY_SERIES_RETURN_FUNCTIONS.has(name)) {
+            return createTypeMetadata('series', `call:builtin:${name}`, 'certain');
+        }
+        return createTypeMetadata('series', `call:builtin:${name}`);
+    }
+    return null;
+}
+function combineCertainty(...metadatas) {
+    if (metadatas.some((metadata) => metadata.certainty === 'conflict')) {
+        return 'conflict';
+    }
+    if (metadatas.every((metadata) => metadata.certainty === 'certain')) {
+        return 'certain';
+    }
+    return 'inferred';
+}
+function isNumericKind(kind) {
+    return kind === 'int' || kind === 'float';
+}
+function createUnknown(reason, certainty = 'inferred') {
+    return createTypeMetadata('unknown', reason, certainty);
+}
+function annotateNode(environment, node, metadata, reason, overrides) {
+    const annotated = cloneTypeMetadata(metadata, {
+        ...(overrides ?? {}),
+        addSource: reason,
+    });
+    environment.nodeTypes.set(node, annotated);
+    return annotated;
+}
+function assignIdentifier(environment, identifier, metadata, reason, overrides) {
+    const annotated = cloneTypeMetadata(metadata, {
+        ...(overrides ?? {}),
+        addSource: reason,
+    });
+    environment.identifiers.set(identifier.name, annotated);
+    environment.nodeTypes.set(identifier, annotated);
+    return annotated;
+}
+function recordIdentifierUsage(environment, identifier, reason) {
+    const existing = environment.identifiers.get(identifier.name);
+    if (!existing) {
+        const builtinSeries = SERIES_IDENTIFIERS.has(identifier.name)
+            ? createTypeMetadata('series', 'identifier:builtin:series', 'certain')
+            : null;
+        const metadata = builtinSeries ?? createUnknown(reason);
+        environment.identifiers.set(identifier.name, metadata);
+        environment.nodeTypes.set(identifier, metadata);
+        return metadata;
+    }
+    const annotated = cloneTypeMetadata(existing, { addSource: reason });
+    environment.identifiers.set(identifier.name, annotated);
+    environment.nodeTypes.set(identifier, annotated);
+    return annotated;
+}
+function inferArgument(environment, argument) {
+    if (argument.name) {
+        // Named arguments reference parameter labels rather than script symbols.
+        environment.nodeTypes.set(argument.name, createTypeMetadata('unknown', 'argument:name', 'certain'));
+    }
+    return inferExpression(environment, argument.value, `argument:value`);
+}
+function determineNumericLiteralKind(literal) {
+    return /[.eE]/.test(literal.raw) ? 'float' : 'int';
+}
+function inferCallExpression(environment, expression) {
+    inferExpression(environment, expression.callee, 'call:callee');
+    const argumentTypes = expression.args.map((arg) => inferArgument(environment, arg));
+    const calleeName = resolveQualifiedName(expression.callee);
+    let metadata = calleeName
+        ? createBuiltinCallMetadata(calleeName, argumentTypes)
+        : null;
+    if (metadata?.kind === 'series') {
+        const seriesArguments = argumentTypes.filter((argumentType) => argumentType.kind === 'series');
+        if (seriesArguments.length > 0) {
+            metadata = cloneTypeMetadata(metadata, { certainty: combineCertainty(...seriesArguments) });
+        }
+    }
+    if (!metadata) {
+        metadata = createUnknown('call:return');
+    }
+    return annotateNode(environment, expression, metadata);
+}
+function inferBinaryExpression(environment, expression) {
+    const leftType = inferExpression(environment, expression.left, 'binary:left');
+    const rightType = inferExpression(environment, expression.right, 'binary:right');
+    if (NUMERIC_BINARY_OPERATORS.has(expression.operator)) {
+        if (leftType.kind === 'series' || rightType.kind === 'series') {
+            const certainty = combineCertainty(leftType, rightType);
+            return annotateNode(environment, expression, createTypeMetadata('series', `binary:${expression.operator}`, certainty));
+        }
+        if (expression.operator === '+' &&
+            (leftType.kind === 'string' || rightType.kind === 'string') &&
+            (STRING_COMPATIBLE_OPERATORS.has(expression.operator))) {
+            const certainty = combineCertainty(leftType, rightType);
+            return annotateNode(environment, expression, createTypeMetadata('string', `binary:${expression.operator}`, certainty));
+        }
+        if (isNumericKind(leftType.kind) && isNumericKind(rightType.kind)) {
+            const numericKind = leftType.kind === 'float' || rightType.kind === 'float' ? 'float' : 'int';
+            const certainty = combineCertainty(leftType, rightType);
+            return annotateNode(environment, expression, createTypeMetadata(numericKind, `binary:${expression.operator}`, certainty));
+        }
+        return annotateNode(environment, expression, createUnknown(`binary:${expression.operator}`));
+    }
+    if (COMPARISON_OPERATORS.has(expression.operator)) {
+        return annotateNode(environment, expression, createTypeMetadata('bool', `comparison:${expression.operator}`, combineCertainty(leftType, rightType)));
+    }
+    if (LOGICAL_OPERATORS.has(expression.operator)) {
+        return annotateNode(environment, expression, createTypeMetadata('bool', `logical:${expression.operator}`));
+    }
+    return annotateNode(environment, expression, createUnknown(`binary:${expression.operator}`));
+}
+function inferMemberExpression(environment, expression, reason) {
+    inferExpression(environment, expression.object, `${reason}:object`);
+    const propertyMetadata = recordIdentifierUsage(environment, expression.property, `${reason}:property`);
+    const annotated = cloneTypeMetadata(propertyMetadata, { addSource: `${reason}:member` });
+    return annotateNode(environment, expression, annotated);
+}
+function inferUnaryExpression(environment, expression) {
+    const argumentType = inferExpression(environment, expression.argument, 'unary:argument');
+    if (BOOLEAN_UNARY_OPERATORS.has(expression.operator)) {
+        return annotateNode(environment, expression, createTypeMetadata('bool', `unary:${expression.operator}`));
+    }
+    if (argumentType.kind === 'series' && NUMERIC_UNARY_OPERATORS.has(expression.operator)) {
+        return annotateNode(environment, expression, createTypeMetadata('series', `unary:${expression.operator}`, argumentType.certainty));
+    }
+    if (NUMERIC_UNARY_OPERATORS.has(expression.operator) && isNumericKind(argumentType.kind)) {
+        return annotateNode(environment, expression, createTypeMetadata(argumentType.kind, `unary:${expression.operator}`, argumentType.certainty));
+    }
+    return annotateNode(environment, expression, createUnknown(`unary:${expression.operator}`));
+}
+function inferConditionalExpression(environment, expression) {
+    inferExpression(environment, expression.test, 'conditional:test');
+    const consequentType = inferExpression(environment, expression.consequent, 'conditional:consequent');
+    const alternateType = inferExpression(environment, expression.alternate, 'conditional:alternate');
+    if (consequentType.kind === alternateType.kind) {
+        return annotateNode(environment, expression, createTypeMetadata(consequentType.kind, 'conditional:branches', combineCertainty(consequentType, alternateType)));
+    }
+    return annotateNode(environment, expression, createUnknown('conditional:branches', 'conflict'));
+}
+function inferExpression(environment, expression, reason) {
+    if (!expression) {
+        return createUnknown(`${reason}:missing`);
+    }
+    switch (expression.kind) {
+        case 'Identifier':
+            return recordIdentifierUsage(environment, expression, reason);
+        case 'NumberLiteral': {
+            const literalKind = determineNumericLiteralKind(expression);
+            return annotateNode(environment, expression, createTypeMetadata(literalKind, `${reason}:literal`, 'certain'));
+        }
+        case 'StringLiteral':
+            return annotateNode(environment, expression, createTypeMetadata('string', `${reason}:literal`, 'certain'));
+        case 'BooleanLiteral':
+            return annotateNode(environment, expression, createTypeMetadata('bool', `${reason}:literal`, 'certain'));
+        case 'NullLiteral':
+            return annotateNode(environment, expression, createTypeMetadata('void', `${reason}:literal`, 'certain'));
+        case 'CallExpression':
+            return inferCallExpression(environment, expression);
+        case 'ArrowFunctionExpression':
+            return inferArrowFunctionExpression(environment, expression);
+        case 'BinaryExpression':
+            return inferBinaryExpression(environment, expression);
+        case 'MemberExpression':
+            return inferMemberExpression(environment, expression, reason);
+        case 'UnaryExpression':
+            return inferUnaryExpression(environment, expression);
+        case 'ConditionalExpression':
+            return inferConditionalExpression(environment, expression);
+        case 'IfExpression':
+            return inferIfExpression(environment, expression);
+        case 'IndexExpression': {
+            const indexExpression = expression;
+            const objectType = inferExpression(environment, indexExpression.object, `${reason}:object`);
+            inferExpression(environment, indexExpression.index, `${reason}:index`);
+            if (objectType.kind === 'series') {
+                return annotateNode(environment, expression, createTypeMetadata('series', `${reason}:historical`, objectType.certainty));
+            }
+            if (objectType.kind === 'matrix') {
+                return annotateNode(environment, expression, createTypeMetadata('unknown', `${reason}:matrix-index`));
+            }
+            return annotateNode(environment, expression, createUnknown(`${reason}:index`));
+        }
+        case 'MatrixLiteral': {
+            const matrixLiteral = expression;
+            matrixLiteral.rows.forEach((row, rowIndex) => {
+                row.forEach((element, columnIndex) => {
+                    inferExpression(environment, element, `${reason}:matrix[${rowIndex}][${columnIndex}]`);
+                });
+            });
+            return annotateNode(environment, expression, createTypeMetadata('matrix', `${reason}:matrix`, 'certain'));
+        }
+        case 'ArrayLiteral': {
+            const arrayLiteral = expression;
+            arrayLiteral.elements.forEach((element, elementIndex) => {
+                if (element) {
+                    inferExpression(environment, element, `${reason}:array[${elementIndex}]`);
+                }
+            });
+            return annotateNode(environment, expression, createTypeMetadata('array', `${reason}:array`, 'certain'));
+        }
+        case 'TupleExpression': {
+            const tuple = expression;
+            tuple.elements.forEach((element, elementIndex) => {
+                if (element) {
+                    inferExpression(environment, element, `${reason}:tuple[${elementIndex}]`);
+                }
+            });
+            return annotateNode(environment, expression, createUnknown(`${reason}:tuple`));
+        }
+        case 'ForStatement': {
+            const forExpression = expression;
+            const resultType = analyzeForStatement(environment, forExpression) ?? createUnknown('for:result');
+            return annotateNode(environment, expression, resultType);
+        }
+        case 'WhileStatement': {
+            const whileExpression = expression;
+            const resultType = analyzeWhileStatement(environment, whileExpression) ?? createUnknown('while:result');
+            return annotateNode(environment, expression, resultType);
+        }
+        case 'RepeatStatement': {
+            const repeatExpression = expression;
+            const resultType = analyzeRepeatStatement(environment, repeatExpression) ?? createUnknown('repeat:result');
+            return annotateNode(environment, expression, resultType);
+        }
+        case 'SwitchStatement': {
+            const switchExpression = expression;
+            const resultType = analyzeSwitchStatement(environment, switchExpression) ?? createUnknown('switch:result');
+            return annotateNode(environment, expression, resultType);
+        }
+        default:
+            return annotateNode(environment, expression, createUnknown(reason));
+    }
+}
+function visitBlock(environment, block) {
+    block.body.forEach((statement) => visitStatement(environment, statement));
+}
+function inferIfExpression(environment, expression) {
+    inferExpression(environment, expression.test, 'if-expression:test');
+    visitStatement(environment, expression.consequent);
+    if (expression.alternate) {
+        if (expression.alternate.kind === 'IfExpression') {
+            inferIfExpression(environment, expression.alternate);
+        }
+        else {
+            visitStatement(environment, expression.alternate);
+        }
+    }
+    return annotateNode(environment, expression, createUnknown('if-expression'));
+}
+function visitIfStatement(environment, statement) {
+    inferExpression(environment, statement.test, 'if:test');
+    visitStatement(environment, statement.consequent);
+    if (statement.alternate) {
+        visitStatement(environment, statement.alternate);
+    }
+}
+function analyzeWhileStatement(environment, statement) {
+    inferExpression(environment, statement.test, 'while:test');
+    visitStatement(environment, statement.body);
+    if (statement.result) {
+        return inferExpression(environment, statement.result, 'while:result');
+    }
+    return null;
+}
+function visitWhileStatement(environment, statement) {
+    analyzeWhileStatement(environment, statement);
+}
+function analyzeRepeatStatement(environment, statement) {
+    visitStatement(environment, statement.body);
+    let resultType = null;
+    if (statement.result) {
+        resultType = inferExpression(environment, statement.result, 'repeat:result');
+    }
+    inferExpression(environment, statement.test, 'repeat:test');
+    return resultType;
+}
+function visitRepeatStatement(environment, statement) {
+    analyzeRepeatStatement(environment, statement);
+}
+function analyzeForStatement(environment, statement) {
+    if (statement.initializer) {
+        visitStatement(environment, statement.initializer);
+    }
+    if (statement.iterator) {
+        inferExpression(environment, statement.iterator, 'for:iterator');
+    }
+    if (statement.iterable) {
+        inferExpression(environment, statement.iterable, 'for:iterable');
+    }
+    if (statement.test) {
+        inferExpression(environment, statement.test, 'for:test');
+    }
+    if (statement.update) {
+        inferExpression(environment, statement.update, 'for:update');
+    }
+    visitStatement(environment, statement.body);
+    if (statement.result) {
+        return inferExpression(environment, statement.result, 'for:result');
+    }
+    return null;
+}
+function visitForStatement(environment, statement) {
+    analyzeForStatement(environment, statement);
+}
+function analyzeSwitchStatement(environment, statement) {
+    const discriminantMetadata = inferExpression(environment, statement.discriminant, 'switch:discriminant');
+    const caseMetadatas = [];
+    statement.cases.forEach((caseNode, index) => {
+        if (caseNode.test) {
+            inferExpression(environment, caseNode.test, `switch:case:${index}:test`);
+        }
+        caseNode.consequent.forEach((caseStatement) => {
+            visitStatement(environment, caseStatement);
+        });
+        const resultExpression = extractSwitchCaseResult(caseNode);
+        if (resultExpression) {
+            const metadata = environment.nodeTypes.get(resultExpression) ??
+                inferExpression(environment, resultExpression, `switch:case:${index}:result`);
+            caseMetadatas.push(metadata);
+        }
+    });
+    const merged = mergeSwitchCaseMetadatas(caseMetadatas) ?? discriminantMetadata ?? null;
+    if (merged && statement.resultBinding) {
+        bindSwitchResult(environment, statement.resultBinding, merged);
+    }
+    return merged;
+}
+function visitSwitchStatement(environment, statement) {
+    analyzeSwitchStatement(environment, statement);
+}
+function extractSwitchCaseResult(caseNode) {
+    if (caseNode.consequent.length === 0) {
+        return null;
+    }
+    const first = caseNode.consequent[0];
+    switch (first.kind) {
+        case 'ExpressionStatement':
+            return first.expression;
+        case 'AssignmentStatement':
+            return first.right;
+        case 'ReturnStatement':
+            return first.argument;
+        case 'VariableDeclaration':
+            return first.initializer ?? null;
+        default:
+            return null;
+    }
+}
+function mergeSwitchCaseMetadatas(metadatas) {
+    const filtered = metadatas.filter((metadata) => metadata.kind !== 'unknown');
+    if (filtered.length === 0) {
+        return metadatas.length > 0 ? metadatas[0] : null;
+    }
+    return filtered.reduce((accumulator, current) => mergeTwoSwitchTypes(accumulator, current));
+}
+function mergeTwoSwitchTypes(first, second) {
+    if (first.kind === 'unknown') {
+        return cloneTypeMetadata(second, { addSource: 'switch:merge:unknown-left' });
+    }
+    if (second.kind === 'unknown') {
+        return cloneTypeMetadata(first, { addSource: 'switch:merge:unknown-right' });
+    }
+    if (first.kind === second.kind) {
+        return createTypeMetadata(first.kind, 'switch:merge:same', combineCertainty(first, second));
+    }
+    if (isNumericKind(first.kind) && isNumericKind(second.kind)) {
+        const kind = first.kind === 'float' || second.kind === 'float' ? 'float' : 'int';
+        return createTypeMetadata(kind, 'switch:merge:numeric', combineCertainty(first, second));
+    }
+    if ((first.kind === 'series' && isNumericKind(second.kind)) ||
+        (second.kind === 'series' && isNumericKind(first.kind))) {
+        return createTypeMetadata('series', 'switch:merge:series-numeric', combineCertainty(first, second));
+    }
+    if (first.kind === 'series' && second.kind === 'series') {
+        return createTypeMetadata('series', 'switch:merge:series', combineCertainty(first, second));
+    }
+    if (first.kind === 'bool' && second.kind === 'bool') {
+        return createTypeMetadata('bool', 'switch:merge:bool', combineCertainty(first, second));
+    }
+    if (first.kind === 'string' && second.kind === 'string') {
+        return createTypeMetadata('string', 'switch:merge:string', combineCertainty(first, second));
+    }
+    return createTypeMetadata('unknown', 'switch:merge:conflict', 'conflict');
+}
+function bindSwitchResult(environment, binding, metadata) {
+    switch (binding.kind) {
+        case 'assignment':
+        case 'variableDeclaration':
+            assignSwitchTarget(environment, binding.target, metadata);
+            break;
+        case 'tupleAssignment': {
+            if (binding.target.kind === 'TupleExpression') {
+                const tuple = binding.target;
+                tuple.elements.forEach((element) => {
+                    if (element && element.kind === 'Identifier') {
+                        assignIdentifier(environment, element, metadata, 'switch:result');
+                    }
+                });
+            }
+            else {
+                assignSwitchTarget(environment, binding.target, metadata);
+            }
+            break;
+        }
+        default:
+            break;
+    }
+}
+function assignSwitchTarget(environment, target, metadata) {
+    if (target.kind === 'Identifier') {
+        assignIdentifier(environment, target, metadata, 'switch:result');
+        return;
+    }
+    annotateNode(environment, target, metadata);
+}
+function visitFunctionDeclaration(environment, statement) {
+    if (statement.identifier) {
+        assignIdentifier(environment, statement.identifier, createTypeMetadata('function', 'function:declaration', 'certain'), 'function:declaration');
+    }
+    statement.params.forEach((param) => {
+        assignIdentifier(environment, param.identifier, createUnknown(`parameter:${param.identifier.name}`), 'parameter:declaration');
+        if (param.defaultValue) {
+            inferExpression(environment, param.defaultValue, 'parameter:default');
+        }
+    });
+    visitBlock(environment, statement.body);
+}
+function inferArrowFunctionExpression(environment, expression) {
+    expression.params.forEach((param) => {
+        assignIdentifier(environment, param.identifier, createUnknown(`arrow:param:${param.identifier.name}`), 'arrow:param');
+        if (param.defaultValue) {
+            inferExpression(environment, param.defaultValue, 'arrow:param:default');
+        }
+    });
+    visitBlock(environment, expression.body);
+    return annotateNode(environment, expression, createTypeMetadata('function', 'arrow:function', 'certain'));
+}
+function visitVariableDeclaration(environment, statement) {
+    const initializerMetadata = statement.initializer
+        ? inferExpression(environment, statement.initializer, 'variable:initializer')
+        : createUnknown('variable:initializer');
+    assignIdentifier(environment, statement.identifier, initializerMetadata, 'variable:declaration');
+}
+function visitAssignmentStatement(environment, statement) {
+    const rightMetadata = statement.right
+        ? inferExpression(environment, statement.right, 'assignment:right')
+        : createUnknown('assignment:right');
+    inferExpression(environment, statement.left, 'assignment:left');
+    if (statement.left.kind === 'Identifier') {
+        assignIdentifier(environment, statement.left, rightMetadata, 'assignment:target');
+    }
+    else if (statement.left.kind === 'TupleExpression') {
+        const tuple = statement.left;
+        tuple.elements.forEach((element) => {
+            if (element && element.kind === 'Identifier') {
+                assignIdentifier(environment, element, rightMetadata, 'assignment:target');
+            }
+        });
+    }
+}
+function visitReturnStatement(environment, statement) {
+    inferExpression(environment, statement.argument, 'return:argument');
+}
+function visitScriptDeclaration(environment, statement) {
+    if (statement.kind !== 'ScriptDeclaration') {
+        return;
+    }
+    if (statement.identifier) {
+        assignIdentifier(environment, statement.identifier, createTypeMetadata('unknown', 'script:identifier', 'certain'), 'script:identifier');
+    }
+    statement.arguments.forEach((arg) => inferArgument(environment, arg));
+}
+function visitStatement(environment, statement) {
+    switch (statement.kind) {
+        case 'VariableDeclaration':
+            visitVariableDeclaration(environment, statement);
+            break;
+        case 'AssignmentStatement':
+            visitAssignmentStatement(environment, statement);
+            break;
+        case 'ExpressionStatement':
+            inferExpression(environment, statement.expression, 'expression:statement');
+            break;
+        case 'ReturnStatement':
+            visitReturnStatement(environment, statement);
+            break;
+        case 'BlockStatement':
+            visitBlock(environment, statement);
+            break;
+        case 'FunctionDeclaration':
+            visitFunctionDeclaration(environment, statement);
+            break;
+        case 'IfStatement':
+            visitIfStatement(environment, statement);
+            break;
+        case 'RepeatStatement':
+            visitRepeatStatement(environment, statement);
+            break;
+        case 'WhileStatement':
+            visitWhileStatement(environment, statement);
+            break;
+        case 'ForStatement':
+            visitForStatement(environment, statement);
+            break;
+        case 'SwitchStatement':
+            visitSwitchStatement(environment, statement);
+            break;
+        case 'ScriptDeclaration':
+            visitScriptDeclaration(environment, statement);
+            break;
+        case 'EnumDeclaration': {
+            const enumDeclaration = statement;
+            assignIdentifier(environment, enumDeclaration.identifier, createTypeMetadata('unknown', 'enum:declaration', 'certain'), 'enum:declaration');
+            enumDeclaration.members.forEach((member) => {
+                assignIdentifier(environment, member.identifier, createTypeMetadata('unknown', 'enum:member', 'certain'), 'enum:member');
+                inferExpression(environment, member.value, 'enum:member');
+            });
+            break;
+        }
+        case 'EnumMember':
+            break;
+        case 'TypeDeclaration':
+            assignIdentifier(environment, statement.identifier, createTypeMetadata('udt', 'type:declaration', 'certain'), 'type:declaration');
+            break;
+        case 'ImportDeclaration':
+            break;
+        case 'BreakStatement':
+        case 'ContinueStatement':
+            break;
+        default:
+            break;
+    }
+}
+export function inferTypes(program) {
+    const environment = createEmptyTypeEnvironment();
+    if (!program) {
+        return environment;
+    }
+    program.body.forEach((statement) => visitStatement(environment, statement));
+    return environment;
+}

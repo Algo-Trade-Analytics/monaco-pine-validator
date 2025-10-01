@@ -1,0 +1,784 @@
+/**
+ * Matrix validation module for Pine Script v6
+ * Handles matrix declarations, operations, performance, and best practices
+ */
+import { ensureAstContext } from '../core/ast/context-utils';
+import { findAncestor, visit } from '../core/ast/traversal';
+import { getNodeSource } from '../core/ast/source-utils';
+const VALID_MATRIX_ELEMENT_TYPES = new Set(['int', 'float', 'bool', 'string', 'color']);
+const MATRIX_METHOD_SPECS = [
+    // Basic operations
+    { name: 'matrix.set', params: 4, description: 'matrix.set(id, row, col, value)' },
+    { name: 'matrix.get', params: 3, description: 'matrix.get(id, row, col)' },
+    { name: 'matrix.rows', params: 1, description: 'matrix.rows(id)' },
+    { name: 'matrix.columns', params: 1, description: 'matrix.columns(id)' },
+    { name: 'matrix.copy', params: 1, description: 'matrix.copy(id)' },
+    { name: 'matrix.fill', params: 2, description: 'matrix.fill(id, value)' },
+    { name: 'matrix.elements_count', params: 1, description: 'matrix.elements_count(id)' },
+    // Row/Column manipulation
+    { name: 'matrix.add_row', params: 3, description: 'matrix.add_row(id, row_num, values)' },
+    { name: 'matrix.add_col', params: 3, description: 'matrix.add_col(id, col_num, values)' },
+    { name: 'matrix.remove_row', params: 2, description: 'matrix.remove_row(id, row_num)' },
+    { name: 'matrix.remove_col', params: 2, description: 'matrix.remove_col(id, col_num)' },
+    // Math operations
+    { name: 'matrix.sum', params: 1, description: 'matrix.sum(id)' },
+    { name: 'matrix.avg', params: 1, description: 'matrix.avg(id)' },
+    { name: 'matrix.min', params: 1, description: 'matrix.min(id)' },
+    { name: 'matrix.max', params: 1, description: 'matrix.max(id)' },
+    { name: 'matrix.median', params: 1, description: 'matrix.median(id)' },
+    { name: 'matrix.mode', params: 1, description: 'matrix.mode(id)' },
+    { name: 'matrix.add', params: 2, description: 'matrix.add(id1, id2)' },
+    { name: 'matrix.sub', params: 2, description: 'matrix.sub(id1, id2)' },
+    { name: 'matrix.mult', params: 2, description: 'matrix.mult(id1, id2)' },
+    { name: 'matrix.div', params: 2, description: 'matrix.div(id1, id2)' },
+    { name: 'matrix.pow', params: 2, description: 'matrix.pow(id, power)' },
+    { name: 'matrix.sqrt', params: 1, description: 'matrix.sqrt(id)' },
+    { name: 'matrix.abs', params: 1, description: 'matrix.abs(id)' },
+    { name: 'matrix.diff', params: 2, description: 'matrix.diff(id1, id2)' },
+    // Statistical operations
+    { name: 'matrix.variance', params: 1, description: 'matrix.variance(id)' },
+    { name: 'matrix.stdev', params: 1, description: 'matrix.stdev(id)' },
+    { name: 'matrix.covariance', params: 2, description: 'matrix.covariance(id1, id2)' },
+    { name: 'matrix.percentile_linear_interpolation', params: 2, description: 'matrix.percentile_linear_interpolation(id, percentage)' },
+    { name: 'matrix.percentile_nearest_rank', params: 2, description: 'matrix.percentile_nearest_rank(id, percentage)' },
+    // Linear algebra
+    { name: 'matrix.det', params: 1, description: 'matrix.det(id)' },
+    { name: 'matrix.inv', params: 1, description: 'matrix.inv(id)' },
+    { name: 'matrix.pinv', params: 1, description: 'matrix.pinv(id)' },
+    { name: 'matrix.rank', params: 1, description: 'matrix.rank(id)' },
+    { name: 'matrix.transpose', params: 1, description: 'matrix.transpose(id)' },
+    { name: 'matrix.eigenvalues', params: 1, description: 'matrix.eigenvalues(id)' },
+    { name: 'matrix.eigenvectors', params: 1, description: 'matrix.eigenvectors(id)' },
+    // Transformations
+    { name: 'matrix.reshape', params: 3, description: 'matrix.reshape(id, rows, columns)' },
+    { name: 'matrix.reverse', params: 1, description: 'matrix.reverse(id)' },
+    { name: 'matrix.concat', params: 3, description: 'matrix.concat(id1, id2, axis)' },
+    // Helper functions
+    { name: 'matrix.is_square', params: 1, description: 'matrix.is_square(id)' },
+    { name: 'matrix.is_identity', params: 1, description: 'matrix.is_identity(id)' },
+    { name: 'matrix.is_symmetric', params: 1, description: 'matrix.is_symmetric(id)' },
+];
+const EXPENSIVE_MATRIX_METHODS = new Set([
+    'matrix.fill',
+    'matrix.copy',
+    'matrix.mult',
+    'matrix.inv',
+    'matrix.pinv',
+    'matrix.eigenvalues',
+    'matrix.eigenvectors',
+    'matrix.det',
+    'matrix.reshape',
+]);
+export class MatrixValidator {
+    constructor() {
+        this.name = 'MatrixValidator';
+        this.errors = [];
+        this.warnings = [];
+        this.info = [];
+        this.astContext = null;
+        this.matrixDeclarations = new Map();
+        this.matrixAllocations = 0;
+        this.matrixUsage = new Map();
+    }
+    getDependencies() {
+        return ['FunctionValidator'];
+    }
+    getPriority() {
+        return 80;
+    }
+    validate(context, config) {
+        this.reset();
+        this.context = context;
+        this.astContext = this.getAstContext(context, config);
+        const ast = this.astContext?.ast;
+        if (!ast) {
+            return this.buildResult(context.scriptType);
+        }
+        this.collectMatrixDataAst(ast);
+        this.validateMatrixPerformanceAst();
+        this.validateMatrixBestPracticesAst();
+        return this.buildResult(context.scriptType);
+    }
+    reset() {
+        this.errors = [];
+        this.warnings = [];
+        this.info = [];
+        this.astContext = null;
+        this.matrixDeclarations.clear();
+        this.matrixAllocations = 0;
+        this.matrixUsage.clear();
+    }
+    addError(line, column, message, code) {
+        this.errors.push({ line, column, message, code });
+    }
+    addWarning(line, column, message, code) {
+        this.warnings.push({ line, column, message, code });
+    }
+    addInfo(line, column, message, code) {
+        this.info.push({ line, column, message, code });
+    }
+    collectMatrixDataAst(program) {
+        const loopStack = [];
+        visit(program, {
+            ForStatement: {
+                enter: (path) => {
+                    loopStack.push(path);
+                },
+                exit: () => {
+                    loopStack.pop();
+                },
+            },
+            WhileStatement: {
+                enter: (path) => {
+                    loopStack.push(path);
+                },
+                exit: () => {
+                    loopStack.pop();
+                },
+            },
+            VariableDeclaration: {
+                enter: (path) => {
+                    this.registerMatrixTypeAnnotation(path.node);
+                },
+            },
+            CallExpression: {
+                enter: (path) => {
+                    const call = path.node;
+                    const qualifiedName = this.getExpressionQualifiedName(call.callee);
+                    if (!qualifiedName || !qualifiedName.startsWith('matrix.')) {
+                        return;
+                    }
+                    if (qualifiedName === 'matrix.new') {
+                        this.handleMatrixCreationAst(call, path);
+                    }
+                    else {
+                        this.handleMatrixMethodCallAst(qualifiedName, call, loopStack.length > 0);
+                    }
+                },
+            },
+        });
+    }
+    registerMatrixTypeAnnotation(declaration) {
+        const typeAnnotation = declaration.typeAnnotation;
+        if (!typeAnnotation) {
+            return;
+        }
+        const elementType = this.extractMatrixAnnotationElement(typeAnnotation);
+        if (!elementType) {
+            return;
+        }
+        const identifier = declaration.identifier;
+        const name = identifier.name;
+        const line = identifier.loc.start.line;
+        const column = identifier.loc.start.column;
+        const info = this.matrixDeclarations.get(name) ?? {
+            elementType,
+            rows: null,
+            cols: null,
+            line,
+            column,
+        };
+        info.elementType = elementType;
+        info.line = line;
+        info.column = column;
+        this.matrixDeclarations.set(name, info);
+        this.context.typeMap.set(name, {
+            type: 'matrix',
+            isConst: declaration.declarationKind === 'const',
+            isSeries: false,
+            declaredAt: { line, column },
+            usages: [],
+            elementType,
+        });
+    }
+    handleMatrixCreationAst(call, path) {
+        this.matrixAllocations++;
+        const target = this.extractMatrixAssignmentTarget(path);
+        const line = call.loc.start.line;
+        const column = call.loc.start.column;
+        const elementType = this.inferMatrixElementTypeFromCall(call);
+        const hasGenericType = Array.isArray(call.typeArguments) && call.typeArguments.length > 0;
+        const normalizedElementType = elementType && elementType.trim().length > 0 ? elementType.trim() : null;
+        const elementTypeIsKnown = normalizedElementType ? VALID_MATRIX_ELEMENT_TYPES.has(normalizedElementType) : false;
+        if (!normalizedElementType || normalizedElementType === 'unknown') {
+            this.addError(line, column, 'Matrix declarations must specify a valid element type, e.g. matrix.new<float>(rows, cols).', 'PSV6-MATRIX-INVALID-SYNTAX');
+        }
+        if (normalizedElementType && !elementTypeIsKnown) {
+            this.addError(line, column, `Unknown matrix element type '${normalizedElementType}'. Supported types: ${Array.from(VALID_MATRIX_ELEMENT_TYPES).join(', ')}.`, 'PSV6-MATRIX-INVALID-SYNTAX');
+        }
+        if (normalizedElementType && normalizedElementType !== 'unknown') {
+            this.validateMatrixType(normalizedElementType, line, column);
+        }
+        const args = call.args;
+        const typeProvidedViaArgument = !hasGenericType && elementTypeIsKnown;
+        const dimensionArgumentCount = args.length - (typeProvidedViaArgument ? 1 : 0);
+        if (dimensionArgumentCount < 2) {
+            this.addError(line, column, 'Matrix declarations must provide both row and column dimensions.', 'PSV6-MATRIX-INVALID-SYNTAX');
+        }
+        const { rows, cols } = this.extractMatrixDimensionsFromCall(call);
+        if (rows !== null && cols !== null) {
+            this.validateMatrixDimensions(rows, cols, line, column);
+        }
+        if (target) {
+            const info = this.matrixDeclarations.get(target.name) ?? {
+                elementType: elementType ?? 'unknown',
+                rows,
+                cols,
+                line: target.line,
+                column: target.column,
+            };
+            if (elementType) {
+                info.elementType = elementType;
+            }
+            info.rows = rows;
+            info.cols = cols;
+            info.line = target.line;
+            info.column = target.column;
+            this.matrixDeclarations.set(target.name, info);
+            this.context.typeMap.set(target.name, {
+                type: 'matrix',
+                isConst: false,
+                isSeries: false,
+                declaredAt: { line: target.line, column: target.column },
+                usages: [],
+                elementType: elementType ?? 'unknown',
+            });
+        }
+    }
+    handleMatrixMethodCallAst(qualifiedName, call, inLoop) {
+        const line = call.loc.start.line;
+        const column = call.loc.start.column;
+        const spec = MATRIX_METHOD_SPECS.find((entry) => entry.name === qualifiedName);
+        const args = call.args;
+        if (spec && args.length !== spec.params) {
+            this.addError(line, column, `Invalid parameter count for ${qualifiedName}. Expected ${spec.params}, got ${args.length}. Usage: ${spec.description}`, 'PSV6-MATRIX-METHOD-PARAMS');
+        }
+        const matrixArgument = args[0]?.value ?? null;
+        const matrixName = matrixArgument ? this.validateMatrixVariableAst(matrixArgument, line, column) : null;
+        // Existing validations
+        if (qualifiedName === 'matrix.get' && matrixName && args[1] && args[2]) {
+            this.validateMatrixIndexAst(matrixName, args[1], args[2], line, column);
+        }
+        if (qualifiedName === 'matrix.set' && matrixName) {
+            if (args[1] && args[2]) {
+                this.validateMatrixIndexAst(matrixName, args[1], args[2], line, column);
+            }
+            if (args[3]) {
+                this.validateMatrixValueTypeAst(matrixName, args[3].value, line, column, 'set');
+                this.recordMatrixUsage(matrixName, 'set', line);
+            }
+        }
+        if (qualifiedName === 'matrix.fill' && matrixName && args[1]) {
+            this.validateMatrixValueTypeAst(matrixName, args[1].value, line, column, 'fill');
+            this.recordMatrixUsage(matrixName, 'fill', line);
+        }
+        // Linear algebra validations
+        if (qualifiedName === 'matrix.inv' || qualifiedName === 'matrix.det') {
+            this.validateSquareMatrix(matrixName, line, column, qualifiedName);
+        }
+        if (qualifiedName === 'matrix.eigenvalues' || qualifiedName === 'matrix.eigenvectors') {
+            this.validateSquareMatrix(matrixName, line, column, qualifiedName);
+        }
+        // Matrix multiplication dimension check
+        if (qualifiedName === 'matrix.mult' && args.length >= 2) {
+            this.validateMatrixMultiplicationDimensions(args[0], args[1], line, column);
+        }
+        // Reshape validation
+        if (qualifiedName === 'matrix.reshape' && matrixName && args.length >= 3) {
+            this.validateReshapeDimensions(matrixName, args[1], args[2], line, column);
+        }
+        // Row/Column operations
+        if (qualifiedName === 'matrix.add_row' || qualifiedName === 'matrix.remove_row') {
+            this.validateRowOperation(matrixName, args[1], line, column, qualifiedName);
+        }
+        if (qualifiedName === 'matrix.add_col' || qualifiedName === 'matrix.remove_col') {
+            this.validateColOperation(matrixName, args[1], line, column, qualifiedName);
+        }
+        // Covariance validation (requires compatible dimensions)
+        if (qualifiedName === 'matrix.covariance' && args.length >= 2) {
+            this.validateCovarianceDimensions(args[0], args[1], line, column);
+        }
+        // Performance warning for expensive operations in loops
+        if (inLoop && EXPENSIVE_MATRIX_METHODS.has(qualifiedName)) {
+            this.addWarning(line, column, `Expensive matrix operation '${qualifiedName}' detected in loop. Consider moving outside loop if possible.`, 'PSV6-MATRIX-PERF-LOOP');
+        }
+    }
+    validateSquareMatrix(matrixName, line, column, operation) {
+        if (!matrixName)
+            return;
+        const info = this.matrixDeclarations.get(matrixName);
+        if (!info)
+            return;
+        if (info.rows !== null && info.cols !== null && info.rows !== info.cols) {
+            this.addError(line, column, `${operation} requires a square matrix, but '${matrixName}' is ${info.rows}x${info.cols}`, 'PSV6-MATRIX-NOT-SQUARE');
+        }
+    }
+    validateMatrixMultiplicationDimensions(arg1, arg2, line, column) {
+        const matrix1Name = arg1.value.kind === 'Identifier' ? arg1.value.name : null;
+        const matrix2Name = arg2.value.kind === 'Identifier' ? arg2.value.name : null;
+        if (!matrix1Name || !matrix2Name)
+            return;
+        const info1 = this.matrixDeclarations.get(matrix1Name);
+        const info2 = this.matrixDeclarations.get(matrix2Name);
+        if (info1?.cols !== null && info2?.rows !== null && info1.cols !== info2.rows) {
+            this.addError(line, column, `Matrix multiplication dimension mismatch: '${matrix1Name}' columns (${info1.cols}) must equal '${matrix2Name}' rows (${info2.rows})`, 'PSV6-MATRIX-DIMENSION-MISMATCH');
+        }
+    }
+    validateReshapeDimensions(matrixName, rowsArg, colsArg, line, column) {
+        if (!matrixName)
+            return;
+        const info = this.matrixDeclarations.get(matrixName);
+        if (!info || info.rows === null || info.cols === null)
+            return;
+        const newRows = this.extractNumericLiteral(rowsArg.value);
+        const newCols = this.extractNumericLiteral(colsArg.value);
+        if (newRows !== null && newCols !== null) {
+            const originalElements = info.rows * info.cols;
+            const newElements = newRows * newCols;
+            if (originalElements !== newElements) {
+                this.addError(line, column, `Reshape dimension mismatch: original matrix has ${originalElements} elements but reshape requires ${newElements} elements`, 'PSV6-MATRIX-RESHAPE-MISMATCH');
+            }
+        }
+    }
+    validateRowOperation(matrixName, rowArg, line, column, operation) {
+        if (!matrixName || !rowArg)
+            return;
+        const info = this.matrixDeclarations.get(matrixName);
+        if (!info || info.rows === null)
+            return;
+        const rowNum = this.extractNumericLiteral(rowArg.value);
+        if (rowNum !== null && (rowNum < 0 || rowNum > info.rows)) {
+            this.addError(line, column, `${operation}: row index ${rowNum} is out of bounds for matrix with ${info.rows} rows`, 'PSV6-MATRIX-INDEX-OUT-OF-BOUNDS');
+        }
+    }
+    validateColOperation(matrixName, colArg, line, column, operation) {
+        if (!matrixName || !colArg)
+            return;
+        const info = this.matrixDeclarations.get(matrixName);
+        if (!info || info.cols === null)
+            return;
+        const colNum = this.extractNumericLiteral(colArg.value);
+        if (colNum !== null && (colNum < 0 || colNum > info.cols)) {
+            this.addError(line, column, `${operation}: column index ${colNum} is out of bounds for matrix with ${info.cols} columns`, 'PSV6-MATRIX-INDEX-OUT-OF-BOUNDS');
+        }
+    }
+    validateCovarianceDimensions(arg1, arg2, line, column) {
+        const matrix1Name = arg1.value.kind === 'Identifier' ? arg1.value.name : null;
+        const matrix2Name = arg2.value.kind === 'Identifier' ? arg2.value.name : null;
+        if (!matrix1Name || !matrix2Name)
+            return;
+        const info1 = this.matrixDeclarations.get(matrix1Name);
+        const info2 = this.matrixDeclarations.get(matrix2Name);
+        if (info1 && info2) {
+            const size1 = info1.rows !== null && info1.cols !== null ? info1.rows * info1.cols : null;
+            const size2 = info2.rows !== null && info2.cols !== null ? info2.rows * info2.cols : null;
+            if (size1 !== null && size2 !== null && size1 !== size2) {
+                this.addWarning(line, column, `Covariance calculation: matrices should have the same number of elements for meaningful results`, 'PSV6-MATRIX-COVARIANCE-SIZE');
+            }
+        }
+    }
+    extractMatrixAssignmentTarget(path) {
+        const declarationPath = findAncestor(path, (ancestor) => {
+            return ancestor.node.kind === 'VariableDeclaration';
+        });
+        if (declarationPath) {
+            const declaration = declarationPath.node;
+            if (declaration.initializer === path.node) {
+                const identifier = declaration.identifier;
+                return {
+                    name: identifier.name,
+                    line: identifier.loc.start.line,
+                    column: identifier.loc.start.column,
+                };
+            }
+        }
+        const assignmentPath = findAncestor(path, (ancestor) => {
+            return ancestor.node.kind === 'AssignmentStatement';
+        });
+        if (assignmentPath) {
+            const assignment = assignmentPath.node;
+            if (assignment.right === path.node && assignment.left.kind === 'Identifier') {
+                const identifier = assignment.left;
+                return {
+                    name: identifier.name,
+                    line: identifier.loc.start.line,
+                    column: identifier.loc.start.column,
+                };
+            }
+        }
+        return null;
+    }
+    inferMatrixElementTypeFromCall(call) {
+        const genericType = this.extractGenericElementType(call);
+        if (genericType) {
+            return genericType;
+        }
+        const args = call.args;
+        if (args.length >= 1) {
+            const typeArg = args[0].value;
+            const resolved = this.resolveTypeIdentifier(typeArg);
+            if (resolved) {
+                return resolved;
+            }
+        }
+        return null;
+    }
+    extractMatrixDimensionsFromCall(call) {
+        const args = call.args;
+        const genericType = this.extractGenericElementType(call);
+        const rowIndex = genericType ? 0 : 1;
+        const colIndex = genericType ? 1 : 2;
+        const rows = args[rowIndex] ? this.extractNumericLiteral(args[rowIndex].value) : null;
+        const cols = args[colIndex] ? this.extractNumericLiteral(args[colIndex].value) : null;
+        return { rows, cols };
+    }
+    validateMatrixVariableAst(expression, line, column) {
+        if (expression.kind !== 'Identifier') {
+            return null;
+        }
+        const identifier = expression;
+        const name = identifier.name;
+        if (this.matrixDeclarations.has(name)) {
+            return name;
+        }
+        const typeInfo = this.context.typeMap.get(name);
+        if (typeInfo?.type === 'matrix') {
+            return name;
+        }
+        if (this.isFunctionParameter(name)) {
+            return name;
+        }
+        this.addError(line, column, `Variable '${name}' is not declared as a matrix`, 'PSV6-MATRIX-NOT-MATRIX');
+        return name;
+    }
+    validateMatrixIndexAst(name, rowArg, colArg, line, column) {
+        const info = this.matrixDeclarations.get(name);
+        if (!info) {
+            return;
+        }
+        const rowValue = this.extractNumericLiteral(rowArg.value);
+        if (rowValue !== null && info.rows !== null && (rowValue < 0 || rowValue >= info.rows)) {
+            this.addWarning(line, column, `Matrix row index ${rowValue} is out of bounds for matrix with ${info.rows} rows`, 'PSV6-MATRIX-INDEX-BOUNDS');
+        }
+        const colValue = this.extractNumericLiteral(colArg.value);
+        if (colValue !== null && info.cols !== null && (colValue < 0 || colValue >= info.cols)) {
+            this.addWarning(line, column, `Matrix column index ${colValue} is out of bounds for matrix with ${info.cols} columns`, 'PSV6-MATRIX-INDEX-BOUNDS');
+        }
+    }
+    validateMatrixValueTypeAst(name, expression, line, column, operation) {
+        const info = this.matrixDeclarations.get(name);
+        if (!info) {
+            return;
+        }
+        const valueType = this.inferExpressionTypeAst(expression);
+        if (!this.areTypesCompatible(info.elementType, valueType)) {
+            const action = operation === 'set' ? 'set' : 'fill';
+            this.addError(line, column, `Type mismatch: cannot ${action} ${valueType} ${operation === 'set' ? 'in' : 'into'} ${info.elementType} matrix '${name}'`, 'PSV6-MATRIX-TYPE-MISMATCH');
+        }
+    }
+    recordMatrixUsage(name, kind, line) {
+        const usage = this.matrixUsage.get(name) ?? { sets: [], fills: [] };
+        if (kind === 'set') {
+            usage.sets.push(line);
+        }
+        else {
+            usage.fills.push(line);
+        }
+        this.matrixUsage.set(name, usage);
+    }
+    validateMatrixType(type, line, column) {
+        if (!VALID_MATRIX_ELEMENT_TYPES.has(type)) {
+            this.addError(line, column, `Invalid matrix type: ${type}. Valid types are: ${Array.from(VALID_MATRIX_ELEMENT_TYPES).join(', ')}`, 'PSV6-MATRIX-INVALID-TYPE');
+        }
+    }
+    validateMatrixDimensions(rows, cols, line, column) {
+        if (rows <= 0 || cols <= 0) {
+            this.addError(line, column, `Matrix dimensions must be positive, got: ${rows}x${cols}`, 'PSV6-MATRIX-INVALID-DIMENSIONS');
+            return;
+        }
+        if (rows > 1000 || cols > 1000) {
+            this.addError(line, column, `Matrix dimensions (${rows}x${cols}) exceed the maximum limit of 1000 for a single dimension`, 'PSV6-MATRIX-DIMENSION-LIMIT');
+        }
+    }
+    validateMatrixPerformanceAst() {
+        if (this.matrixAllocations > 5) {
+            this.addWarning(1, 1, `Too many matrix allocations (${this.matrixAllocations}). Consider reusing matrices or using fewer matrices.`, 'PSV6-MATRIX-PERF-ALLOCATION');
+        }
+        for (const [name, info] of this.matrixDeclarations) {
+            if (info.rows !== null && info.cols !== null) {
+                const totalElements = info.rows * info.cols;
+                if (totalElements > 10000) {
+                    this.addWarning(info.line, info.column, `Large matrix '${name}' with ${totalElements} elements. Consider performance implications.`, 'PSV6-MATRIX-PERF-LARGE');
+                }
+            }
+        }
+    }
+    validateMatrixBestPracticesAst() {
+        this.validateMatrixNaming();
+        this.validateMatrixInitializationAst();
+        this.validateMatrixMemoryManagementAst();
+    }
+    validateMatrixNaming() {
+        for (const [name, info] of this.matrixDeclarations) {
+            if (name.length <= 2 || /^[a-z]$/.test(name) || /^mat\d*$/.test(name)) {
+                this.addInfo(info.line, info.column, `Consider using more descriptive names for matrices. '${name}' could be improved.`, 'PSV6-MATRIX-NAMING-SUGGESTION');
+            }
+        }
+    }
+    validateMatrixInitializationAst() {
+        for (const [name, info] of this.matrixDeclarations) {
+            const usage = this.matrixUsage.get(name);
+            if (!usage) {
+                this.addInfo(info.line, info.column, `Matrix '${name}' is declared but never initialized. Consider adding initial values.`, 'PSV6-MATRIX-INITIALIZATION-SUGGESTION');
+                continue;
+            }
+            const hasInitialization = [...usage.sets, ...usage.fills].some((usageLine) => usageLine >= info.line);
+            if (!hasInitialization) {
+                this.addInfo(info.line, info.column, `Matrix '${name}' is declared but never initialized. Consider adding initial values.`, 'PSV6-MATRIX-INITIALIZATION-SUGGESTION');
+            }
+        }
+    }
+    validateMatrixMemoryManagementAst() {
+        for (const [name, info] of this.matrixDeclarations) {
+            if (info.rows === null || info.cols === null) {
+                continue;
+            }
+            const usage = this.matrixUsage.get(name);
+            if (!usage) {
+                continue;
+            }
+            const hasSet = usage.sets.length > 0;
+            const hasFill = usage.fills.length > 0;
+            if (hasSet && !hasFill && info.rows * info.cols > 100) {
+                this.addInfo(info.line, info.column, `Matrix '${name}' is modified but never reset. Consider using matrix.fill() or recreating the matrix to manage memory.`, 'PSV6-MATRIX-MEMORY-SUGGESTION');
+            }
+        }
+    }
+    buildResult(scriptType) {
+        return {
+            isValid: this.errors.length === 0,
+            errors: this.errors.map((error) => ({ ...error, severity: 'error' })),
+            warnings: this.warnings.map((warning) => ({ ...warning, severity: 'warning' })),
+            info: this.info.map((entry) => ({ ...entry, severity: 'info' })),
+            typeMap: this.context.typeMap,
+            scriptType,
+        };
+    }
+    getAstContext(context, config) {
+        return ensureAstContext(context, config);
+    }
+    extractGenericElementType(call) {
+        if (Array.isArray(call.typeArguments) && call.typeArguments.length > 0) {
+            const formatted = this.formatTypeReference(call.typeArguments[0]);
+            if (formatted) {
+                return formatted;
+            }
+        }
+        const source = this.getExpressionText(call.callee);
+        const match = source.match(/matrix\.new\s*<\s*([^>]+)\s*>/i);
+        if (match) {
+            return match[1].trim();
+        }
+        return null;
+    }
+    resolveTypeIdentifier(expression) {
+        if (expression.kind === 'Identifier') {
+            return expression.name;
+        }
+        if (expression.kind === 'StringLiteral') {
+            const raw = this.getExpressionText(expression).replace(/^['"]|['"]$/g, '');
+            return raw;
+        }
+        return null;
+    }
+    extractMatrixAnnotationElement(type) {
+        if (type.name.name === 'matrix' && type.generics.length > 0) {
+            const generic = type.generics[0];
+            return this.formatTypeReference(generic);
+        }
+        const source = getNodeSource(this.context, type).trim();
+        const match = source.match(/^matrix\s*<\s*([^>]+)\s*>/i);
+        if (match) {
+            return match[1];
+        }
+        return null;
+    }
+    formatTypeReference(type) {
+        const base = type.name.name;
+        if (!base) {
+            return '';
+        }
+        if (!Array.isArray(type.generics) || type.generics.length === 0) {
+            return base;
+        }
+        const generics = type.generics
+            .map((generic) => this.formatTypeReference(generic))
+            .filter((name) => name.length > 0);
+        if (generics.length === 0) {
+            return base;
+        }
+        return `${base}<${generics.join(', ')}>`;
+    }
+    isFunctionParameter(name) {
+        if (!this.astContext) {
+            return false;
+        }
+        const record = this.astContext.symbolTable.get(name);
+        if (!record) {
+            return false;
+        }
+        const kinds = record.metadata?.declarationKinds ?? [];
+        return kinds.includes('parameter');
+    }
+    inferExpressionTypeAst(expression) {
+        switch (expression.kind) {
+            case 'StringLiteral':
+                return 'string';
+            case 'BooleanLiteral':
+                return 'bool';
+            case 'NullLiteral':
+                return 'unknown';
+            case 'NumberLiteral': {
+                const number = expression;
+                const raw = number.raw ?? '';
+                const isFloat = raw.includes('.') || /[eE]/.test(raw);
+                return !isFloat && Number.isInteger(number.value) ? 'int' : 'float';
+            }
+            case 'Identifier': {
+                const name = expression.name;
+                const matrixInfo = this.matrixDeclarations.get(name);
+                if (matrixInfo) {
+                    return 'matrix';
+                }
+                const typeInfo = this.context.typeMap.get(name);
+                if (typeInfo) {
+                    return typeInfo.elementType ?? typeInfo.type;
+                }
+                return 'unknown';
+            }
+            case 'MemberExpression': {
+                const text = this.getExpressionText(expression);
+                if (text.startsWith('color.') || text.startsWith('#') || text.startsWith('rgb')) {
+                    return 'color';
+                }
+                return 'unknown';
+            }
+            case 'CallExpression': {
+                const call = expression;
+                const qualified = this.getExpressionQualifiedName(call.callee);
+                if (!qualified) {
+                    return 'unknown';
+                }
+                if (qualified === 'matrix.get' && call.args.length > 0) {
+                    const name = this.getIdentifierName(call.args[0].value);
+                    if (name) {
+                        const info = this.matrixDeclarations.get(name);
+                        if (info) {
+                            return info.elementType;
+                        }
+                    }
+                }
+                if (qualified === 'matrix.new') {
+                    return 'matrix';
+                }
+                if (qualified.startsWith('ta.')) {
+                    return 'series';
+                }
+                if (qualified.startsWith('math.')) {
+                    return 'float';
+                }
+                return 'unknown';
+            }
+            case 'BinaryExpression': {
+                const binary = expression;
+                if (binary.operator === '+') {
+                    const leftType = this.inferExpressionTypeAst(binary.left);
+                    const rightType = this.inferExpressionTypeAst(binary.right);
+                    if (leftType === 'string' || rightType === 'string') {
+                        return 'string';
+                    }
+                    if (leftType === 'float' || rightType === 'float') {
+                        return 'float';
+                    }
+                    return 'int';
+                }
+                return 'float';
+            }
+            default:
+                return 'unknown';
+        }
+    }
+    extractNumericLiteral(expression) {
+        if (expression.kind === 'NumberLiteral') {
+            return expression.value;
+        }
+        if (expression.kind === 'UnaryExpression') {
+            const unary = expression;
+            const value = this.extractNumericLiteral(unary.argument);
+            if (value === null) {
+                return null;
+            }
+            if (unary.operator === '-') {
+                return -value;
+            }
+            if (unary.operator === '+') {
+                return value;
+            }
+        }
+        return null;
+    }
+    getIdentifierName(expression) {
+        if (expression.kind === 'Identifier') {
+            return expression.name;
+        }
+        return null;
+    }
+    getExpressionQualifiedName(expression) {
+        if (expression.kind === 'Identifier') {
+            return expression.name;
+        }
+        if (expression.kind === 'MemberExpression') {
+            const member = expression;
+            if (member.computed) {
+                return null;
+            }
+            const objectName = this.getExpressionQualifiedName(member.object);
+            if (!objectName) {
+                return null;
+            }
+            return `${objectName}.${member.property.name}`;
+        }
+        return null;
+    }
+    getExpressionText(expression) {
+        switch (expression.kind) {
+            case 'Identifier':
+                return expression.name;
+            case 'MemberExpression': {
+                const member = expression;
+                if (member.computed) {
+                    return getNodeSource(this.context, member);
+                }
+                const objectText = this.getExpressionText(member.object);
+                return `${objectText}.${member.property.name}`;
+            }
+            default:
+                return getNodeSource(this.context, expression);
+        }
+    }
+    areTypesCompatible(expectedType, actualType) {
+        if (expectedType === actualType) {
+            return true;
+        }
+        if (expectedType === 'float' && (actualType === 'int' || actualType === 'float')) {
+            return true;
+        }
+        if (expectedType === 'int' && actualType === 'int') {
+            return true;
+        }
+        if (expectedType === 'float' && actualType === 'series') {
+            return true;
+        }
+        return false;
+    }
+}
