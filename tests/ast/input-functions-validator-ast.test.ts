@@ -44,16 +44,14 @@ describe('InputFunctionsValidator (AST)', () => {
   });
 
   it('validates parameter counts for positional arguments', () => {
-    const source = 'input.float(5)';
+    // Test that input.float() with NO arguments generates an error
+    const source = 'input.float()';
     const inputIdentifier = createIdentifier('input', source.indexOf('input'), 1);
     const floatIdentifier = createIdentifier('float', source.indexOf('float'), 1);
     const callee = createMemberExpression(inputIdentifier, floatIdentifier, source.indexOf('input'), source.indexOf('float') + 'float'.length, 1);
 
-    const numberStart = source.indexOf('5');
-    const numberLiteral = createNumberLiteral(5, '5', numberStart, 1);
-    const argument = createArgument(numberLiteral, numberStart, numberStart + 1, 1);
-
-    const call = createCallExpression(callee, [argument], 0, source.length, 1);
+    // Create call with empty arguments array
+    const call = createCallExpression(callee, [], 0, source.length, 1);
     const statement = createExpressionStatement(call, 0, source.length, 1);
     const program = createProgram([statement], 0, source.length, 1, 1);
 
@@ -63,6 +61,7 @@ describe('InputFunctionsValidator (AST)', () => {
     const result = harness.validate(source);
     const codes = result.errors.map((error) => error.code);
 
+    // input.float() requires at least a defval parameter
     expect(codes).toContain('PSV6-FUNCTION-PARAM-COUNT');
   });
 

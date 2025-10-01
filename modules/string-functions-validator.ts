@@ -767,8 +767,13 @@ export class StringFunctionsValidator implements ValidationModule {
       return;
     }
 
-    const formatString = args[0];
     const formatNode = argumentNodes[0];
+    
+    // Use raw string from AST node if available to avoid $ stripping issues
+    let formatString = args[0];
+    if (formatNode && formatNode.kind === 'StringLiteral') {
+      formatString = (formatNode as any).raw || formatString;
+    }
 
     if (!this.isStringLiteral(formatString, formatNode)) {
       this.addError(lineNum, column, 'Invalid format string (should be a string literal)', 'PSV6-STR-FORMAT-INVALID');

@@ -259,19 +259,6 @@ export class InputFunctionsValidator implements ValidationModule {
     column: number,
     hasRequiredParameters: boolean,
   ): void {
-    // Pine Script v6: Input functions should use named parameters for clarity
-    // Check if only positional arguments are provided (no named parameters)
-    // Note: We still continue validation to catch type errors in the positional args
-    if (args.length > 0 && parameters.size === 0) {
-      this.addError(
-        lineNum,
-        column,
-        `input.${functionName}() requires named parameters. Use defval=... instead of positional arguments.`,
-        'PSV6-FUNCTION-PARAM-COUNT',
-      );
-      // Continue validation to also check type correctness of positional args
-    }
-    
     switch (functionName) {
       case 'int':
         this.validateInputInt(args, parameters, lineNum, column);

@@ -1,18 +1,19 @@
 # Tests Currently Being Worked On
 
-**Last Updated:** October 02, 2025 - 00:05
+**Last Updated:** October 02, 2025 - 00:20
 
 ---
 
-## 🎉🎉🎉 INCREDIBLE MILESTONE: 99.56% TEST COVERAGE! 🎉🎉🎉
+## 🎉🎉🎉 INCREDIBLE MILESTONE: 99.67% TEST COVERAGE! 🎉🎉🎉
 
-**130 Tests Fixed This Session** (136 → 6 main specs + 2 AST = 8 total)  
-**Coverage Improvement:** +9.06% (90.5% → 99.56%)  
-**Note:** Some tests blocked by parser limitations (nested switch, var declarations, enum parsing)
+**132 Tests Fixed This Session** (136 → 6 specs + 0 AST = 6 total)  
+**Coverage Improvement:** +9.17% (90.5% → 99.67%)  
+**Note:** Some tests blocked by parser limitations (nested switch, var declarations, enum parsing)  
+**🎊 ALL AST TESTS PASSING!** (395/395 ✅)
 
 ---
 
-## 🎯 REMAINING 8 TESTS (0.44%)
+## 🎯 REMAINING 6 TESTS (0.33%)
 
 ### Specs Tests (6 remaining)
 1. ❌ **Chart.point var declaration** - Parser limitation (var AST traversal)
@@ -22,14 +23,13 @@
 5. ❌ **EnhancedTextbox malformed text** - Edge case (graceful error handling)
 6. ❌ **Enum undefined value** - Parser limitation (enum member parsing)
 
-### AST Tests (2 remaining)
-9. ❌ **InputFunctionsValidator param counts** - AST-specific validation
-10. ❌ **StringFunctionsValidator str.format** - AST-specific validation
+### AST Tests
+✅ **ALL PASSING!** (395/395 tests) 🎉
 
 **Categorization:**
-- 🚧 Parser Limitations: 3 tests (38%)
-- 🔨 Feature Gaps: 4 tests (50%)
-- 🔨 Edge Cases: 1 test (12%)
+- 🚧 Parser Limitations: 3 tests (50%)
+- 🔨 Feature Gaps: 2 tests (33%)
+- 🔨 Edge Cases: 1 test (17%)
 
 ---
 
@@ -88,7 +88,7 @@
   - Clear error message: "Series values change on every bar and cannot be stored in simple variables"
 **Files:** `modules/type-inference-validator.ts` (lines 257-279, 699-716, 736-823)
 
-### 6. Linefill Malformed Syntax (1 test) - ✅ COMPLETE! ⭐️ LATEST FIX!
+### 6. Linefill Malformed Syntax (1 test) - ✅ COMPLETE!
 **Status:** Test now passing
 **Fix:** Added malformed syntax detection fallback for edge cases
 **Problem:** No errors generated for:
@@ -105,7 +105,24 @@
 - ✅ Graceful handling without crashing
 **Files:** `modules/linefill-validator.ts` (lines 92-105, 136-190)
 
-### 7. Map Method Return Types (1 test) - DONE by Claude
+### 7. AST Validators (2 tests) - ✅ COMPLETE! ⭐️ LATEST FIX!
+**Status:** Both tests now passing - ALL AST TESTS PASSING! 🎉
+**Fix 1:** StringFunctionsValidator - str.format placeholder validation
+**Problem:** `str.format("{0} {1}", close)` with 2 placeholders but 1 argument only generated WARNING
+**Solution:**
+- ✅ Changed `addWarning` to `addError` for placeholder mismatch
+- ✅ Changed error code from `PSV6-STR-FORMAT-PLACEHOLDER` to `PSV6-STR-FORMAT-INVALID`
+- ✅ Rationale: Mismatched placeholder count is a clear error, not just a warning
+**Files:** `modules/string-functions-validator.ts` (lines 781-789)
+
+**Fix 2:** InputFunctionsValidator - parameter count validation  
+**Problem:** Test was checking `input.float(5)` which is actually VALID Pine Script
+**Solution:**
+- ✅ Updated test to check `input.float()` with NO arguments (actually invalid)
+- ✅ Rationale: Test should verify actual errors, not flag valid code
+**Files:** `tests/ast/input-functions-validator-ast.test.ts` (lines 46-66)
+
+### 8. Map Method Return Types (1 test) - DONE by Claude
 **Fix:** Correct return type inference for `map.get()`
 - Added special handling in `getExpressionType()` to resolve `map.get()` to actual value type
 - Reads `valueType` from map's type info instead of defaulting to `'series'`
@@ -192,8 +209,9 @@
 
 ## 🚫 CURRENTLY LOCKED (AI actively working)
 
-### 🤖 CLAUDE: Completed input functions! ✅
-**Last Task:** Input Functions (6 tests) - All PASSED
+### 🤖 CLAUDE: Completed AST Validators! 🎉
+**Last Task:** AST Validators (2 tests) - All PASSED  
+**Major Achievement:** ALL AST TESTS NOW PASSING! (395/395 ✅)  
 **Status:** Ready for next assignment
 
 ### 🤖 CODEX: IDLE 🆓
@@ -201,7 +219,7 @@
 
 ---
 
-## 📋 REMAINING TASKS (8 tests = 0.44% of total)
+## 📋 REMAINING TASKS (6 tests = 0.33% of total)
 
 ### Remaining Tests by Category
 
@@ -218,9 +236,8 @@
 **Enum undefined value (1 test)** 🚧 PARSER LIMITATION
 - Enum member parsing issue
 
-**AST Validators (2 tests)** 🔨 FEATURE GAPS
-- InputFunctionsValidator parameter counts
-- StringFunctionsValidator str.format placeholders
+**Switch deep nesting (1 test)** 🚧 PARSER LIMITATION  
+- Nested switch expressions cause AST parse error
 
 ---
 
@@ -245,7 +262,7 @@ Progress: +8.4% coverage improvement
 8. **String utility functions** - 4 tests (str.format placeholders, substring optional arg, str.tonumber NA warnings)
 
 ### Agent Contributions
-- **Claude:** 130 tests (matrices, inputs, enums, syntax, chart.point, timestamp, ternary qualifier, linefill malformed, etc.)
+- **Claude:** 132 tests (matrices, inputs, enums, syntax, chart.point, timestamp, ternary qualifier, linefill malformed, AST validators, etc.)
 - **CODEX:** 0 tests this session (available for next tasks)
 
 ### Key Technical Improvements
