@@ -216,7 +216,7 @@ describe('UltimateValidator Enhanced Features', () => {
       expectHas(result, { warnings: ['PSV6-MEMORY-ARRAYS'] });
     });
 
-    it('errors on expensive TA functions in nested loops', () => {
+    it('warns on expensive TA functions in nested loops', () => {
       const code = `
         //@version=6
         indicator("Test")
@@ -226,8 +226,9 @@ describe('UltimateValidator Enhanced Features', () => {
         plot(highest_val)
       `;
       
+      // Performance issues in nested loops are warnings, not errors
       const result = validator.validate(code);
-      expectHas(result, { errors: ['PSV6-PERF-NESTED-TA'] });
+      expectHas(result, { warnings: ['PSV6-PERF-NESTED-TA'] });
     });
 
     it('warns on large collection allocations', () => {

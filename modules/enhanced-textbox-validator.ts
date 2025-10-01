@@ -112,6 +112,9 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     this.collectTextboxDataAst(ast);
 
+    // Check for malformed syntax patterns
+    this.detectMalformedSyntax();
+
     // Post-process validations
     this.validateTextboxPerformance();
     this.validateTextboxBestPractices();
@@ -834,6 +837,62 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
   hasDrawingObjectsDetected(): boolean {
     return this.hasDrawingObjects;
+  }
+
+  /**
+   * Detects common malformed syntax patterns in cleanLines.
+   * This is a fallback for when AST parsing fails or is unavailable.
+   */
+  private detectMalformedSyntax(): void {
+    const lines = this.context.cleanLines || this.context.lines;
+    
+    lines.forEach((line, index) => {
+      const lineNum = index + 1;
+      const trimmed = line.trim();
+      
+      // Skip empty lines and comments
+      if (!trimmed || trimmed.startsWith('//')) {
+        return;
+      }
+      
+      // Check for textbox-related lines
+      if (!trimmed.includes('box.new') && !trimmed.includes('text=')) {
+        return;
+      }
+      
+      // Pattern 1: Trailing comma before closing parenthesis
+      // Example: box.new(left=0, top=1, right=1, bottom=0, text="test",)
+      if (/box\.new\([^)]*,\s*\)/.test(trimmed)) {
+        this.addError(
+          lineNum,
+          1,
+          'Malformed syntax: trailing comma before closing parenthesis',
+          'PSV6-SYNTAX-ERROR',
+        );
+      }
+      
+      // Pattern 2: Named parameter with missing value
+      // Example: box.new(left=0, top=1, right=1, bottom=0, text=)
+      if (/\w+\s*=\s*[,)]/.test(trimmed)) {
+        this.addError(
+          lineNum,
+          1,
+          'Malformed syntax: named parameter missing value',
+          'PSV6-SYNTAX-ERROR',
+        );
+      }
+      
+      // Pattern 3: Unclosed string in text parameter
+      // Example: box.new(left=0, top=1, right=1, bottom=0, text=unclosed_string")
+      if (/text=\s*[^"]*"[^"]*$/.test(trimmed)) {
+        this.addError(
+          lineNum,
+          1,
+          'Malformed text parameter: unclosed string',
+          'PSV6-TEXTBOX-MALFORMED-TEXT',
+        );
+      }
+    });
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {

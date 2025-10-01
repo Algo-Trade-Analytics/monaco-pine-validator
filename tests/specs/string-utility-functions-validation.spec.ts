@@ -349,7 +349,7 @@ indicator("Format")
 
 name = "Bitcoin"
 price = close
-formatted = str.format("{0}: ${1}", name, price)
+formatted = str.format("{0}: \${1}", name, price)
 label.new(bar_index, high, formatted)
       `;
 
@@ -421,7 +421,7 @@ for [i, field] in fields
         volumeValue := str.tonumber(str.substring(field, 7))
 
 // Display
-label.new(bar_index, high, str.format("{0}: ${1}", symbolName, priceValue))
+label.new(bar_index, high, str.format("{0}: \${1}", symbolName, priceValue))
       `;
 
       const result = createValidator().validate(code);
@@ -442,7 +442,7 @@ change = str.tostring(ta.change(close), "#.##")
 volume = str.tostring(volume, "#,###")
 
 template = str.format(
-     "<div>\\n  <h1>{0}</h1>\\n  <p>Symbol: {1}</p>\\n  <p>Price: ${2}</p>\\n  <p>Change: ${3}</p>\\n  <p>Volume: {4}</p>\\n</div>",
+     "<div>\\n  <h1>{0}</h1>\\n  <p>Symbol: {1}</p>\\n  <p>Price: \${2}</p>\\n  <p>Change: \${3}</p>\\n  <p>Volume: {4}</p>\\n</div>",
      title, symbol, price, change, volume)
 
 var table t = table.new(position.top_right, 1, 1)

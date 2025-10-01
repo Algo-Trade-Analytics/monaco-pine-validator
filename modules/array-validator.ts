@@ -208,6 +208,16 @@ export class ArrayValidator implements ValidationModule {
           loopStack.pop();
         },
       },
+      ExpressionStatement: {
+        enter: (path) => {
+          // Handle mis-parsed var array<chart.point> declarations
+          // Parser bug: "var array<chart.point> x" creates ExpressionStatement instead of VariableDeclaration
+          const expr = path.node.expression;
+          if (expr.kind === 'BinaryExpression') {
+            this.tryRegisterMisparsedArrayDeclaration(expr as BinaryExpressionNode);
+          }
+        },
+      },
       VariableDeclaration: {
         enter: (path) => {
           if (process.env.DEBUG_ARRAY === '1' && path.node.identifier.name === 'points') {
@@ -250,7 +260,8 @@ export class ArrayValidator implements ValidationModule {
     let elementType: string | undefined;
     
     if (typeAnnotation) {
-      elementType = this.extractArrayAnnotationElement(typeAnnotation);
+      const extracted = this.extractArrayAnnotationElement(typeAnnotation);
+      elementType = extracted ?? undefined; // Convert null to undefined
       if (process.env.DEBUG_ARRAY === '1' && name === 'points') {
         console.log('[ArrayValidator] Extracted element type:', elementType);
       }
@@ -286,6 +297,126 @@ export class ArrayValidator implements ValidationModule {
       usages: [],
       elementType,
     });
+  }
+
+  /**
+   * WORKAROUND: Handle parser bug where "var array<chart.point> x = ..." is mis-parsed
+   * Parser creates: ExpressionStatement { BinaryExpression } instead of VariableDeclaration
+   * This happens specifically with compound types (chart.point) in generics
+   */
+  private tryRegisterMisparsedArrayDeclaration(expr: BinaryExpressionNode): void {
+    // Pattern: array < chart.point > identifier = array.new<...>()
+    if (expr.operator !== '=') {
+      return;
+    }
+
+    // Left side should be: array<type> identifier (parsed as BinaryExpression with operator '>')
+    if (expr.left.kind !== 'BinaryExpression') {
+      return;
+    }
+
+    const typedExpr = expr.left as BinaryExpressionNode;
+    if (typedExpr.operator !== '>') {
+      return;
+    }
+
+    // Right side of '>' should be the identifier
+    if (typedExpr.right.kind !== 'Identifier') {
+      return;
+    }
+
+    const identifier = typedExpr.right as IdentifierNode;
+    const name = identifier.name;
+    const line = identifier.loc.start.line;
+    const column = identifier.loc.start.column;
+
+    // Left side of '>' should be: array < type
+    if (typedExpr.left.kind !== 'BinaryExpression') {
+      return;
+    }
+
+    const arrayTypeExpr = typedExpr.left as BinaryExpressionNode;
+    if (arrayTypeExpr.operator !== '<') {
+      return;
+    }
+
+    // Check if left side is 'array'
+    const baseTypeText = this.getExpressionText(arrayTypeExpr.left).trim();
+    if (baseTypeText !== 'array') {
+      return;
+    }
+
+    // Extract element type from right side (e.g., chart.point)
+    const elementType = this.getExpressionText(arrayTypeExpr.right).trim()
+      .replace(/\s*\.\s*/g, '.'); // Normalize: 'chart . point' → 'chart.point'
+
+    if (!elementType) {
+      return;
+    }
+
+    // Check source code to determine if this is a 'var' declaration
+    const sourceLine = this.context.lines?.[line - 1] ?? '';
+    const isVarDeclaration = sourceLine.trimStart().startsWith('var ');
+
+    // Only register if it's actually a var declaration (workaround for parser bug)
+    if (!isVarDeclaration) {
+      return;
+    }
+
+    // Register the array declaration
+    const existing = this.arrayDeclarations.get(name);
+    const size = existing?.size ?? 0;
+    this.arrayDeclarations.set(name, {
+      type: elementType,
+      elementType,
+      size,
+      line,
+      column,
+    });
+
+    this.context.typeMap.set(name, {
+      type: 'array',
+      isConst: false, // 'var' is never const
+      isSeries: false,
+      declaredAt: { line, column },
+      usages: [],
+      elementType,
+    });
+  }
+
+  /**
+   * Get source code text for an expression node
+   */
+  private getExpressionText(expr: ExpressionNode): string {
+    if (expr.kind === 'Identifier') {
+      return (expr as IdentifierNode).name;
+    }
+
+    if (expr.kind === 'MemberExpression') {
+      const member = expr as MemberExpressionNode;
+      const objectText = this.getExpressionText(member.object);
+      const propertyText = member.property.name;
+      return `${objectText}.${propertyText}`;
+    }
+
+    if (expr.kind === 'BinaryExpression') {
+      const binary = expr as BinaryExpressionNode;
+      const leftText = this.getExpressionText(binary.left);
+      const rightText = this.getExpressionText(binary.right);
+      return `${leftText} ${binary.operator} ${rightText}`;
+    }
+
+    // Fallback: use getNodeSource if available
+    if (expr.loc && this.context.lines) {
+      const lineNum = expr.loc.start.line;
+      const sourceLine = this.context.lines[lineNum - 1];
+      if (sourceLine) {
+        // Simple extraction: just get the text from the line
+        return sourceLine.slice(expr.loc.start.column - 1, expr.loc.end.column - 1).trim();
+      }
+    }
+
+    return '';
   }
 
   private detectBuiltinArrayConstant(expression: ExpressionNode): string | undefined {
@@ -919,23 +1050,6 @@ export class ArrayValidator implements ValidationModule {
     }
 
     return null;
-  }
-
-  private getExpressionText(expression: ExpressionNode): string {
-    switch (expression.kind) {
-      case 'Identifier':
-        return (expression as IdentifierNode).name;
-      case 'MemberExpression': {
-        const member = expression as MemberExpressionNode;
-        if (member.computed) {
-          return getNodeSource(this.context, member);
-        }
-        const objectText = this.getExpressionText(member.object);
-        return `${objectText}.${member.property.name}`;
-      }
-      default:
-        return getNodeSource(this.context, expression);
-    }
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {

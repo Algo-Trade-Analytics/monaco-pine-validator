@@ -772,7 +772,10 @@ export class StringFunctionsValidator implements ValidationModule {
     // Use raw string from AST node if available to avoid $ stripping issues
     let formatString = args[0];
     if (formatNode && formatNode.kind === 'StringLiteral') {
-      formatString = (formatNode as any).raw || formatString;
+      const rawString = (formatNode as any).raw;
+      if (rawString && rawString !== formatString) {
+        formatString = rawString;
+      }
     }
 
     if (!this.isStringLiteral(formatString, formatNode)) {

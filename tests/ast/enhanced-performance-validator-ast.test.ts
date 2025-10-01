@@ -58,9 +58,10 @@ describe('EnhancedPerformanceValidator (AST)', () => {
     const harness = new EnhancedPerformanceHarness(service);
 
     const result = harness.validate('for i = 0 to 1\n    for j = 0 to 1\n        ta.pivothigh()');
-    const errorCodes = result.errors.map((error) => error.code);
+    const warningCodes = result.warnings.map((warning) => warning.code);
 
-    expect(errorCodes).toContain('PSV6-PERF-NESTED-TA');
+    // Performance issues in nested loops are warnings, not errors
+    expect(warningCodes).toContain('PSV6-PERF-NESTED-TA');
   });
 
   it('warns about request.security lookahead usage discovered via AST traversal', () => {
@@ -223,9 +224,10 @@ describe('EnhancedPerformanceValidator (AST)', () => {
     const harness = new EnhancedPerformanceHarness(service);
 
     const result = harness.validate('while true\n    while true\n        pivothigh()');
-    const errorCodes = result.errors.map((error) => error.code);
+    const warningCodes = result.warnings.map((warning) => warning.code);
 
-    expect(errorCodes).toContain('PSV6-PERF-NESTED-TA');
+    // Performance issues in nested loops are warnings, not errors
+    expect(warningCodes).toContain('PSV6-PERF-NESTED-TA');
   });
 
   it('returns no diagnostics when AST mode is disabled', () => {

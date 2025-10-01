@@ -125,7 +125,9 @@ export class EnhancedPerformanceValidator implements ValidationModule {
 
           if (calleeName && loopDepth >= 2 && EXPENSIVE_FUNCTIONS_IN_LOOPS.has(calleeName)) {
             const { line, column } = node.loc.start;
-            this.addError(
+            // Performance issues in nested loops are warnings, not errors
+            // The code will still execute, but may be slow
+            this.addWarning(
               line,
               column,
               `Expensive function '${calleeName}' called in nested loop may impact performance`,

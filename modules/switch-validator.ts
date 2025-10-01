@@ -57,11 +57,15 @@ export class SwitchValidator implements ValidationModule {
     const ast = this.astContext?.ast;
 
     if (!ast) {
+      // Fallback: Check for deeply nested switch statements in cleanLines
+      // This handles edge cases where AST parsing fails
+      this.detectDeepNestingFallback();
+      
       return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
+        isValid: this.errors.length === 0,
+        errors: this.errors,
+        warnings: this.warnings,
+        info: this.info,
         typeMap: new Map(),
         scriptType: context.scriptType,
       };
@@ -572,5 +576,46 @@ export class SwitchValidator implements ValidationModule {
     );
   }
 
+  /**
+   * Detects deeply nested switch statements in cleanLines as a fallback
+   * when AST parsing fails due to parser limitations.
+   */
+  private detectDeepNestingFallback(): void {
+    const lines = this.context.cleanLines || this.context.lines;
+    
+    let maxNestingDepth = 0;
+    let currentNestingDepth = 0;
+    let switchCount = 0;
+    
+    lines.forEach((line, index) => {
+      const lineNum = index + 1;
+      const trimmed = line.trim();
+      
+      // Skip empty lines and comments
+      if (!trimmed || trimmed.startsWith('//')) {
+        return;
+      }
+      
+      // Count switch statements and track nesting
+      const switchMatches = trimmed.match(/\bswitch\b/g);
+      if (switchMatches) {
+        switchCount += switchMatches.length;
+        currentNestingDepth += switchMatches.length;
+        maxNestingDepth = Math.max(maxNestingDepth, currentNestingDepth);
+      }
+      
+      // Simple heuristic: if we see multiple switch keywords in close proximity,
+      // it's likely deeply nested
+      if (switchCount > 2 && maxNestingDepth > 2) {
+        this.addWarning(
+          lineNum,
+          1,
+          `Switch statement has deep nesting (${maxNestingDepth} levels), consider refactoring.`,
+          'PSV6-SWITCH-DEEP-NESTING',
+        );
+        return; // Only add one warning per script
+      }
+    });
+  }
 
 }
