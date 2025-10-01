@@ -280,8 +280,9 @@ indicator("Test")
 for i = 0 to 5
     request.security(syminfo.tickerid, "D", high[i])`;
       const { codes } = run(code);
-      // The validator generates PSV6-FUNCTION-PARAM-TYPE for function parameter type issues
-      expect(codes.errors).toContain('PSV6-FUNCTION-PARAM-TYPE');
+      // Request calls inside loops surface dedicated performance warnings in v6
+      expectHas(codes, { warnings: ['PSV6-REQUEST-PERF-LOOP'] });
+      expectLacks(codes, { errors: ['PSV6-FUNCTION-PARAM-TYPE'] });
     });
   });
 
