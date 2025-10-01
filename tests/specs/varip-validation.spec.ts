@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { VaripValidator } from '../../modules/varip-validator';
 import { ValidationContext, ValidatorConfig } from '../../core/types';
-import { expectHas } from './test-utils';
+import { expectHas, createModuleHarness } from './test-utils';
 
 describe('Varip Validation (TDD)', () => {
   let validator: VaripValidator;
@@ -13,15 +13,23 @@ describe('Varip Validation (TDD)', () => {
     context = {
       lines: [],
       cleanLines: [],
+      rawLines: [],
       typeMap: new Map(),
+      usedVars: new Set(),
+      declaredVars: new Map(),
       functionNames: new Set(),
-      scopeStack: []
+      methodNames: new Set(),
+      functionParams: new Map(),
+      scriptType: null,
+      version: 6,
+      hasVersion: false,
+      firstVersionLine: null
     };
     config = {
       strictMode: true,
       enableWarnings: true,
       enableInfo: true
-    };
+    } as ValidatorConfig;
   });
 
   describe('PSV6-VARIP: Varip Declaration Validation', () => {
@@ -240,10 +248,9 @@ varip int count6 = 0  // Too many for strategy
 
 plot(close)`;
       
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-      
-      const result = validator.validate(context, config);
+      // Use test harness to properly parse AST and extract script type
+      const harness = createModuleHarness(new VaripValidator(), config);
+      const result = harness.run(code, config);
       expectHas(result, { warnings: ['PSV6-VARIP-STRATEGY'] });
     });
   });

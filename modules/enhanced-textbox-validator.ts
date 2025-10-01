@@ -120,7 +120,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
     // Build analysis results for other validators
     const typeMap = this.context.typeMap ?? new Map();
     typeMap.set('textbox_analysis', {
-      type: 'unknown',
+      type: 'analysis',
       isConst: false,
       isSeries: false,
       declaredAt: { line: 1, column: 1 },

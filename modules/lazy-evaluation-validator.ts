@@ -132,7 +132,7 @@ export class LazyEvaluationValidator implements ValidationModule {
 
     const typeMap = new Map();
     typeMap.set('conditional_historical_functions', {
-      type: 'unknown',
+      type: 'analysis',
       isConst: false,
       isSeries: false,
       count: this.conditionalHistoricalCount,
