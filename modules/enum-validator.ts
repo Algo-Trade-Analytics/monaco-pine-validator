@@ -401,13 +401,16 @@ export class EnumValidator implements ValidationModule {
       return;
     }
 
-    // Skip if this is a variable property access (not an enum)
-    if (this.context.typeMap.has(reference.enumName)) {
-      return;
-    }
-
     const enumInfo = this.astEnumDeclarations.get(reference.enumName);
     if (!enumInfo) {
+      // Skip cases where the object is a regular variable property access
+      // rather than an enum namespace. Enum declarations are tracked in
+      // astEnumDeclarations so a missing entry combined with a known typeMap
+      // entry indicates a non-enum reference that should not raise errors.
+      if (this.context.typeMap.has(reference.enumName)) {
+        return;
+      }
+
       const { line, column } = reference.node.object.loc.start;
       this.addError(line, column, `Undefined enum type: ${reference.enumName}`, 'PSV6-ENUM-UNDEFINED-TYPE');
       return;

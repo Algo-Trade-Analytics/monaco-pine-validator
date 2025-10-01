@@ -256,8 +256,9 @@ for i = 0 to 10
     for j = 0 to 5
         request.security(syminfo.tickerid, "D", close)`;
         const { codes } = run(code);
-        // The validator generates PSV6-FUNCTION-PARAM-TYPE for function parameter issues
-        expect(codes.errors).toContain('PSV6-FUNCTION-PARAM-TYPE');
+        // Nested request.* calls should trigger loop performance warnings, not type errors
+        expectHas(codes, { warnings: ['PSV6-REQUEST-PERF-LOOP'] });
+        expectLacks(codes, { errors: ['PSV6-FUNCTION-PARAM-TYPE'] });
       });
 
       it('should not warn about simple functions in nested loops', () => {
