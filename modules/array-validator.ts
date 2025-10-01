@@ -119,7 +119,7 @@ export class ArrayValidator implements ValidationModule {
   private knownUdtTypes = new Set<string>();
 
   getDependencies(): string[] {
-    return ['FunctionValidator'];
+    return ['TypeInferenceValidator', 'FunctionValidator'];
   }
 
   getPriority(): number {
@@ -210,6 +210,13 @@ export class ArrayValidator implements ValidationModule {
       },
       VariableDeclaration: {
         enter: (path) => {
+          if (process.env.DEBUG_ARRAY === '1' && path.node.identifier.name === 'points') {
+            console.log('[ArrayValidator] Visiting VariableDeclaration for points:', {
+              declarationKind: path.node.declarationKind,
+              hasTypeAnnotation: !!path.node.typeAnnotation,
+              hasInitializer: !!path.node.initializer,
+            });
+          }
           this.registerArrayTypeAnnotation(path.node);
         },
       },
@@ -244,6 +251,9 @@ export class ArrayValidator implements ValidationModule {
     
     if (typeAnnotation) {
       elementType = this.extractArrayAnnotationElement(typeAnnotation);
+      if (process.env.DEBUG_ARRAY === '1' && name === 'points') {
+        console.log('[ArrayValidator] Extracted element type:', elementType);
+      }
     }
 
     // If no type annotation, check if initializer is a built-in .all constant
@@ -252,6 +262,9 @@ export class ArrayValidator implements ValidationModule {
     }
 
     if (!elementType) {
+      if (process.env.DEBUG_ARRAY === '1' && name === 'points') {
+        console.log('[ArrayValidator] No element type found, returning');
+      }
       return;
     }
 
@@ -672,16 +685,44 @@ export class ArrayValidator implements ValidationModule {
   private extractArrayAnnotationElement(type: TypeReferenceNode): string | null {
     if (type.name.name === 'array' && type.generics.length > 0) {
       const generic = type.generics[0];
-      return this.formatTypeReference(generic);
+      let elementType = this.formatTypeReference(generic);
+      
+      // WORKAROUND: Parser limitation - chart.point in type annotations
+      // Also check for chart.point in the type annotation context
+      if (elementType === 'chart' && this.context.lines && generic.loc) {
+        const line = this.context.lines[generic.loc.start.line - 1];
+        if (line) {
+          const endCol = generic.loc.end.column - 1;
+          if (line.substring(endCol, endCol + 6) === '.point') {
+            elementType = 'chart.point';
+          }
+        }
+      }
+      
+      return elementType;
     }
 
     return null;
   }
 
   private formatTypeReference(type: TypeReferenceNode): string {
-    const base = type.name.name;
+    let base = type.name.name;
     if (!base) {
       return '';
+    }
+
+    // WORKAROUND: Parser limitation - chart.point gets parsed as just "chart"
+    // Check the source code to see if .point follows
+    if (base === 'chart' && this.context.lines && type.loc) {
+      const line = this.context.lines[type.loc.start.line - 1];
+      if (line) {
+        const startCol = type.loc.start.column - 1;
+        const endCol = type.loc.end.column - 1;
+        // Check if ".point" immediately follows "chart"
+        if (line.substring(endCol, endCol + 6) === '.point') {
+          base = 'chart.point';
+        }
+      }
     }
 
     if (!Array.isArray(type.generics) || type.generics.length === 0) {
@@ -750,6 +791,11 @@ export class ArrayValidator implements ValidationModule {
 
         const typeInfo = this.context.typeMap.get(name);
         if (typeInfo) {
+          // For UDT types, return the UDT name (e.g., 'box', 'line') instead of 'udt'
+          // This allows proper type checking when pushing/setting values in arrays
+          if (typeInfo.type === 'udt' && typeInfo.udtName) {
+            return typeInfo.udtName.toLowerCase();
+          }
           return typeInfo.elementType ?? typeInfo.type;
         }
 
@@ -789,6 +835,15 @@ export class ArrayValidator implements ValidationModule {
 
         if (qualified.startsWith('math.')) {
           return 'float';
+        }
+
+        // Handle drawing object constructors (box.new, line.new, label.new, etc.)
+        const drawingConstructors = ['box.new', 'line.new', 'label.new', 'table.new', 'linefill.new', 'polyline.new'];
+        for (const constructor of drawingConstructors) {
+          if (qualified === constructor) {
+            const type = constructor.split('.')[0];
+            return type;
+          }
         }
 
         return 'unknown';

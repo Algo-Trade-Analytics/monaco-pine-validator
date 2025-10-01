@@ -254,7 +254,7 @@ plot(close)`;
 
       const result = validator.validate(context, config);
       expect(result.isValid).toBe(false);
-      expectHas(result, { errors: ['PSV6-MATRIX-METHOD-PARAMS'] });
+      expectHas(result, { errors: ['PSV6-FUNCTION-PARAM-COUNT'] });
     });
 
     it('should validate matrix method return types', () => {

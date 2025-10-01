@@ -429,9 +429,9 @@ export class SwitchValidator implements ValidationModule {
 
       node.cases.forEach((caseNode) => {
         if (caseNode.test) {
-          visitExpression(caseNode.test as ExpressionNode, depth + 1);
+          visitExpression(caseNode.test as ExpressionNode, depth);
         }
-        caseNode.consequent.forEach((stmt) => visitStatementNode(stmt, depth + 1));
+        caseNode.consequent.forEach((stmt) => visitStatementNode(stmt, depth));
       });
     };
 
@@ -441,7 +441,7 @@ export class SwitchValidator implements ValidationModule {
       }
       switch (stmt.kind) {
         case 'SwitchStatement':
-          visitSwitch(stmt as SwitchStatementNode, depth);
+          visitSwitch(stmt as SwitchStatementNode, depth + 1);
           break;
         case 'ExpressionStatement':
           visitExpression((stmt as ExpressionStatementNode).expression, depth);
@@ -468,7 +468,7 @@ export class SwitchValidator implements ValidationModule {
         return;
       }
       if (expr.kind === 'SwitchStatement') {
-        visitSwitch(expr as SwitchStatementNode, depth);
+        visitSwitch(expr as SwitchStatementNode, depth + 1);
         return;
       }
       switch (expr.kind) {

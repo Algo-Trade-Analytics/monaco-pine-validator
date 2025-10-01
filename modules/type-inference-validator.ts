@@ -147,7 +147,7 @@ export class TypeInferenceValidator implements ValidationModule {
     const collectionInfo = this.inferCollectionTypeFromExpression(initializer);
     const { line, column } = node.loc.start;
 
-    if (process.env.DEBUG_TYPE_INFERENCE === '1' && (node.identifier.name === 'idx' || node.identifier.name === 'allBoxes')) {
+    if (process.env.DEBUG_TYPE_INFERENCE === '1' && (node.identifier.name === 'idx' || node.identifier.name === 'allBoxes' || node.identifier.name === 'eigenvals')) {
       console.log(`[TypeInference] handleVariableDeclaration for ${node.identifier.name}:`, {
         declaredType,
         initializerType,
@@ -610,6 +610,18 @@ export class TypeInferenceValidator implements ValidationModule {
           return 'array';  // Return 'array' type for .all constants
         }
       }
+      // Check for syminfo.* built-in properties
+      if (!member.computed && member.object.kind === 'Identifier') {
+        const namespace = (member.object as IdentifierNode).name;
+        const propertyName = member.property.name;
+        if (namespace === 'syminfo') {
+          // Most syminfo properties are strings, except for numeric ones
+          if (propertyName === 'minmove' || propertyName === 'pointvalue') {
+            return 'float';
+          }
+          return 'string';
+        }
+      }
     }
 
     // For CallExpression, check builtin return type FIRST before AST inference
@@ -618,6 +630,18 @@ export class TypeInferenceValidator implements ValidationModule {
       const call = expression as CallExpressionNode;
       const calleeName = this.resolveCalleeName(call.callee);
       if (calleeName) {
+        // Special handling for map.get() - resolve to actual value type
+        if (calleeName === 'map.get' && call.args.length > 0) {
+          const mapArg = call.args[0].value;
+          if (mapArg.kind === 'Identifier') {
+            const mapName = (mapArg as IdentifierNode).name;
+            const mapTypeInfo = this.context.typeMap?.get(mapName);
+            if (mapTypeInfo && mapTypeInfo.type === 'map' && mapTypeInfo.valueType) {
+              return this.normalizeType(mapTypeInfo.valueType);
+            }
+          }
+        }
+        
         const builtinReturn = this.getBuiltinReturnType(calleeName);
         if (process.env.DEBUG_TYPE_INFERENCE === '1' && calleeName.startsWith('array.')) {
           console.log(`[TypeInference] getExpressionType for ${calleeName}:`, {
@@ -733,6 +757,14 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     if (consequentType === alternateType) {
+      return consequentType;
+    }
+
+    // If one branch is 'unknown' or 'void' (like na), prefer the known type
+    if (consequentType === 'unknown' || consequentType === 'void') {
+      return alternateType;
+    }
+    if (alternateType === 'unknown' || alternateType === 'void') {
       return consequentType;
     }
 
@@ -995,6 +1027,22 @@ export class TypeInferenceValidator implements ValidationModule {
         keyType,
         valueType,
       };
+    }
+
+    // Check if the function returns a collection type (array, matrix, map)
+    const functionDef = BUILTIN_FUNCTIONS_V6_RULES[calleeName];
+    if (functionDef && functionDef.returnType) {
+      if (functionDef.returnType === 'array') {
+        // Functions like matrix.eigenvalues(), matrix.eigenvectors(), etc. return arrays
+        // Try to infer element type from context if possible
+        return { type: 'array' };
+      }
+      if (functionDef.returnType === 'matrix') {
+        return { type: 'matrix' };
+      }
+      if (functionDef.returnType === 'map') {
+        return { type: 'map' };
+      }
     }
 
     return null;

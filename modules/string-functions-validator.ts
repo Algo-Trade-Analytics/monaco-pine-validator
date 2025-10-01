@@ -534,18 +534,20 @@ export class StringFunctionsValidator implements ValidationModule {
     column: number,
     argumentNodes: ExpressionNode[] = [],
   ): void {
-    if (args.length !== 3) {
-      this.addError(lineNum, column, 'str.substring() requires exactly 3 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+    if (args.length < 2 || args.length > 3) {
+      this.addError(lineNum, column, 'str.substring() accepts 2 or 3 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
-    // Validate start and end indices are integers
-    const startIndex = this.extractNumericValue(args[1], argumentNodes[1]);
-    const endIndex = this.extractNumericValue(args[2], argumentNodes[2]);
+    const startNode = argumentNodes[1];
+    const endNode = args.length === 3 ? argumentNodes[2] : undefined;
+
+    const startIndex = this.extractNumericValue(args[1], startNode);
+    const endIndex = args.length === 3 ? this.extractNumericValue(args[2], endNode) : null;
     if (startIndex === null) {
       this.addError(lineNum, column, 'substring start index must be numeric', 'PSV6-FUNCTION-PARAM-TYPE');
     }
-    if (endIndex === null) {
+    if (args.length === 3 && endIndex === null) {
       this.addError(lineNum, column, 'substring end index must be numeric', 'PSV6-FUNCTION-PARAM-TYPE');
     }
     
@@ -731,15 +733,26 @@ export class StringFunctionsValidator implements ValidationModule {
       return;
     }
 
-    // Check if parameter is already a string literal (suggestion)
     const arg = args[0].trim();
     const node = argumentNodes[0];
+    let issuedNaWarning = false;
     if (node?.kind === 'StringLiteral' && /^(?:\d+(?:\.\d+)?)$/.test((node as StringLiteralNode).value)) {
       this.addInfo(lineNum, column, 'Consider using numeric literal instead of str.tonumber() with string literal', 'PSV6-STR-LITERAL-SUGGESTION');
     }
-    // Invalid conversion parameter types
     if (/^[+\-]?\d+(?:\.[0-9]+)?$/.test(arg) || /^(true|false|na)$/.test(arg)) {
       this.addError(lineNum, column, 'Invalid parameter type for str.tonumber(), expected string', 'PSV6-STR-CONVERSION-INVALID');
+    }
+
+    if (node?.kind === 'StringLiteral') {
+      const literalValue = (node as StringLiteralNode).value.trim();
+      if (!/^[+\-]?\d+(?:\.\d+)?$/.test(literalValue)) {
+        this.addWarning(lineNum, column, 'str.tonumber() may return na for non-numeric strings', 'PSV6-STR-TONUMBER-NA');
+        issuedNaWarning = true;
+      }
+    }
+
+    if (!issuedNaWarning) {
+      this.addWarning(lineNum, column, 'str.tonumber() may return na when conversion fails', 'PSV6-STR-TONUMBER-NA');
     }
   }
 
@@ -757,23 +770,23 @@ export class StringFunctionsValidator implements ValidationModule {
     const formatString = args[0];
     const formatNode = argumentNodes[0];
 
-    // Validate format string
     if (!this.isStringLiteral(formatString, formatNode)) {
       this.addError(lineNum, column, 'Invalid format string (should be a string literal)', 'PSV6-STR-FORMAT-INVALID');
       return;
     }
 
-    // Count format placeholders
     const placeholders = this.countFormatPlaceholders(formatString);
-    const expectedArgs = placeholders + 1; // +1 for format string itself
-    
+    const expectedArgs = placeholders + 1;
+
     if (args.length !== expectedArgs) {
-      this.addError(lineNum, column, 
-        `str.format() expects ${expectedArgs} parameters (${placeholders} format placeholders), got ${args.length}`, 
-        'PSV6-STR-FORMAT-INVALID');
+      this.addWarning(
+        lineNum,
+        column,
+        `str.format() provided ${args.length - 1} argument(s) but format string references ${placeholders} placeholder(s)`,
+        'PSV6-STR-FORMAT-PLACEHOLDER',
+      );
     }
-    
-    // Check for invalid format placeholders
+
     if (this.hasInvalidFormatPlaceholders(formatString)) {
       this.addError(lineNum, column, 'Invalid format string: incomplete or malformed placeholders', 'PSV6-STR-FORMAT-INVALID');
     }

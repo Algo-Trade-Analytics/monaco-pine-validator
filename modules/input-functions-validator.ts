@@ -234,18 +234,19 @@ export class InputFunctionsValidator implements ValidationModule {
       isValid = false;
     }
 
-    const positionalIndexForTitle = hasNamedDefval ? 0 : 1;
-    const hasNamedTitle = parameters.has('title');
-    const hasPositionalTitle = args.length > positionalIndexForTitle;
-    if (!hasNamedTitle && !hasPositionalTitle) {
-      this.addError(
-        lineNum,
-        column,
-        `input.${functionName}() requires a title parameter`,
-        'PSV6-FUNCTION-PARAM-COUNT',
-      );
-      isValid = false;
-    }
+    // In Pine Script v6, the title parameter is optional for input functions
+    // const positionalIndexForTitle = hasNamedDefval ? 0 : 1;
+    // const hasNamedTitle = parameters.has('title');
+    // const hasPositionalTitle = args.length > positionalIndexForTitle;
+    // if (!hasNamedTitle && !hasPositionalTitle) {
+    //   this.addError(
+    //     lineNum,
+    //     column,
+    //     `input.${functionName}() requires a title parameter`,
+    //     'PSV6-FUNCTION-PARAM-COUNT',
+    //   );
+    //   isValid = false;
+    // }
 
     return isValid;
   }

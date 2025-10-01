@@ -319,7 +319,7 @@ export class DynamicDataValidator implements ValidationModule {
     const timeframeArg = this.getNamedArgument(call, 'timeframe') ?? this.getPositionalArgument(call, 1);
     if (
       timeframeArg &&
-      !this.argumentIsStringLiteral(timeframeArg) &&
+      !this.argumentIsStringLiteralOrInputFunction(timeframeArg) &&
       (this.countPositionalArguments(call) >= 3 || this.getNamedArgument(call, 'timeframe'))
     ) {
       const position = this.getArgumentPosition(call, timeframeArg);
@@ -1322,6 +1322,53 @@ export class DynamicDataValidator implements ValidationModule {
       return true;
     }
     return this.isStringLiteral(arg.value);
+  }
+
+  private argumentIsStringLiteralOrInputFunction(arg: RequestArgumentInfo | undefined): boolean {
+    // Check if it's a string literal
+    if (this.argumentIsStringLiteral(arg)) {
+      return true;
+    }
+
+    if (!arg) {
+      return false;
+    }
+
+    // Check if it's a timeframe.* builtin constant
+    if (arg.value && /^timeframe\.[a-z_]+$/i.test(arg.value.trim())) {
+      return true;
+    }
+
+    // Check if it's an identifier (variable)
+    if (arg.node && arg.node.kind === 'Identifier') {
+      const identifierName = (arg.node as any).name;
+      // Check if the variable comes from input.timeframe() or input.symbol()
+      if (this.isVariableFromInputFunction(identifierName)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private isVariableFromInputFunction(varName: string): boolean {
+    // Check the context typeMap to see if this variable comes from an input function
+    const typeInfo = this.context.typeMap.get(varName);
+    if (!typeInfo) {
+      return false;
+    }
+
+    // If the variable is assigned from an input function, it's valid
+    // We can check the source code for the assignment
+    const lines = this.context.lines || [];
+    for (const line of lines) {
+      const inputTimeframeMatch = line.match(new RegExp(`\\b${varName}\\s*=\\s*input\\.(timeframe|symbol|session)\\s*\\(`));
+      if (inputTimeframeMatch) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private argumentIsBooleanLiteral(arg: RequestArgumentInfo | undefined): boolean {

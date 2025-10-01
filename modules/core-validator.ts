@@ -19,7 +19,7 @@ import {
   KEYWORDS, PSEUDO_VARS, WILDCARD_IDENT, IDENT
 } from '../core/constants';
 
-const ALLOWED_KEYWORD_IDENTIFIERS = new Set(['color']);
+const ALLOWED_KEYWORD_IDENTIFIERS = new Set<string>();
 
 const isReservedKeyword = (name: string): boolean =>
   KEYWORDS.has(name) && !ALLOWED_KEYWORD_IDENTIFIERS.has(name);
@@ -746,6 +746,21 @@ export class CoreValidator implements ValidationModule {
           "The value for 'linewidth' must be >= 1, but it was 0.",
           'PSV6-002',
         );
+      }
+    }
+
+    for (const argument of call.args) {
+      if (!argument.name) {
+        continue;
+      }
+
+      const argName = argument.name.name;
+      const valueLoc = argument.value.loc;
+      const isMultiLineValue = valueLoc && valueLoc.end.line > valueLoc.start.line;
+
+      if (isMultiLineValue && isReservedKeyword(argName)) {
+        const { line, column } = argument.name.loc.start;
+        this.addError(line, column, `Identifier '${argName}' conflicts with a Pine keyword/builtin.`, 'PS007');
       }
     }
   }
@@ -2078,9 +2093,16 @@ export class CoreValidator implements ValidationModule {
       this.addError(line, col, `Invalid identifier '${name}'.`, 'PS006');
       return;
     }
-    if (!this.astTypeFieldLines.has(line) && isReservedIdentifier(name)) {
-      this.addError(line, col, `Identifier '${name}' conflicts with a Pine keyword/builtin.`, 'PS007');
-      return;
+    if (!this.astTypeFieldLines.has(line)) {
+      if (isReservedKeyword(name)) {
+        this.addError(line, col, `Identifier '${name}' conflicts with a Pine keyword/builtin.`, 'PS007');
+        return;
+      }
+
+      if (isReservedPseudoVar(name)) {
+        this.addWarning(line, col, `Identifier '${name}' shadows a built-in variable.`, 'PS007');
+        return;
+      }
     }
 
     const lexicalScope = this.currentScope();

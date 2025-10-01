@@ -1178,9 +1178,11 @@ export class FunctionValidator implements ValidationModule {
     if (/(?:barstate\.|ta\.|security\.|request\.)/.test(value)) {
       return true;
     }
-    if (/\?.*?:/.test(value)) {
-      return true;
-    }
+    // Conditional expressions don't necessarily return series - they can return any type
+    // The inferred type should be determined by inferArgumentType instead
+    // if (/\?.*?:/.test(value)) {
+    //   return true;
+    // }
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(value) && this.seriesLikeIdentifiers.has(value)) {
       return true;
     }
@@ -1503,6 +1505,32 @@ export class FunctionValidator implements ValidationModule {
   private inferArgumentType(arg: string): string {
     const trimmed = arg.trim();
     
+    // Check for conditional expressions (? :)
+    // Extract the consequent type, as it's usually more specific than 'na'
+    if (trimmed.includes('?') && trimmed.includes(':')) {
+      const condMatch = trimmed.match(/\?\s*(.+?)\s*:\s*(.+?)$/);
+      if (condMatch) {
+        const consequent = condMatch[1].trim();
+        const alternate = condMatch[2].trim();
+        
+        // If alternate is 'na', infer type from consequent
+        if (alternate === 'na') {
+          return this.inferArgumentType(consequent);
+        }
+        
+        // If consequent is 'na', infer type from alternate
+        if (consequent === 'na') {
+          return this.inferArgumentType(alternate);
+        }
+        
+        // Otherwise, try to infer from consequent (most common case)
+        const consequentType = this.inferArgumentType(consequent);
+        if (consequentType && consequentType !== 'unknown') {
+          return consequentType;
+        }
+      }
+    }
+    
     // String literal
     if (trimmed.match(/^"[^"]*"$/) || trimmed.match(/^'[^']*'$/)) {
       return 'string';
@@ -1579,6 +1607,13 @@ export class FunctionValidator implements ValidationModule {
         if (namespace === 'session') return 'string';
         if (namespace === 'timezone') return 'string';
         if (namespace === 'timeframe') return 'string';
+        if (namespace === 'syminfo') {
+          // Most syminfo properties are strings, except for numeric ones
+          if (member === 'minmove' || member === 'pointvalue') {
+            return 'float';
+          }
+          return 'string';
+        }
         return 'unknown';
       }
     }
