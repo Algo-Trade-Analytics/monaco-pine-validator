@@ -1,0 +1,172 @@
+🧪 Pine Script v6 Validator - Running All Tests
+============================================================
+
+📋 Running: Full validator spec suite
+🧾 Pattern: tests/specs/all-validation-tests.spec.ts
+--------------------------------------------------
+🎯 Suite filter: Ultimate Validator Enhanced
+
+ RUN  v1.6.1 /Users/egr/Desktop/TradeSync/pine-validator
+
+stdout | displaySuiteMetadata (/Users/egr/Desktop/TradeSync/pine-validator/tests/specs/all-validation-tests.spec.ts:122:11)
+🧪 Pine Script v6 Validator Test Suite Loaded
+
+stdout | displaySuiteMetadata (/Users/egr/Desktop/TradeSync/pine-validator/tests/specs/all-validation-tests.spec.ts:123:11)
+📊 Mode: full
+
+stdout | displaySuiteMetadata (/Users/egr/Desktop/TradeSync/pine-validator/tests/specs/all-validation-tests.spec.ts:124:11)
+📊 Total Test Modules: 1
+
+stdout | displaySuiteMetadata (/Users/egr/Desktop/TradeSync/pine-validator/tests/specs/all-validation-tests.spec.ts:125:11)
+📋 Test Modules: Ultimate Validator Enhanced
+
+stdout | displaySuiteMetadata (/Users/egr/Desktop/TradeSync/pine-validator/tests/specs/all-validation-tests.spec.ts:127:13)
+🎯 Suite Filter: ultimate validator enhanced
+
+stdout | tests/specs/all-validation-tests.spec.ts > UltimateValidator Enhanced Features > Library Import & Dependency Validation > validates library export compatibility
+[FunctionValidator] visit function myFunc at 4
+[FunctionValidator] track myFunc line 4
+[FunctionValidator] visit function privateFunc at 7
+[FunctionValidator] track privateFunc line 7
+[FunctionValidator] returns myFunc [ 'series' ]
+[FunctionValidator] returns privateFunc [ 'series' ]
+
+stdout | tests/specs/all-validation-tests.spec.ts > UltimateValidator Enhanced Features > Integration Tests > validates complex real-world script
+Complex script errors: [
+  'PSV6-ALERT-CONDITION-TYPE: Unable to determine alert condition type. Expected a series bool expression.',
+  'PSV6-ALERT-CONDITION-TYPE: Unable to determine alert condition type. Expected a series bool expression.'
+]
+
+ ❯ tests/specs/all-validation-tests.spec.ts  (33 tests | 2 failed) 340ms
+   ❯ tests/specs/all-validation-tests.spec.ts > UltimateValidator Enhanced Features > Enhanced Type Safety & Inference > validates function return type consistency
+     → expected [] to include 'PSV6-FUNCTION-RETURN-TYPE'
+   ❯ tests/specs/all-validation-tests.spec.ts > UltimateValidator Enhanced Features > Code Quality & Style Enforcement > warns on overly complex functions
+     → expected [ 'PSV6-QUALITY-COMPLEXITY', …(3) ] to include 'PSV6-STYLE-COMPLEXITY'
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 31 passed (33)
+   Start at  09:54:07
+   Duration  3.09s (transform 1.07s, setup 0ms, collect 2.08s, tests 340ms, environment 0ms, prepare 99ms)
+
+❌ Test command failed
+❌ Full validator spec suite - FAILED
+
+📋 Running: AST module harness
+🧾 Pattern: tests/ast/**/*.test.ts
+--------------------------------------------------
+
+ RUN  v1.6.1 /Users/egr/Desktop/TradeSync/pine-validator
+
+ ✓ tests/ast/fixture-snapshots.test.ts  (4 tests) 36ms
+ ✓ tests/ast/scope-builder.test.ts  (6 tests) 31ms
+ ✓ tests/ast/type-inference.test.ts  (8 tests) 36ms
+ ✓ tests/ast/strategy-order-limits-validator-ast.test.ts  (8 tests) 104ms
+ ✓ tests/ast/chevrotain-parser.test.ts  (35 tests) 551ms
+ ✓ tests/ast/core-validator-ast.test.ts  (40 tests) 383ms
+ ✓ tests/ast/syntax-validator-ast.test.ts  (7 tests) 66ms
+ ✓ tests/ast/ticker-functions-validator-ast.test.ts  (6 tests) 82ms
+ ✓ tests/ast/scope-validator-ast.test.ts  (8 tests) 130ms
+ ✓ tests/ast/v6-features-validator-ast.test.ts  (8 tests) 44ms
+ ✓ tests/ast/semantic-golden.test.ts  (2 tests) 519ms
+ ✓ tests/ast/while-loop-validator-ast.test.ts  (6 tests) 338ms
+ ✓ tests/ast/dynamic-data-validator-ast.test.ts  (7 tests) 267ms
+ ✓ tests/ast/enhanced-performance-validator-ast.test.ts  (8 tests) 154ms
+ ✓ tests/ast/function-validator-ast.test.ts  (8 tests) 246ms
+stdout | tests/ast/function-validator-ast.test.ts > FunctionValidator (AST) > flags calls with too few arguments for user functions
+[FunctionValidator] visit function foo at 1
+[FunctionValidator] track foo line 1
+[FunctionValidator] returns foo [ 'unknown' ]
+
+stdout | tests/ast/function-validator-ast.test.ts > FunctionValidator (AST) > warns when optional parameters are never supplied by callers
+[FunctionValidator] visit function foo at 1
+[FunctionValidator] track foo line 1
+[FunctionValidator] returns foo [ 'unknown' ]
+
+stdout | tests/ast/function-validator-ast.test.ts > FunctionValidator (AST) > warns when function complexity exceeds the threshold using AST traversal
+[FunctionValidator] visit function complex at 1
+[FunctionValidator] track complex line 1
+[FunctionValidator] returns complex [ 'void' ]
+
+ ✓ tests/ast/type-validator-ast.test.ts  (5 tests) 256ms
+ ✓ tests/ast/type-inference-validator-ast.test.ts  (4 tests) 46ms
+ ✓ tests/ast/lazy-evaluation-validator-ast.test.ts  (5 tests) 165ms
+ ✓ tests/ast/switch-validator-ast.test.ts  (6 tests) 175ms
+ ✓ tests/ast/enhanced-strategy-validator-ast.test.ts  (8 tests) 242ms
+ ✓ tests/ast/input-functions-validator-ast.test.ts  (5 tests) 53ms
+ ✓ tests/ast/udt-validator-ast.test.ts  (7 tests) 111ms
+ ✓ tests/ast/matrix-validator-ast.test.ts  (4 tests) 110ms
+ ✓ tests/ast/enum-validator-ast.test.ts  (5 tests) 63ms
+ ✓ tests/ast/time-date-functions-validator-ast.test.ts  (6 tests) 58ms
+ ✓ tests/ast/function-declarations-ast.test.ts  (5 tests) 52ms
+ ✓ tests/ast/enhanced-resource-validator-ast.test.ts  (5 tests) 67ms
+ ✓ tests/ast/linefill-validator-ast.test.ts  (5 tests) 62ms
+ ✓ tests/ast/varip-validator-ast.test.ts  (6 tests) 63ms
+ ✓ tests/ast/math-functions-validator-ast.test.ts  (5 tests) 66ms
+ ✓ tests/ast/enhanced-semantic-validator-ast.test.ts  (5 tests) 36ms
+ ✓ tests/ast/array-validator-ast.test.ts  (4 tests) 54ms
+ ✓ tests/ast/enhanced-boolean-validator-ast.test.ts  (5 tests) 84ms
+ ✓ tests/ast/traversal-schema.test.ts  (7 tests) 47ms
+ ✓ tests/ast/monaco-worker.test.ts  (3 tests) 56ms
+ ✓ tests/ast/drawing-functions-validator-ast.test.ts  (5 tests) 76ms
+ ✓ tests/ast/monaco-worker-harness.test.ts  (3 tests) 42ms
+ ✓ tests/ast/enhanced-library-validator-ast.test.ts  (7 tests) 60ms
+ ✓ tests/ast/style-validator-ast.test.ts  (5 tests) 51ms
+ ✓ tests/ast/polyline-functions-validator-ast.test.ts  (4 tests) 50ms
+ ✓ tests/ast/map-validator-ast.test.ts  (4 tests) 39ms
+ ✓ tests/ast/alert-functions-validator-ast.test.ts  (4 tests) 44ms
+ ✓ tests/ast/monaco-worker-client.test.ts  (4 tests) 23ms
+ ✓ tests/ast/enhanced-migration-validator-ast.test.ts  (4 tests) 48ms
+ ✓ tests/ast/ta-functions-validator-ast.test.ts  (5 tests) 62ms
+ ✓ tests/ast/text-formatting-validator-ast.test.ts  (4 tests) 45ms
+ ✓ tests/ast/enhanced-quality-validator-ast.test.ts  (4 tests) 48ms
+ ✓ tests/ast/performance-validator-ast.test.ts  (4 tests) 50ms
+ ✓ tests/ast/string-functions-validator-ast.test.ts  (4 tests) 55ms
+ ✓ tests/ast/control-flow.test.ts  (4 tests) 36ms
+ ✓ tests/ast/helper.test.ts  (8 tests) 60ms
+ ✓ tests/ast/enhanced-textbox-validator-ast.test.ts  (4 tests) 36ms
+ ✓ tests/ast/strategy-functions-validator-ast.test.ts  (4 tests) 38ms
+ ✓ tests/ast/syminfo-variables-validator-ast.test.ts  (4 tests) 42ms
+ ✓ tests/ast/enhanced-method-validator-ast.test.ts  (2 tests) 23ms
+ ✓ tests/ast/gap.test.ts  (3 tests) 48ms
+ ❯ tests/e2e/monaco-worker.e2e.test.ts  (3 tests | 1 failed) 715ms
+   ❯ tests/e2e/monaco-worker.e2e.test.ts > Monaco worker end-to-end > validates a popular Pine Script without emitting errors
+     → expected [ { …(2) }, { …(2) }, { …(2) }, …(11) ] to deeply equal [ { …(2) }, { …(2) }, { …(2) }, …(9) ]
+stdout | tests/e2e/monaco-worker.e2e.test.ts > Monaco worker end-to-end > validates a popular Pine Script without emitting errors
+[FunctionValidator] visit function basisFrom at 40
+[FunctionValidator] track basisFrom line 40
+[FunctionValidator] visit function volFrom at 44
+[FunctionValidator] track volFrom line 44
+[FunctionValidator] visit function toSize at 114
+[FunctionValidator] track toSize line 114
+[FunctionValidator] returns basisFrom [ 'void', 'series' ]
+[FunctionValidator] returns volFrom [ 'void', 'series' ]
+[FunctionValidator] returns toSize [ 'unknown' ]
+
+ ✓ tests/ast/function-types-validator-ast.test.ts  (4 tests) 51ms
+ ✓ tests/ast/builtin-variables-validator.test.ts  (2 tests) 27ms
+ ✓ tests/ast/pipeline.test.ts  (3 tests) 37ms
+ ✓ tests/ast/final-constants-validator-ast.test.ts  (2 tests) 43ms
+ ✓ tests/ast/dynamic-loop-validator.test.ts  (3 tests) 54ms
+ ✓ tests/ast/history-referencing-validator.test.ts  (2 tests) 16ms
+ ✓ tests/ast/visitor.test.ts  (2 tests) 18ms
+ ✓ tests/ast/node.test.ts  (5 tests) 68ms
+ ✓ tests/ast/error.test.ts  (3 tests) 20ms
+ ✓ tests/ast/lexer.test.ts  (3 tests) 25ms
+ ✓ tests/ast/diagnostic-helpers.test.ts  (3 tests) 17ms
+ ✓ tests/ast/collector.test.ts  (2 tests) 28ms
+
+ Test Files  1 failed | 68 passed (69)
+      Tests  1 failed | 392 passed (393)
+   Start at  09:54:12
+   Duration  15.36s (transform 4.88s, setup 2ms, collect 52.77s, tests 6.95s, environment 13ms, prepare 16.17s)
+
+❌ Test command failed
+❌ AST module harness - FAILED
+
+============================================================
+📊 Test Summary:
+✅ Passed: 0
+❌ Failed: 2
+📈 Total: 2
+
+⚠️  Some test suites failed. Please check the output above.

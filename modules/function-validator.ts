@@ -21,6 +21,10 @@ import {
   type TypeReferenceNode,
   type UnaryExpressionNode,
   type VariableDeclarationNode,
+  type NumberLiteralNode,
+  type StatementNode,
+  type BlockStatementNode,
+  type IfStatementNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 import { BUILTIN_FUNCTIONS_V6_RULES, KEYWORDS, NAMESPACES, NS_MEMBERS } from '../core/constants';
@@ -1864,10 +1868,55 @@ export class FunctionValidator implements ValidationModule {
     });
 
     if (!sawReturn) {
+      this.collectImplicitReturnTypesFromStatement(fn.body, types);
+    }
+
+    if (types.size === 0) {
       types.add('void');
     }
 
     return types;
+  }
+
+  private collectImplicitReturnTypesFromStatement(statement: StatementNode | null, types: Set<string>): void {
+    if (!statement) {
+      types.add('void');
+      return;
+    }
+
+    switch (statement.kind) {
+      case 'BlockStatement': {
+        const block = statement as BlockStatementNode;
+        for (const stmt of block.body) {
+          this.collectImplicitReturnTypesFromStatement(stmt, types);
+        }
+        break;
+      }
+      case 'ExpressionStatement': {
+        const kind = this.getNodeTypeKind(statement.expression);
+        types.add(kind ?? 'unknown');
+        break;
+      }
+      case 'IfStatement': {
+        const ifStmt = statement as IfStatementNode;
+        this.collectImplicitReturnTypesFromStatement(ifStmt.consequent, types);
+        if (ifStmt.alternate) {
+          this.collectImplicitReturnTypesFromStatement(ifStmt.alternate, types);
+        } else {
+          types.add('void');
+        }
+        break;
+      }
+      case 'ReturnStatement': {
+        const kind = this.getNodeTypeKind(statement.argument);
+        types.add(kind ?? 'unknown');
+        break;
+      }
+      default: {
+        types.add('void');
+        break;
+      }
+    }
   }
 
   private getNodeTypeKind(node: ExpressionNode | null | undefined): string | null {
@@ -1876,6 +1925,18 @@ export class FunctionValidator implements ValidationModule {
     }
     const metadata = this.astContext?.typeEnvironment.nodeTypes.get(node) ?? null;
     if (!metadata) {
+      switch (node.kind) {
+        case 'StringLiteral':
+          return 'string';
+        case 'NumberLiteral':
+          return Number.isInteger((node as NumberLiteralNode).value) ? 'int' : 'float';
+        case 'BooleanLiteral':
+          return 'bool';
+        case 'NullLiteral':
+          return 'void';
+        default:
+          return 'unknown';
+      }
       return 'unknown';
     }
     return metadata.kind;

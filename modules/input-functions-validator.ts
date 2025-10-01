@@ -207,11 +207,57 @@ export class InputFunctionsValidator implements ValidationModule {
       assignedName: this.getAssignedIdentifier(path),
     };
 
+    const hasRequiredParameters = this.ensureRequiredParameters(functionName, args, parameters, callInfo.line, callInfo.column);
+
     this.recordInputFunctionCall(callInfo);
-    this.validateInputFunction(functionName, args, parameters, callInfo.line, callInfo.column);
+    this.validateInputFunction(functionName, args, parameters, callInfo.line, callInfo.column, hasRequiredParameters);
   }
 
-  private validateInputFunction(functionName: string, args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
+  private ensureRequiredParameters(
+    functionName: string,
+    args: string[],
+    parameters: Map<string, string>,
+    lineNum: number,
+    column: number,
+  ): boolean {
+    let isValid = true;
+
+    const hasNamedDefval = parameters.has('defval');
+    const hasPositionalDefval = args.length > 0;
+    if (!hasNamedDefval && !hasPositionalDefval) {
+      this.addError(
+        lineNum,
+        column,
+        `input.${functionName}() requires a default value (defval)`,
+        'PSV6-FUNCTION-PARAM-COUNT',
+      );
+      isValid = false;
+    }
+
+    const positionalIndexForTitle = hasNamedDefval ? 0 : 1;
+    const hasNamedTitle = parameters.has('title');
+    const hasPositionalTitle = args.length > positionalIndexForTitle;
+    if (!hasNamedTitle && !hasPositionalTitle) {
+      this.addError(
+        lineNum,
+        column,
+        `input.${functionName}() requires a title parameter`,
+        'PSV6-FUNCTION-PARAM-COUNT',
+      );
+      isValid = false;
+    }
+
+    return isValid;
+  }
+
+  private validateInputFunction(
+    functionName: string,
+    args: string[],
+    parameters: Map<string, string>,
+    lineNum: number,
+    column: number,
+    hasRequiredParameters: boolean,
+  ): void {
     switch (functionName) {
       case 'int':
         this.validateInputInt(args, parameters, lineNum, column);
@@ -254,6 +300,11 @@ export class InputFunctionsValidator implements ValidationModule {
         break;
       default:
         this.addError(lineNum, column, `Unknown input function: input.${functionName}`, 'PSV6-INPUT-UNKNOWN-FUNCTION');
+    }
+
+    if (!hasRequiredParameters) {
+      // Skip best-practice suggestions that rely on the missing parameters
+      return;
     }
   }
 
@@ -301,12 +352,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputInt(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    // input.int() requires at least 1 parameter (default value) or named defval
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.int() requires at least 1 parameter (default value)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Validate default value
     const hasNamedDef = parameters.has('defval');
     const defArgInt = parameters.get('defval') ?? args[0];
@@ -326,12 +371,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputFloat(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    // input.float() requires at least 1 parameter (default value)
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.float() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Validate default value
     const hasNamedDefF = parameters.has('defval');
     const defArgFloat = parameters.get('defval') ?? args[0];
@@ -349,11 +388,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputBool(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.bool() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Validate default value
     const hasNamedDefB = parameters.has('defval');
     const defArgBool = (parameters.get('defval') ?? args[0] ?? '').trim().toLowerCase();
@@ -371,11 +405,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputString(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.string() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Validate default value (should be string literal or constant)
     const hasNamedDefS = parameters.has('defval');
     const defArgStr = parameters.get('defval') ?? args[0];
@@ -391,11 +420,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputColor(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.color() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Validate default value (should be color expression)
     const hasNamedDefC = parameters.has('defval');
     const defArgColor = (parameters.get('defval') ?? args[0] ?? '').trim();
@@ -408,11 +432,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputSource(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.source() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Validate default value (should be series)
     const hasNamedDefSrc = parameters.has('defval');
     const defArgSource = (parameters.get('defval') ?? args[0] ?? '').trim();
@@ -425,11 +444,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputTimeframe(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.timeframe() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Validate default value (should be timeframe string)
     const defaultValue = args[0];
     if (this.isStringLiteral(defaultValue) && !this.isValidTimeframe(defaultValue)) {
@@ -441,11 +455,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputSession(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.session() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Validate default value (should be session string)
     const defaultValue = args[0];
     if (this.isStringLiteral(defaultValue) && !this.isValidSession(defaultValue)) {
@@ -457,11 +466,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputSymbol(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.symbol() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Validate default value (should be string literal)
     if (!this.isStringLiteral(args[0])) {
       this.addWarning(lineNum, column, 'Default value should be a string literal', 'PSV6-INPUT-DEFAULT-TYPE');
@@ -472,11 +476,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputResolution(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.resolution() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Validate default value (should be string literal)
     if (!this.isStringLiteral(args[0])) {
       this.addWarning(lineNum, column, 'Default value should be a string literal', 'PSV6-INPUT-DEFAULT-TYPE');
@@ -487,11 +486,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputTime(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.time() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Default value should be an int (timestamp) or timestamp() call
     const defaultValue = parameters.get('defval') ?? args[0];
     if (defaultValue && !this.isNumericOrTimestamp(defaultValue)) {
@@ -503,11 +497,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputTextArea(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.text_area() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Validate default value (should be string literal)
     const defaultValue = parameters.get('defval') ?? args[0];
     if (defaultValue && !this.isStringLiteral(defaultValue)) {
@@ -519,11 +508,6 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private validateInputPrice(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
-    if (args.length < 1 && !parameters.has('defval')) {
-      this.addError(lineNum, column, 'input.price() requires at least 1 parameter (defval)', 'PSV6-FUNCTION-PARAM-COUNT');
-      return;
-    }
-
     // Validate default value (should be numeric)
     const defaultValue = parameters.get('defval') ?? args[0];
     if (defaultValue && !this.isNumericLike(defaultValue)) {

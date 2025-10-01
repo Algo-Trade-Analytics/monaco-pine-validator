@@ -197,4 +197,27 @@ describe('FunctionValidator (AST)', () => {
     const result = harness.validate(source);
     expect(result.warnings.map((warning) => warning.code)).toContain('PSV6-FUNCTION-STYLE-COMPLEXITY');
   });
+
+  it('detects inconsistent return types with implicit arrow returns', () => {
+    const funcIdentifier = createIdentifier('myFunc', 0, 1);
+    const condition = createIdentifier('cond', 11, 1);
+    const bullishLiteral = createStringLiteral('bullish', '"bullish"', 17, 2);
+    const bullishStatement = createExpressionStatement(bullishLiteral, 17, 26, 2);
+    const numberLiteral = createNumberLiteral(123, '123', 33, 4);
+    const numberStatement = createExpressionStatement(numberLiteral, 33, 36, 4);
+    const ifStatement = createIfStatement(condition, bullishStatement, numberStatement, 11, 36, 1);
+    const body = createBlock([ifStatement], 0, 36, 1, 4);
+    const fn = createFunctionDeclaration(funcIdentifier, [], body, 0, 36, 1, 4);
+    const program = createProgram([fn], 0, 36, 1, 4);
+    const source = 'myFunc() =>\n    if cond\n        "bullish"\n    else\n        123';
+
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new FunctionValidatorHarness(service);
+
+    const result = harness.validate(source);
+    const errorCodes = result.errors.map((error) => error.code);
+
+    expect(errorCodes).toContain('PSV6-FUNCTION-RETURN-TYPE');
+  });
+
 });
