@@ -508,19 +508,47 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   
   // Time functions
   'timestamp': {
-    parameters: [
-      // Overload 1: timestamp(dateString) - single string parameter
-      { name: 'dateString', type: 'string', qualifier: 'simple', required: false },
-      // Overload 2: timestamp(year, month, day, hour, minute, second, [timezone])
-      { name: 'year', type: 'int', qualifier: 'simple', required: false, min: 1970, max: 2100 },
-      { name: 'month', type: 'int', qualifier: 'simple', required: false, min: 1, max: 12 },
-      { name: 'day', type: 'int', qualifier: 'simple', required: false, min: 1, max: 31 },
-      { name: 'hour', type: 'int', qualifier: 'simple', required: false, min: 0, max: 23 },
-      { name: 'minute', type: 'int', qualifier: 'simple', required: false, min: 0, max: 59 },
-      { name: 'second', type: 'int', qualifier: 'simple', required: false, min: 0, max: 59 },
-      { name: 'timezone', type: 'string', qualifier: 'simple', required: false }
+    overloads: [
+      // Overload 1: timestamp(dateString)
+      {
+        parameters: [
+          { name: 'dateString', type: 'string', qualifier: 'simple', required: true }
+        ]
+      },
+      // Overload 2: timestamp(year, month, day, hour, minute)
+      {
+        parameters: [
+          { name: 'year', type: 'int', qualifier: 'simple', required: true, min: 1970, max: 2100 },
+          { name: 'month', type: 'int', qualifier: 'simple', required: true, min: 1, max: 12 },
+          { name: 'day', type: 'int', qualifier: 'simple', required: true, min: 1, max: 31 },
+          { name: 'hour', type: 'int', qualifier: 'simple', required: true, min: 0, max: 23 },
+          { name: 'minute', type: 'int', qualifier: 'simple', required: true, min: 0, max: 59 }
+        ]
+      },
+      // Overload 3: timestamp(year, month, day, hour, minute, second)
+      {
+        parameters: [
+          { name: 'year', type: 'int', qualifier: 'simple', required: true, min: 1970, max: 2100 },
+          { name: 'month', type: 'int', qualifier: 'simple', required: true, min: 1, max: 12 },
+          { name: 'day', type: 'int', qualifier: 'simple', required: true, min: 1, max: 31 },
+          { name: 'hour', type: 'int', qualifier: 'simple', required: true, min: 0, max: 23 },
+          { name: 'minute', type: 'int', qualifier: 'simple', required: true, min: 0, max: 59 },
+          { name: 'second', type: 'int', qualifier: 'simple', required: true, min: 0, max: 59 }
+        ]
+      },
+      // Overload 4: timestamp(year, month, day, hour, minute, second, timezone)
+      {
+        parameters: [
+          { name: 'year', type: 'int', qualifier: 'simple', required: true, min: 1970, max: 2100 },
+          { name: 'month', type: 'int', qualifier: 'simple', required: true, min: 1, max: 12 },
+          { name: 'day', type: 'int', qualifier: 'simple', required: true, min: 1, max: 31 },
+          { name: 'hour', type: 'int', qualifier: 'simple', required: true, min: 0, max: 23 },
+          { name: 'minute', type: 'int', qualifier: 'simple', required: true, min: 0, max: 59 },
+          { name: 'second', type: 'int', qualifier: 'simple', required: true, min: 0, max: 59 },
+          { name: 'timezone', type: 'string', qualifier: 'simple', required: true }
+        ]
+      }
     ],
-    parameterCounts: [1, 6, 7], // Accept 1 string OR 6-7 numeric parameters
     returnType: 'int',
     v6Changes: 'Adds timezone support plus stricter bounds for date components.'
   },
@@ -2362,35 +2390,28 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   // Drawing functions - Chart point helpers
   'chart.point.new': {
     parameters: [
-      { name: 'point_id', type: 'chart.point', qualifier: 'simple', required: false },
-      { name: 'x', type: 'any', qualifier: 'series', required: true },
-      { name: 'y', type: 'any', qualifier: 'series', required: true },
-      { name: 'xloc', type: 'string', qualifier: 'simple', required: false },
-      { name: 'yloc', type: 'string', qualifier: 'simple', required: false }
+      { name: 'time', type: 'series', qualifier: 'series', required: true },
+      { name: 'price', type: 'series', qualifier: 'series', required: true }
     ],
     returnType: 'chart.point'
   },
   'chart.point.from_time': {
     parameters: [
-      { name: 'point_id', type: 'chart.point', qualifier: 'simple', required: false },
-      { name: 'time', type: 'any', qualifier: 'series', required: true },
-      { name: 'price', type: 'any', qualifier: 'series', required: true },
-      { name: 'xloc', type: 'string', qualifier: 'simple', required: false },
-      { name: 'yloc', type: 'string', qualifier: 'simple', required: false }
+      { name: 'time', type: 'series', qualifier: 'series', required: true },
+      { name: 'price', type: 'series', qualifier: 'series', required: true }
     ],
     returnType: 'chart.point'
   },
   'chart.point.from_index': {
     parameters: [
-      { name: 'point_id', type: 'chart.point', qualifier: 'simple', required: false },
-      { name: 'index', type: 'int', qualifier: 'series', required: true },
-      { name: 'price', type: 'float', qualifier: 'series', required: true }
+      { name: 'bar_index', type: 'series', qualifier: 'series', required: true },
+      { name: 'price', type: 'series', qualifier: 'series', required: true }
     ],
     returnType: 'chart.point'
   },
   'chart.point.now': {
     parameters: [
-      { name: 'price', type: 'float', qualifier: 'series', required: true }
+      { name: 'price', type: 'series', qualifier: 'series', required: true }
     ],
     returnType: 'chart.point'
   },

@@ -233,20 +233,27 @@ export class ArrayValidator implements ValidationModule {
   }
 
   private registerArrayTypeAnnotation(declaration: VariableDeclarationNode): void {
-    const typeAnnotation = declaration.typeAnnotation;
-    if (!typeAnnotation) {
-      return;
-    }
-
-    const elementType = this.extractArrayAnnotationElement(typeAnnotation);
-    if (!elementType) {
-      return;
-    }
-
     const identifier = declaration.identifier;
     const name = identifier.name;
     const line = identifier.loc.start.line;
     const column = identifier.loc.start.column;
+
+    // First, check for explicit type annotation
+    const typeAnnotation = declaration.typeAnnotation;
+    let elementType: string | undefined;
+    
+    if (typeAnnotation) {
+      elementType = this.extractArrayAnnotationElement(typeAnnotation);
+    }
+
+    // If no type annotation, check if initializer is a built-in .all constant
+    if (!elementType && declaration.initializer) {
+      elementType = this.detectBuiltinArrayConstant(declaration.initializer);
+    }
+
+    if (!elementType) {
+      return;
+    }
 
     const existing = this.arrayDeclarations.get(name);
     const size = existing?.size ?? 0;
@@ -266,6 +273,37 @@ export class ArrayValidator implements ValidationModule {
       usages: [],
       elementType,
     });
+  }
+
+  private detectBuiltinArrayConstant(expression: ExpressionNode): string | undefined {
+    // Check if expression is a MemberExpression like box.all, line.all, etc.
+    if (expression.kind !== 'MemberExpression') {
+      return undefined;
+    }
+
+    const memberExpr = expression as MemberExpressionNode;
+    if (memberExpr.computed) {
+      return undefined;
+    }
+
+    // Check if it's <namespace>.all
+    if (memberExpr.object.kind !== 'Identifier' || memberExpr.property.name !== 'all') {
+      return undefined;
+    }
+
+    const namespace = (memberExpr.object as IdentifierNode).name;
+    
+    // Map namespace to element type
+    const builtinArrayConstants: Record<string, string> = {
+      'box': 'box',
+      'line': 'line',
+      'label': 'label',
+      'table': 'table',
+      'linefill': 'linefill',
+      'polyline': 'polyline',
+    };
+
+    return builtinArrayConstants[namespace];
   }
 
   private handleArrayCreationAst(

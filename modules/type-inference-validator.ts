@@ -175,7 +175,9 @@ export class TypeInferenceValidator implements ValidationModule {
       );
     }
 
-    if (initializerType === 'void' && this.isNaExpression(initializer)) {
+    // Only convert na to float when there's no type annotation
+    // If there's a type annotation, keep it as void so it can be compatible with any type
+    if (initializerType === 'void' && this.isNaExpression(initializer) && (!declaredType || declaredType === 'unknown')) {
       initializerType = 'float';
     }
 
@@ -835,6 +837,11 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     if (expected === actual) {
+      return true;
+    }
+
+    // na is compatible with any type annotation
+    if (actual === 'void' || actual === 'unknown') {
       return true;
     }
 

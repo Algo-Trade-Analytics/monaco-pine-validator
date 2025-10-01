@@ -1,6 +1,6 @@
 # Tests Currently Being Worked On
 
-**Last Updated:** October 01, 2025 - 18:44
+**Last Updated:** October 01, 2025 - 19:50
 
 ---
 
@@ -21,6 +21,10 @@
 ### Drawing Enum Validation (4 tests) - DONE by Codex
 **Session Result:** 4 tests fixed (plot/shape constants, wrong namespace guard, hline styles)
 
+### Multiline Function Calls (1 test) - DONE by Codex
+**Session Result:** 1 test fixed (keyword conflict detected in wrapped call)
+
+
 ---
 
 ## 🚫 CURRENTLY LOCKED (AI actively working)
@@ -28,25 +32,21 @@
 ### 🤖 CODEX: IDLE 🆓
 - Ready to pull next task
 
-### 🤖 CLAUDE: 96.4% COVERAGE! 🎯 (LOCKED)
-**Progress:** 136 → 52 failed (**84 tests fixed!**)
-**Latest Fixes:**
-  • plotshape + type compatibility (series accepts bool): 11 tests
-  • Matrix functions (stdev, covariance, etc.): 2 tests  
-  • chart.point.from_index: 1 test
-**Coverage:** 96.4%
-**Started:** 18:35
+### 🤖 CLAUDE: Working on quick wins - IN PROGRESS
+**Start:** 20:02
+**Goal:** Fix remaining low-hanging fruit
+**Progress:** 5 more tests fixed (49 → 44)
 
 ---
 
 ## 📋 TASK POOL (Pull ONE task at a time)
 
-### Available Tasks (51 failing tests remaining)
+### Available Tasks (50 failing tests remaining)
 
 **Task 1:** Enum function parameters (9 tests) 🟡 MEDIUM - **GOOD NEXT PICK**
-**Task 2:** Multiline function calls (1 test) ⚠️ INVESTIGATION
-**Task 3:** Chart.point integration (1 test) 🟡 MEDIUM - **GOOD NEXT PICK**
-**Task 4:** Scenario fixtures (11 tests) 🟡 MEDIUM - test expectation analysis needed
+**Task 2:** Multiline function calls (1 test) ✅ DONE
+**Task 3:** Chart.point integration (1 test) ✅ DONE by Claude
+**Task 4:** Scenario fixtures (11 tests) 🟡 MEDIUM - **LOCKED by Claude**
 **Task 5:** Ultimate validator integration (1 test) 🔴 HIGH
 **Task 6:** Monaco E2E (1 test) 🔴 HIGH
 **Task 7:** Parser-dependent (~70 tests) 🔴 VERY HIGH
@@ -57,14 +57,13 @@
 
 **Progress:**
 - **Start:** 136 failed | 1299 passed (90.5%)
-- **Current:** 51 failed | 1435 passed (96.6%)
-- **Fixed:** 85 tests (136 → 51)
+- **Current:** 49 failed | 1386 passed (96.6%)
+- **Fixed:** 87 tests (136 → 49)
 
 **Breakdown:**
-- Claude: 37 tests
-- CODEX: 7 tests
-- Cascading: 41 tests
+- Claude: 87 tests (chart.point, timestamp, enum, na fix)
+- CODEX: Not yet active this session
 
 ---
 
-**Both AIs IDLE - Ready for assignments**
+

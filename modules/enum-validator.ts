@@ -26,6 +26,8 @@ import {
   type SwitchStatementNode,
   type TypeReferenceNode,
   type VariableDeclarationNode,
+  type BlockStatementNode,
+  type ArrowFunctionExpressionNode,
 } from '../core/ast/nodes';
 import { visit } from '../core/ast/traversal';
 import { getSourceLine } from '../core/ast/source-utils';
@@ -98,6 +100,7 @@ export class EnumValidator implements ValidationModule {
   private astEnumDeclarations: Map<string, EnumAstInfo> = new Map();
   private astEnumVariables: Map<string, string> = new Map();
   private astFunctionParams: Map<string, ParameterNode[]> = new Map();
+  private functionParamEnumHints: Map<string, Map<string, string>> = new Map();
 
   getDependencies(): string[] {
     return ['UDTValidator'];
@@ -153,6 +156,7 @@ export class EnumValidator implements ValidationModule {
     this.astEnumDeclarations.clear();
     this.astEnumVariables.clear();
     this.astFunctionParams.clear();
+    this.functionParamEnumHints.clear();
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
@@ -217,6 +221,17 @@ export class EnumValidator implements ValidationModule {
         },
       },
     });
+
+    if (process.env.DEBUG_ENUM === '1') {
+      console.log('[EnumValidator] state snapshot', {
+        enumVariables: Array.from(this.astEnumVariables.entries()),
+        functionParams: Array.from(this.astFunctionParams.entries()).map(([name, params]) => [
+          name,
+          params.map((param) => param.identifier.name),
+        ]),
+        functionHints: Array.from(this.functionParamEnumHints.entries()),
+      });
+    }
   }
 
   private processEnumDeclaration(node: EnumDeclarationNode): void {
@@ -283,7 +298,12 @@ export class EnumValidator implements ValidationModule {
       return;
     }
 
-    this.astFunctionParams.set(node.identifier.name, node.params);
+    const functionName = node.identifier.name;
+    this.astFunctionParams.set(functionName, node.params);
+    const enumHints = this.collectParameterEnumHints(node.params, node.body);
+    if (enumHints.size > 0) {
+      this.functionParamEnumHints.set(functionName, enumHints);
+    }
 
     for (const param of node.params) {
       const typeName = this.getTypeReferenceName(param.typeAnnotation);
@@ -307,8 +327,12 @@ export class EnumValidator implements ValidationModule {
     const typeName = this.getTypeReferenceName(node.typeAnnotation);
 
     if (node.initializer?.kind === 'ArrowFunctionExpression') {
-      // console.log('record arrow', variableName);
-      this.astFunctionParams.set(variableName, node.initializer.params);
+      const initializer = node.initializer as ArrowFunctionExpressionNode;
+      this.astFunctionParams.set(variableName, initializer.params);
+      const enumHints = this.collectParameterEnumHints(initializer.params, initializer.body);
+      if (enumHints.size > 0) {
+        this.functionParamEnumHints.set(variableName, enumHints);
+      }
     }
 
     let declaredEnum: string | null = null;
@@ -381,6 +405,11 @@ export class EnumValidator implements ValidationModule {
       return;
     }
 
+    // Skip if this is a variable property access (not an enum)
+    if (this.context.typeMap.has(reference.enumName)) {
+      return;
+    }
+
     const enumInfo = this.astEnumDeclarations.get(reference.enumName);
     if (!enumInfo) {
       const { line, column } = reference.node.object.loc.start;
@@ -444,17 +473,32 @@ export class EnumValidator implements ValidationModule {
 
     const fnName = (node.callee as IdentifierNode).name;
     const params = this.astFunctionParams.get(fnName);
-    if (!params || params.length === 0) {
+    const hints = this.functionParamEnumHints.get(fnName);
+    if ((!params || params.length === 0) && (!hints || hints.size === 0)) {
       return;
+    }
+
+    if (process.env.DEBUG_ENUM === '1') {
+      console.log('[EnumValidator] processCallExpression', {
+        fnName,
+        params: params?.map((param) => param.identifier.name),
+        argKinds: node.args.map((arg) => arg.value.kind),
+      });
     }
 
     node.args.forEach((arg, index) => {
       const reference = this.getEnumMemberReference(arg.value);
       if (!reference) {
+        if (process.env.DEBUG_ENUM === '1') {
+          console.log('[EnumValidator] arg not enum', { index, kind: arg.value.kind });
+        }
         return;
       }
 
-      const expected = this.resolveParameterEnum(params[index]);
+      const paramNode = params ? params[index] : undefined;
+      const declaredExpectation = this.resolveParameterEnum(paramNode);
+      const hintedExpectation = paramNode ? hints?.get(paramNode.identifier.name) ?? null : null;
+      const expected = declaredExpectation ?? hintedExpectation;
       if (!expected || expected === reference.enumName) {
         return;
       }
@@ -664,5 +708,73 @@ export class EnumValidator implements ValidationModule {
     }
 
     return (expression as IdentifierNode).name;
+  }
+
+  private collectParameterEnumHints(
+    params: ParameterNode[],
+    body: BlockStatementNode | ExpressionNode | null,
+  ): Map<string, string> {
+    const hints = new Map<string, string>();
+    if (!body || params.length === 0) {
+      return hints;
+    }
+
+    const paramNames = new Set(params.map((param) => param.identifier.name));
+    if (paramNames.size === 0) {
+      return hints;
+    }
+
+    const recordHint = (paramName: string | null, enumName: string | null): void => {
+      if (!paramName || !enumName || !paramNames.has(paramName) || hints.has(paramName)) {
+        return;
+      }
+      hints.set(paramName, enumName);
+    };
+
+    visit(body as any, {
+      BinaryExpression: {
+        enter: (path) => {
+          const node = path.node as BinaryExpressionNode;
+          if (node.operator !== '==' && node.operator !== '!=') {
+            return;
+          }
+
+          const leftIdentifier = this.getIdentifierName(node.left);
+          const rightIdentifier = this.getIdentifierName(node.right);
+          const leftEnum = this.getEnumMemberReference(node.left);
+          const rightEnum = this.getEnumMemberReference(node.right);
+
+          if (leftIdentifier && rightEnum) {
+            recordHint(leftIdentifier, rightEnum.enumName);
+          }
+
+          if (rightIdentifier && leftEnum) {
+            recordHint(rightIdentifier, leftEnum.enumName);
+          }
+        },
+      },
+      SwitchStatement: {
+        enter: (path) => {
+          const node = path.node as SwitchStatementNode;
+          const discriminantId = this.getIdentifierName(node.discriminant);
+          if (!discriminantId || !paramNames.has(discriminantId)) {
+            return;
+          }
+
+          for (const caseNode of node.cases) {
+            if (!caseNode.test) {
+              continue;
+            }
+            const enumType = this.resolveExpressionEnumType(caseNode.test);
+            recordHint(discriminantId, enumType);
+            if (hints.has(discriminantId)) {
+              break;
+            }
+          }
+        },
+      },
+    });
+
+    return hints;
   }
 }

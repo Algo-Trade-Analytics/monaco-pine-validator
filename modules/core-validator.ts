@@ -685,6 +685,23 @@ export class CoreValidator implements ValidationModule {
       return;
     }
 
+    for (const argument of call.args) {
+      if (!argument.name) {
+        continue;
+      }
+
+      const name = argument.name.name;
+      if (isReservedIdentifier(name)) {
+        const { line, column } = argument.name.loc.start;
+        this.addError(
+          line,
+          column,
+          `Identifier '${name}' conflicts with a Pine keyword/builtin.`,
+          'PS007',
+        );
+      }
+    }
+
     const root = calleePath[0];
     const fullName = calleePath.join('.');
 

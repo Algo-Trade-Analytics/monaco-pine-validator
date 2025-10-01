@@ -172,6 +172,17 @@ export class WhileLoopValidator implements ValidationModule {
       return;
     }
 
+    // Check for invalid/empty condition (parser error recovery artifacts)
+    if (test.kind === 'Identifier' && (test as IdentifierNode).name === '') {
+      this.addError(
+        line,
+        column,
+        'While loop requires a condition expression',
+        'PSV6-WHILE-EMPTY-CONDITION',
+      );
+      return;
+    }
+
     switch (test.kind) {
       case 'BooleanLiteral':
         if (test.value) {

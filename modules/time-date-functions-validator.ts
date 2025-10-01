@@ -387,8 +387,8 @@ export class TimeDateFunctionsValidator implements ValidationModule {
       return;
     }
 
-    if (args.length < 6) {
-      this.addError(lineNum, column, 'timestamp() requires either 1 date string or 6+ parameters (year, month, day, hour, minute, second, [timezone])', 'PSV6-TIMESTAMP-PARAMS');
+    if (args.length < 5) {
+      this.addError(lineNum, column, 'timestamp() requires either 1 date string or 5+ parameters (year, month, day, hour, minute, [second], [timezone])', 'PSV6-TIMESTAMP-PARAMS');
       return;
     }
 
@@ -437,17 +437,19 @@ export class TimeDateFunctionsValidator implements ValidationModule {
         'PSV6-TIMESTAMP-MINUTE-RANGE');
     }
 
-    // Validate second parameter
-    const secondParam = args[5].trim();
-    const secondValue = parseInt(secondParam);
-    if (!isNaN(secondValue) && (secondValue < 0 || secondValue > 59)) {
-      this.addError(lineNum, column, 
-        `Second value must be between 0 and 59, got ${secondValue}`, 
-        'PSV6-TIMESTAMP-SECOND-RANGE');
+    // Validate second parameter (optional)
+    if (args.length >= 6 && args[5]) {
+      const secondParam = args[5].trim();
+      const secondValue = parseInt(secondParam);
+      if (!isNaN(secondValue) && (secondValue < 0 || secondValue > 59)) {
+        this.addError(lineNum, column, 
+          `Second value must be between 0 and 59, got ${secondValue}`, 
+          'PSV6-TIMESTAMP-SECOND-RANGE');
+      }
     }
 
     // Validate optional timezone parameter
-    if (args.length >= 7) {
+    if (args.length >= 7 && args[6]) {
       this.validateTimezoneParameter(args[6], lineNum, column);
     }
 
