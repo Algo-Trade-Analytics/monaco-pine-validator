@@ -10,13 +10,17 @@
 
 import { describe, it, expect } from 'vitest';
 import { EnhancedModularValidator } from '../..';
+import { ChevrotainAstService } from '../../core/ast/service';
 
 describe('Strategy Properties Validation (TDD)', () => {
   const createValidator = () => new EnhancedModularValidator({
-    version: '6',
-    scriptType: 'strategy',
+    targetVersion: 6,
     strictMode: true,
-    enableWarnings: true
+    enablePerformanceAnalysis: true,
+    ast: {
+      mode: 'primary',
+      service: new ChevrotainAstService(),
+    },
   });
 
   // ============================================================================

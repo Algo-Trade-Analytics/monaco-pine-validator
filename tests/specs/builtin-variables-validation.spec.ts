@@ -1,16 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { EnhancedModularValidator } from '../../EnhancedModularValidator';
 import { expectHas, expectLacks, expectValid } from './test-utils';
-import { createConstantAstService } from './ast-helpers';
+import { ChevrotainAstService } from '../../core/ast/service';
 
 const createValidator = () => {
-  const service = createConstantAstService();
-
   return new EnhancedModularValidator({
     targetVersion: 6,
     strictMode: true,
     enablePerformanceAnalysis: true,
-    ast: { mode: 'primary', service },
+    ast: {
+      mode: 'primary',
+      service: new ChevrotainAstService(),
+    },
   });
 };
 
