@@ -804,6 +804,12 @@ export class TypeInferenceValidator implements ValidationModule {
       return this.isSeriesExpression(binary.left) || this.isSeriesExpression(binary.right);
     }
 
+    // Conditional expressions (ternary) with series condition are series
+    if (expression.kind === 'ConditionalExpression') {
+      const conditional = expression as ConditionalExpressionNode;
+      return this.isSeriesExpression(conditional.test);
+    }
+
     return false;
   }
 
