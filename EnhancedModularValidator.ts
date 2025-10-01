@@ -74,8 +74,8 @@ export class EnhancedModularValidator extends BaseValidator {
     // Register all validation modules in priority order
     // Core validation is handled by CoreValidator module (priority 100)
     this.registerModule(new CoreValidator());           // Core validation (priority 100) - runs first
-    this.registerModule(new ArrayValidator());          // Array validation (priority 90) - must run before FunctionValidator
     this.registerModule(new MatrixValidator());         // Matrix validation (priority 90) - must run before FunctionValidator
+    this.registerModule(new ArrayValidator());          // Array validation (priority 90) - must run after matrix typing updates and before FunctionValidator
             this.registerModule(new MapValidator());            // Map validation (priority 88) - must run before FunctionValidator
             this.registerModule(new ChartValidator());          // Chart validation (priority 70) - handles chart.point.* functions
             this.registerModule(new StringFunctionsValidator()); // String functions validation (priority 85) - essential for Pine Script
