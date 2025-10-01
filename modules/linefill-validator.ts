@@ -90,11 +90,15 @@ export class LinefillValidator implements ValidationModule {
 
     const ast = this.astContext?.ast;
     if (!ast) {
+      // Fallback: Check for malformed syntax in cleanLines
+      // This handles edge cases where AST parsing fails
+      this.detectMalformedSyntax();
+      
       return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
+        isValid: this.errors.length === 0,
+        errors: this.errors,
+        warnings: this.warnings,
+        info: this.info,
         typeMap: new Map(),
         scriptType: context.scriptType,
       };
@@ -127,6 +131,62 @@ export class LinefillValidator implements ValidationModule {
       typeMap,
       scriptType: null
     };
+  }
+
+  /**
+   * Detects common malformed syntax patterns in cleanLines.
+   * This is a fallback for when AST parsing fails or is unavailable.
+   */
+  private detectMalformedSyntax(): void {
+    const lines = this.context.cleanLines || this.context.lines;
+    
+    lines.forEach((line, index) => {
+      const lineNum = index + 1;
+      const trimmed = line.trim();
+      
+      // Skip empty lines and comments
+      if (!trimmed || trimmed.startsWith('//')) {
+        return;
+      }
+      
+      // Check for linefill-related lines
+      if (!trimmed.includes('linefill.')) {
+        return;
+      }
+      
+      // Pattern 1: Trailing comma before closing parenthesis
+      // Example: linefill.new(line1, line2,)
+      if (/linefill\.\w+\([^)]*,\s*\)/.test(trimmed)) {
+        this.addError(
+          lineNum,
+          1,
+          'Malformed syntax: trailing comma before closing parenthesis',
+          'PSV6-SYNTAX-ERROR',
+        );
+      }
+      
+      // Pattern 2: Named parameter with missing value
+      // Example: linefill.set_color(fill, color=)
+      if (/\w+\s*=\s*[,)]/.test(trimmed)) {
+        this.addError(
+          lineNum,
+          1,
+          'Malformed syntax: named parameter missing value',
+          'PSV6-SYNTAX-ERROR',
+        );
+      }
+      
+      // Pattern 3: Empty function call
+      // Example: linefill.new()
+      if (/linefill\.new\(\s*\)/.test(trimmed)) {
+        this.addError(
+          lineNum,
+          1,
+          'linefill.new() requires at least 2 parameters',
+          'PSV6-FUNCTION-PARAM-COUNT',
+        );
+      }
+    });
   }
 
   private reset(): void {

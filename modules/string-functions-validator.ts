@@ -779,11 +779,12 @@ export class StringFunctionsValidator implements ValidationModule {
     const expectedArgs = placeholders + 1;
 
     if (args.length !== expectedArgs) {
-      this.addWarning(
+      // Mismatched placeholder count is an error, not just a warning
+      this.addError(
         lineNum,
         column,
         `str.format() provided ${args.length - 1} argument(s) but format string references ${placeholders} placeholder(s)`,
-        'PSV6-STR-FORMAT-PLACEHOLDER',
+        'PSV6-STR-FORMAT-INVALID',
       );
     }
 
