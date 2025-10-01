@@ -150,7 +150,7 @@ type Point
     float x
     float y
 
-method Point.distance(this<Point>, other<Point>) =>
+method Point.distance(Point this, Point other) =>
     math.sqrt(math.pow(this.x - other.x, 2) + math.pow(this.y - other.y, 2))
 
 p1 = Point.new(0, 0)

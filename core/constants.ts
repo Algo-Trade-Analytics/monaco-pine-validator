@@ -130,7 +130,7 @@ export const NS_MEMBERS: Record<string, Set<string>> = {
     'max','min','abs','round','floor','ceil','pow','sqrt','log','log10','exp','sin','cos','tan',
     'asin','acos','atan','todegrees','toradians','sign','sum','avg','random','round_to_mintick'
   ]),
-  str: new Set(['tostring','tonumber','length','contains','substring','replace','split','format','format_time','startswith','endswith','pos','match','trim','upper','lower','repeat','replace_all']),
+  str: new Set(['tostring','tonumber','length','contains','substring','replace','split','format','format_time','startswith','endswith','pos','match','trim','upper','lower','repeat','replace_all','join']),
   request: new Set(['security','security_lower_tf','dividends','splits','earnings','economic','quandl','financial','currency_rate','seed']),
   input: new Set(['int','float','bool','string','color','source','timeframe','session','symbol','resolution','enum','price','text_area','time','hline']),
   line: new Set(['new','set_xy1','set_xy2','set_color','set_width','set_style','delete','set_x1','set_x2','set_y1','set_y2','get_x1','get_x2','get_y1','get_y2','copy','all','get_price','set_extend','set_first_point','set_second_point','set_xloc']),
@@ -138,13 +138,17 @@ export const NS_MEMBERS: Record<string, Set<string>> = {
   box: new Set([
     'new','delete','set_bgcolor','set_border_color','set_border_width','set_border_style','set_left','set_right',
     'set_top','set_bottom','set_lefttop','set_rightbottom','get_left','get_right','get_top','get_bottom',
-    'set_text','set_text_color','set_text_size','set_text_halign','set_text_valign','set_text_wrap','copy','all'
+    'set_text','set_text_color','set_text_size','set_text_halign','set_text_valign','set_text_wrap','copy','all',
+    'set_extend','set_xloc','set_top_left_point','set_bottom_right_point','set_text_font_family','set_text_formatting'
   ]),
   chart: new Set([
     'new','from_time','bg_color','fg_color','is_heikinashi','is_renko','is_linebreak','is_kagi','is_pnf','is_range','is_standard',
     'left_visible_bar_time','right_visible_bar_time'
   ]),
   table: new Set(['new','cell','cell_set_text','cell_set_bgcolor','cell_set_text_color','cell_set_text_size','delete','clear','set_position','set_bgcolor','set_border_color','set_border_width','set_frame_color','set_frame_width','all','cell_set_height','cell_set_text_font_family','cell_set_text_formatting','cell_set_text_halign','cell_set_text_valign','cell_set_tooltip','cell_set_width','merge_cells']),
+  text: new Set(['align_left','align_center','align_right','align_top','align_middle','align_bottom','wrap_auto','wrap_none','format_bold','format_italic','format_none']),
+  xloc: new Set(['bar_index','bar_time']),
+  order: new Set(['ascending','descending']),
   array: new Set([
     'new','new_bool','new_box','new_color','new_float','new_int','new_label','new_line','new_linefill','new_string','new_table',
     'push','pop','get','set','size','clear','slice','copy','sort','sort_indices','reverse','join','concat','range','fill','from','from_example',
@@ -306,7 +310,18 @@ export const BOX_TEXT_FUNCTIONS = new Set([
   'box.set_text_size',
   'box.set_text_halign',
   'box.set_text_valign',
-  'box.set_text_wrap'
+  'box.set_text_wrap',
+  'box.set_extend',
+  'box.set_left',
+  'box.set_top',
+  'box.set_right',
+  'box.set_bottom',
+  'box.set_xloc',
+  'box.get_left',
+  'box.get_top',
+  'box.get_right',
+  'box.get_bottom',
+  'box.copy'
 ]);
 
 // Wildcard identifiers
@@ -1705,10 +1720,21 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
     returnType: 'void'
   },
   'array.sort': {
-    parameters: [
-      { name: 'id', type: 'array', qualifier: 'simple' }
-    ],
-    returnType: 'void'
+    overloads: [
+      {
+        parameters: [
+          { name: 'id', type: 'array', qualifier: 'simple' }
+        ],
+        returnType: 'void'
+      },
+      {
+        parameters: [
+          { name: 'id', type: 'array', qualifier: 'simple' },
+          { name: 'order', type: 'sort_order', qualifier: 'simple', optional: true }
+        ],
+        returnType: 'void'
+      }
+    ]
   },
   'array.copy': {
     parameters: [
@@ -1743,7 +1769,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
       { name: 'id', type: 'array', qualifier: 'simple' },
       { name: 'index', type: 'int', qualifier: 'simple' }
     ],
-    returnType: 'void'
+    returnType: 'element'
   },
   'array.insert': {
     parameters: [
@@ -2347,6 +2373,12 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
     ],
     returnType: 'chart.point'
   },
+  'chart.point.now': {
+    parameters: [
+      { name: 'price', type: 'float', qualifier: 'series', required: true }
+    ],
+    returnType: 'chart.point'
+  },
   
   // Drawing functions - Line
   'line.new': {
@@ -2570,6 +2602,78 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
       { name: 'wrap', type: 'int', qualifier: 'simple', required: true }
     ],
     returnType: 'void'
+  },
+  'box.set_extend': {
+    parameters: [
+      { name: 'id', type: 'box', qualifier: 'series', required: true },
+      { name: 'extend', type: 'string', qualifier: 'series', required: true }
+    ],
+    returnType: 'void'
+  },
+  'box.set_left': {
+    parameters: [
+      { name: 'id', type: 'box', qualifier: 'series', required: true },
+      { name: 'left', type: 'int', qualifier: 'series', required: true }
+    ],
+    returnType: 'void'
+  },
+  'box.set_top': {
+    parameters: [
+      { name: 'id', type: 'box', qualifier: 'series', required: true },
+      { name: 'top', type: 'float', qualifier: 'series', required: true }
+    ],
+    returnType: 'void'
+  },
+  'box.set_right': {
+    parameters: [
+      { name: 'id', type: 'box', qualifier: 'series', required: true },
+      { name: 'right', type: 'int', qualifier: 'series', required: true }
+    ],
+    returnType: 'void'
+  },
+  'box.set_bottom': {
+    parameters: [
+      { name: 'id', type: 'box', qualifier: 'series', required: true },
+      { name: 'bottom', type: 'float', qualifier: 'series', required: true }
+    ],
+    returnType: 'void'
+  },
+  'box.set_xloc': {
+    parameters: [
+      { name: 'id', type: 'box', qualifier: 'series', required: true },
+      { name: 'xloc', type: 'string', qualifier: 'series', required: true }
+    ],
+    returnType: 'void'
+  },
+  'box.get_left': {
+    parameters: [
+      { name: 'id', type: 'box', qualifier: 'series', required: true }
+    ],
+    returnType: 'int'
+  },
+  'box.get_top': {
+    parameters: [
+      { name: 'id', type: 'box', qualifier: 'series', required: true }
+    ],
+    returnType: 'float'
+  },
+  'box.get_right': {
+    parameters: [
+      { name: 'id', type: 'box', qualifier: 'series', required: true }
+    ],
+    returnType: 'int'
+  },
+  'box.get_bottom': {
+    parameters: [
+      { name: 'id', type: 'box', qualifier: 'series', required: true }
+    ],
+    returnType: 'float'
+  },
+  'box.copy': {
+    parameters: [
+      { name: 'id', type: 'box', qualifier: 'series', required: true }
+    ],
+    returnType: 'box'
   },
   
   // Drawing functions - Table

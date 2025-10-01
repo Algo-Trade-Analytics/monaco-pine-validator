@@ -281,7 +281,8 @@ export class UDTValidator implements ValidationModule {
 
     let thisTypeName: string | null = null;
     if (firstParam?.typeAnnotation) {
-      const parsed = this.parseFieldType(this.stringifyAstTypeReference(firstParam.typeAnnotation));
+      const rawType = this.stringifyAstTypeReference(firstParam.typeAnnotation);
+      const parsed = this.parseFieldType(rawType);
       if (parsed.baseType === 'udt' && parsed.udtName) {
         thisTypeName = parsed.udtName;
       } else if (parsed.baseType !== 'unknown') {
@@ -497,11 +498,7 @@ export class UDTValidator implements ValidationModule {
     }
 
     const parent = path.parent;
-    if (
-      parent &&
-      parent.node.kind === 'CallExpression' &&
-      (parent.key === 'callee' || parent.key === 'expression')
-    ) {
+    if (parent && parent.node.kind === 'CallExpression') {
       return;
     }
 

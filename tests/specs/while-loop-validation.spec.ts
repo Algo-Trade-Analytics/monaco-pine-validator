@@ -78,9 +78,9 @@ plot(close)`;
       expectHas(result, { errors: ['PSV6-WHILE-EMPTY-CONDITION'] });
     });
 
-    it('should error on missing end statement', () => {
+    it('should validate correct while loop with indented body', () => {
       const code = `//@version=6
-indicator("Missing End Test")
+indicator("While Loop Test")
 
 i = 0
 while i < 10
@@ -92,7 +92,9 @@ plot(close)`;
       context.cleanLines = code.split('\n');
       
       const result = validator.validate(context, config);
-      expectHas(result, { errors: ['PSV6-WHILE-MISSING-END'] });
+      // Pine Script while loops use indentation, not 'end' statements
+      // This is valid syntax
+      expect(result.errors.filter(e => e.code?.startsWith('PSV6-WHILE'))).toEqual([]);
     });
   });
 

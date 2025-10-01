@@ -106,11 +106,11 @@ export class WhileLoopValidator implements ValidationModule {
   }
 
   private validateWhileLoopsAst(program: ProgramNode): void {
-    interface NestingRecord {
+    type NestingRecord = {
       depth: number;
       line: number;
       column: number;
-    }
+    };
 
     let maxDepth: NestingRecord | null = null;
     const loopStack: WhileStatementNode[] = [];
@@ -144,19 +144,33 @@ export class WhileLoopValidator implements ValidationModule {
       },
     });
 
-    if (maxDepth && maxDepth.depth > 3) {
-      this.addWarning(
-        maxDepth.line,
-        maxDepth.column,
-        `While loop nesting depth is ${maxDepth.depth}. Consider refactoring.`,
-        'PSV6-WHILE-DEEP-NESTING',
-      );
+    if (maxDepth) {
+      const { depth, line, column } = maxDepth;
+      if (depth > 3) {
+        this.addWarning(
+          line,
+          column,
+          `While loop nesting depth is ${depth}. Consider refactoring.`,
+          'PSV6-WHILE-DEEP-NESTING',
+        );
+      }
     }
   }
 
   private evaluateWhileCondition(statement: WhileStatementNode): void {
     const { line, column } = statement.loc.start;
     const { test } = statement;
+
+    // Check for missing/empty condition
+    if (!test) {
+      this.addError(
+        line,
+        column,
+        'While loop requires a condition expression',
+        'PSV6-WHILE-EMPTY-CONDITION',
+      );
+      return;
+    }
 
     switch (test.kind) {
       case 'BooleanLiteral':

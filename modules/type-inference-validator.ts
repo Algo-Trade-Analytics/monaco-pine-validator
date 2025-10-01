@@ -143,7 +143,7 @@ export class TypeInferenceValidator implements ValidationModule {
     const declaredType = declaredInfo?.type ?? null;
     const declaredElementType = declaredInfo?.elementType;
     const declaredValueType = declaredInfo?.valueType;
-    const initializerType = this.getExpressionType(initializer);
+    let initializerType = this.getExpressionType(initializer);
     const collectionInfo = this.inferCollectionTypeFromExpression(initializer);
     const { line, column } = node.loc.start;
 
@@ -173,6 +173,10 @@ export class TypeInferenceValidator implements ValidationModule {
         "Request functions can return 'na' values. Ensure proper null-checking or use nz() for safety.",
         'PSV6-TYPE-SAFETY-NA-FUNCTION',
       );
+    }
+
+    if (initializerType === 'void' && this.isNaExpression(initializer)) {
+      initializerType = 'float';
     }
 
     if (!declaredType || declaredType === 'unknown') {
@@ -324,6 +328,17 @@ export class TypeInferenceValidator implements ValidationModule {
 
     if (node.left.kind === 'Identifier') {
       const identifier = node.left as IdentifierNode;
+      const existingInfo = this.context.typeMap.get(identifier.name);
+
+      if (!existingInfo && this.isLiteralExpression(right)) {
+        this.addInfo(
+          identifier.loc.start.line,
+          identifier.loc.start.column,
+          `Consider annotating '${identifier.name}' with its literal type for readability.`,
+          'PSV6-TYPE-ANNOTATION-SUGGESTION',
+        );
+      }
+
       if (valueType && valueType !== 'unknown') {
         this.registerVariableTypeInfo(
           identifier.name,
@@ -1000,7 +1015,7 @@ export class TypeInferenceValidator implements ValidationModule {
 
   private registerVariableTypeInfo(
     name: string,
-    type: TypeInfo['type'] | 'unknown',
+    type: TypeInfo['type'],
     elementType: string | undefined,
     keyType: string | undefined,
     valueType: string | undefined,
@@ -1031,13 +1046,16 @@ export class TypeInferenceValidator implements ValidationModule {
       const updated: TypeInfo = { ...existing };
       let changed = false;
 
-      // Always update type if we have a more specific value (not 'unknown' or missing)
+      // Always update type if we have a more specific value
       // This ensures function return types override initial inferences
-      if (!updated.type) {
-        if (updated.type !== type) {
-          updated.type = type;
-          updated.isSeries = type === 'series' || updated.isSeries;
-          changed = true;
+      if (this.shouldOverrideExistingType(updated.type, type)) {
+        const previousType = updated.type;
+        updated.type = type;
+        updated.isSeries = type === 'series' || updated.isSeries;
+        changed = true;
+
+        if (process.env.DEBUG_TYPE_INFERENCE === '1' && name === 'idx') {
+          console.log(`[TypeInference] Overriding ${name} type from ${previousType} to ${type}`);
         }
       }
 
@@ -1090,6 +1108,58 @@ export class TypeInferenceValidator implements ValidationModule {
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
     return ensureAstContext(this.context, config);
+  }
+
+  private shouldOverrideExistingType(existing: TypeInfo['type'], next: TypeInfo['type']): boolean {
+    if (!existing) {
+      return true;
+    }
+
+    if (existing === next) {
+      return false;
+    }
+
+    const existingPriority = this.getTypePriority(existing);
+    const nextPriority = this.getTypePriority(next);
+
+    if (nextPriority > existingPriority) {
+      return true;
+    }
+
+    // Prefer float over int when they compete at the same priority level
+    if (existing === 'int' && next === 'float') {
+      return true;
+    }
+
+    return false;
+  }
+
+  private getTypePriority(type: TypeInfo['type']): number {
+    switch (type) {
+      case 'array':
+      case 'matrix':
+      case 'map':
+        return 1;
+      case 'int':
+      case 'float':
+      case 'bool':
+      case 'string':
+      case 'color':
+      case 'line':
+      case 'label':
+      case 'box':
+      case 'table':
+      case 'linefill':
+      case 'polyline':
+      case 'chart.point':
+      case 'analysis':
+      case 'udt':
+        return 2;
+      case 'series':
+        return 3;
+      default:
+        return 1;
+    }
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
@@ -1148,24 +1218,58 @@ export class TypeInferenceValidator implements ValidationModule {
     return typeInfo.type;
   }
 
-  private normalizeType(type: string): 'int' | 'float' | 'bool' | 'string' | 'color' | 'series' | 'line' | 'label' | 'box' | 'table' | 'array' | 'matrix' | 'map' | 'udt' | 'unknown' {
+  private normalizeType(
+    type: string,
+  ): TypeInfo['type'] {
     // Normalize type strings to match the TypeInfo union type
-    const validTypes = ['int', 'float', 'bool', 'string', 'color', 'series', 'line', 'label', 'box', 'table', 'array', 'matrix', 'map', 'udt'] as const;
-    
-    if (validTypes.includes(type as any)) {
-      return type as any;
+    const normalized = type.trim().toLowerCase();
+    const validTypes = new Set([
+      'int',
+      'float',
+      'bool',
+      'string',
+      'color',
+      'series',
+      'line',
+      'label',
+      'box',
+      'table',
+      'array',
+      'matrix',
+      'map',
+      'linefill',
+      'polyline',
+      'chart.point',
+      'udt',
+      'analysis',
+    ] satisfies Array<TypeInfo['type']>);
+
+    if (validTypes.has(normalized as any)) {
+      return normalized as TypeInfo['type'];
     }
-    
-    // Handle common variations
-    if (type === 'series bool' || type === 'series int' || type === 'series float') {
+
+    // Handle generic-style annotations (e.g., "series <type>", "array<float>")
+    if (normalized === 'element') {
       return 'series';
     }
-    
+    if (normalized.startsWith('series')) {
+      return 'series';
+    }
+    if (normalized.startsWith('array')) {
+      return 'array';
+    }
+    if (normalized.startsWith('matrix')) {
+      return 'matrix';
+    }
+    if (normalized.startsWith('map')) {
+      return 'map';
+    }
+
     // Treat Pine 'na' literal as numeric for compatibility
-    if (type === 'na') {
+    if (normalized === 'na') {
       return 'float';
     }
-    
+
     return 'unknown';
   }
 

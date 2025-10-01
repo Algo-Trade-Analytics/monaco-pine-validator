@@ -583,7 +583,11 @@ export class EnumValidator implements ValidationModule {
       return null;
     }
 
-    const objectType = this.context.typeMap.get(object.name)?.type;
+    const objectInfo = this.context.typeMap.get(object.name);
+    if (objectInfo?.udtName) {
+      return null;
+    }
+    const objectType = objectInfo?.type;
     if (objectType === 'udt') {
       return null;
     }

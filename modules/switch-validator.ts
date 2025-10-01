@@ -183,6 +183,13 @@ export class SwitchValidator implements ValidationModule {
       this.addError(line, column, 'Switch statement requires an expression.', 'PSV6-SWITCH-SYNTAX');
       return;
     }
+    
+    // Check for invalid/empty discriminant (parser error recovery artifacts)
+    if (expression.kind === 'Identifier' && (expression as IdentifierNode).name === '') {
+      const { line, column } = statement.loc.start;
+      this.addError(line, column, 'Switch statement requires an expression.', 'PSV6-SWITCH-SYNTAX');
+      return;
+    }
 
     switch (expression.kind) {
       case 'StringLiteral':

@@ -319,12 +319,42 @@ export class DrawingFunctionsValidator implements ValidationModule {
       case 'delete':
         this.validateLineDelete(args, lineNum, column);
         break;
+      case 'set_extend':
+      case 'set_xloc':
+      case 'get_x1':
+      case 'get_y1':
+      case 'get_x2':
+      case 'get_y2':
+      case 'get_price':
+      case 'copy':
+      case 'set_first_point':
+      case 'set_second_point':
+        // Valid line functions - generic validation
+        if (args.length < 1) {
+          this.addError(lineNum, column, `line.${functionName}() requires at least 1 parameter`, 'PSV6-FUNCTION-PARAM-COUNT');
+        }
+        break;
       default:
         this.addError(lineNum, column, `Unknown line function: line.${functionName}`, 'PSV6-LINE-UNKNOWN-FUNCTION');
     }
   }
 
   private validateLineNew(args: string[], lineNum: number, column: number): void {
+    // Check if using chart.point overload: line.new(first_point, second_point, ...)
+    // Detect chart.point by checking if first arg contains chart.point call OR if there are only 2 args (likely chart.point variables)
+    const firstArgHasChartPoint = args.length >= 1 && /chart\.point/i.test(args[0]);
+    const likelyChartPointOverload = args.length === 2 || firstArgHasChartPoint;
+    
+    if (likelyChartPointOverload) {
+      // New v6 signature with chart.point objects
+      if (args.length < 2) {
+        this.addError(lineNum, column, 'line.new() with chart.point requires at least 2 parameters (first_point, second_point)', 'PSV6-FUNCTION-PARAM-COUNT');
+      }
+      // Valid chart.point usage - skip coordinate validation
+      return;
+    }
+
+    // Old signature with numeric coordinates
     if (args.length < 4) {
       this.addError(lineNum, column, 'line.new() requires at least 4 parameters (x1, y1, x2, y2)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
@@ -482,6 +512,24 @@ export class DrawingFunctionsValidator implements ValidationModule {
       case 'delete':
         this.validateLabelDelete(args, lineNum, column);
         break;
+      case 'set_textcolor':
+      case 'set_textalign':
+      case 'set_tooltip':
+      case 'set_xloc':
+      case 'set_yloc':
+      case 'set_xy':
+      case 'set_point':
+      case 'get_text':
+      case 'get_x':
+      case 'get_y':
+      case 'copy':
+      case 'set_text_font_family':
+      case 'set_text_formatting':
+        // Valid label functions - generic validation
+        if (args.length < 1) {
+          this.addError(lineNum, column, `label.${functionName}() requires at least 1 parameter`, 'PSV6-FUNCTION-PARAM-COUNT');
+        }
+        break;
       default:
         this.addError(lineNum, column, `Unknown label function: label.${functionName}`, 'PSV6-LABEL-UNKNOWN-FUNCTION');
     }
@@ -614,12 +662,55 @@ export class DrawingFunctionsValidator implements ValidationModule {
       case 'delete':
         this.validateBoxDelete(args, lineNum, column);
         break;
+      case 'set_extend':
+      case 'set_text':
+      case 'set_text_size':
+      case 'set_text_color':
+      case 'set_text_halign':
+      case 'set_text_valign':
+      case 'set_text_wrap':
+      case 'set_xloc':
+        // Valid box setter functions - generic validation
+        if (args.length < 2) {
+          this.addError(lineNum, column, `box.${functionName}() requires at least 2 parameters`, 'PSV6-FUNCTION-PARAM-COUNT');
+        }
+        break;
+      case 'get_left':
+      case 'get_top':
+      case 'get_right':
+      case 'get_bottom':
+        // Valid box getter functions
+        if (args.length !== 1) {
+          this.addError(lineNum, column, `box.${functionName}() requires exactly 1 parameter (id)`, 'PSV6-FUNCTION-PARAM-COUNT');
+        }
+        break;
+      case 'copy':
+        // Valid box copy function
+        if (args.length !== 1) {
+          this.addError(lineNum, column, 'box.copy() requires exactly 1 parameter (id)', 'PSV6-FUNCTION-PARAM-COUNT');
+        }
+        break;
       default:
         this.addError(lineNum, column, `Unknown box function: box.${functionName}`, 'PSV6-BOX-UNKNOWN-FUNCTION');
     }
   }
 
   private validateBoxNew(args: string[], lineNum: number, column: number): void {
+    // Check if using chart.point overload: box.new(top_left, bottom_right, ...)
+    // Detect chart.point by checking if first arg contains chart.point call OR if there are only 2 args (likely chart.point variables)
+    const firstArgHasChartPoint = args.length >= 1 && /chart\.point/i.test(args[0]);
+    const likelyChartPointOverload = args.length === 2 || firstArgHasChartPoint;
+    
+    if (likelyChartPointOverload) {
+      // New v6 signature with chart.point objects
+      if (args.length < 2) {
+        this.addError(lineNum, column, 'box.new() with chart.point requires at least 2 parameters (top_left, bottom_right)', 'PSV6-FUNCTION-PARAM-COUNT');
+      }
+      // Valid chart.point usage - skip coordinate validation
+      return;
+    }
+
+    // Old signature with numeric coordinates
     if (args.length < 4) {
       this.addError(lineNum, column, 'box.new() requires at least 4 parameters (left, top, right, bottom)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
