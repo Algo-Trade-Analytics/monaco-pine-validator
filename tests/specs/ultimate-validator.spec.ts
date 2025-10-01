@@ -114,8 +114,6 @@ if close > open
 {
     plot(close)`;
     const { codes } = run(code);
-    // Check what errors we actually get
-    console.log('Braces errors:', codes.errors, 'warnings:', codes.warnings);
     expectHas(codes, { errors: ['PS011'] }); // Unmatched braces should be detected
     // PSB01 might not trigger due to early error detection
   });
@@ -135,8 +133,6 @@ indicator("Indent")
 \tif close > open
       plot(close)`;
     const { codes } = run(code);
-    // Check what warnings we actually get
-    console.log('Indent warnings:', codes.warnings);
     expectHas(codes, { warnings: ['PSI02'] }); // Mixed tabs/spaces should be detected
     // PS018 might not trigger in this specific case
   });
@@ -204,21 +200,7 @@ type Point
 p = Point.new(0.0, 0.0)
 p.setX(1.0)
 plot(close)`;
-    const validator = new EnhancedModularValidator();
-    const result = validator.validate(code);
-    const context = validator.getContext();
-    console.log('ENV DEBUG', process.env.DEBUG_PS016);
-    console.log('AST exists', !!context.ast);
-    console.log('Diagnostics', context.astDiagnostics);
-    if (context.ast) {
-      console.log(JSON.stringify(context.ast.body, null, 2));
-    }
-    const codes = {
-      errors: result.errors.map(e => e.code || ''),
-      warnings: result.warnings.map(e => e.code || ''),
-      info: result.info.map(e => e.code || ''),
-    };
-    console.log('UDT field errors', codes.errors);
+    const { codes } = run(code);
     expectHas(codes, { errors: ['PS016'] });
   });
 });

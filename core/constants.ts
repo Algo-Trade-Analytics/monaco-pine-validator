@@ -2989,7 +2989,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'matrix.add_row': {
     parameters: [
       { name: 'id', type: 'matrix', qualifier: 'any', required: true },
-      { name: 'row', type: 'int', qualifier: 'series', required: false },
+      { name: 'row', type: 'int', qualifier: 'series', required: true },
       { name: 'array_id', type: 'array', qualifier: 'any', required: false }
     ],
     returnType: 'void'

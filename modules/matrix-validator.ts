@@ -952,6 +952,14 @@ export class MatrixValidator implements ValidationModule {
         const isFloat = raw.includes('.') || /[eE]/.test(raw);
         return !isFloat && Number.isInteger(number.value) ? 'int' : 'float';
       }
+      case 'UnaryExpression': {
+        // Handle negative/positive numbers like -5.0
+        const unary = expression as UnaryExpressionNode;
+        if (unary.operator === '-' || unary.operator === '+') {
+          return this.inferExpressionTypeAst(unary.argument);
+        }
+        return 'unknown';
+      }
       case 'Identifier': {
         const name = (expression as IdentifierNode).name;
         const matrixInfo = this.matrixDeclarations.get(name);
