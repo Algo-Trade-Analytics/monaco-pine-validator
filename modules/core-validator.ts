@@ -685,22 +685,10 @@ export class CoreValidator implements ValidationModule {
       return;
     }
 
-    for (const argument of call.args) {
-      if (!argument.name) {
-        continue;
-      }
-
-      const name = argument.name.name;
-      if (isReservedIdentifier(name)) {
-        const { line, column } = argument.name.loc.start;
-        this.addError(
-          line,
-          column,
-          `Identifier '${name}' conflicts with a Pine keyword/builtin.`,
-          'PS007',
-        );
-      }
-    }
+    // Note: Parameter names in function calls (e.g., box.new(bgcolor=color.red))
+    // are just labels for arguments and should NOT be checked for keyword conflicts.
+    // Many valid parameter names (bgcolor, color, series, etc.) are also function
+    // names or built-ins, but that doesn't prevent their use as parameter names.
 
     const root = calleePath[0];
     const fullName = calleePath.join('.');

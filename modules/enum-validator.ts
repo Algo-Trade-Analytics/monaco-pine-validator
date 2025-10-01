@@ -88,6 +88,21 @@ interface EnumAstInfo {
   readonly members: Map<string, EnumMemberNode>;
 }
 
+interface FallbackFunctionParamInfo {
+  readonly name: string;
+  readonly expectedEnum: string | null;
+}
+
+interface FallbackFunctionInfo {
+  readonly params: FallbackFunctionParamInfo[];
+  readonly bodyText: string;
+}
+
+interface FallbackCallArgInfo {
+  readonly value: string;
+  readonly startIndex: number;
+}
+
 export class EnumValidator implements ValidationModule {
   name = 'EnumValidator';
   
@@ -126,11 +141,12 @@ export class EnumValidator implements ValidationModule {
 
     const program = this.astContext?.ast ?? null;
     if (!program) {
+      this.validateWithoutAstFallback();
       return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
+        isValid: this.errors.length === 0,
+        errors: this.errors.map((e) => ({ ...e, severity: 'error' as const })),
+        warnings: this.warnings.map((w) => ({ ...w, severity: 'warning' as const })),
+        info: this.info.map((i) => ({ ...i, severity: 'info' as const })),
         typeMap: context.typeMap,
         scriptType: context.scriptType,
       };
@@ -160,23 +176,14 @@ export class EnumValidator implements ValidationModule {
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
-    if (process.env.DEBUG_ENUM === '1') {
-      console.log('[EnumValidator] addError', { line, column, code, message });
-    }
     this.errors.push({ line, column, message, code });
   }
 
   private addWarning(line: number, column: number, message: string, code: string): void {
-    if (process.env.DEBUG_ENUM === '1') {
-      console.log('[EnumValidator] addWarning', { line, column, code, message });
-    }
     this.warnings.push({ line, column, message, code });
   }
 
   private addInfo(line: number, column: number, message: string, code: string): void {
-    if (process.env.DEBUG_ENUM === '1') {
-      console.log('[EnumValidator] addInfo', { line, column, code, message });
-    }
     this.info.push({ line, column, message, code });
   }
 
@@ -222,16 +229,6 @@ export class EnumValidator implements ValidationModule {
       },
     });
 
-    if (process.env.DEBUG_ENUM === '1') {
-      console.log('[EnumValidator] state snapshot', {
-        enumVariables: Array.from(this.astEnumVariables.entries()),
-        functionParams: Array.from(this.astFunctionParams.entries()).map(([name, params]) => [
-          name,
-          params.map((param) => param.identifier.name),
-        ]),
-        functionHints: Array.from(this.functionParamEnumHints.entries()),
-      });
-    }
   }
 
   private processEnumDeclaration(node: EnumDeclarationNode): void {
@@ -293,7 +290,6 @@ export class EnumValidator implements ValidationModule {
   }
 
   private recordFunctionDeclaration(node: FunctionDeclarationNode): void {
-    // console.log('record function decl', node.identifier?.name);
     if (!node.identifier) {
       return;
     }
@@ -478,20 +474,9 @@ export class EnumValidator implements ValidationModule {
       return;
     }
 
-    if (process.env.DEBUG_ENUM === '1') {
-      console.log('[EnumValidator] processCallExpression', {
-        fnName,
-        params: params?.map((param) => param.identifier.name),
-        argKinds: node.args.map((arg) => arg.value.kind),
-      });
-    }
-
     node.args.forEach((arg, index) => {
       const reference = this.getEnumMemberReference(arg.value);
       if (!reference) {
-        if (process.env.DEBUG_ENUM === '1') {
-          console.log('[EnumValidator] arg not enum', { index, kind: arg.value.kind });
-        }
         return;
       }
 
@@ -776,5 +761,397 @@ export class EnumValidator implements ValidationModule {
     });
 
     return hints;
+  }
+
+  private validateWithoutAstFallback(): void {
+    const source = this.context.sourceText ?? this.context.rawLines?.join('\n') ?? '';
+    if (!source.trim()) {
+      return;
+    }
+
+    const enumMap = this.extractEnumsFromSource(source);
+    if (enumMap.size === 0) {
+      return;
+    }
+
+    const functionMap = this.extractFunctionDefinitionsFromSource(source, enumMap);
+    if (functionMap.size === 0) {
+      return;
+    }
+
+    const lineOffsets = this.computeLineOffsets(source);
+
+    for (const [fnName, info] of functionMap.entries()) {
+      const calls = this.extractFunctionCallsFromSource(source, fnName);
+      for (const call of calls) {
+        call.args.forEach((arg, index) => {
+          if (index >= info.params.length) {
+            return;
+          }
+
+          const expectedEnum = info.params[index]?.expectedEnum;
+          if (!expectedEnum) {
+            return;
+          }
+
+          const reference = this.parseEnumReference(arg.value);
+          if (!reference) {
+            return;
+          }
+
+          if (reference.enumName === expectedEnum) {
+            return;
+          }
+
+          const { line, column } = this.indexToPosition(lineOffsets, arg.startIndex);
+          this.addError(
+            line,
+            column,
+            `Function parameter type mismatch: expected ${expectedEnum}, got ${reference.enumName}`,
+            'PSV6-ENUM-FUNCTION-TYPE-MISMATCH',
+          );
+        });
+      }
+    }
+  }
+
+  private extractEnumsFromSource(source: string): Map<string, Set<string>> {
+    const enums = new Map<string, Set<string>>();
+    const lines = source.split('\n');
+
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      const match = /^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(line);
+      if (!match) {
+        continue;
+      }
+
+      const enumName = match[1];
+      if (!enums.has(enumName)) {
+        enums.set(enumName, new Set());
+      }
+
+      const members = enums.get(enumName)!;
+      let memberIndex = index + 1;
+      while (memberIndex < lines.length) {
+        const memberLine = lines[memberIndex];
+        if (!/^\s/.test(memberLine)) {
+          break;
+        }
+
+        const stripped = memberLine.replace(/\/\/.*$/, '').trim();
+        if (stripped.length === 0) {
+          memberIndex++;
+          continue;
+        }
+
+        const valueMatch = /^([A-Za-z_][A-Za-z0-9_]*)/.exec(stripped);
+        if (valueMatch) {
+          members.add(valueMatch[1]);
+          memberIndex++;
+          continue;
+        }
+
+        // Stop scanning members when encountering non-identifier content
+        break;
+      }
+
+      index = memberIndex - 1;
+    }
+
+    return enums;
+  }
+
+  private extractFunctionDefinitionsFromSource(
+    source: string,
+    enums: Map<string, Set<string>>,
+  ): Map<string, FallbackFunctionInfo> {
+    const functionMap = new Map<string, FallbackFunctionInfo>();
+    const functionPattern = /\b([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*=>/g;
+    const knownEnumNames = new Set(enums.keys());
+
+    let match: RegExpExecArray | null;
+    while ((match = functionPattern.exec(source))) {
+      const functionName = match[1];
+      const paramsSource = match[2] ?? '';
+      const bodyStartIndex = match.index + match[0].length;
+      const bodyInfo = this.extractArrowFunctionBody(source, bodyStartIndex);
+      const params = this.parseParameterList(paramsSource, knownEnumNames, bodyInfo.text);
+
+      functionMap.set(functionName, {
+        params,
+        bodyText: bodyInfo.text,
+      });
+    }
+
+    return functionMap;
+  }
+
+  private extractArrowFunctionBody(source: string, startIndex: number): { text: string; endIndex: number } {
+    if (startIndex >= source.length) {
+      return { text: '', endIndex: source.length };
+    }
+
+    if (source[startIndex] !== '\n') {
+      const lineEnd = source.indexOf('\n', startIndex);
+      const endIndex = lineEnd === -1 ? source.length : lineEnd;
+      return { text: source.slice(startIndex, endIndex).trimEnd(), endIndex };
+    }
+
+    let currentIndex = startIndex + 1;
+    const bodyLines: string[] = [];
+    while (currentIndex < source.length) {
+      const nextNewline = source.indexOf('\n', currentIndex);
+      const lineEnd = nextNewline === -1 ? source.length : nextNewline;
+      const lineText = source.slice(currentIndex, lineEnd);
+
+      if (lineText.trim().length === 0) {
+        bodyLines.push(lineText);
+        currentIndex = lineEnd + 1;
+        continue;
+      }
+
+      if (!/^\s/.test(lineText)) {
+        break;
+      }
+
+      bodyLines.push(lineText);
+      currentIndex = lineEnd + 1;
+    }
+
+    return { text: bodyLines.join('\n'), endIndex: currentIndex };
+  }
+
+  private parseParameterList(
+    paramsSource: string,
+    knownEnums: Set<string>,
+    bodyText: string,
+  ): FallbackFunctionParamInfo[] {
+    const segments = this.splitCommaSeparatedValues(paramsSource);
+    const params: FallbackFunctionParamInfo[] = [];
+
+    for (const segment of segments) {
+      const raw = segment.value;
+      if (!raw) {
+        params.push({ name: '', expectedEnum: null });
+        continue;
+      }
+
+      const assignmentIndex = raw.indexOf('=');
+      const valuePart = assignmentIndex === -1 ? raw : raw.slice(0, assignmentIndex).trim();
+      const tokens = valuePart.trim().split(/\s+/).filter(Boolean);
+      let paramName = tokens.length > 0 ? tokens[tokens.length - 1] : valuePart.trim();
+
+      if (!IDENTIFIER_PATTERN.test(paramName)) {
+        paramName = paramName.replace(/[^A-Za-z0-9_]/g, '');
+      }
+
+      let expectedEnum: string | null = null;
+
+      if (tokens.length > 1) {
+        const potentialType = tokens[0];
+        if (knownEnums.has(potentialType)) {
+          expectedEnum = potentialType;
+        }
+      }
+
+      if (!expectedEnum) {
+        if (knownEnums.has(paramName)) {
+          expectedEnum = paramName;
+        } else {
+          const capitalized = paramName.charAt(0).toUpperCase() + paramName.slice(1);
+          if (knownEnums.has(capitalized)) {
+            expectedEnum = capitalized;
+          }
+        }
+      }
+
+      if (!expectedEnum && bodyText) {
+        expectedEnum = this.inferEnumFromBody(paramName, bodyText, knownEnums);
+      }
+
+      params.push({ name: paramName, expectedEnum });
+    }
+
+    return params;
+  }
+
+  private inferEnumFromBody(paramName: string, bodyText: string, knownEnums: Set<string>): string | null {
+    if (!paramName) {
+      return null;
+    }
+
+    const escapedParam = this.escapeForRegExp(paramName);
+    const paramPattern = new RegExp(`\\b${escapedParam}\\b`);
+    const lines = bodyText.split('\n');
+
+    for (const enumName of knownEnums) {
+      const escapedEnum = this.escapeForRegExp(enumName);
+      const enumPattern = new RegExp(`\\b${escapedEnum}\\.`);
+
+      for (const line of lines) {
+        if (paramPattern.test(line) && enumPattern.test(line)) {
+          return enumName;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private extractFunctionCallsFromSource(
+    source: string,
+    functionName: string,
+  ): Array<{ args: FallbackCallArgInfo[] }> {
+    const calls: Array<{ args: FallbackCallArgInfo[] }> = [];
+    const escapedName = this.escapeForRegExp(functionName);
+    const pattern = new RegExp(`\\b${escapedName}\\s*\\(`, 'g');
+
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(source))) {
+      let currentIndex = pattern.lastIndex;
+      let depth = 1;
+
+      while (currentIndex < source.length && depth > 0) {
+        const char = source[currentIndex];
+        if (char === "\"" || char === "'") {
+          currentIndex = this.skipStringLiteral(source, currentIndex);
+          continue;
+        }
+        if (char === '(') {
+          depth++;
+        } else if (char === ')') {
+          depth--;
+        }
+        currentIndex++;
+      }
+
+      if (depth !== 0) {
+        break;
+      }
+
+      const closeIndex = currentIndex - 1;
+      const trailing = source.slice(closeIndex + 1, closeIndex + 3);
+      if (trailing === '=>' || /^\s*=>/.test(source.slice(closeIndex + 1))) {
+        pattern.lastIndex = closeIndex + 1;
+        continue;
+      }
+
+      const args = this.splitArguments(source.slice(pattern.lastIndex, closeIndex), pattern.lastIndex);
+      if (args.length > 0) {
+        calls.push({ args });
+      }
+
+      pattern.lastIndex = closeIndex + 1;
+    }
+
+    return calls;
+  }
+
+  private splitArguments(segment: string, absoluteStart: number): FallbackCallArgInfo[] {
+    return this.splitCommaSeparatedValues(segment, absoluteStart)
+      .map(({ value, offset }) => ({ value, startIndex: offset }))
+      .filter((entry) => entry.value.length > 0);
+  }
+
+  private splitCommaSeparatedValues(input: string, absoluteStart = 0): Array<{ value: string; offset: number }> {
+    const result: Array<{ value: string; offset: number }> = [];
+    let depth = 0;
+    let segmentStart = 0;
+
+    const pushSegment = (end: number): void => {
+      let start = segmentStart;
+      while (start < end && /\s/.test(input[start])) {
+        start++;
+      }
+      let finish = end;
+      while (finish > start && /\s/.test(input[finish - 1])) {
+        finish--;
+      }
+      if (start >= finish) {
+        return;
+      }
+      result.push({ value: input.slice(start, finish), offset: absoluteStart + start });
+    };
+
+    for (let index = 0; index < input.length; index++) {
+      const char = input[index];
+      if (char === "\"" || char === "'") {
+        index = this.skipStringLiteral(input, index) - 1;
+        continue;
+      }
+      if (char === '(' || char === '[' || char === '{') {
+        depth++;
+        continue;
+      }
+      if (char === ')' || char === ']' || char === '}') {
+        if (depth > 0) {
+          depth--;
+        }
+        continue;
+      }
+      if (char === ',' && depth === 0) {
+        pushSegment(index);
+        segmentStart = index + 1;
+      }
+    }
+
+    pushSegment(input.length);
+    return result;
+  }
+
+  private parseEnumReference(value: string): { enumName: string; memberName: string } | null {
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(value.trim());
+    if (!match) {
+      return null;
+    }
+    return { enumName: match[1], memberName: match[2] };
+  }
+
+  private computeLineOffsets(source: string): number[] {
+    const offsets: number[] = [0];
+    for (let index = 0; index < source.length; index++) {
+      if (source[index] === '\n') {
+        offsets.push(index + 1);
+      }
+    }
+    return offsets;
+  }
+
+  private indexToPosition(offsets: number[], index: number): { line: number; column: number } {
+    let line = 0;
+    for (let i = 0; i < offsets.length; i++) {
+      if (offsets[i] <= index) {
+        line = i;
+      } else {
+        break;
+      }
+    }
+    const lineStart = offsets[line] ?? 0;
+    return {
+      line: line + 1,
+      column: index - lineStart + 1,
+    };
+  }
+
+  private skipStringLiteral(text: string, startIndex: number): number {
+    const quote = text[startIndex];
+    let index = startIndex + 1;
+    while (index < text.length) {
+      const char = text[index];
+      if (char === '\\') {
+        index += 2;
+        continue;
+      }
+      if (char === quote) {
+        return index + 1;
+      }
+      index++;
+    }
+    return text.length;
+  }
+
+  private escapeForRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 }

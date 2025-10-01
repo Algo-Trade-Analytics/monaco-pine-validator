@@ -147,7 +147,7 @@ export class TypeInferenceValidator implements ValidationModule {
     const collectionInfo = this.inferCollectionTypeFromExpression(initializer);
     const { line, column } = node.loc.start;
 
-    if (process.env.DEBUG_TYPE_INFERENCE === '1' && node.identifier.name === 'idx') {
+    if (process.env.DEBUG_TYPE_INFERENCE === '1' && (node.identifier.name === 'idx' || node.identifier.name === 'allBoxes')) {
       console.log(`[TypeInference] handleVariableDeclaration for ${node.identifier.name}:`, {
         declaredType,
         initializerType,
@@ -202,8 +202,8 @@ export class TypeInferenceValidator implements ValidationModule {
 
       // Register inferred type from function call or collection info
       if (initializerType && initializerType !== 'unknown') {
-        if (process.env.DEBUG_TYPE_INFERENCE === '1' && node.identifier.name === 'idx') {
-          console.log(`[TypeInference] Registering ${node.identifier.name} with type:`, initializerType);
+        if (process.env.DEBUG_TYPE_INFERENCE === '1' && node.identifier.name === 'allBoxes') {
+          console.log(`[TypeInference] Registering ${node.identifier.name} with type:`, initializerType, 'collectionInfo:', collectionInfo);
         }
         this.registerVariableTypeInfo(
           node.identifier.name,
@@ -216,7 +216,7 @@ export class TypeInferenceValidator implements ValidationModule {
           node.declarationKind === 'const',
         );
       } else if (collectionInfo) {
-        if (process.env.DEBUG_TYPE_INFERENCE === '1' && node.identifier.name === 'idx') {
+        if (process.env.DEBUG_TYPE_INFERENCE === '1' && node.identifier.name === 'allBoxes') {
           console.log(`[TypeInference] Registering ${node.identifier.name} with collectionInfo:`, collectionInfo);
         }
         this.registerVariableTypeInfo(
@@ -319,6 +319,12 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     const valueType = this.getExpressionType(right);
+    const inferredCollection = this.inferCollectionTypeFromExpression(right);
+    
+    if (process.env.DEBUG_TYPE_INFERENCE === '1' && node.left.kind === 'Identifier' && (node.left as IdentifierNode).name === 'allBoxes') {
+      console.log('[TypeInference] handleAssignment allBoxes:', { valueType, inferredCollection, rightKind: right.kind });
+    }
+    
     if (!valueType || valueType === 'unknown') {
       this.addWarning(
         line,
@@ -341,19 +347,7 @@ export class TypeInferenceValidator implements ValidationModule {
         );
       }
 
-      if (valueType && valueType !== 'unknown') {
-        this.registerVariableTypeInfo(
-          identifier.name,
-          this.normalizeType(valueType),
-          undefined,
-          undefined,
-          undefined,
-          identifier.loc.start.line,
-          identifier.loc.start.column,
-          false,
-        );
-      }
-      const inferredCollection = this.inferCollectionTypeFromExpression(right);
+      // Register variable type, preferring collection info if available
       if (inferredCollection) {
         this.registerVariableTypeInfo(
           identifier.name,
@@ -361,6 +355,17 @@ export class TypeInferenceValidator implements ValidationModule {
           inferredCollection.elementType,
           inferredCollection.keyType,
           inferredCollection.valueType,
+          identifier.loc.start.line,
+          identifier.loc.start.column,
+          false,
+        );
+      } else if (valueType && valueType !== 'unknown') {
+        this.registerVariableTypeInfo(
+          identifier.name,
+          this.normalizeType(valueType),
+          undefined,
+          undefined,
+          undefined,
           identifier.loc.start.line,
           identifier.loc.start.column,
           false,
@@ -587,6 +592,25 @@ export class TypeInferenceValidator implements ValidationModule {
 
   private getExpressionType(expression: ExpressionNode): string | null {
     let resolved: string | null = null;
+
+    // Check for built-in .all array constants (box.all, line.all, label.all, etc.)
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (!member.computed && member.property.name === 'all' && member.object.kind === 'Identifier') {
+        const namespace = (member.object as IdentifierNode).name;
+        const builtinArrayTypes: Record<string, string> = {
+          'box': 'array',
+          'line': 'array',
+          'label': 'array',
+          'table': 'array',
+          'linefill': 'array',
+          'polyline': 'array',
+        };
+        if (builtinArrayTypes[namespace]) {
+          return 'array';  // Return 'array' type for .all constants
+        }
+      }
+    }
 
     // For CallExpression, check builtin return type FIRST before AST inference
     // This ensures functions like array.indexof() return 'int' not 'array'
@@ -924,6 +948,26 @@ export class TypeInferenceValidator implements ValidationModule {
   private inferCollectionTypeFromExpression(
     expression: ExpressionNode,
   ): { type: TypeInfo['type']; elementType?: string; keyType?: string; valueType?: string } | null {
+    // Check for built-in .all array constants (box.all, line.all, label.all, etc.)
+    if (expression.kind === 'MemberExpression') {
+      const member = expression as MemberExpressionNode;
+      if (!member.computed && member.property.name === 'all' && member.object.kind === 'Identifier') {
+        const namespace = (member.object as IdentifierNode).name;
+        const builtinArrayElementTypes: Record<string, string> = {
+          'box': 'box',
+          'line': 'line',
+          'label': 'label',
+          'table': 'table',
+          'linefill': 'linefill',
+          'polyline': 'polyline',
+        };
+        const elementType = builtinArrayElementTypes[namespace];
+        if (elementType) {
+          return { type: 'array', elementType };
+        }
+      }
+    }
+
     if (expression.kind !== 'CallExpression') {
       return null;
     }
@@ -1034,7 +1078,7 @@ export class TypeInferenceValidator implements ValidationModule {
       return;
     }
 
-    if (process.env.DEBUG_TYPE_INFERENCE === '1' && name === 'idx') {
+    if (process.env.DEBUG_TYPE_INFERENCE === '1' && (name === 'idx' || name === 'allBoxes')) {
       console.log(`[TypeInference] registerVariableTypeInfo for ${name}:`, {
         type,
         elementType,
@@ -1118,8 +1162,8 @@ export class TypeInferenceValidator implements ValidationModule {
   }
 
   private shouldOverrideExistingType(existing: TypeInfo['type'], next: TypeInfo['type']): boolean {
-    if (!existing) {
-      return true;
+    if (!existing || existing === 'unknown') {
+      return true; // Always override unknown or missing types
     }
 
     if (existing === next) {
