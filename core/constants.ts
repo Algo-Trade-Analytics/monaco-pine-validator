@@ -1697,49 +1697,57 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'array.reverse': {
     parameters: [
       { name: 'id', type: 'array', qualifier: 'simple' }
-    ]
+    ],
+    returnType: 'void'
   },
   'array.sort': {
     parameters: [
       { name: 'id', type: 'array', qualifier: 'simple' }
-    ]
+    ],
+    returnType: 'void'
   },
   'array.copy': {
     parameters: [
       { name: 'id', type: 'array', qualifier: 'simple' }
-    ]
+    ],
+    returnType: 'array'
   },
   'array.slice': {
     parameters: [
       { name: 'id', type: 'array', qualifier: 'simple' },
       { name: 'start', type: 'int', qualifier: 'simple' },
       { name: 'end', type: 'int', qualifier: 'simple' }
-    ]
+    ],
+    returnType: 'array'
   },
   'array.indexof': {
     parameters: [
       { name: 'id', type: 'array', qualifier: 'simple' },
       { name: 'value', type: 'any', qualifier: 'simple' }
-    ]
+    ],
+    returnType: 'int'
   },
   'array.lastindexof': {
     parameters: [
       { name: 'id', type: 'array', qualifier: 'simple' },
       { name: 'value', type: 'any', qualifier: 'simple' }
-    ]
+    ],
+    returnType: 'int'
   },
   'array.remove': {
     parameters: [
       { name: 'id', type: 'array', qualifier: 'simple' },
       { name: 'index', type: 'int', qualifier: 'simple' }
-    ]
+    ],
+    returnType: 'void'
   },
   'array.insert': {
     parameters: [
       { name: 'id', type: 'array', qualifier: 'simple' },
       { name: 'index', type: 'int', qualifier: 'simple' },
       { name: 'value', type: 'any', qualifier: 'simple' }
-    ]
+    ],
+    returnType: 'void'
   },
   'matrix.new': {
     parameters: [

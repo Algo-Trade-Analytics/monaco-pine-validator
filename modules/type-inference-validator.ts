@@ -147,6 +147,15 @@ export class TypeInferenceValidator implements ValidationModule {
     const collectionInfo = this.inferCollectionTypeFromExpression(initializer);
     const { line, column } = node.loc.start;
 
+    if (process.env.DEBUG_TYPE_INFERENCE === '1' && node.identifier.name === 'idx') {
+      console.log(`[TypeInference] handleVariableDeclaration for ${node.identifier.name}:`, {
+        declaredType,
+        initializerType,
+        collectionInfo,
+        initializerKind: initializer.kind,
+      });
+    }
+
     if (this.isNaExpression(initializer)) {
       this.addWarning(
         line,
@@ -185,7 +194,19 @@ export class TypeInferenceValidator implements ValidationModule {
         );
       }
 
-      if (collectionInfo) {
+      // Register inferred type from function call or collection info
+      if (initializerType && initializerType !== 'unknown') {
+        this.registerVariableTypeInfo(
+          node.identifier.name,
+          initializerType,
+          collectionInfo?.elementType,
+          collectionInfo?.keyType,
+          collectionInfo?.valueType,
+          line,
+          column,
+          node.declarationKind === 'const',
+        );
+      } else if (collectionInfo) {
         this.registerVariableTypeInfo(
           node.identifier.name,
           collectionInfo.type,
@@ -544,6 +565,25 @@ export class TypeInferenceValidator implements ValidationModule {
   private getExpressionType(expression: ExpressionNode): string | null {
     let resolved: string | null = null;
 
+    // For CallExpression, check builtin return type FIRST before AST inference
+    // This ensures functions like array.indexof() return 'int' not 'array'
+    if (expression.kind === 'CallExpression') {
+      const call = expression as CallExpressionNode;
+      const calleeName = this.resolveCalleeName(call.callee);
+      if (calleeName) {
+        const builtinReturn = this.getBuiltinReturnType(calleeName);
+        if (process.env.DEBUG_TYPE_INFERENCE === '1' && calleeName.startsWith('array.')) {
+          console.log(`[TypeInference] getExpressionType for ${calleeName}:`, {
+            builtinReturn,
+            normalized: builtinReturn ? this.normalizeType(builtinReturn) : null,
+          });
+        }
+        if (builtinReturn) {
+          return this.normalizeType(builtinReturn);
+        }
+      }
+    }
+
     if (this.astTypeEnvironment) {
       const metadata = this.astTypeEnvironment.nodeTypes.get(expression);
       const described = this.describeTypeMetadata(metadata);
@@ -583,17 +623,6 @@ export class TypeInferenceValidator implements ValidationModule {
 
     if (resolved && resolved !== 'unknown' && !shouldRefine) {
       return resolved;
-    }
-
-    if (expression.kind === 'CallExpression') {
-      const call = expression as CallExpressionNode;
-      const calleeName = this.resolveCalleeName(call.callee);
-      if (calleeName) {
-        const builtinReturn = this.getBuiltinReturnType(calleeName);
-        if (builtinReturn) {
-          return this.normalizeType(builtinReturn);
-        }
-      }
     }
 
     if (expression.kind === 'ConditionalExpression') {
