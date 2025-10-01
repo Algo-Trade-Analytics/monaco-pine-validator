@@ -300,6 +300,12 @@ plot(close, "Step Line Diamond", style=plot.style_stepline_diamond)
       `;
 
       const result = createValidator().validate(code);
+      if (!result.isValid || result.errors.length > 0 || result.warnings.length > 0) {
+        console.log('plot.style diagnostics', {
+          errors: result.errors.map((e) => e.code),
+          warnings: result.warnings.map((w) => w.code),
+        });
+      }
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
     });
@@ -324,6 +330,12 @@ plotshape(high == ta.highest(high, 20), style=shape.diamond, location=location.t
       `;
 
       const result = createValidator().validate(code);
+      if (!result.isValid || result.errors.length > 0 || result.warnings.length > 0) {
+        console.log('hline diagnostics', {
+          errors: result.errors.map((e) => e.code),
+          warnings: result.warnings.map((w) => w.code),
+        });
+      }
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
     });
@@ -501,4 +513,3 @@ var table t = table.new(position.top_centre, 2, 2)  // Should be top_center
     });
   });
 });
-

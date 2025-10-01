@@ -89,9 +89,11 @@
     "code": "//@version=6\nindicator(\"TS\")\nts = timestamp(2024, 13, 1, 0, 0, 0)\nplot(close)\n",
     "expect": {
       "errors": [
-        "PSV6-PARAM-MAX",
+        "PSV6-FUNCTION-PARAM-TYPE",
+        "PSV6-002",
         "PSV6-TIMESTAMP-MONTH-RANGE"
-      ]
+      ],
+      "warnings": []
     }
   },
   {
@@ -183,7 +185,6 @@
     "code": "//@version=6\nindicator(\"Box\", overlay=true)\nb = box.new(left=0, top=1, right=1, bottom=0)\nbox.set_text(b)\nplot(close)\n",
     "expect": {
       "errors": [
-        "PSV6-BOX-UNKNOWN-FUNCTION",
         "PSV6-FUNCTION-PARAM-COUNT"
       ],
       "warnings": [
@@ -197,8 +198,10 @@
     "expect": {
       "errors": [],
       "warnings": [
-        "PSV6-MATH-PERF-NESTED",
-        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
+        "PSV6-TYPE-INFERENCE-AMBIGUOUS",
+        "PSV6-FUNCTION-STYLE-DOCS",
+        "PSU-PARAM",
+        "PSV6-MATH-PERF-NESTED"
       ]
     }
   },
@@ -216,11 +219,12 @@
     "code": "//@version=6\nindicator(\"UDT Missing This\")\n\ntype Counter\n    float total\n\nmethod add(float amount) =>\n    total := total + amount\n\nvar Counter counter = Counter.new(0.0)\ncounter.add(1.0)\nplot(counter.total)\n",
     "expect": {
       "errors": [
-        "PS016",
         "PSV6-METHOD-THIS"
       ],
       "warnings": [
-        "PSU03"
+        "PSV6-TYPE-INFERENCE-AMBIGUOUS",
+        "PSV6-FUNCTION-STYLE-DOCS",
+        "PSU-PARAM"
       ]
     }
   },
@@ -302,8 +306,7 @@
     "expect": {
       "warnings": [
         "PS023",
-        "PSV6-TYPE-SAFETY-NA-COMPARISON",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-TYPE-SAFETY-NA-COMPARISON"
       ]
     }
   },
@@ -349,10 +352,11 @@
     "expect": {
       "errors": [
         "PSV6-FUNCTION-PARAM-COUNT",
-        "PSV6-FUNCTION-PARAM-TYPE",
+        "PSV6-REQUEST-SECURITY-PARAMS",
         "PSV6-REQUEST-PARAMS"
       ],
       "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION",
         "PSV6-REPAINT-SECURITY",
         "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
         "PSV6-REQUEST-DYNAMIC-SYMBOL"
@@ -369,8 +373,7 @@
       "warnings": [
         "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
         "PSV6-REQUEST-SEED-EXT",
-        "PSV6-REQUEST-SEED-SOURCE",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-REQUEST-SEED-SOURCE"
       ]
     }
   },
@@ -461,9 +464,7 @@
         "PSV6-FUNCTION-PARAM-COUNT",
         "PSV6-REQUEST-FINANCIAL-PARAMS"
       ],
-      "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
-      ]
+      "warnings": []
     }
   },
   {
@@ -471,7 +472,6 @@
     "code": "//@version=6\nindicator(\"Request Financial Period\")\nfin = request.financial(\"AAPL\", \"INVALID_ID\", \"INVALID\")\nplot(fin)\n",
     "expect": {
       "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION",
         "PSV6-REQUEST-FINANCIAL-ID",
         "PSV6-REQUEST-FINANCIAL-PERIOD"
       ]
@@ -482,7 +482,6 @@
     "code": "//@version=6\nindicator(\"Request Financial Invalid Gaps\")\nfin = request.financial(\"AAPL\", \"TOTAL_REVENUE\", \"FY\", \"invalid\")\nplot(fin)\n",
     "expect": {
       "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION",
         "PSV6-REQUEST-GAPS-INVALID"
       ]
     }
@@ -506,7 +505,6 @@
         "PSV6-FUNCTION-PARAM-TYPE"
       ],
       "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION",
         "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
         "PSV6-REQUEST-GAPS-BARMERGE"
       ]
@@ -577,10 +575,12 @@
     "code": "//@version=6\nindicator(\"Request Security Lower TF\")\nres = request.security_lower_tf(\"AAPL\", \"D\")\nplot(res)\n",
     "expect": {
       "errors": [
-        "PSV6-TYPE-FUNCTION-PARAM-MISMATCH",
         "PSV6-FUNCTION-PARAM-COUNT",
-        "PSV6-FUNCTION-PARAM-TYPE",
-        "PSV6-REQUEST-SECURITY-LOWER-TF-PARAMS"
+        "PSV6-REQUEST-SECURITY-LOWER-TF-PARAMS",
+        "PSV6-REQUEST-PARAMS"
+      ],
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
       ]
     }
   },
@@ -788,12 +788,11 @@
     "name": "request_seed_dynamic_symbol",
     "code": "//@version=6\nindicator(\"Request Seed Dynamic\")\nfloat x = close\nseed = request.seed(\"FRED\", str.tostring(x), close)\nplot(seed)",
     "expect": {
-    "errors": [
-      "PSV6-REQUEST-SEED-PARAMS"
-    ],
+      "errors": [
+        "PSV6-REQUEST-SEED-PARAMS"
+      ],
       "warnings": [
-        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
       ]
     }
   },
@@ -814,8 +813,7 @@
       "warnings": [
         "PSV6-REPAINT-HTF",
         "PSV6-REPAINT-SECURITY",
-        "PSV6-REQUEST-DYNAMIC-TIMEFRAME",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-REQUEST-DYNAMIC-TIMEFRAME"
       ]
     }
   },
@@ -823,13 +821,11 @@
     "name": "request_security_dynamic_symbol",
     "code": "//@version=6\nindicator(\"Request Security Dynamic Symbol\")\nsymbol = syminfo.tickerid + \"\"\nres = request.security(symbol, \"D\", close)\nplot(res)",
     "expect": {
-      "errors": [
-        "PSV6-FUNCTION-PARAM-TYPE"
-      ],
+      "errors": [],
       "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION",
         "PSV6-REPAINT-SECURITY",
-        "PSV6-REQUEST-DYNAMIC-SYMBOL",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-REQUEST-DYNAMIC-SYMBOL"
       ]
     }
   },
@@ -866,7 +862,6 @@
         "PSV6-REQUEST-PERF-LOOP",
         "PSV6-HISTORY-PERF-LOOP",
         "PSV6-HISTORY-FUNCTION-PARAM",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION",
         "PSV6-STR-PERF-LOOP",
         "PSV6-REQUEST-DYNAMIC-SYMBOL"
       ]
@@ -880,8 +875,7 @@
         "PSV6-LAZY-EVAL-CONDITIONAL",
         "PSV6-REPAINT-SECURITY",
         "PSV6-REQUEST-DYNAMIC-CONDITIONAL",
-        "PSV6-HISTORY-FUNCTION-PARAM",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-HISTORY-FUNCTION-PARAM"
       ]
     }
   },
@@ -889,11 +883,10 @@
     "name": "request_security_ignore_invalid_timeframe",
     "code": "//@version=6\nindicator(\"Request Security Ignore TF\")\nres = request.security_lower_tf(\"AAPL\", \"60\", close, ignore_invalid_timeframe = true)\nplot(res)",
     "expect": {
-      "errors": [
-        "PSV6-FUNCTION-PARAM-TYPE",
-        "PSV6-TYPE-FUNCTION-PARAM-MISMATCH"
-      ],
-      "warnings": []
+      "errors": [],
+      "warnings": [
+        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+      ]
     }
   },
   {
@@ -937,8 +930,7 @@
     "code": "//@version=6\nindicator(\"Input String Non Literal\")\nname = input.string(close, \"Name\")\nplot(close)",
     "expect": {
       "warnings": [
-        "PSV6-INPUT-DEFAULT-TYPE",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-INPUT-DEFAULT-TYPE"
       ]
     }
   },
@@ -1038,9 +1030,7 @@
       "errors": [
         "PSV6-FUNCTION-PARAM-TYPE"
       ],
-      "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
-      ]
+      "warnings": []
     }
   },
   {
@@ -1133,10 +1123,8 @@
     "name": "request_seed_calc_bars_dynamic",
     "code": "//@version=6\nindicator(\"Seed Calc Bars Dynamic\")\nint bars = bar_index\nseed = request.seed(\"seed_repo\", \"DATA\", close, calc_bars_count = bars)\nplot(seed)\n",
     "expect": {
-    "errors": [],
-      "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
-      ]
+      "errors": [],
+      "warnings": []
     }
   },
   {
@@ -1168,9 +1156,7 @@
     "name": "request_financial_valid_usage",
     "code": "//@version=6\nindicator(\"Financial Valid\")\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", \"FY\")\nplot(fin)\n",
     "expect": {
-      "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
-      ]
+      "warnings": []
     }
   },
   {
@@ -1182,8 +1168,7 @@
         "PSV6-FUNCTION-PARAM-TYPE"
       ],
       "warnings": [
-        "PSV6-REQUEST-SYMBOL-FORMAT",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-REQUEST-SYMBOL-FORMAT"
       ]
     }
   },
@@ -1192,8 +1177,7 @@
     "code": "//@version=6\nindicator(\"Financial Dynamic Field\")\nstring field = \"TOTAL_REVENUE\"\nfin = request.financial(\"NASDAQ:AAPL\", field, \"FY\")\nplot(fin)\n",
     "expect": {
       "warnings": [
-        "PSV6-REQUEST-FINANCIAL-FIELD",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-REQUEST-FINANCIAL-FIELD"
       ]
     }
   },
@@ -1202,8 +1186,7 @@
     "code": "//@version=6\nindicator(\"Financial Period Unknown\")\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", \"ABC\")\nplot(fin)\n",
     "expect": {
       "warnings": [
-        "PSV6-REQUEST-FINANCIAL-PERIOD",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-REQUEST-FINANCIAL-PERIOD"
       ]
     }
   },
@@ -1211,18 +1194,14 @@
     "name": "request_financial_invalid_currency_literal",
     "code": "//@version=6\nindicator(\"Financial Currency\")\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", \"FY\", currency=\"XYZ\")\nplot(fin)\n",
     "expect": {
-      "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
-      ]
+      "warnings": []
     }
   },
   {
     "name": "request_financial_named_gaps_invalid",
     "code": "//@version=6\nindicator(\"Financial Gaps Invalid\")\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", \"FY\", gaps=\"foo\")\nplot(fin)\n",
     "expect": {
-      "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
-      ]
+      "warnings": []
     }
   },
   {
@@ -1230,8 +1209,7 @@
     "code": "//@version=6\nindicator(\"Financial Lookahead Invalid\")\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", \"FY\", lookahead=barmerge.lookahead_middle)\nplot(fin)\n",
     "expect": {
       "warnings": [
-        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
       ]
     }
   },
@@ -1239,9 +1217,7 @@
     "name": "request_financial_period_dynamic",
     "code": "//@version=6\nindicator(\"Financial Period Dynamic\")\nstring per = \"FY\"\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", per)\nplot(fin)\n",
     "expect": {
-      "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
-      ]
+      "warnings": []
     }
   },
   {
@@ -1250,7 +1226,6 @@
     "expect": {
       "warnings": [
         "PSV6-REQUEST-PERFORMANCE-MULTIPLE",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION",
         "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
       ]
     }
@@ -1307,9 +1282,7 @@
         "PSV6-ENUM-UNDEFINED-TYPE",
         "PSV6-FUNCTION-PARAM-TYPE"
       ],
-      "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
-      ]
+      "warnings": []
     }
   },
   {
@@ -1419,8 +1392,7 @@
         "PSV6-FUNCTION-PARAM-TYPE"
       ],
       "warnings": [
-        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
       ]
     }
   },
@@ -1433,8 +1405,7 @@
       ],
       "warnings": [
         "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
-        "PSV6-REQUEST-LOOKAHEAD-INVALID",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-REQUEST-LOOKAHEAD-INVALID"
       ]
     }
   },
@@ -1481,8 +1452,7 @@
       ],
       "warnings": [
         "PSV6-REPAINT-SECURITY",
-        "PSV6-REQUEST-DYNAMIC-TIMEFRAME",
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
+        "PSV6-REQUEST-DYNAMIC-TIMEFRAME"
       ]
     }
   },

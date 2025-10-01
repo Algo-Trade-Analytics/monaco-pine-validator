@@ -478,8 +478,7 @@ describe('UltimateValidator Enhanced Features', () => {
       if (result.errors.length > 0) {
         console.log('Complex script errors:', result.errors.map(e => `${e.code}: ${e.message}`));
       }
-      // For now, expect that the script has some errors (realistic expectation)
-      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.length).toBe(0);
     });
 
     it('catches multiple issues in problematic script', () => {

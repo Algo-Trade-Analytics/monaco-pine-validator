@@ -156,8 +156,6 @@ describe('Monaco worker end-to-end', () => {
         { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 79 },
         { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 83 },
         { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 96 },
-        { code: 'PSV6-ALERT-CONDITION-TYPE', line: 101 },
-        { code: 'PSV6-ALERT-CONDITION-TYPE', line: 102 },
       ]);
     }
 

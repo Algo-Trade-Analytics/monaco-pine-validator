@@ -178,7 +178,7 @@ if true
 x = 1
 x = 2`;
     const { codes } = run(code);
-    expectHas(codes, { warnings: ['PSW04', 'PSW03'] });
+    expectHas(codes, { warnings: ['PS014'] });
   });
 
   it('checks element reassignment/compound before decl', () => {

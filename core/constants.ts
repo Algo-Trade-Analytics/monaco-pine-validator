@@ -121,7 +121,7 @@ export const NS_MEMBERS: Record<string, Set<string>> = {
   ta: new Set([
     'sma','ema','rsi','macd','stoch','atr','bb','highest','lowest','crossover','crossunder','sar','roc',
     'mom','change','correlation','dev','linreg','percentrank','pivothigh','pivotlow','range','stdev',
-    'variance','wma','alma','vwma','swma','rma','hma','tsi','cci','cmo','mfi','obv','pvt','nvi','pvi',
+    'variance','wma','alma','vwma','swma','rma','hma','tsi','cci','cmo','mfi','obv','pvt','nvi','pvi','covariance',
     'wad','barssince','cog','cross','cum','highestbars','lowestbars','max','median','min','mode',
     'percentile_linear_interpolation','percentile_nearest_rank','rci','valuewhen','bbw','kcw','falling',
     'rising','tr','iii','wvad'
@@ -850,8 +850,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   },
   'ta.swma': {
     parameters: [
-      { name: 'source', type: 'float', qualifier: 'series', required: true },
-      { name: 'length', type: 'int', qualifier: 'simple', required: true }
+      { name: 'source', type: 'float', qualifier: 'series', required: true }
     ],
     returnType: 'series'
   },
@@ -1027,6 +1026,14 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
     ],
     returnType: 'series'
   },
+  'ta.covariance': {
+    parameters: [
+      { name: 'source1', type: 'float', qualifier: 'series', required: true },
+      { name: 'source2', type: 'float', qualifier: 'series', required: true },
+      { name: 'length', type: 'int', qualifier: 'simple', required: true }
+    ],
+    returnType: 'series'
+  },
   'ta.dev': {
     parameters: [
       { name: 'source', type: 'float', qualifier: 'series', required: true },
@@ -1102,7 +1109,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'ta.change': {
     parameters: [
       { name: 'source', type: 'float', qualifier: 'series', required: true },
-      { name: 'length', type: 'int', qualifier: 'simple', required: true }
+      { name: 'length', type: 'int', qualifier: 'simple', required: false }
     ],
     returnType: 'series'
   },
