@@ -195,7 +195,7 @@ describe('FunctionValidator (AST)', () => {
     const harness = new FunctionValidatorHarness(service);
 
     const result = harness.validate(source);
-    expect(result.warnings.map((warning) => warning.code)).toContain('PSV6-FUNCTION-STYLE-COMPLEXITY');
+    expect(result.warnings.map((warning) => warning.code)).toContain('PSV6-STYLE-COMPLEXITY');
   });
 
   it('detects inconsistent return types with implicit arrow returns', () => {

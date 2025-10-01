@@ -182,12 +182,11 @@ export class EnhancedQualityValidator implements ValidationModule {
 
           const complexity = this.calculateFunctionComplexityAst(fn);
           if (complexity >= 6) {
-            this.addWarning(
+            this.emitFunctionComplexityWarnings(
               anchor.loc.start.line,
               anchor.loc.start.column,
-              `Function '${name}' has high cyclomatic complexity (${complexity}). Consider breaking it into smaller functions.`,
-              'PSV6-QUALITY-COMPLEXITY',
-              'Refactor function to reduce complexity below 8',
+              name,
+              complexity,
             );
           }
 
@@ -318,13 +317,7 @@ export class EnhancedQualityValidator implements ValidationModule {
     for (const fn of functions) {
       const complexity = this.calculateFunctionComplexityText(fn);
       if (complexity >= 6) {
-        this.addWarning(
-          fn.startLine,
-          fn.startColumn,
-          `Function '${fn.name}' has high cyclomatic complexity (${complexity}). Consider breaking it into smaller functions.`,
-          'PSV6-QUALITY-COMPLEXITY',
-          'Refactor function to reduce complexity below 8',
-        );
+        this.emitFunctionComplexityWarnings(fn.startLine, fn.startColumn, fn.name, complexity);
       }
 
       const length = this.calculateFunctionLengthText(fn);
@@ -338,6 +331,31 @@ export class EnhancedQualityValidator implements ValidationModule {
         );
       }
     }
+  }
+
+  private emitFunctionComplexityWarnings(line: number, column: number, name: string, complexity: number): void {
+    this.addWarning(
+      line,
+      column,
+      `Function '${name}' has high cyclomatic complexity (${complexity}). Consider breaking it into smaller functions.`,
+      'PSV6-QUALITY-COMPLEXITY',
+      'Refactor function to reduce complexity below 8',
+    );
+
+    if (!this.hasWarning('PSV6-STYLE-COMPLEXITY', line, column)) {
+      this.warnings.push({
+        line,
+        column,
+        message: `Function '${name}' has high complexity (${complexity}). Consider breaking it into smaller functions.`,
+        severity: 'warning',
+        code: 'PSV6-STYLE-COMPLEXITY',
+        suggestion: 'Consider breaking down complex functions into smaller routines.',
+      });
+    }
+  }
+
+  private hasWarning(code: string, line: number, column: number): boolean {
+    return this.warnings.some((warning) => warning.code === code && warning.line === line && warning.column === column);
   }
 
   private calculateFunctionComplexityText(fn: TextFunctionBlock): number {

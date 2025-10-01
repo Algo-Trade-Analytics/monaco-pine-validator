@@ -197,6 +197,66 @@ describe('CoreValidator AST integration', () => {
     expect(strategyNamespaceErrors[0]?.line).toBe(3);
   });
 
+  it('emits PSO02 when assignments appear inside conditional tests', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Eq Check")',
+      'foo = 1',
+      'bar = 2',
+      'if foo = bar',
+      '    plot(foo)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleValue = createStringLiteral('Eq Check', '"Eq Check"', 16, 2);
+    const titleArgument = createArgument(titleValue, 10, 26, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 27, 2);
+
+    const fooIdentifier = createIdentifier('foo', 0, 3);
+    const fooInitializer = createNumberLiteral(1, '1', 6, 3);
+    const fooDeclaration = createVariableDeclaration(fooIdentifier, 0, 8, 3, {
+      declarationKind: 'regular',
+      initializer: fooInitializer,
+    });
+
+    const barIdentifier = createIdentifier('bar', 0, 4);
+    const barInitializer = createNumberLiteral(2, '2', 6, 4);
+    const barDeclaration = createVariableDeclaration(barIdentifier, 0, 8, 4, {
+      declarationKind: 'regular',
+      initializer: barInitializer,
+    });
+
+    const conditionLeft = createIdentifier('foo', 3, 5);
+    const conditionRight = createIdentifier('bar', 8, 5);
+    const assignmentExpression = createBinaryExpression('=', conditionLeft, conditionRight, 3, 8, 5);
+
+    const plotCallee = createIdentifier('plot', 4, 6);
+    const plotArgument = createArgument(createIdentifier('foo', 9, 6), 9, 12, 6);
+    const plotCall = createCallExpression(plotCallee, [plotArgument], 4, 12, 6);
+    const plotStatement = createExpressionStatement(plotCall, 4, 12, 6);
+    const consequentBlock = createBlock([plotStatement], 4, 12, 6, 6);
+    const ifStatement = createIfStatement(assignmentExpression, consequentBlock, null, 0, 12, 5);
+
+    const program = createProgramFromSource(source, [directive], [
+      scriptDeclaration,
+      fooDeclaration,
+      barDeclaration,
+      ifStatement,
+    ]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new CoreValidatorHarness(service);
+    const result = validator.validate(source);
+    const operatorWarnings = result.warnings.filter((warning) => warning.code === 'PSO02');
+
+    expect(operatorWarnings).toHaveLength(1);
+    expect(operatorWarnings[0]?.line).toBe(5);
+  });
+
   it("warns when method declarations don't place 'this' as the first parameter", () => {
     const source = [
       '//@version=6',

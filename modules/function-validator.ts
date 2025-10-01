@@ -25,6 +25,7 @@ import {
   type StatementNode,
   type BlockStatementNode,
   type IfStatementNode,
+  type IfExpressionNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 import { BUILTIN_FUNCTIONS_V6_RULES, KEYWORDS, NAMESPACES, NS_MEMBERS } from '../core/constants';
@@ -253,6 +254,7 @@ export class FunctionValidator implements ValidationModule {
     const program = this.astContext?.ast ?? null;
 
     if (!program) {
+      this.validateInconsistentReturnTypesLegacy();
       return this.buildResult();
     }
 
@@ -1194,7 +1196,7 @@ export class FunctionValidator implements ValidationModule {
           location.loc.start.line,
           location.loc.start.column,
           `Function '${func.name}' has high complexity (${complexity}). Consider breaking it into smaller functions`,
-          'PSV6-FUNCTION-STYLE-COMPLEXITY',
+          'PSV6-STYLE-COMPLEXITY',
         );
       }
     }
@@ -1280,10 +1282,22 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private hasFunctionDocumentation(lineNum: number): boolean {
-    // Check if there's a comment above the function
-    if (lineNum > 1) {
-      const prevLine = getSourceLine(this.context, lineNum - 1);
-      return prevLine.trim().startsWith('//');
+    for (let line = lineNum - 1; line >= 1; line -= 1) {
+      const sourceLine = getSourceLine(this.context, line);
+      if (typeof sourceLine !== 'string') {
+        continue;
+      }
+
+      const trimmed = sourceLine.trim();
+      if (trimmed.length === 0) {
+        continue;
+      }
+
+      if (!trimmed.startsWith('//')) {
+        return false;
+      }
+
+      return trimmed.startsWith('//@') || trimmed.startsWith('///');
     }
     return false;
   }
@@ -1556,7 +1570,7 @@ export class FunctionValidator implements ValidationModule {
       return false;
     }
 
-    if (parent.node.kind === 'VariableDeclaration' && parent.key === 'initializer') {
+    if (parent.node.kind === 'VariableDeclaration' && path.key === 'initializer') {
       const declaration = parent.node as VariableDeclarationNode;
       if (
         declaration.identifier.kind === 'Identifier'
@@ -1571,7 +1585,7 @@ export class FunctionValidator implements ValidationModule {
       return false;
     }
 
-    if (parent.node.kind === 'AssignmentStatement' && parent.key === 'right') {
+    if (parent.node.kind === 'AssignmentStatement' && path.key === 'right') {
       const assignment = parent.node as AssignmentStatementNode;
       if (assignment.left.kind === 'Identifier') {
         const identifier = assignment.left as IdentifierNode;
@@ -1823,6 +1837,7 @@ export class FunctionValidator implements ValidationModule {
 
   private validateInconsistentReturnTypes(): void {
     if (!this.astContext?.ast) {
+      this.validateInconsistentReturnTypesLegacy();
       return;
     }
 
@@ -1878,6 +1893,72 @@ export class FunctionValidator implements ValidationModule {
     return types;
   }
 
+  private validateInconsistentReturnTypesLegacy(): void {
+    const lines = this.context.cleanLines ?? this.context.lines ?? [];
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return;
+    }
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index] ?? '';
+      const trimmed = line.trim();
+
+      if (!trimmed || trimmed.startsWith('//')) {
+        continue;
+      }
+
+      const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s*\([^)]*\)\s*=>/);
+      if (!match) {
+        continue;
+      }
+
+      const funcName = match[1];
+      const returnKinds = new Set<string>();
+      let sawReturn = false;
+
+      for (let bodyIndex = index + 1; bodyIndex < Math.min(lines.length, index + 20); bodyIndex += 1) {
+        const bodyLine = lines[bodyIndex] ?? '';
+        const bodyTrimmed = bodyLine.trim();
+
+        if (!bodyTrimmed || bodyTrimmed.startsWith('//')) {
+          continue;
+        }
+
+        const indent = bodyLine.search(/\S/);
+        if (indent <= 0 && bodyTrimmed) {
+          break;
+        }
+
+        if (/^[A-Za-z_][A-Za-z0-9_.]*\s*\([^)]*\)\s*=>/.test(bodyTrimmed)) {
+          break;
+        }
+
+        if (/(?:"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')/.test(bodyTrimmed)) {
+          returnKinds.add('string');
+          sawReturn = true;
+        }
+
+        if (/\b\d+\.\d+\b/.test(bodyTrimmed)) {
+          returnKinds.add('float');
+          sawReturn = true;
+        } else if (/\b\d+\b/.test(bodyTrimmed)) {
+          returnKinds.add('int');
+          sawReturn = true;
+        }
+      }
+
+      const meaningful = Array.from(returnKinds);
+      if (sawReturn && meaningful.length > 1) {
+        this.addError(
+          index + 1,
+          1,
+          `Function '${funcName}' has inconsistent return types: ${meaningful.join(', ')}`,
+          'PSV6-FUNCTION-RETURN-TYPE',
+        );
+      }
+    }
+  }
+
   private collectImplicitReturnTypesFromStatement(statement: StatementNode | null, types: Set<string>): void {
     if (!statement) {
       types.add('void');
@@ -1886,13 +1967,14 @@ export class FunctionValidator implements ValidationModule {
 
     switch (statement.kind) {
       case 'BlockStatement': {
-        const block = statement as BlockStatementNode;
-        for (const stmt of block.body) {
-          this.collectImplicitReturnTypesFromStatement(stmt, types);
-        }
+        this.collectImplicitReturnTypesFromBlock(statement as BlockStatementNode, types);
         break;
       }
       case 'ExpressionStatement': {
+        if (statement.expression.kind === 'IfExpression') {
+          this.collectImplicitReturnTypesFromIfExpression(statement.expression as IfExpressionNode, types);
+          break;
+        }
         const kind = this.getNodeTypeKind(statement.expression);
         types.add(kind ?? 'unknown');
         break;
@@ -1919,27 +2001,54 @@ export class FunctionValidator implements ValidationModule {
     }
   }
 
+  private collectImplicitReturnTypesFromBlock(block: BlockStatementNode, types: Set<string>): void {
+    for (const stmt of block.body) {
+      this.collectImplicitReturnTypesFromStatement(stmt, types);
+    }
+  }
+
+  private collectImplicitReturnTypesFromIfExpression(expr: IfExpressionNode, types: Set<string>): void {
+    this.collectImplicitReturnTypesFromBlock(expr.consequent, types);
+    if (expr.alternate) {
+      if (expr.alternate.kind === 'IfExpression') {
+        this.collectImplicitReturnTypesFromIfExpression(expr.alternate, types);
+      } else {
+        this.collectImplicitReturnTypesFromBlock(expr.alternate as BlockStatementNode, types);
+      }
+    } else {
+      types.add('void');
+    }
+  }
+
   private getNodeTypeKind(node: ExpressionNode | null | undefined): string | null {
     if (!node) {
       return 'void';
     }
     const metadata = this.astContext?.typeEnvironment.nodeTypes.get(node) ?? null;
     if (!metadata) {
-      switch (node.kind) {
-        case 'StringLiteral':
-          return 'string';
-        case 'NumberLiteral':
-          return Number.isInteger((node as NumberLiteralNode).value) ? 'int' : 'float';
-        case 'BooleanLiteral':
-          return 'bool';
-        case 'NullLiteral':
-          return 'void';
-        default:
-          return 'unknown';
-      }
-      return 'unknown';
+      return this.inferLiteralKindFromNode(node);
     }
+
+    if (metadata.kind === 'literal') {
+      return this.inferLiteralKindFromNode(node);
+    }
+
     return metadata.kind;
+  }
+
+  private inferLiteralKindFromNode(node: ExpressionNode): string {
+    switch (node.kind) {
+      case 'StringLiteral':
+        return 'string';
+      case 'NumberLiteral':
+        return Number.isInteger((node as NumberLiteralNode).value) ? 'int' : 'float';
+      case 'BooleanLiteral':
+        return 'bool';
+      case 'NullLiteral':
+        return 'void';
+      default:
+        return 'unknown';
+    }
   }
 
   private findCorrectNamespace(funcName: string): string | null {

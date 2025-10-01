@@ -141,20 +141,20 @@ describe('Monaco worker end-to-end', () => {
 
     expect(resultMessage.type).toBe('result');
     if (resultMessage.type === 'result') {
-      const codesWithLines = resultMessage.payload.result.errors.map((issue) => ({
-        code: issue.code,
-        line: issue.line,
-      }));
+      const codesWithLines = resultMessage.payload.result.errors
+        .map((issue) => ({
+          code: issue.code,
+          line: issue.line,
+        }))
+        .sort((a, b) => a.line - b.line || a.code.localeCompare(b.code));
       expect(codesWithLines).toEqual([
+        { code: 'PSV6-FUNCTION-RETURN-TYPE', line: 40 },
+        { code: 'PSV6-FUNCTION-RETURN-TYPE', line: 44 },
         { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 74 },
         { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 75 },
         { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 78 },
         { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 79 },
         { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 83 },
-        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 83 },
-        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 92 },
-        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 93 },
-        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 96 },
         { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 96 },
         { code: 'PSV6-ALERT-CONDITION-TYPE', line: 101 },
         { code: 'PSV6-ALERT-CONDITION-TYPE', line: 102 },

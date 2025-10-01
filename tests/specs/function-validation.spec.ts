@@ -424,7 +424,7 @@ result = complex_function(1, 2, 3)
 plot(close)`;
       
       const result = validator.validate(code);
-      expectHas(result, { warnings: ['PSV6-FUNCTION-STYLE-COMPLEXITY'] });
+      expectHas(result, { warnings: ['PSV6-STYLE-COMPLEXITY'] });
     });
 
     it('should suggest function documentation', () => {

@@ -81,6 +81,23 @@ export const XLOC_YLOC_CONSTANTS = new Set<string>([
   'xloc.bar_index', 'xloc.bar_time', 'yloc.price', 'yloc.abovebar', 'yloc.belowbar'
 ]);
 
+export const EXTEND_CONSTANTS = new Set<string>([
+  'extend.none', 'extend.left', 'extend.right', 'extend.both'
+]);
+
+export const LOCATION_CONSTANTS = new Set<string>([
+  'location.abovebar', 'location.belowbar', 'location.top', 'location.bottom', 'location.absolute'
+]);
+
+export const SHAPE_CONSTANTS = new Set<string>([
+  'shape.arrowdown', 'shape.arrowup', 'shape.circle', 'shape.cross', 'shape.diamond', 'shape.flag',
+  'shape.labeldown', 'shape.labelup', 'shape.square', 'shape.triangledown', 'shape.triangleup', 'shape.xcross'
+]);
+
+export const SIZE_CONSTANTS = new Set<string>([
+  'size.tiny', 'size.small', 'size.normal', 'size.large', 'size.huge', 'size.auto'
+]);
+
 // Style constant sets used by final constants validator and drawing
 export const PLOT_STYLE_CONSTANTS = new Set<string>([
   'plot.style_line', 'plot.style_stepline', 'plot.style_stepline_diamond',

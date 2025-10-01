@@ -256,6 +256,7 @@ export function createEqualityExpressionRule(parser: PineParser) {
         { ALT: () => parser.consumeToken(NotEqual) },
         { ALT: () => parser.consumeToken(StrictEqual) },
         { ALT: () => parser.consumeToken(StrictNotEqual) },
+        { ALT: () => parser.consumeToken(Equal) },
       ]);
       const right = parser.invokeSubrule(parser.relationalExpression, 2);
       const endToken = parser.lookAhead(0);
