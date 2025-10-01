@@ -1,0 +1,538 @@
+import { describe, it, expect } from 'vitest';
+import { EnhancedModularValidator } from '../../EnhancedModularValidator';
+
+describe('Box Utility Functions Validation', () => {
+  const validator = new EnhancedModularValidator();
+
+  describe('box.get_* Getter Functions', () => {
+    it('should validate box.get_left()', () => {
+      const code = `//@version=6
+indicator("Box Get Left")
+var box myBox = box.new(bar_index, high, bar_index + 10, low)
+leftBar = box.get_left(myBox)
+plot(leftBar, "Left Bar")`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should validate box.get_right()', () => {
+      const code = `//@version=6
+indicator("Box Get Right")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+rightBar = box.get_right(myBox)
+plot(rightBar, "Right Bar")`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.get_top()', () => {
+      const code = `//@version=6
+indicator("Box Get Top")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+topPrice = box.get_top(myBox)
+plot(topPrice, "Top Price")`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.get_bottom()', () => {
+      const code = `//@version=6
+indicator("Box Get Bottom")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+bottomPrice = box.get_bottom(myBox)
+plot(bottomPrice, "Bottom Price")`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate getting all box coordinates', () => {
+      const code = `//@version=6
+indicator("Get All Coordinates")
+var box myBox = box.new(bar_index - 20, high, bar_index, low)
+left = box.get_left(myBox)
+right = box.get_right(myBox)
+top = box.get_top(myBox)
+bottom = box.get_bottom(myBox)
+width = right - left
+height = top - bottom
+plot(width, "Width")
+plot(height, "Height")`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('box.set_* Setter Functions', () => {
+    it('should validate box.set_left()', () => {
+      const code = `//@version=6
+indicator("Box Set Left")
+var box myBox = box.new(bar_index, high, bar_index + 10, low)
+if bar_index % 20 == 0
+    box.set_left(myBox, bar_index - 5)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_right()', () => {
+      const code = `//@version=6
+indicator("Box Set Right")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+if bar_index % 20 == 0
+    box.set_right(myBox, bar_index + 5)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_top()', () => {
+      const code = `//@version=6
+indicator("Box Set Top")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+newTop = ta.highest(high, 20)
+box.set_top(myBox, newTop)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_bottom()', () => {
+      const code = `//@version=6
+indicator("Box Set Bottom")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+newBottom = ta.lowest(low, 20)
+box.set_bottom(myBox, newBottom)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_lefttop()', () => {
+      const code = `//@version=6
+indicator("Box Set Left Top")
+var box myBox = box.new(bar_index, high, bar_index + 10, low)
+if bar_index % 20 == 0
+    box.set_lefttop(myBox, bar_index - 5, high * 1.05)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_rightbottom()', () => {
+      const code = `//@version=6
+indicator("Box Set Right Bottom")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+if bar_index % 20 == 0
+    box.set_rightbottom(myBox, bar_index + 5, low * 0.95)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate updating box dynamically', () => {
+      const code = `//@version=6
+indicator("Dynamic Box Update")
+var box myBox = box.new(bar_index, high, bar_index, low)
+box.set_right(myBox, bar_index)
+box.set_top(myBox, ta.highest(high, 10))
+box.set_bottom(myBox, ta.lowest(low, 10))`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('box.set_border_* Functions', () => {
+    it('should validate box.set_border_color()', () => {
+      const code = `//@version=6
+indicator("Set Border Color")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+bullish = close > open
+newColor = bullish ? color.green : color.red
+box.set_border_color(myBox, newColor)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_border_width()', () => {
+      const code = `//@version=6
+indicator("Set Border Width")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+volatility = ta.atr(14)
+width = volatility > ta.sma(volatility, 20) ? 3 : 1
+box.set_border_width(myBox, width)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_border_style()', () => {
+      const code = `//@version=6
+indicator("Set Border Style")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+box.set_border_style(myBox, line.style_dashed)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate all border style options', () => {
+      const code = `//@version=6
+indicator("All Border Styles")
+var box box1 = box.new(bar_index - 50, high * 1.05, bar_index - 40, high)
+var box box2 = box.new(bar_index - 35, high * 1.05, bar_index - 25, high)
+var box box3 = box.new(bar_index - 20, high * 1.05, bar_index - 10, high)
+box.set_border_style(box1, line.style_solid)
+box.set_border_style(box2, line.style_dashed)
+box.set_border_style(box3, line.style_dotted)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('box.set_bgcolor() Function', () => {
+    it('should validate box.set_bgcolor()', () => {
+      const code = `//@version=6
+indicator("Set Background Color")
+var box myBox = box.new(bar_index - 10, high, bar_index, low, bgcolor=color.new(color.blue, 80))
+bullish = close > open
+newBgColor = bullish ? color.new(color.green, 80) : color.new(color.red, 80)
+box.set_bgcolor(myBox, newBgColor)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_bgcolor() with transparency', () => {
+      const code = `//@version=6
+indicator("Background with Transparency")
+var box myBox = box.new(bar_index - 20, high, bar_index, low)
+strength = math.abs(close - open) / ta.atr(14)
+transparency = int(100 - (strength * 50))
+box.set_bgcolor(myBox, color.new(color.blue, transparency))`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('box.set_text() and text styling Functions', () => {
+    it('should validate box.set_text()', () => {
+      const code = `//@version=6
+indicator("Set Text")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+priceChange = (close - open) / open * 100
+text = str.format("{0,number,#.##}%", priceChange)
+box.set_text(myBox, text)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_text_size()', () => {
+      const code = `//@version=6
+indicator("Set Text Size")
+var box myBox = box.new(bar_index - 10, high, bar_index, low, text="Label")
+box.set_text_size(myBox, size.normal)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate all text sizes', () => {
+      const code = `//@version=6
+indicator("All Text Sizes")
+var box tiny = box.new(bar_index - 50, high * 1.1, bar_index - 40, high, text="Tiny")
+var box small = box.new(bar_index - 35, high * 1.1, bar_index - 25, high, text="Small")
+var box normal = box.new(bar_index - 20, high * 1.1, bar_index - 10, high, text="Normal")
+box.set_text_size(tiny, size.tiny)
+box.set_text_size(small, size.small)
+box.set_text_size(normal, size.normal)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_text_color()', () => {
+      const code = `//@version=6
+indicator("Set Text Color")
+var box myBox = box.new(bar_index - 10, high, bar_index, low, text="Signal")
+bullish = close > open
+textColor = bullish ? color.green : color.red
+box.set_text_color(myBox, textColor)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_text_halign()', () => {
+      const code = `//@version=6
+indicator("Set Text Horizontal Align")
+var box myBox = box.new(bar_index - 10, high, bar_index, low, text="Centered")
+box.set_text_halign(myBox, text.align_center)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate all text horizontal alignments', () => {
+      const code = `//@version=6
+indicator("All H-Alignments")
+var box left = box.new(bar_index - 30, high * 1.1, bar_index - 20, high, text="Left")
+var box center = box.new(bar_index - 18, high * 1.1, bar_index - 8, high, text="Center")
+var box right = box.new(bar_index - 6, high * 1.1, bar_index + 4, high, text="Right")
+box.set_text_halign(left, text.align_left)
+box.set_text_halign(center, text.align_center)
+box.set_text_halign(right, text.align_right)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_text_valign()', () => {
+      const code = `//@version=6
+indicator("Set Text Vertical Align")
+var box myBox = box.new(bar_index - 10, high, bar_index, low, text="Middle")
+box.set_text_valign(myBox, text.align_center)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate all text vertical alignments', () => {
+      const code = `//@version=6
+indicator("All V-Alignments")
+var box top = box.new(bar_index - 30, high * 1.15, bar_index - 20, high, text="Top")
+var box middle = box.new(bar_index - 18, high * 1.15, bar_index - 8, high, text="Middle")
+var box bottom = box.new(bar_index - 6, high * 1.15, bar_index + 4, high, text="Bottom")
+box.set_text_valign(top, text.align_top)
+box.set_text_valign(middle, text.align_center)
+box.set_text_valign(bottom, text.align_bottom)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_text_wrap()', () => {
+      const code = `//@version=6
+indicator("Set Text Wrap")
+var box myBox = box.new(bar_index - 10, high, bar_index, low, text="This is a long text that should wrap")
+box.set_text_wrap(myBox, text.wrap_auto)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('box.set_extend() Function', () => {
+    it('should validate box.set_extend() with no extension', () => {
+      const code = `//@version=6
+indicator("Box Extend None")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+box.set_extend(myBox, extend.none)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_extend() with left extension', () => {
+      const code = `//@version=6
+indicator("Box Extend Left")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+box.set_extend(myBox, extend.left)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_extend() with right extension', () => {
+      const code = `//@version=6
+indicator("Box Extend Right")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+box.set_extend(myBox, extend.right)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate box.set_extend() with both extensions', () => {
+      const code = `//@version=6
+indicator("Box Extend Both")
+var box myBox = box.new(bar_index - 10, high, bar_index, low)
+box.set_extend(myBox, extend.both)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('box.copy() Function', () => {
+    it('should validate box.copy()', () => {
+      const code = `//@version=6
+indicator("Box Copy")
+originalBox = box.new(bar_index - 20, high, bar_index - 10, low, bgcolor=color.new(color.blue, 80))
+copiedBox = box.copy(originalBox)
+box.set_left(copiedBox, bar_index - 5)
+box.set_right(copiedBox, bar_index + 5)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate copying and modifying boxes', () => {
+      const code = `//@version=6
+indicator("Copy and Modify")
+template = box.new(bar_index - 10, high, bar_index, low, border_color=color.blue, border_width=2, bgcolor=color.new(color.blue, 90))
+if close > open
+    bullishBox = box.copy(template)
+    box.set_border_color(bullishBox, color.green)
+    box.set_bgcolor(bullishBox, color.new(color.green, 90))
+else
+    bearishBox = box.copy(template)
+    box.set_border_color(bearishBox, color.red)
+    box.set_bgcolor(bearishBox, color.new(color.red, 90))`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('box.delete() Function', () => {
+    it('should validate box.delete()', () => {
+      const code = `//@version=6
+indicator("Box Delete")
+var box myBox = na
+if bar_index % 20 == 0
+    if not na(myBox)
+        box.delete(myBox)
+    myBox := box.new(bar_index, high, bar_index + 10, low)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate managing box limit with delete', () => {
+      const code = `//@version=6
+indicator("Box Management", max_boxes_count=10)
+var array<box> boxes = array.new<box>()
+if bar_index % 5 == 0
+    newBox = box.new(bar_index, high, bar_index + 5, low)
+    array.push(boxes, newBox)
+    if array.size(boxes) > 10
+        oldBox = array.shift(boxes)
+        box.delete(oldBox)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('box.all Variable', () => {
+    it('should validate box.all for counting boxes', () => {
+      const code = `//@version=6
+indicator("Count Boxes")
+if bar_index % 10 == 0
+    box.new(bar_index, high, bar_index + 5, low)
+boxCount = array.size(box.all)
+plot(boxCount, "Total Boxes")`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate iterating through box.all', () => {
+      const code = `//@version=6
+indicator("Iterate Boxes")
+if bar_index % 10 == 0
+    box.new(bar_index, high, bar_index + 5, low)
+if bar_index % 50 == 0
+    for b in box.all
+        box.set_border_color(b, color.red)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate cleaning old boxes from box.all', () => {
+      const code = `//@version=6
+indicator("Clean Old Boxes")
+if bar_index % 5 == 0
+    box.new(bar_index, high, bar_index + 3, low)
+if bar_index % 100 == 0
+    for b in box.all
+        if box.get_right(b) < bar_index - 50
+            box.delete(b)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('Box Complex Scenarios', () => {
+    it('should validate support/resistance boxes', () => {
+      const code = `//@version=6
+indicator("Support/Resistance Boxes")
+var box supportBox = na
+var box resistanceBox = na
+pivotHigh = ta.pivothigh(high, 5, 5)
+pivotLow = ta.pivotlow(low, 5, 5)
+if not na(pivotLow)
+    if not na(supportBox)
+        box.delete(supportBox)
+    supportBox := box.new(bar_index - 5, pivotLow * 0.999, bar_index + 20, pivotLow * 1.001, bgcolor=color.new(color.green, 90))
+if not na(pivotHigh)
+    if not na(resistanceBox)
+        box.delete(resistanceBox)
+    resistanceBox := box.new(bar_index - 5, pivotHigh * 0.999, bar_index + 20, pivotHigh * 1.001, bgcolor=color.new(color.red, 90))`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate time-based boxes', () => {
+      const code = `//@version=6
+indicator("Time-Based Boxes")
+sessionStart = ta.change(time("D"))
+var box sessionBox = na
+var int sessionStartBar = na
+if sessionStart
+    sessionStartBar := bar_index
+    if not na(sessionBox)
+        box.delete(sessionBox)
+    sessionBox := box.new(bar_index, high, bar_index, low)
+if not na(sessionBox)
+    box.set_right(sessionBox, bar_index)
+    box.set_top(sessionBox, ta.highest(high, bar_index - sessionStartBar + 1))
+    box.set_bottom(sessionBox, ta.lowest(low, bar_index - sessionStartBar + 1))`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate volatility-based box sizing', () => {
+      const code = `//@version=6
+indicator("Volatility Boxes")
+atr = ta.atr(14)
+var box volBox = na
+if bar_index % 20 == 0
+    if not na(volBox)
+        box.delete(volBox)
+    boxHeight = atr * 2
+    volBox := box.new(bar_index, close + boxHeight, bar_index + 10, close - boxHeight)
+    borderWidth = atr > ta.sma(atr, 20) ? 3 : 1
+    box.set_border_width(volBox, borderWidth)`;
+      
+      const result = validator.validateSource(code);
+      expect(result.success).toBe(true);
+    });
+  });
+});
+
