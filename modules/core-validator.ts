@@ -647,7 +647,7 @@ export class CoreValidator implements ValidationModule {
     let hasEmptySlot = false;
 
     tuple.elements.forEach((element) => {
-      if (!element || element.kind === 'NullLiteral') {
+      if (this.isEmptyTupleElement(element)) {
         hasEmptySlot = true;
         return;
       }
@@ -677,6 +677,26 @@ export class CoreValidator implements ValidationModule {
     if (hasEmptySlot) {
       this.addWarning(tupleLine, tupleColumn, 'Empty slot in destructuring tuple.', 'PST02');
     }
+  }
+
+  private isEmptyTupleElement(element: ExpressionNode | null): boolean {
+    if (!element) {
+      return true;
+    }
+
+    if (element.kind === 'NullLiteral') {
+      const { start, end } = element.loc;
+      if (start.line === end.line && start.column === end.column) {
+        return true;
+      }
+
+      const [rangeStart, rangeEnd] = element.range;
+      if (rangeStart === rangeEnd) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private processAstCallExpression(call: CallExpressionNode): void {

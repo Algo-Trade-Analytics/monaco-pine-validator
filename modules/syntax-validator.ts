@@ -306,7 +306,7 @@ export class SyntaxValidator implements ValidationModule {
       );
     }
 
-    const hasEmptySlot = tuple.elements.some((element) => element == null);
+    const hasEmptySlot = tuple.elements.some((element) => this.isEmptyTupleElement(element));
     if (hasEmptySlot) {
       this.addWarning(
         assignment.loc.start.line,
@@ -315,6 +315,26 @@ export class SyntaxValidator implements ValidationModule {
         'PST02',
       );
     }
+  }
+
+  private isEmptyTupleElement(element: ExpressionNode | null): boolean {
+    if (!element) {
+      return true;
+    }
+
+    if (element.kind === 'NullLiteral') {
+      const { start, end } = element.loc;
+      if (start.line === end.line && start.column === end.column) {
+        return true;
+      }
+
+      const [rangeStart, rangeEnd] = element.range;
+      if (rangeStart === rangeEnd) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private validateBinaryOperatorAst(node: BinaryExpressionNode): void {
