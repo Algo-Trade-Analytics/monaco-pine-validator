@@ -1016,14 +1016,17 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   private hasComplexExpression(expression: string): boolean {
+    // Remove string literals to avoid false positives from parentheses in strings
+    const withoutStrings = expression.replace(/"[^"]*"|'[^']*'/g, '');
+    
     const complexPatterns = [
       /ta\./,
       /math\./,
       /str\./,
-      /\(/,
+      /\(/,  // Function calls (after removing string literals)
       /\+|\-|\*|\//
     ];
-    return complexPatterns.some(pattern => pattern.test(expression));
+    return complexPatterns.some(pattern => pattern.test(withoutStrings));
   }
 
   private isUnreasonableDefault(value: string): boolean {

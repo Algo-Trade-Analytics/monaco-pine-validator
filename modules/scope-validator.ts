@@ -281,6 +281,8 @@ export class ScopeValidator implements ValidationModule {
     const ignoredNames = this.createAstIgnoredNameSet(context);
 
     const declaredNames = new Set<string>();
+    const scopedDeclarations = new Map<string, string[]>(); // name -> scopeIds where declared
+    
     for (const record of context.symbolTable.values()) {
       if (!record.declarations.length) {
         continue;
@@ -292,12 +294,21 @@ export class ScopeValidator implements ValidationModule {
         continue;
       }
 
-      if (metadataKinds.some((kind) => this.shouldCheckAstDeclarationKind(kind) || kind === 'parameter')) {
+      // Check if this is a parameter - parameters are scope-limited
+      const isParameter = metadataKinds.some((kind) => kind === 'parameter');
+      const declarationScopes = (record.metadata?.declarationScopes as string[] | undefined) ?? [];
+      
+      if (isParameter && declarationScopes.length > 0) {
+        // Store parameter declarations with their scope IDs
+        scopedDeclarations.set(record.name, declarationScopes);
+      } else if (metadataKinds.some((kind) => this.shouldCheckAstDeclarationKind(kind))) {
+        // Non-parameter declarations are available globally
         declaredNames.add(record.name);
       }
     }
 
     for (const record of context.symbolTable.values()) {
+      // Skip if globally declared
       if (declaredNames.has(record.name)) {
         continue;
       }
@@ -316,20 +327,59 @@ export class ScopeValidator implements ValidationModule {
           continue;
         }
 
+        // Check if this is a scoped declaration (parameter)
+        const paramScopes = scopedDeclarations.get(record.name);
+        if (paramScopes) {
+          // Check if reference is within any of the parameter's scopes
+          const referencePath = identifierPaths.get(node);
+          if (referencePath && this.isReferenceInScopes(referencePath, paramScopes, context.scopeGraph)) {
+            // Reference is valid within parameter's scope
+            continue;
+          }
+        }
+
         const siteKey = `${reference.line}:${reference.column}:${record.name}`;
         if (this.astUndefinedWarningSites.has(siteKey)) {
           continue;
         }
         this.astUndefinedWarningSites.add(siteKey);
 
-        this.addWarning(
+        this.addError(
           reference.line,
           reference.column,
-          `Potential undefined reference '${record.name}'.`,
+          `Undefined variable '${record.name}'.`,
           'PSU02',
         );
       }
     }
+  }
+
+  private isReferenceInScopes(referencePath: NodePath<IdentifierNode>, targetScopes: string[], scopeGraph: any): boolean {
+    // Find which scope this reference is in by walking up the AST
+    let current: NodePath<any> | null = referencePath;
+    
+    while (current) {
+      const node = current.node;
+      
+      // Check if current node has scope information
+      if (node.range && scopeGraph?.nodes) {
+        for (const [scopeId, scopeNode] of scopeGraph.nodes.entries()) {
+          // Check if this reference is within one of the target scopes
+          if (targetScopes.includes(scopeId)) {
+            // Check if reference position is within scope's range
+            const refStart = node.range[0];
+            const scopeRange = scopeNode.metadata?.range;
+            if (scopeRange && refStart >= scopeRange[0] && refStart <= scopeRange[1]) {
+              return true;
+            }
+          }
+        }
+      }
+      
+      current = current.parent;
+    }
+    
+    return false;
   }
 
   private emitAstIdentifierDeclarationErrors(context: AstValidationContext): void {
@@ -379,27 +429,25 @@ export class ScopeValidator implements ValidationModule {
   private createAstIgnoredNameSet(context: AstValidationContext): Set<string> {
     const ignored = new Set<string>();
 
+    // Add Pine Script built-ins (system-defined)
     for (const name of KEYWORDS) ignored.add(name);
     for (const name of PSEUDO_VARS) ignored.add(name);
     for (const name of NAMESPACES) ignored.add(name);
     for (const name of WILDCARD_IDENT) ignored.add(name);
 
+    // Add user-defined functions and methods
     context.functionNames.forEach((name) => ignored.add(name));
     context.methodNames.forEach((name) => ignored.add(name));
+    
+    // Add user-defined variables (but NOT parameters - they're scope-limited)
     context.usedVars.forEach((name) => ignored.add(name));
     context.declaredVars.forEach((_line, declaredName) => ignored.add(declaredName));
 
-    for (const params of context.functionParams.values()) {
-      for (const rawParam of params) {
-        const cleaned = rawParam.trim().replace(/<[^>]*>/g, '');
-        const fragments = cleaned.split(/\s+/);
-        const identifier = fragments[fragments.length - 1];
-        if (identifier) {
-          ignored.add(identifier);
-        }
-      }
-    }
+    // NOTE: Function parameters are NOT added here because they are scope-limited.
+    // They are handled separately in emitAstUndefinedReferenceWarnings via scopedDeclarations.
+    // This ensures parameters like 's' in 'toSize(s)' are only valid inside that function.
 
+    // Special case: 'this' is valid in method contexts
     ignored.add('this');
 
     return ignored;

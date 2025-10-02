@@ -556,8 +556,13 @@ export class DrawingFunctionsValidator implements ValidationModule {
       }
     }
 
-    // Validate text parameter
-    if (!this.isStringLiteral(args[2])) {
+    // Validate text parameter - extract value from named parameter if present
+    let textParam = args[2];
+    const textMatch = textParam.match(/^\s*text\s*=\s*(.+)$/);
+    if (textMatch) {
+      textParam = textMatch[1];
+    }
+    if (!this.isStringLiteral(textParam)) {
       this.addWarning(lineNum, column, 'label.new() text parameter should be a string literal', 'PSV6-LABEL-TEXT-TYPE');
     }
 
@@ -1223,13 +1228,32 @@ export class DrawingFunctionsValidator implements ValidationModule {
       /ta\./,
       /math\./,
       /str\./,
-      /\(/,
-      /\+|\-|\*|\//
+      /\+|\-|\*|\//  // Arithmetic operations
     ];
     
-    return args.some(arg => 
-      complexPatterns.some(pattern => pattern.test(arg))
-    );
+    return args.some(arg => {
+      // Remove string literals and named parameters to avoid false positives
+      const withoutStrings = arg.replace(/"[^"]*"|'[^']*'/g, '').replace(/^\w+\s*=\s*/, '');
+      
+      // Check for complex patterns
+      if (complexPatterns.some(pattern => pattern.test(withoutStrings))) {
+        return true;
+      }
+      
+      // Check for function calls, but exclude simple helper functions with single identifier args
+      // e.g., toSize(lblSize) is not complex, but ta.sma(close, 20) is
+      const functionCallMatch = withoutStrings.match(/(\w+)\s*\(/);
+      if (functionCallMatch) {
+        const funcName = functionCallMatch[1];
+        // Simple helper functions are not complex
+        const simpleHelpers = ['toSize', 'color', 'size', 'label', 'line', 'box', 'str'];
+        if (!simpleHelpers.includes(funcName)) {
+          return true;
+        }
+      }
+      
+      return false;
+    });
   }
 
   // Getter methods for other modules

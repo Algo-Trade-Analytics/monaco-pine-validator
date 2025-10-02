@@ -331,12 +331,12 @@ method foo(x, this, y) =>
 });
 
 describe('References / undefined / named args', () => {
-  it('warns on potential undefined reference', () => {
+  it('errors on undefined reference', () => {
     const code = `//@version=6
 indicator("Undef")
 plot(foo)`;
     const { codes } = run(code);
-    expectHas(codes, { warnings: ['PSU02'] });
+    expectHas(codes, { errors: ['PSU02'] });
   });
 
   it('does not flag named arguments as assignments', () => {
@@ -501,7 +501,7 @@ plot(close)`;
 indicator("Version in comment")
 plot(close)`;
     const { codes } = run(code);
-    expectLacks(codes, { warnings: ['PSU02'] }); // Should not flag "version" as undefined
+    expectLacks(codes, { errors: ['PSU02'], warnings: ['PSU02'] }); // Should not flag "version" as undefined
   });
 
   it('does not flag named arguments as undefined references', () => {
@@ -509,7 +509,7 @@ plot(close)`;
 indicator("Named args")
 plot(close, title="My Plot", linewidth=2)`;
     const { codes } = run(code);
-    expectLacks(codes, { warnings: ['PSU02'] }); // Should not flag title, linewidth as undefined
+    expectLacks(codes, { errors: ['PSU02'], warnings: ['PSU02'] }); // Should not flag title, linewidth as undefined
   });
 });
 

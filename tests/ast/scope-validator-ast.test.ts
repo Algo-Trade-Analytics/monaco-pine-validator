@@ -197,9 +197,9 @@ describe('ScopeValidator AST integration', () => {
     const validator = new ScopeValidatorHarness(service);
     const result = validator.validate(source);
 
-    const undefinedWarning = result.warnings.find((warning) => warning.code === 'PSU02');
-    expect(undefinedWarning).toBeDefined();
-    expect(undefinedWarning).toMatchObject({ line: 3, column: 6 });
+    const undefinedError = result.errors.find((error) => error.code === 'PSU02');
+    expect(undefinedError).toBeDefined();
+    expect(undefinedError).toMatchObject({ line: 3, column: 6 });
   });
 
   it('does not emit PSU02 for named arguments', () => {
