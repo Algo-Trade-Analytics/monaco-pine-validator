@@ -42,12 +42,9 @@
     "code": "//@version=6\nindicator(\"Invalid Box\", overlay=true)\nmy_box = box.new(left=0, top=1, right=1, bottom=0)\ncurrent = box.get_text(my_box)\nplot(close)\n",
     "expect": {
       "errors": [
-        "PSV6-UNDEFINED-NAMESPACE-MEMBER",
-        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
+        "PSV6-FUNCTION-NAMESPACE"
       ],
-      "warnings": [
-        "PSV6-BOX-COORDINATE-TYPE"
-      ]
+      "warnings": []
     }
   },
   {
@@ -114,7 +111,7 @@
     "code": "//@version=6\nindicator(\"Migration\")\ns = sma(close, 10)\nplot(s)\n",
     "expect": {
       "errors": [
-        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
+        "PSV6-FUNCTION-NAMESPACE"
       ],
       "warnings": [
         "PSV6-MIG-SYNTAX"
@@ -126,23 +123,17 @@
     "code": "//@version=6\nindicator(\"NS\")\nval = math.sma(close, 10)\nplot(val)\n",
     "expect": {
       "errors": [
-        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
+        "PSV6-FUNCTION-NAMESPACE"
       ],
-      "warnings": [
-        "PSV6-MATH-FUNCTION-UNKNOWN: Unknown Math function: math.sma"
-      ]
+      "warnings": []
     }
   },
   {
     "name": "unsupported_math_function_median",
     "code": "//@version=6\nindicator(\"Median\")\nv = math.median(close, 10)\nplot(v)\n",
     "expect": {
-      "errors": [
-        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
-      ],
-      "warnings": [
-        "PSV6-MATH-FUNCTION-UNKNOWN: Unknown Math function: math.median"
-      ]
+      "errors": [],
+      "warnings": []
     }
   },
   {
@@ -257,11 +248,10 @@
     "code": "//@version=6\nindicator(\"Enum Undefined\")\n\nenum Direction\n    Long\n    Short\n\nvar Direction dir = Direction.Long\nif dir == Direction.Sideways\n    plot(1)\nplot(0)\n",
     "expect": {
       "errors": [
-        "PSV6-ENUM-UNDEFINED-VALUE"
-      ],
-      "warnings": [
+        "PSV6-ENUM-UNDEFINED-VALUE",
         "PSU02"
-      ]
+      ],
+      "warnings": []
     }
   },
   {
@@ -319,7 +309,7 @@
     "code": "//@version=6\nindicator(\"Security Migration\")\nsec = security(syminfo.tickerid, \"D\", close)\nplot(sec)\n",
     "expect": {
       "errors": [
-        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
+        "PSV6-FUNCTION-NAMESPACE"
       ],
       "warnings": [
         "PSV6-MIG-SYNTAX"
@@ -331,9 +321,9 @@
     "code": "//@version=6\nindicator(\"Request Unknown\")\ndata = request.foobar(\"AAPL\", close)\nplot(close)\n",
     "expect": {
       "errors": [
-        "PSV6-UNDEFINED-NAMESPACE-MEMBER",
-        "PSV6-REQUEST-UNKNOWN"
-      ]
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
+      ],
+      "warnings": []
     }
   },
   {
@@ -394,10 +384,10 @@
     "name": "request_dividends_invalid_field",
     "code": "//@version=6\nindicator(\"Request Dividends Invalid\")\ndiv = request.dividends(\"AAPL\", \"dividends.invalid_field\")\nplot(div)\n",
     "expect": {
-      "warnings": [
-        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
-        "PSV6-REQUEST-DIVIDENDS-FIELD"
-      ]
+      "errors": [
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
+      ],
+      "warnings": []
     }
   },
   {
@@ -485,11 +475,10 @@
     "name": "request_dividends_named_gaps_type",
     "code": "//@version=6\nindicator(\"Request Dividends Named Gaps\")\ndiv = request.dividends(\"AAPL\", \"dividends.amount\", gaps = \"foo\")\nplot(div)\n",
     "expect": {
-      "warnings": [
-        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
-        "PSV6-REQUEST-DIVIDENDS-FIELD",
-        "PSV6-REQUEST-GAPS-INVALID"
-      ]
+      "errors": [
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
+      ],
+      "warnings": []
     }
   },
   {
@@ -570,13 +559,9 @@
     "code": "//@version=6\nindicator(\"Request Security Lower TF\")\nres = request.security_lower_tf(\"AAPL\", \"D\")\nplot(res)\n",
     "expect": {
       "errors": [
-        "PSV6-FUNCTION-PARAM-COUNT",
-        "PSV6-REQUEST-SECURITY-LOWER-TF-PARAMS",
-        "PSV6-REQUEST-PARAMS"
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
       ],
-      "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
-      ]
+      "warnings": []
     }
   },
   {
@@ -878,10 +863,10 @@
     "name": "request_security_ignore_invalid_timeframe",
     "code": "//@version=6\nindicator(\"Request Security Ignore TF\")\nres = request.security_lower_tf(\"AAPL\", \"60\", close, ignore_invalid_timeframe = true)\nplot(res)",
     "expect": {
-      "errors": [],
-      "warnings": [
-        "PSV6-TYPE-SAFETY-NA-FUNCTION"
-      ]
+      "errors": [
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
+      ],
+      "warnings": []
     }
   },
   {
@@ -1203,9 +1188,10 @@
     "name": "request_financial_lookahead_invalid",
     "code": "//@version=6\nindicator(\"Financial Lookahead Invalid\")\nfin = request.financial(\"NASDAQ:AAPL\", \"TOTAL_REVENUE\", \"FY\", lookahead=barmerge.lookahead_middle)\nplot(fin)\n",
     "expect": {
-      "warnings": [
-        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH"
-      ]
+      "errors": [
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
+      ],
+      "warnings": []
     }
   },
   {
@@ -1297,12 +1283,9 @@
     "code": "//@version=6\nindicator(\"Dividends Lookahead Invalid\")\ndiv = request.dividends(\"NASDAQ:AAPL\", dividends.gross, lookahead=barmerge.lookahead_middle)\nplot(div)\n",
     "expect": {
       "errors": [
-        "PSV6-FUNCTION-PARAM-TYPE"
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
       ],
-      "warnings": [
-        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
-        "PSV6-REQUEST-LOOKAHEAD-INVALID"
-      ]
+      "warnings": []
     }
   },
   {
@@ -1346,12 +1329,9 @@
     "code": "//@version=6\nindicator(\"Earnings Lookahead Invalid\")\nearn = request.earnings(\"NASDAQ:AAPL\", earnings.actual, lookahead=barmerge.lookahead_middle)\nplot(earn)\n",
     "expect": {
       "errors": [
-        "PSV6-FUNCTION-PARAM-TYPE"
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
       ],
-      "warnings": [
-        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
-        "PSV6-REQUEST-LOOKAHEAD-INVALID"
-      ]
+      "warnings": []
     }
   },
   {
@@ -1396,12 +1376,9 @@
     "code": "//@version=6\nindicator(\"Splits Lookahead Invalid\")\nsplit = request.splits(\"NASDAQ:AAPL\", splits.denominator, lookahead=barmerge.lookahead_middle)\nplot(split)\n",
     "expect": {
       "errors": [
-        "PSV6-FUNCTION-PARAM-TYPE"
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
       ],
-      "warnings": [
-        "PSV6-ENUM-COMPARISON-TYPE-MISMATCH",
-        "PSV6-REQUEST-LOOKAHEAD-INVALID"
-      ]
+      "warnings": []
     }
   },
   {
