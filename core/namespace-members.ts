@@ -40,7 +40,7 @@ export const NAMESPACE_MEMBERS = {
     'log10', 'max', 'min', 'pow', 'random', 'round', 'round_to_mintick', 'sign',
     'sin', 'sqrt', 'sum', 'tan', 'todegrees', 'toradians',
     // Constants
-    'pi',
+    'pi', 'e', 'phi', 'rphi',
     // Statistics (v6)
     'median', 'mode'
   ]),
@@ -142,6 +142,8 @@ export const NAMESPACE_MEMBERS = {
     // Text setters (v6)
     'set_text', 'set_text_color', 'set_text_size',
     'set_text_halign', 'set_text_valign', 'set_text_font_family', 'set_text_wrap',
+    // Border styles
+    'border_style_double', 'border_style_solid', 'border_style_dashed',
     // Note: box.get_text and box.set_text_font do NOT exist in Pine Script v6
     // They are intentionally excluded to catch errors
   ]),
@@ -151,7 +153,9 @@ export const NAMESPACE_MEMBERS = {
     'cell_set_text_color', 'cell_set_text_font_family', 'cell_set_text_halign',
     'cell_set_text_valign', 'cell_set_text_size', 'cell_set_tooltip',
     'cell_set_width', 'cell_set_height', 'set_bgcolor', 'set_border_color',
-    'set_border_width', 'set_frame_color', 'set_frame_width', 'set_position'
+    'set_border_width', 'set_frame_color', 'set_frame_width', 'set_position',
+    // Cell merge constants
+    'cell_merge_horizontal', 'cell_merge_vertical', 'cell_merge_none'
   ]),
   
   'strategy': new Set([
@@ -163,19 +167,23 @@ export const NAMESPACE_MEMBERS = {
     'wintrades', 'losstrades', 'eventrades', 'grossprofit', 'grossloss',
     'netprofit', 'account', 'equity', 'initial_capital',
     // Strategy directions
-    'long', 'short'
+    'long', 'short',
+    // Nested constants
+    'commission', 'oca', 'direction'
   ]),
   
   'syminfo': new Set([
     'tickerid', 'ticker', 'prefix', 'root', 'currency', 'basecurrency', 'type',
     'timezone', 'session', 'mintick', 'pointvalue', 'description', 'volumetype',
+    // Futures-related
+    'current_contract', 'expiration_date', 'mincontract',
     // Company information
     'employees', 'shareholders', 'sector', 'industry',
     // Shares outstanding
     'shares_outstanding_float', 'shares_outstanding_total',
     // Fundamental variables
     'country', 'target_price_average', 'target_price_median', 'target_price_mode',
-    'target_price_high', 'target_price_low', 'target_price_stddev',
+    'target_price_high', 'target_price_low', 'target_price_stddev', 'target_price_estimates', 'target_price_date',
     // Recommendations (both old and new naming)
     'recommendation_mean', 'recommendation_all', 'recommendation_buy',
     'recommendation_hold', 'recommendation_sell', 'recommendation_strong_buy',
@@ -191,7 +199,9 @@ export const NAMESPACE_MEMBERS = {
     'net_income_margin', 'operating_margin', 'price_to_book', 'price_to_cash_flow',
     'price_to_earnings', 'price_to_earnings_forward', 'price_to_sales',
     'quick_ratio', 'return_on_assets', 'return_on_equity', 'revenue',
-    'revenue_per_share', 'total_debt', 'total_debt_to_equity', 'total_revenue'
+    'revenue_per_share', 'total_debt', 'total_debt_to_equity', 'total_revenue',
+    // Additional specialized variables
+    'pe_ratio', 'beta', 'avg_volume_30d', 'contract_size', 'tick_value', 'margin_requirement'
   ]),
   
   'timeframe': new Set([
@@ -234,7 +244,9 @@ export const NAMESPACE_MEMBERS = {
   'text': new Set([
     'align_left', 'align_center', 'align_right',
     'align_top', 'align_bottom',
-    'wrap_none', 'wrap_auto'
+    'wrap_none', 'wrap_auto',
+    'format_bold', 'format_italic', 'format_normal',
+    'format_bold_italic', 'format_underline', 'format_strikethrough'
   ]),
   
   'polyline': new Set([
@@ -253,7 +265,8 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'display': new Set([
-    'none', 'all', 'data_window', 'pane', 'price_scale', 'status_line'
+    'none', 'all', 'data_window', 'pane', 'price_scale', 'status_line',
+    'price_scale_only', 'data_window_only'
   ]),
   
   'chart': new Set([
@@ -269,7 +282,8 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'font': new Set([
-    'default', 'monospace', 'monospace_bold', 'serif', 'serif_bold', 'sans_serif', 'sans_serif_bold'
+    'default', 'monospace', 'monospace_bold', 'serif', 'serif_bold', 'sans_serif', 'sans_serif_bold',
+    'family_default', 'family_monospace'
   ]),
   
   'format': new Set([
@@ -277,11 +291,25 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'barmerge': new Set([
-    'gaps_off', 'gaps_on', 'gaps_left', 'gaps_right', 'gaps_middle'
+    'gaps_off', 'gaps_on', 'gaps_left', 'gaps_right', 'gaps_middle',
+    'lookahead_off', 'lookahead_on'
   ]),
   
   'currency': new Set([
     'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD', 'CNY', 'KRW', 'INR', 'BRL', 'MXN', 'RUB', 'ZAR'
+  ]),
+  
+  // Nested strategy constants
+  'strategy.commission': new Set([
+    'percent', 'cash'
+  ]),
+  
+  'strategy.oca': new Set([
+    'cancel', 'reduce'
+  ]),
+  
+  'strategy.direction': new Set([
+    'long', 'short', 'all'
   ]),
   
   'dividends': new Set([
