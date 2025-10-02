@@ -237,6 +237,11 @@ export class CoreValidator implements ValidationModule {
   }
 
   private reset(): void {
+    // Clear error/warning/info arrays
+    this.errors = [];
+    this.warnings = [];
+    this.info = [];
+    
     this.astContext = null;
     this.astVersionDirectiveLines.clear();
     this.astScriptDeclarationLines.clear();

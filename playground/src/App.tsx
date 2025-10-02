@@ -143,7 +143,6 @@ export default function App() {
 
     const markers = markerData.map((marker) => ({
       ...marker,
-      severity: marker.severity as unknown as MonacoEditor.MarkerSeverity,
     }));
 
     monaco.editor.setModelMarkers(model, markerSourceRef.current, markers);
@@ -206,11 +205,14 @@ export default function App() {
 
     const run = async (): Promise<void> => {
       try {
+        console.log('[Validation] Starting validation v' + version + ', code length:', code.length, 'first line:', code.split('\n')[0]);
         const message = await client.validate({ code, version });
         if (requestVersionRef.current !== version) {
+          console.log('[Validation] Stale response (v' + version + ' vs current v' + requestVersionRef.current + '), ignoring');
           return;
         }
         const payload: WorkerValidationResponse = message.payload;
+        console.log('[Validation] Completed v' + version + ', errors:', payload.result.errors.length, 'warnings:', payload.result.warnings.length);
         lastMarkersRef.current = payload.markers;
         setResult(payload.result);
         applyMarkers(payload.markers);
@@ -240,7 +242,11 @@ export default function App() {
   }, [applyMarkers]);
 
   const onEditorChange = useCallback((value?: string) => {
-    setCode(value ?? '');
+    const newCode = value ?? '';
+    console.log('[Editor] Content changed, length:', newCode.length);
+    // Clear results immediately on any change
+    setResult(createEmptyResult());
+    setCode(newCode);
   }, []);
 
   const toggleTheme = useCallback(() => {
@@ -248,6 +254,28 @@ export default function App() {
   }, []);
 
   const handleSnippetPick = useCallback((snippet: string) => {
+    console.log('[Snippet] Picking snippet, length:', snippet.length, 'first line:', snippet.split('\n')[0]);
+    
+    // Clear validation results immediately FIRST
+    setResult(createEmptyResult());
+    
+    // Clear existing markers and update editor
+    const monaco = monacoRef.current;
+    const editor = editorRef.current;
+    if (monaco && editor) {
+      const model = editor.getModel();
+      if (model) {
+        console.log('[Snippet] Clearing markers and setting new content');
+        monaco.editor.setModelMarkers(model, markerSourceRef.current, []);
+        // Explicitly set the model value to ensure editor updates
+        model.setValue(snippet);
+      }
+    }
+    
+    // Force state update to trigger validation
+    // We need to do this even if model.setValue was called because
+    // the onChange event might not fire for programmatic changes
+    console.log('[Snippet] Triggering validation with new code');
     setCode(snippet);
   }, []);
 
@@ -387,6 +415,7 @@ dump(tree, indent=2, include_attributes=True)
               ))}
             </div>
             <Editor
+              key="validator-editor"
               height="calc(100% - 48px)"
               defaultLanguage="pinescript"
               value={code}
@@ -484,6 +513,7 @@ dump(tree, indent=2, include_attributes=True)
               ))}
             </div>
             <Editor
+              key="ast-editor"
               height="calc(100% - 48px)"
               defaultLanguage="pinescript"
               value={code}
