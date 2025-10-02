@@ -65,6 +65,7 @@ import { SyminfoVariablesValidator } from './modules/syminfo-variables-validator
 import { FinalConstantsValidator } from './modules/final-constants-validator';
 import { TickerFunctionsValidator } from './modules/ticker-functions-validator';
 import { SyntaxErrorValidator } from './modules/syntax-error-validator';
+import { NamespaceValidator } from './modules/namespace-validator';
 
 export class EnhancedModularValidator extends BaseValidator {
   protected functionHeaderLine = new Map<string, number>();
@@ -75,6 +76,7 @@ export class EnhancedModularValidator extends BaseValidator {
     // Register all validation modules in priority order
     // Syntax error validation runs first to prevent error cascades
     this.registerModule(new SyntaxErrorValidator());    // Syntax errors (priority 999) - runs FIRST to catch parser errors
+    this.registerModule(new NamespaceValidator());      // Namespace validation (priority 950) - runs SECOND to catch undefined properties
     // Core validation is handled by CoreValidator module (priority 100)
     this.registerModule(new CoreValidator());           // Core validation (priority 100)
     this.registerModule(new MatrixValidator());         // Matrix validation (priority 90) - must run before FunctionValidator
@@ -228,10 +230,13 @@ export class EnhancedModularValidator extends BaseValidator {
         this.addWarnings(moduleResult.warnings);
         this.addInfoMessages(moduleResult.info);
         
-        // Note: No early exit needed anymore!
-        // Pre-check errors prevent AST parsing in base-validator's prepareContext,
-        // so validators can still run and report legitimate issues from the code
-        // that doesn't depend on a fully-parsed AST
+        // BEST PRACTICE: Early exit on critical errors (industry standard)
+        // Prevents cascading false positives and matches user expectations
+        // (ESLint, TypeScript, Python linters all do this)
+        if ((module.name === 'SyntaxErrorValidator' || module.name === 'NamespaceValidator') 
+            && this.errors.length > 0) {
+          return; // Stop validation - user should fix these fundamental errors first
+        }
       } catch (error) {
         this.addError(1, 1, `Error in ${module.name} module: ${error}`, 'MODULE-ERROR');
       }
