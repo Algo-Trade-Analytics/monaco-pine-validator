@@ -33,9 +33,9 @@ const SYNTAX_PATTERNS: SyntaxPattern[] = [
     }
   },
   
-  // Empty parameter between commas: func(a, , b)
+  // Empty parameter between commas: func(a, , b) - but not tuple destructuring [a, , c]
   {
-    pattern: /,\s*,/,
+    pattern: /[a-zA-Z_][a-zA-Z0-9_]*(?:\.\w+)?\s*\([^)]*,\s*,/,
     code: 'PSV6-SYNTAX-EMPTY-PARAM',
     message: () => `Empty parameter between commas`,
     suggestion: () => `Function calls cannot have empty parameters. Remove the extra comma or provide a value.`

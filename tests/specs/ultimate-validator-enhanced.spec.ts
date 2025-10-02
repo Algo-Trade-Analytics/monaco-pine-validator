@@ -181,9 +181,9 @@ describe('UltimateValidator Enhanced Features', () => {
         indicator("Test")
         myFunc() =>
           if close > open
-            "bullish"
+            return "bullish"
           else
-            123
+            return 123
         result = myFunc()
         plot(result)
       `;
