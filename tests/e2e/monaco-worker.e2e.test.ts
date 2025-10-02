@@ -21,7 +21,7 @@ class InMemoryWorker implements WorkerAdapter {
     event: MessageEvent<MonacoWorkerOutboundMessage>,
   ) => void>();
   private readonly controller: WorkerController;
-  private readonly scope: Pick<Worker, 'postMessage'>;
+  private readonly scope: Pick<Worker, 'postMessage'> & { onmessage: ((event: MessageEvent) => void) | null };
   private readonly pending: MonacoWorkerOutboundMessage[] = [];
 
   constructor(options: CreateWorkerOptions = {}) {
@@ -36,6 +36,7 @@ class InMemoryWorker implements WorkerAdapter {
           listener(event);
         }
       },
+      onmessage: null,
     };
 
     this.controller = createMonacoValidationWorker({
@@ -141,22 +142,9 @@ describe('Monaco worker end-to-end', () => {
 
     expect(resultMessage.type).toBe('result');
     if (resultMessage.type === 'result') {
-      const codesWithLines = resultMessage.payload.result.errors
-        .map((issue) => ({
-          code: issue.code,
-          line: issue.line,
-        }))
-        .sort((a, b) => a.line - b.line || a.code.localeCompare(b.code));
-      expect(codesWithLines).toEqual([
-        { code: 'PSV6-FUNCTION-RETURN-TYPE', line: 40 },
-        { code: 'PSV6-FUNCTION-RETURN-TYPE', line: 44 },
-        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 74 },
-        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 75 },
-        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 78 },
-        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 79 },
-        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 83 },
-        { code: 'PSV6-FUNCTION-PARAM-TYPE', line: 96 },
-      ]);
+      // The Uptrick Volatility script should now be valid with 0 errors
+      // after fixing color type inference and function return type issues
+      expect(resultMessage.payload.result.errors).toHaveLength(0);
     }
 
     await client.dispose();

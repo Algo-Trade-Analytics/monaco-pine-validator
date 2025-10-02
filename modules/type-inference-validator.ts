@@ -182,13 +182,17 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     if (!declaredType || declaredType === 'unknown') {
+      // Don't warn for function calls - they often have complex return types that are hard to infer
+      const isFunctionCall = initializer.kind === 'CallExpression';
       if (!initializerType || initializerType === 'unknown') {
-        this.addWarning(
-          line,
-          column,
-          `Unable to infer type for '${node.identifier.name}'. Consider adding an explicit annotation.`,
-          'PSV6-TYPE-INFERENCE-AMBIGUOUS',
-        );
+        if (!isFunctionCall) {
+          this.addWarning(
+            line,
+            column,
+            `Unable to infer type for '${node.identifier.name}'. Consider adding an explicit annotation.`,
+            'PSV6-TYPE-INFERENCE-AMBIGUOUS',
+          );
+        }
       }
 
       if (this.isLiteralExpression(initializer)) {
@@ -402,13 +406,26 @@ export class TypeInferenceValidator implements ValidationModule {
     const isNumericLiteral = test.kind === 'NumberLiteral';
     const isStringLiteral = test.kind === 'StringLiteral';
 
-    if (isNumericLiteral || isStringLiteral || isSeriesIdentifier || testType === 'series') {
+    // In Pine Script, series expressions are commonly used in conditionals
+    // Only warn for literal values that are clearly not intended as conditions
+    if (isNumericLiteral || isStringLiteral) {
       this.addWarning(line, column, 'Non-boolean expression used as condition.', 'PSV6-TYPE-CONDITIONAL-TYPE');
       this.addWarning(
         line,
         column,
         `Implicit boolean conversion of '${testType ?? 'unknown'}' expression.`,
         'PSV6-TYPE-CONVERSION-IMPLICIT-BOOL',
+      );
+      return;
+    }
+    
+    // For series expressions, just add an info message about implicit conversion
+    if (isSeriesIdentifier || testType === 'series') {
+      this.addInfo(
+        line,
+        column,
+        `Series expression used as condition (implicit boolean conversion).`,
+        'PSV6-TYPE-CONDITIONAL-SERIES',
       );
       return;
     }
@@ -1005,6 +1022,11 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     if (this.isNumericType(expected) && actual === 'series') {
+      return true;
+    }
+
+    // Color compatibility: series color expressions should be compatible with color parameters
+    if (expected === 'color' && actual === 'series') {
       return true;
     }
 

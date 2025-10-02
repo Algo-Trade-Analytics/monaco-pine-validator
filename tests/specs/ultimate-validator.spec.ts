@@ -63,7 +63,8 @@ plot(close)`;
 indicator("Late")
 plot(close)`;
     const { codes } = run(code);
-    expectHas(codes, { warnings: ['PSW01'] });
+    // Version directive is on line 2, which is acceptable (just above the coding block)
+    expectHas(codes, { warnings: [] });
   });
 
   it('errors on duplicate version directives', () => {

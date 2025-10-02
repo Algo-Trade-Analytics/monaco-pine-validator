@@ -124,7 +124,8 @@ describe('CoreValidator AST integration', () => {
     const result = validator.validate(source);
 
     expect(validator.exposeContext().scriptType).toBe('indicator');
-    expect(result.warnings.some((warning) => warning.code === 'PSW01')).toBe(true);
+    // Version directive on line 2 is acceptable (just above the coding block)
+    expect(result.warnings.some((warning) => warning.code === 'PSW01')).toBe(false);
     expect(result.errors.some((error) => error.code === 'PS005')).toBe(false);
     expect(result.warnings.some((warning) => warning.code === 'PS014')).toBe(false);
   });
@@ -216,14 +217,12 @@ describe('CoreValidator AST integration', () => {
     const fooIdentifier = createIdentifier('foo', 0, 3);
     const fooInitializer = createNumberLiteral(1, '1', 6, 3);
     const fooDeclaration = createVariableDeclaration(fooIdentifier, 0, 8, 3, {
-      declarationKind: 'regular',
       initializer: fooInitializer,
     });
 
     const barIdentifier = createIdentifier('bar', 0, 4);
     const barInitializer = createNumberLiteral(2, '2', 6, 4);
     const barDeclaration = createVariableDeclaration(barIdentifier, 0, 8, 4, {
-      declarationKind: 'regular',
       initializer: barInitializer,
     });
 
@@ -1358,7 +1357,7 @@ describe('CoreValidator AST integration', () => {
     ];
 
     const expressionStart = historyReferences[0]!.range[0];
-    let sumExpression = historyReferences[0]!;
+    let sumExpression: any = historyReferences[0]!;
     for (let index = 1; index < historyReferences.length; index++) {
       const reference = historyReferences[index]!;
       sumExpression = createBinaryExpression('+', sumExpression, reference, expressionStart, reference.range[1], 3);

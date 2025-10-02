@@ -12,8 +12,7 @@ import { EnhancedModularValidator } from '../..';
 
 describe('Input Functions Validation (TDD)', () => {
   const createValidator = () => new EnhancedModularValidator({
-    version: '6',
-    scriptType: 'indicator',
+    targetVersion: 6,
     strictMode: true,
     enableWarnings: true
   });
@@ -401,7 +400,7 @@ myBool = input.bool(true, "Boolean Input", confirm=true)
 //@version=6
 indicator("Input Performance Test")
 
-// Too many inputs
+// Too many inputs (26 inputs to trigger the warning)
 input1 = input.int(1, "Input 1")
 input2 = input.int(2, "Input 2")
 input3 = input.int(3, "Input 3")
@@ -418,6 +417,16 @@ input13 = input.int(13, "Input 13")
 input14 = input.int(14, "Input 14")
 input15 = input.int(15, "Input 15")
 input16 = input.int(16, "Input 16")
+input17 = input.int(17, "Input 17")
+input18 = input.int(18, "Input 18")
+input19 = input.int(19, "Input 19")
+input20 = input.int(20, "Input 20")
+input21 = input.int(21, "Input 21")
+input22 = input.int(22, "Input 22")
+input23 = input.int(23, "Input 23")
+input24 = input.int(24, "Input 24")
+input25 = input.int(25, "Input 25")
+input26 = input.int(26, "Input 26")
       `;
 
       const result = createValidator().validate(code);

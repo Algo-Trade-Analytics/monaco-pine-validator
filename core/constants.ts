@@ -1666,7 +1666,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   },
   'color.new': {
     parameters: [
-      { name: 'baseColor', type: 'color', qualifier: 'simple', required: true },
+      { name: 'baseColor', type: 'color', qualifier: 'series', required: true },
       { name: 'transparency', type: 'int', qualifier: 'simple', required: true, min: 0, max: 100 }
     ],
     returnType: 'color'

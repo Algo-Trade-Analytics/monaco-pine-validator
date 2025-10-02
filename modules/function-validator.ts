@@ -1465,6 +1465,8 @@ export class FunctionValidator implements ValidationModule {
     if (expectedType === 'string' && (actualType === 'string' || actualType === 'series')) return true;
     if (expectedType === 'bool' && actualType === 'bool') return true;
     if (expectedType === 'color' && actualType === 'color') return true;
+    // Color compatibility: series color expressions should be compatible with color parameters
+    if (expectedType === 'color' && actualType === 'series') return true;
     if (expectedType === 'array' && actualType === 'array') return true;
     if (expectedType === 'matrix' && actualType === 'matrix') return true;
     if (expectedType === 'map' && actualType === 'map') return true;
@@ -2120,7 +2122,7 @@ export class FunctionValidator implements ValidationModule {
 
   private collectImplicitReturnTypesFromStatement(statement: StatementNode | null, types: Set<string>): void {
     if (!statement) {
-      types.add('void');
+      // For Pine Script functions, don't add void unless explicitly needed
       return;
     }
 
@@ -2143,9 +2145,8 @@ export class FunctionValidator implements ValidationModule {
         this.collectImplicitReturnTypesFromStatement(ifStmt.consequent, types);
         if (ifStmt.alternate) {
           this.collectImplicitReturnTypesFromStatement(ifStmt.alternate, types);
-        } else {
-          types.add('void');
         }
+        // Don't add void for missing else clause in Pine Script functions
         break;
       }
       case 'ReturnStatement': {
@@ -2154,7 +2155,7 @@ export class FunctionValidator implements ValidationModule {
         break;
       }
       default: {
-        types.add('void');
+        // For Pine Script functions, don't add void for unknown statement types
         break;
       }
     }

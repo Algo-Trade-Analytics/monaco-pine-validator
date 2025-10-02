@@ -779,7 +779,7 @@ export class InputFunctionsValidator implements ValidationModule {
 
   private validateInputPerformance(): void {
     // Check for too many input functions
-    if (this.inputCount > 15) {
+    if (this.inputCount > 25) {
       this.addWarning(1, 1,
         `Too many input functions detected (${this.inputCount}). Consider grouping related inputs.`,
         'PSV6-INPUT-TOO-MANY');

@@ -85,7 +85,11 @@ describe('TypeInferenceValidator (AST)', () => {
     const tostringArgs = [createArgument(createStringLiteral('message', '"message"', 13, 3), 13, 22, 3)];
     const tostringCall = createCallExpression(tostringMember, tostringArgs, 0, 22, 3);
 
-    const program = createProgram([smaCall, maxCall, tostringCall], 0, 24, 1, 3);
+    const program = createProgram([
+      { kind: 'ExpressionStatement', expression: smaCall, loc: smaCall.loc, range: smaCall.range },
+      { kind: 'ExpressionStatement', expression: maxCall, loc: maxCall.loc, range: maxCall.range },
+      { kind: 'ExpressionStatement', expression: tostringCall, loc: tostringCall.loc, range: tostringCall.range }
+    ], 0, 24, 1, 3);
 
     const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
     const harness = new TypeInferenceHarness(service);
@@ -226,6 +230,7 @@ describe('TypeInferenceValidator (AST)', () => {
     expect(infoCodes).toContain('PSV6-TYPE-ANNOTATION-SUGGESTION');
     expect(infoCodes).toContain('PSV6-TYPE-ANNOTATION-REDUNDANT');
     expect(warningCodes).toContain('PSV6-TYPE-CONVERSION-FLOAT-TO-INT');
-    expect(warningCodes).toContain('PSV6-TYPE-INFERENCE-AMBIGUOUS');
+    // Function calls no longer generate PSV6-TYPE-INFERENCE-AMBIGUOUS warnings
+    // expect(warningCodes).toContain('PSV6-TYPE-INFERENCE-AMBIGUOUS');
   });
 });

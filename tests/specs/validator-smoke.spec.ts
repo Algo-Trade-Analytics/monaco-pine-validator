@@ -46,7 +46,8 @@ describe('Validator smoke tests', () => {
     const result = validator.validate(source);
     const codes = collectCodes(result);
 
-    expect(codes.warnings).toContain('PSW01');
+    // Version directive is on line 2, which is acceptable (just above the coding block)
+    expect(codes.warnings).not.toContain('PSW01');
   });
 
   it('rejects duplicate version directives', () => {

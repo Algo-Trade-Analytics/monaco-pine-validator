@@ -1653,8 +1653,20 @@ export class CoreValidator implements ValidationModule {
       );
     }
 
-    if (line !== 1) {
-      this.addWarning(line, column, 'Version directive should be on the first line.', 'PSW01');
+    // Only warn if version directive is after the script declaration
+    // License comments and other metadata are allowed before version directive
+    // The version directive should be just above the coding block (indicator/strategy/library)
+    // Check if there's a script declaration after the version directive
+    const hasScriptDeclaration = this.context.lines.some((lineContent, index) => 
+      index >= line - 1 && (
+        lineContent.includes('indicator(') || 
+        lineContent.includes('strategy(') || 
+        lineContent.includes('library(')
+      )
+    );
+    
+    if (!hasScriptDeclaration) {
+      this.addWarning(line, column, 'Version directive should be just above the coding block.', 'PSW01');
     }
 
     if (primary.version < 5) {

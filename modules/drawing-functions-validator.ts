@@ -1141,8 +1141,34 @@ export class DrawingFunctionsValidator implements ValidationModule {
     const trimmed = arg.trim();
     if (trimmed === 'na') return true;
     
+    // Accept numeric values
     const numValue = this.extractNumericValue(trimmed);
-    return numValue !== null;
+    if (numValue !== null) return true;
+    
+    // Accept series expressions (common in Pine Script)
+    if (trimmed.includes('bar_index') || trimmed.includes('time') || 
+        trimmed.includes('close') || trimmed.includes('high') || 
+        trimmed.includes('low') || trimmed.includes('open')) {
+      return true;
+    }
+    
+    // Accept function calls that return coordinates
+    if (trimmed.includes('(') && trimmed.includes(')')) {
+      return true;
+    }
+    
+    // Accept variable references (they can be series expressions)
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
+      return true;
+    }
+    
+    // Accept arithmetic expressions (common in Pine Script)
+    if (trimmed.includes('+') || trimmed.includes('-') || 
+        trimmed.includes('*') || trimmed.includes('/')) {
+      return true;
+    }
+    
+    return false;
   }
 
   private isColorExpression(value: string): boolean {

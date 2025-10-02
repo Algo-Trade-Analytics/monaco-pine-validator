@@ -468,8 +468,8 @@ plot(ta.sma(close, length))
       `;
 
       const result = createValidator().validate(code);
-      // Should suggest adding title for better UX
-      expect(result.warnings.length).toBeGreaterThan(0);
+      // Title parameter is optional in Pine Script, so no warning is needed
+      expect(result.warnings.length).toBe(0);
     });
 
     it('should error on invalid timeframe format', () => {

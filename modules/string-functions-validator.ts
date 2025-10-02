@@ -130,13 +130,17 @@ export class StringFunctionsValidator implements ValidationModule {
 
     visit(program, {
       ForStatement: {
-        enter: () => loopStack.push('for'),
+        enter: () => {
+          loopStack.push('for');
+        },
         exit: () => {
           loopStack.pop();
         },
       },
       WhileStatement: {
-        enter: () => loopStack.push('while'),
+        enter: () => {
+          loopStack.push('while');
+        },
         exit: () => {
           loopStack.pop();
         },
