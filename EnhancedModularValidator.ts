@@ -228,11 +228,10 @@ export class EnhancedModularValidator extends BaseValidator {
         this.addWarnings(moduleResult.warnings);
         this.addInfoMessages(moduleResult.info);
         
-        // Early exit if syntax errors are detected (prevents error cascades)
-        if (module.name === 'SyntaxErrorValidator' && this.errors.length > 0) {
-          // Stop validation here to prevent misleading downstream errors
-          return;
-        }
+        // Note: No early exit needed anymore!
+        // Pre-check errors prevent AST parsing in base-validator's prepareContext,
+        // so validators can still run and report legitimate issues from the code
+        // that doesn't depend on a fully-parsed AST
       } catch (error) {
         this.addError(1, 1, `Error in ${module.name} module: ${error}`, 'MODULE-ERROR');
       }

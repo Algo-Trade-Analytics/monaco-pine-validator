@@ -29,21 +29,23 @@ export class SyntaxErrorValidator implements ValidationModule {
     // Get source code
     this.sourceCode = this.getSourceCode(context);
     
-    // STEP 1: Run pre-parser syntax checks for common patterns
-    // These provide accurate line/column info before the parser crashes
-    const preCheckErrors = preCheckSyntax(this.sourceCode);
-    if (preCheckErrors.length > 0) {
-      this.errors.push(...preCheckErrors);
-      return this.buildResult();
-    }
-    
-    // STEP 2: Check if this is an AST context with diagnostics
+    // Check if this is an AST context with diagnostics
     const astContext = this.isAstContext(context) ? context : null;
     if (!astContext || !astContext.astDiagnostics) {
       return this.buildResult();
     }
 
-    // STEP 3: Convert parser errors to user-friendly validation errors
+    // STEP 1: Check for pre-check errors (found before AST parsing)
+    const diagnostics = astContext.astDiagnostics as any;
+    if (diagnostics.preCheckErrors && diagnostics.preCheckErrors.length > 0) {
+      // Pre-check found errors - these are accurate with good line/column info
+      this.errors.push(...diagnostics.preCheckErrors);
+      // Don't add parser errors - they're cascading from the pre-check error
+      return this.buildResult();
+    }
+
+    // STEP 2: Convert parser errors to user-friendly validation errors
+    // (only if there were NO pre-check errors)
     const syntaxErrors = convertAstDiagnosticsToErrors(
       astContext.astDiagnostics,
       this.sourceCode
