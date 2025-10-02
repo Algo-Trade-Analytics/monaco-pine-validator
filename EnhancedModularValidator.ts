@@ -64,6 +64,7 @@ import { BuiltinVariablesValidator } from './modules/builtin-variables-validator
 import { SyminfoVariablesValidator } from './modules/syminfo-variables-validator';
 import { FinalConstantsValidator } from './modules/final-constants-validator';
 import { TickerFunctionsValidator } from './modules/ticker-functions-validator';
+import { SyntaxErrorValidator } from './modules/syntax-error-validator';
 
 export class EnhancedModularValidator extends BaseValidator {
   protected functionHeaderLine = new Map<string, number>();
@@ -72,8 +73,10 @@ export class EnhancedModularValidator extends BaseValidator {
     super(config);
     
     // Register all validation modules in priority order
+    // Syntax error validation runs first to prevent error cascades
+    this.registerModule(new SyntaxErrorValidator());    // Syntax errors (priority 999) - runs FIRST to catch parser errors
     // Core validation is handled by CoreValidator module (priority 100)
-    this.registerModule(new CoreValidator());           // Core validation (priority 100) - runs first
+    this.registerModule(new CoreValidator());           // Core validation (priority 100)
     this.registerModule(new MatrixValidator());         // Matrix validation (priority 90) - must run before FunctionValidator
     this.registerModule(new ArrayValidator());          // Array validation (priority 90) - must run after matrix typing updates and before FunctionValidator
             this.registerModule(new MapValidator());            // Map validation (priority 88) - must run before FunctionValidator
@@ -224,6 +227,12 @@ export class EnhancedModularValidator extends BaseValidator {
         
         this.addWarnings(moduleResult.warnings);
         this.addInfoMessages(moduleResult.info);
+        
+        // Early exit if syntax errors are detected (prevents error cascades)
+        if (module.name === 'SyntaxErrorValidator' && this.errors.length > 0) {
+          // Stop validation here to prevent misleading downstream errors
+          return;
+        }
       } catch (error) {
         this.addError(1, 1, `Error in ${module.name} module: ${error}`, 'MODULE-ERROR');
       }

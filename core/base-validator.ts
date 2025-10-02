@@ -298,7 +298,8 @@ export abstract class BaseValidator {
       this.context.symbolTable = createEmptySymbolTable();
       this.context.typeEnvironment = createEmptyTypeEnvironment();
       this.context.controlFlowGraph = createEmptyControlFlowGraph();
-      this.addWarning(1, 1, `AST parser error: ${message}`, AST_PARSE_ERROR_CODE);
+      // Parser errors should be ERRORS not warnings
+      this.addError(1, 1, `Syntax error: ${message}`, AST_PARSE_ERROR_CODE);
     }
   }
 
