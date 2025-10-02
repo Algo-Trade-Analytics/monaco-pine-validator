@@ -6,6 +6,7 @@
  */
 
 import type { ValidationError } from '../types';
+import { checkIndentation } from './indentation-checker';
 
 export interface SyntaxPattern {
   pattern: RegExp;
@@ -54,6 +55,16 @@ const SYNTAX_PATTERNS: SyntaxPattern[] = [
  */
 export function preCheckSyntax(sourceCode: string): ValidationError[] {
   const errors: ValidationError[] = [];
+  
+  // STEP 1: Check indentation (critical in Pine Script)
+  const indentErrors = checkIndentation(sourceCode);
+  if (indentErrors.length > 0) {
+    errors.push(...indentErrors);
+    // Return early - indentation errors prevent proper parsing
+    return errors;
+  }
+  
+  // STEP 2: Check for empty parameters and other patterns
   const lines = sourceCode.split('\n');
   
   lines.forEach((line, lineIndex) => {

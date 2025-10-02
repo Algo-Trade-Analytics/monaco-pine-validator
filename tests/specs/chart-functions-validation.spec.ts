@@ -236,7 +236,7 @@ line.new(chart.point.from_index(bar_index-1, close[1]), point)
 //@version=6
 indicator("Chart Point Cleanup")
 
-var array<chart.point> points = array.new<chart.point>()
+var points = array.new<chart.point>()
 
 // Add point with size limit
 if array.size(points) > 100

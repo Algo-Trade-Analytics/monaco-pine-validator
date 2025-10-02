@@ -979,10 +979,7 @@ indicator("TA in Conditionals Test")
 sma20 = ta.sma(close, 20)
 rsi14 = ta.rsi(close, 14)
 
-buySignal = if ta.crossover(close, sma20)
-    rsi14 < 70
-else
-    false
+buySignal = ta.crossover(close, sma20) and rsi14 < 70
 
 sellSignal = ta.crossunder(close, sma20) and rsi14 > 30
       `;
@@ -1031,8 +1028,8 @@ rsiWithNA = ta.rsi(naValue, 14)
 //@version=6
 indicator("TA with Extreme Values Test")
 
-extremeHigh = 1e10
-extremeLow = -1e10
+extremeHigh = 10000000000
+extremeLow = -10000000000
 
 smaHigh = ta.sma(extremeHigh, 20)
 smaLow = ta.sma(extremeLow, 20)

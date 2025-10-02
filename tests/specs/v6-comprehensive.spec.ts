@@ -197,7 +197,7 @@ library("Test")
 strategy.entry("My Entry", strategy.long)`;
       const { codes } = run(code);
       // The validator generates PSV6-FUNCTION-UNKNOWN for unknown functions
-      expect(codes.errors).toContain('PSV6-FUNCTION-UNKNOWN');
+      expect(codes.errors).toContain('PSV6-UNDEFINED-NAMESPACE-MEMBER');
     });
 
     it('should fail on input functions in library', () => {

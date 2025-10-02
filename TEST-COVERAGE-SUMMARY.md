@@ -1,7 +1,7 @@
 # Test Coverage Summary - New Features
 
 **Date:** October 2, 2025  
-**Status:** ✅ All Tests Passing (40/40)
+**Status:** ✅ All Tests Passing (51/51)
 
 ## Test Files Created
 
@@ -108,13 +108,41 @@
 - ✅ Clean validation (1 test)
   - Valid code passes without critical errors
 
+### 5. Indentation Validation Tests
+**File:** `tests/e2e/indentation-validation.test.ts`  
+**Tests:** 11 passing
+
+#### Coverage:
+- ✅ Inconsistent indentation detection (3 tests)
+  - Extra space in function body
+  - Missing space in function body
+  - User scenario: extra space causes syntax error
+  
+- ✅ Mixed tabs and spaces detection (2 tests)
+  - Tabs mixed with spaces on same line
+  - Tabs mixed with spaces across lines
+  
+- ✅ Correct indentation acceptance (2 tests)
+  - Consistent 4-space indentation
+  - Nested function indentation
+  
+- ✅ Ternary operator exception (1 test)
+  - Allow different indentation for ternary operators
+  
+- ✅ Early exit behavior (1 test)
+  - Stop validation after indentation error
+  
+- ✅ Error message quality (2 tests)
+  - Clear message for extra spaces
+  - Clear message for missing spaces
+
 ## Test Statistics
 
 ### Overall Results
 ```
-Test Files:  4 passed (4)
-Tests:       40 passed (40)
-Duration:    3.40s
+Test Files:  5 passed (5)
+Tests:       51 passed (51)
+Duration:    ~4.5s
 ```
 
 ### Coverage by Feature
@@ -125,7 +153,8 @@ Duration:    3.40s
 | Namespace Validation | 14 | ✅ All passing |
 | Scope Validation | 10 | ✅ All passing |
 | Early Exit Integration | 8 | ✅ All passing |
-| **Total** | **40** | **✅ 100%** |
+| Indentation Validation | 11 | ✅ All passing |
+| **Total** | **51** | **✅ 100%** |
 
 ### Coverage by Error Type
 
@@ -133,6 +162,9 @@ Duration:    3.40s
 |------------|--------|----------|
 | `PSV6-SYNTAX-EMPTY-PARAM` | ✅ | Empty parameters, trailing commas |
 | `PSV6-SYNTAX-TRAILING-COMMA` | ✅ | Trailing comma before `)` |
+| `PSV6-INDENT-INCONSISTENT` | ✅ | Extra/missing spaces in function body |
+| `PSV6-INDENT-MIXED` | ✅ | Mixed tabs and spaces |
+| `PSV6-INDENT-FUNCTION-BODY` | ✅ | Function body not indented properly |
 | `PSV6-UNDEFINED-NAMESPACE-MEMBER` | ✅ | color.*, ta.*, math.*, str.* |
 | `PSU02` | ✅ | Undefined variables (as error) |
 

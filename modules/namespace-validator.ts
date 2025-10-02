@@ -12,7 +12,7 @@ import type {
   ValidationError,
   ValidationResult,
 } from '../core/types';
-import { isValidNamespaceMember, getSimilarMembers } from '../core/namespace-members';
+import { isValidNamespaceMember, getSimilarMembers, NAMESPACE_MEMBERS } from '../core/namespace-members';
 
 export class NamespaceValidator implements ValidationModule {
   name = 'NamespaceValidator';
@@ -49,7 +49,7 @@ export class NamespaceValidator implements ValidationModule {
 
     // Pattern: namespace.member (e.g., color.red, ta.sma, math.abs)
     // Match word.word patterns, but exclude method calls and quoted strings
-    const namespacePattern = /\b(color|ta|math|str|array|request|input|plot|line|label|box|table|strategy|syminfo|timeframe|barstate)\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
+    const namespacePattern = /\b(color|ta|math|str|array|request|input|plot|line|label|box|table|strategy|syminfo|timeframe|barstate|matrix|ticker|text|polyline|linefill|size|display|chart|map|font|format|barmerge|currency|dividends|extend|yloc|location|shape|position)\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
     
     let match;
     while ((match = namespacePattern.exec(line)) !== null) {
@@ -59,21 +59,59 @@ export class NamespaceValidator implements ValidationModule {
       
       // Check if this member exists in the namespace
       if (!isValidNamespaceMember(namespace, member)) {
-        const suggestions = getSimilarMembers(namespace, member);
-        const suggestionText = suggestions.length > 0
-          ? `Did you mean: ${suggestions.join(', ')}?`
-          : `Check Pine Script documentation for valid ${namespace}.* members.`;
+        // Check if the member exists in ANY namespace (wrong namespace error)
+        const correctNamespace = this.findCorrectNamespace(member);
         
-        this.errors.push({
-          line: lineNum,
-          column,
-          message: `Undefined property '${member}' on '${namespace}' namespace`,
-          severity: 'error',
-          code: 'PSV6-UNDEFINED-NAMESPACE-MEMBER',
-          suggestion: suggestionText
-        });
+        if (correctNamespace) {
+          // Function exists but in wrong namespace
+          this.errors.push({
+            line: lineNum,
+            column,
+            message: `Function '${member}' should be in '${correctNamespace}' namespace, not '${namespace}'`,
+            severity: 'error',
+            code: 'PSV6-FUNCTION-NAMESPACE',
+            suggestion: `Use ${correctNamespace}.${member} instead of ${namespace}.${member}`
+          });
+        } else {
+          // Function doesn't exist at all
+          const suggestions = getSimilarMembers(namespace, member);
+          const suggestionText = suggestions.length > 0
+            ? `Did you mean: ${suggestions.join(', ')}?`
+            : `Check Pine Script documentation for valid ${namespace}.* members.`;
+          
+          this.errors.push({
+            line: lineNum,
+            column,
+            message: `Undefined property '${member}' on '${namespace}' namespace`,
+            severity: 'error',
+            code: 'PSV6-UNDEFINED-NAMESPACE-MEMBER',
+            suggestion: suggestionText
+          });
+        }
       }
     }
+  }
+
+  /**
+   * Find which namespace contains the given member
+   */
+  private findCorrectNamespace(member: string): string | null {
+    // Check if the member exists in multiple namespaces
+    const namespacesWithMember: string[] = [];
+    for (const [namespace, members] of Object.entries(NAMESPACE_MEMBERS)) {
+      if (members.has(member)) {
+        namespacesWithMember.push(namespace);
+      }
+    }
+    
+    // If member exists in multiple namespaces, don't suggest a "wrong namespace" error
+    // This allows functions like 'median' to exist in both 'math' and 'ta' namespaces
+    if (namespacesWithMember.length > 1) {
+      return null;
+    }
+    
+    // If member exists in only one namespace, return it
+    return namespacesWithMember.length === 1 ? namespacesWithMember[0] : null;
   }
 }
 

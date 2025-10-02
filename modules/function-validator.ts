@@ -2208,11 +2208,23 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private findCorrectNamespace(funcName: string): string | null {
-    // Check if the function exists in any namespace
+    // Check if the function exists in multiple namespaces
+    const namespacesWithMember: string[] = [];
     for (const [namespace, members] of Object.entries(NS_MEMBERS)) {
       if (members.has(funcName)) {
-        return namespace;
+        namespacesWithMember.push(namespace);
       }
+    }
+    
+    // If member exists in multiple namespaces, don't suggest a "wrong namespace" error
+    // This allows functions like 'median' to exist in both 'math' and 'ta' namespaces
+    if (namespacesWithMember.length > 1) {
+      return null;
+    }
+    
+    // If member exists in only one namespace, return it
+    if (namespacesWithMember.length === 1) {
+      return namespacesWithMember[0];
     }
     
     // Check if it's a standalone built-in function

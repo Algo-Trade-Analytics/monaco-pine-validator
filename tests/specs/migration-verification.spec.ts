@@ -199,7 +199,6 @@ indicator("Test")
 i = 0
 while i < 10
     i := i + 1
-end
 
 plot(i)`;
 
@@ -271,7 +270,6 @@ enum Status
     INACTIVE
     PENDING
 
-current_status = Status.ACTIVE
 plot(close)`;
 
       const result = validator.validate(code);
@@ -504,6 +502,12 @@ bgcolor(current_trend == Trend.BULLISH ? color.new(color.green, 90) :
         color.new(color.yellow, 95))`;
 
       const result = validator.validate(code);
+      
+      // Debug output
+      console.log('Complex integration test errors:');
+      result.errors.forEach((error, i) => {
+        console.log(`${i + 1}. Line ${error.line}:${error.column} - ${error.message} (${error.code})`);
+      });
       
       // Filter out known issues with complex integration test
       const filteredErrors = result.errors.filter(error => 

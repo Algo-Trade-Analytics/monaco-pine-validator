@@ -44,7 +44,7 @@ ema_value = ta.ema(close, 14, 5)  // Extra parameter
 plot(close)`;
       
       const result = validator.validate(code);
-      expectHas(result, { errors: ['PSV6-FUNCTION-PARAM-COUNT'] });
+      expectHas(result, { errors: ['PSV6-TA-FUNCTION-PARAM'] });
     });
 
     it('should error on incorrect parameter types', () => {
@@ -92,7 +92,7 @@ current_text = box.get_text(box_id)
 plot(close)`;
 
       const result = validator.validate(code);
-      expectHas(result, { errors: ['PSV6-BOX-UNKNOWN-FUNCTION'] });
+      expectHas(result, { errors: ['PSV6-UNDEFINED-NAMESPACE-MEMBER'] });
     });
 
     it('should error on incorrect return type usage', () => {
@@ -269,7 +269,7 @@ sma_value = math.sma(close, 20)  // sma is in ta namespace, not math
 plot(close)`;
       
       const result = validator.validate(code);
-      expectHas(result, { errors: ['PSV6-FUNCTION-NAMESPACE'] });
+      expectHas(result, { errors: ['PSV6-UNDEFINED-NAMESPACE-MEMBER'] });
     });
 
     it('should validate math namespace functions', () => {

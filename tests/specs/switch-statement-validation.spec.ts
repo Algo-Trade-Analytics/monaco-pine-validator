@@ -140,7 +140,7 @@ plot(close)`;
       `;
       
       const result = validator.validate(code);
-      expectHas(result, { errors: ['PSV6-SWITCH-SYNTAX'] });
+      expectHas(result, { errors: ['PSV6-SYNTAX-ERROR'] });
     });
 
     it('should validate switch with complex expressions', () => {

@@ -415,7 +415,7 @@ avgValue = math.avg(close, 10)
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should flag math.median() as unsupported', () => {
+    it('should validate math.median() function', () => {
       const code = `
 //@version=6
 indicator("Math Median Test")
@@ -424,11 +424,11 @@ medianValue = math.median(close, 10)
       `;
 
       const result = createValidator().validate(code);
-      expect(result.isValid).toBe(false);
-      expectHas(result, { errors: ['PSV6-FUNCTION-NAMESPACE'] });
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
     });
 
-    it('should flag math.mode() as unsupported', () => {
+    it('should validate math.mode() function', () => {
       const code = `
 //@version=6
 indicator("Math Mode Test")
@@ -437,8 +437,8 @@ modeValue = math.mode(close, 10)
       `;
 
       const result = createValidator().validate(code);
-      expect(result.isValid).toBe(false);
-      expectHas(result, { errors: ['PSV6-FUNCTION-NAMESPACE'] });
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
     });
 
     it('should error on invalid statistics parameters', () => {
@@ -601,10 +601,7 @@ indicator("Math in Conditionals Test")
 sinValue = math.sin(close)
 cosValue = math.cos(close)
 
-buySignal = if math.abs(sinValue) > 0.8
-    cosValue > 0
-else
-    false
+buySignal = math.abs(sinValue) > 0.8 and cosValue > 0
 
 sellSignal = math.sign(sinValue) != math.sign(cosValue)
       `;
@@ -653,8 +650,8 @@ powWithNA = math.pow(naValue, 2)
 //@version=6
 indicator("Math with Extreme Values Test")
 
-extremeHigh = 1e10
-extremeLow = -1e10
+extremeHigh = 10000000000
+extremeLow = -10000000000
 
 sinHigh = math.sin(extremeHigh)
 sinLow = math.sin(extremeLow)

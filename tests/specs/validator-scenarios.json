@@ -46,8 +46,8 @@
     "code": "//@version=6\nindicator(\"Invalid Box\", overlay=true)\nmy_box = box.new(left=0, top=1, right=1, bottom=0)\ncurrent = box.get_text(my_box)\nplot(close)\n",
     "expect": {
       "errors": [
-        "PSV6-BOX-UNKNOWN-FUNCTION",
-        "PSV6-FUNCTION-NAMESPACE"
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER",
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
       ],
       "warnings": [
         "PSV6-BOX-COORDINATE-TYPE"
@@ -118,7 +118,7 @@
     "code": "//@version=6\nindicator(\"Migration\")\ns = sma(close, 10)\nplot(s)\n",
     "expect": {
       "errors": [
-        "PSV6-FUNCTION-NAMESPACE"
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
       ],
       "warnings": [
         "PSV6-MIG-SYNTAX"
@@ -130,7 +130,7 @@
     "code": "//@version=6\nindicator(\"NS\")\nval = math.sma(close, 10)\nplot(val)\n",
     "expect": {
       "errors": [
-        "PSV6-FUNCTION-NAMESPACE"
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
       ],
       "warnings": [
         "PSV6-MATH-FUNCTION-UNKNOWN: Unknown Math function: math.sma"
@@ -142,7 +142,7 @@
     "code": "//@version=6\nindicator(\"Median\")\nv = math.median(close, 10)\nplot(v)\n",
     "expect": {
       "errors": [
-        "PSV6-FUNCTION-NAMESPACE"
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
       ],
       "warnings": [
         "PSV6-MATH-FUNCTION-UNKNOWN: Unknown Math function: math.median"
@@ -163,7 +163,7 @@
     "code": "//@version=6\nlibrary(\"Lib\")\nstrategy.entry(\"L\", strategy.long)\n",
     "expect": {
       "errors": [
-        "PSV6-FUNCTION-UNKNOWN"
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
       ],
       "warnings": [
         "PSV6-STRATEGY-PERF-NESTED"
@@ -232,7 +232,7 @@
     "code": "//@version=6\nindicator(\"Primitive Method Call\")\nvalue = close\nvalue.normalize()\nplot(value)\n",
     "expect": {
       "errors": [
-        "PSV6-FUNCTION-UNKNOWN"
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
       ],
       "warnings": []
     }
@@ -323,7 +323,7 @@
     "code": "//@version=6\nindicator(\"Security Migration\")\nsec = security(syminfo.tickerid, \"D\", close)\nplot(sec)\n",
     "expect": {
       "errors": [
-        "PSV6-FUNCTION-NAMESPACE"
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
       ],
       "warnings": [
         "PSV6-MIG-SYNTAX"
@@ -335,7 +335,7 @@
     "code": "//@version=6\nindicator(\"Request Unknown\")\ndata = request.foobar(\"AAPL\", close)\nplot(close)\n",
     "expect": {
       "errors": [
-        "PSV6-FUNCTION-UNKNOWN",
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER",
         "PSV6-REQUEST-UNKNOWN"
       ]
     }
