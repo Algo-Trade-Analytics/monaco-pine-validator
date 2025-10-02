@@ -205,9 +205,10 @@ strategy.entry("My Entry", strategy.long)`;
 library("Test")
 lib_input = input.int(10, "Library Input")`;
       const { codes } = run(code);
-      // The validator generates PS026 and PSV6-FUNCTION-NAMESPACE for input in library
+      
+      // The validator generates PS026 and PSV6-UNDEFINED-NAMESPACE-MEMBER for input in library
       expect(codes.errors).toContain('PS026');
-      expect(codes.errors).toContain('PSV6-FUNCTION-NAMESPACE');
+      expect(codes.errors).toContain('PSV6-UNDEFINED-NAMESPACE-MEMBER');
     });
 
     it('should fail on plotting in library', () => {

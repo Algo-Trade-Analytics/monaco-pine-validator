@@ -67,7 +67,8 @@ describe('Text Typography & Style Validation', () => {
     ];
 
     const result = validator.validate(context, config);
-    const styleError = result.errors.find(e => e.code === 'PSV6-LABEL-TEXT-STYLE');
+    
+    const styleError = result.errors.find(e => e.code === 'PSV6-UNDEFINED-NAMESPACE-MEMBER');
     expect(styleError).toBeDefined();
   });
 

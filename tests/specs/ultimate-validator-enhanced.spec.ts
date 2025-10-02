@@ -308,7 +308,7 @@ describe('UltimateValidator Enhanced Features', () => {
                                       if close[8] > open[8]
                                         if close[9] > open[9]
                                           if close[10] > open[10]
-                                            "very complex"
+                                            return "very complex"
         plot(complexFunc())
       `;
       

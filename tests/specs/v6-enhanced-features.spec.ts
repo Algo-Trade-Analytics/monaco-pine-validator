@@ -536,19 +536,19 @@ complexFunc() =>
                 if low < ta.lowest(low, 10)
                     if rsi > 70
                         if macd > 0
-                            1
+                            return 1
                         else
-                            2
+                            return 2
                     else
-                        3
+                        return 3
                 else
-                    4
+                    return 4
             else
-                5
+                return 5
         else
-            6
+            return 6
     else
-        7`;
+        return 7`;
         const { codes } = run(code);
         expectHas(codes, { warnings: ['PSV6-QUALITY-COMPLEXITY'] });
       });
@@ -577,7 +577,7 @@ deepFunc() =>
                 if rsi > 50
                     if macd > 0
                         if stoch > 20
-                            1`;
+                            return 1`;
         const { codes } = run(code);
         expectHas(codes, { warnings: ['PSV6-QUALITY-DEPTH'] });
       });

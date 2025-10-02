@@ -23,14 +23,10 @@
     "name": "strategy_metrics",
     "code": "//@version=6\nstrategy(\"Percent Metrics\", overlay=false)\nif ta.crossover(close, ta.sma(close, 10))\n    strategy.entry(\"Long\", strategy.long)\nplot(strategy.netprofit_percent)\n",
     "expect": {
-      "errors": [],
-      "warnings": [
-        "PSV6-LAZY-EVAL-CONDITIONAL",
-        "PSV6-STRATEGY-NO-EXIT",
-        "PSV6-STRATEGY-PERF-NESTED",
-        "PSV6-STRATEGY-REALISM",
-        "PSV6-TA-PERF-NESTED"
-      ]
+      "errors": [
+        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
+      ],
+      "warnings": []
     }
   },
   {

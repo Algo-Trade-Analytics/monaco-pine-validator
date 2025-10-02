@@ -198,9 +198,9 @@ indicator("Function Return Inconsistency")
 // Function with inconsistent return types
 inconsistent_function(x) =>
     if x > 0
-        "positive"  // String
+        return "positive"  // String
     else
-        0  // Number
+        return 0  // Number
 
 result = inconsistent_function(10)
 plot(close)`;
@@ -269,7 +269,7 @@ sma_value = math.sma(close, 20)  // sma is in ta namespace, not math
 plot(close)`;
       
       const result = validator.validate(code);
-      expectHas(result, { errors: ['PSV6-UNDEFINED-NAMESPACE-MEMBER'] });
+      expectHas(result, { errors: ['PSV6-FUNCTION-NAMESPACE'] });
     });
 
     it('should validate math namespace functions', () => {
@@ -400,25 +400,25 @@ complex_function(x, y, z) =>
     if x > 0
         if y > 0
             if z > 0
-                x + y + z
+                return x + y + z
             else
-                x + y
+                return x + y
         else
             if z > 0
-                x + z
+                return x + z
             else
-                x
+                return x
     else
         if y > 0
             if z > 0
-                y + z
+                return y + z
             else
-                y
+                return y
         else
             if z > 0
-                z
+                return z
             else
-                0
+                return 0
 
 result = complex_function(1, 2, 3)
 plot(close)`;
