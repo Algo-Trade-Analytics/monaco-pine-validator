@@ -1,0 +1,9 @@
+     → expected [] to deeply equal ArrayContaining{…}
+   ❯ tests/specs/all-validation-tests.spec.ts > Migration Verification - EnhancedPineScriptValidator Features > Complex Integration Test > should validate a complex script with all features
+     → expected 6 to be +0 // Object.is equality
+   ❯ tests/specs/all-validation-tests.spec.ts > UltimateValidator Enhanced Features > Enhanced Type Safety & Inference > validates function return type consistency
+--
+     → expected [] to include 'PSV6-QUALITY-DEPTH'
+   ❯ tests/specs/all-validation-tests.spec.ts > Text Typography & Style Validation > errors on unknown textstyle constant
+     → expected undefined not to be undefined
+   ❯ tests/specs/all-validation-tests.spec.ts > Validator scenario fixtures > strategy_metrics

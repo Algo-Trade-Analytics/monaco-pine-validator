@@ -1,0 +1,635 @@
+
+ RUN  v1.6.1 /Users/egr/Desktop/TradeSync/pine-validator
+
+stdout | displaySuiteMetadata (/Users/egr/Desktop/TradeSync/pine-validator/tests/specs/all-validation-tests.spec.ts:122:11)
+🧪 Pine Script v6 Validator Test Suite Loaded
+
+stdout | displaySuiteMetadata (/Users/egr/Desktop/TradeSync/pine-validator/tests/specs/all-validation-tests.spec.ts:123:11)
+📊 Mode: full
+
+stdout | displaySuiteMetadata (/Users/egr/Desktop/TradeSync/pine-validator/tests/specs/all-validation-tests.spec.ts:124:11)
+📊 Total Test Modules: 1
+
+stdout | displaySuiteMetadata (/Users/egr/Desktop/TradeSync/pine-validator/tests/specs/all-validation-tests.spec.ts:125:11)
+📋 Test Modules: V6 Enhanced Features
+
+stdout | displaySuiteMetadata (/Users/egr/Desktop/TradeSync/pine-validator/tests/specs/all-validation-tests.spec.ts:127:13)
+🎯 Suite Filter: enhanced features
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Boolean Logic Validation > PSV6-MIG-BOOL: Numeric literal conditions > should fail on numeric literal 1 in if condition
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'if (1)',
+  '    label.new(bar_index, high, "Error")'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Boolean Logic Validation > PSV6-MIG-BOOL: Numeric literal conditions > should fail on numeric literal 0 in if condition
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'if (0)',
+  '    label.new(bar_index, high, "Error")'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Boolean Logic Validation > PSV6-MIG-BOOL: Numeric literal conditions > should fail on float literal in if condition
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'if (1.5)',
+  '    label.new(bar_index, high, "Error")'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Boolean Logic Validation > PSV6-MIG-BOOL: Numeric literal conditions > should pass on boolean expressions
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'if (close > open)',
+  '    label.new(bar_index, high, "Valid")'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Boolean Logic Validation > PSV6-MIG-BOOL: Numeric literal conditions > should pass on boolean variables
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'bool condition = true',
+  'if (condition)',
+  '    label.new(bar_index, high, "Valid")'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Boolean Logic Validation > PSV6-TERNARY-TYPE: Type mismatch in ternary branches > should fail on color vs int mismatch
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'color result = close > open ? color.red : 1'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Boolean Logic Validation > PSV6-TERNARY-TYPE: Type mismatch in ternary branches > should fail on string vs float mismatch
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'string result = close > open ? "up" : 1.5'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Boolean Logic Validation > PSV6-TERNARY-TYPE: Type mismatch in ternary branches > should pass on matching types
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'color result = close > open ? color.red : color.green'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Boolean Logic Validation > PSV6-TERNARY-TYPE: Type mismatch in ternary branches > should pass on compatible numeric types
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'float result = close > open ? 1.5 : 2'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Library Import Validation > PSV6-LIB-PATH: Invalid library paths > should fail on non-integer version
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'import "user/lib/v1.5" as myLib'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Library Import Validation > PSV6-LIB-PATH: Invalid library paths > should fail on double slash in path
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'import "user//lib/1" as myLib'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Library Import Validation > PSV6-LIB-PATH: Invalid library paths > should fail on incomplete path (missing version)
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [ '//@version=6', 'indicator("Test")', 'import "user/lib" as myLib' ]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Library Import Validation > PSV6-LIB-PATH: Invalid library paths > should fail on incomplete path (only user)
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [ '//@version=6', 'indicator("Test")', 'import "user" as myLib' ]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Library Import Validation > PSV6-LIB-PATH: Invalid library paths > should pass on valid library path
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'import "user/library/1" as myLib'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Library Import Validation > PSV6-LIB-PATH: Invalid library paths > should pass on valid library path with higher version
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'import "user/library/123" as myLib'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Library Import Validation > PSV6-LIB-ALIAS: Alias conflicts > should fail when alias conflicts with user function
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'myFunc() => 1',
+  'import "user/lib/1" as myFunc'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Library Import Validation > PSV6-LIB-ALIAS: Alias conflicts > should fail when alias conflicts with user variable
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'myVar = 10',
+  'import "user/lib/1" as myVar'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Library Import Validation > PSV6-LIB-ALIAS: Alias conflicts > should fail when alias conflicts with built-in function
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [ '//@version=6', 'indicator("Test")', 'import "user/lib/1" as plot' ]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Library Import Validation > PSV6-LIB-ALIAS: Alias conflicts > should pass on unique alias
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'import "user/lib/1" as uniqueLib'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Performance Analysis > PSV6-PERF-TA: Expensive TA functions in nested loops > should warn about pivothigh in nested loops
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 2
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'for i = 0 to 10',
+  '    for j = 0 to 5',
+  '        pivothigh(high, 5, 5)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Performance Analysis > PSV6-PERF-TA: Expensive TA functions in nested loops > should warn about pivotlow in nested loops
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 2
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'for i = 0 to 10',
+  '    for j = 0 to 5',
+  '        pivotlow(low, 3, 3)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Performance Analysis > PSV6-PERF-TA: Expensive TA functions in nested loops > should warn about request.security in nested loops
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 2
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'for i = 0 to 10',
+  '    for j = 0 to 5',
+  '        request.security(syminfo.tickerid, "D", close)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Performance Analysis > PSV6-PERF-TA: Expensive TA functions in nested loops > should not warn about simple functions in nested loops
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 2
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'for i = 0 to 10',
+  '    for j = 0 to 5',
+  '        math.max(high, low)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Performance Analysis > PSV6-PERF-TA: Expensive TA functions in nested loops > should not warn about expensive functions in single loop
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'for i = 0 to 10',
+  '    pivothigh(high, 5, 5)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Advanced Method Validation > PSV6-METHOD-INVALID: Methods on non-UDT types > should warn about method call on int
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [ '//@version=6', 'indicator("Test")', 'int x = 10', 'x.move(5)' ]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Advanced Method Validation > PSV6-METHOD-INVALID: Methods on non-UDT types > should warn about method call on float
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'float y = 1.5',
+  'y.update(2.0)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Advanced Method Validation > PSV6-METHOD-INVALID: Methods on non-UDT types > should warn about method call on string
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'string s = "test"',
+  's.process()'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Advanced Method Validation > PSV6-METHOD-INVALID: Methods on non-UDT types > should not warn about method call on UDT
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'type Point',
+  '    float x',
+  '    float y'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Advanced Method Validation > PSV6-METHOD-INVALID: Methods on non-UDT types > should not warn about built-in methods
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'myArray = array.new<float>()',
+  'array.push(myArray, 1.0)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Migration Assistance > PSV6-MIG-SYNTAX: Old syntax patterns > should suggest indicator() instead of study()
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [ '//@version=6', 'study("My Script", overlay=true)' ]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Migration Assistance > PSV6-MIG-SYNTAX: Old syntax patterns > should suggest color.new() instead of transp parameter
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'myColor = color.red',
+  'transp = 50'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Migration Assistance > PSV6-MIG-SYNTAX: Old syntax patterns > should suggest request.security() instead of security()
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'security(syminfo.tickerid, "D", close)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Migration Assistance > PSV6-MIG-SYNTAX: Old syntax patterns > should suggest ta.sma() instead of sma()
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [ '//@version=6', 'indicator("Test")', 'sma(close, 14)' ]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Enhanced Migration Assistance > PSV6-MIG-SYNTAX: Old syntax patterns > should not warn on correct v6 syntax
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'ta.sma(close, 14)',
+  'request.security(syminfo.tickerid, "D", close)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Resource Usage Analysis > PSV6-RES-MEMORY: Memory usage warnings > should warn about large array allocation
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'var hugeArray = array.new<float>(50000)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Resource Usage Analysis > PSV6-RES-MEMORY: Memory usage warnings > should warn about multiple large collections
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'var array1 = array.new<float>(10000)',
+  'var array2 = array.new<float>(10000)',
+  'var array3 = array.new<float>(10000)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Resource Usage Analysis > PSV6-RES-MEMORY: Memory usage warnings > should not warn about small arrays
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'var smallArray = array.new<float>(100)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Resource Usage Analysis > PSV6-RES-COMPLEXITY: Computational complexity > should warn about conditional complexity in loops
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 2
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'for i = 0 to (barstate.islast ? 5000 : 10)',
+  '    ',
+  ''
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Resource Usage Analysis > PSV6-RES-COMPLEXITY: Computational complexity > should warn about nested loops with large bounds
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 2
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'for i = 0 to 1000',
+  '    for j = 0 to 1000',
+  '        '
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Resource Usage Analysis > PSV6-RES-COMPLEXITY: Computational complexity > should not warn about simple loops
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [ '//@version=6', 'indicator("Test")', 'for i = 0 to 10', '    ', '' ]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Semantic Type Analysis > PSV6-TYPE-FLOW: Advanced type checking > should fail on series to simple assignment
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'series float x = ta.sma(close, 14)',
+  'simple int len = x'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Semantic Type Analysis > PSV6-TYPE-FLOW: Advanced type checking > should fail on input to series assignment in wrong context
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'input int userInput = 10',
+  'series float result = userInput + close'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Semantic Type Analysis > PSV6-TYPE-FLOW: Advanced type checking > should pass on valid type flow
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'simple int len = 14',
+  'series float result = ta.sma(close, len)'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Semantic Type Analysis > PSV6-TYPE-INFERENCE: Type inference suggestions > should suggest explicit type for ambiguous variable
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'myVar = close > open ? 1.0 : 0.0'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Semantic Type Analysis > PSV6-TYPE-INFERENCE: Type inference suggestions > should suggest type for function return
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'myFunc() => close > open ? 1 : 0'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Semantic Type Analysis > PSV6-TYPE-INFERENCE: Type inference suggestions > should not suggest type when explicit
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 1
+[EnhancedQualityValidator] Text fallback functions found 0
+[EnhancedQualityValidator] No function blocks detected; sample lines [
+  '//@version=6',
+  'indicator("Test")',
+  'float myVar = close > open ? 1.0 : 0.0'
+]
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Code Quality Metrics > PSV6-QUALITY-LENGTH: Function length suggestions > should warn about very long functions
+[EnhancedQualityValidator] AST metrics complete; warnings so far [ 'PSV6-QUALITY-LENGTH' ]
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 1
+[EnhancedQualityValidator] Analyzing function longFunc at 3 1
+[EnhancedQualityValidator] Function complexity (text) longFunc 0
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback [ 'PSV6-QUALITY-LENGTH' ]
+
+stdout | tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Code Quality Metrics > PSV6-QUALITY-LENGTH: Function length suggestions > should not warn about reasonable function length
+[EnhancedQualityValidator] AST metrics complete; warnings so far []
+[EnhancedQualityValidator] Script complexity (text) 0
+[EnhancedQualityValidator] Text fallback functions found 1
+[EnhancedQualityValidator] Analyzing function reasonableFunc at 3 1
+[EnhancedQualityValidator] Function complexity (text) reasonableFunc 0
+[EnhancedQualityValidator] Function length (text) reasonableFunc 3
+[EnhancedQualityValidator] Max nesting depth (text) 0 at 1 0
+[EnhancedQualityValidator] Final warnings after text fallback []
+
+ ❯ tests/specs/all-validation-tests.spec.ts  (53 tests | 2 failed) 339ms
+   ❯ tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Code Quality Metrics > PSV6-QUALITY-COMPLEXITY: Cyclomatic complexity > should warn about high cyclomatic complexity
+     → expected [] to include 'PSV6-QUALITY-COMPLEXITY'
+   ❯ tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Code Quality Metrics > PSV6-QUALITY-DEPTH: Nesting depth warnings > should warn about excessive nesting depth
+     → expected [] to include 'PSV6-QUALITY-DEPTH'
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Code Quality Metrics > PSV6-QUALITY-COMPLEXITY: Cyclomatic complexity > should warn about high cyclomatic complexity
+AssertionError: expected [] to include 'PSV6-QUALITY-COMPLEXITY'
+ ❯ tests/specs/v6-enhanced-features.spec.ts:27:72
+     25| ) {
+     26|   if (want.errors) want.errors.forEach(c => expect(codes.errors).toCon…
+     27|   if (want.warnings) want.warnings.forEach(c => expect(codes.warnings)…
+       |                                                                        ^
+     28|   if (want.info) want.info.forEach(c => expect(codes.info).toContain(c…
+     29| }
+ ❯ expectHas tests/specs/v6-enhanced-features.spec.ts:27:36
+ ❯ tests/specs/v6-enhanced-features.spec.ts:553:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/specs/all-validation-tests.spec.ts > Pine Script V6 Enhanced Features (TDD) > Code Quality Metrics > PSV6-QUALITY-DEPTH: Nesting depth warnings > should warn about excessive nesting depth
+AssertionError: expected [] to include 'PSV6-QUALITY-DEPTH'
+ ❯ tests/specs/v6-enhanced-features.spec.ts:27:72
+     25| ) {
+     26|   if (want.errors) want.errors.forEach(c => expect(codes.errors).toCon…
+     27|   if (want.warnings) want.warnings.forEach(c => expect(codes.warnings)…
+       |                                                                        ^
+     28|   if (want.info) want.info.forEach(c => expect(codes.info).toContain(c…
+     29| }
+ ❯ expectHas tests/specs/v6-enhanced-features.spec.ts:27:36
+ ❯ tests/specs/v6-enhanced-features.spec.ts:582:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 51 passed (53)
+   Start at  16:33:30
+   Duration  3.79s (transform 1.70s, setup 0ms, collect 2.84s, tests 339ms, environment 0ms, prepare 243ms)
+

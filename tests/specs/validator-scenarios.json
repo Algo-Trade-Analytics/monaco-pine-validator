@@ -231,10 +231,10 @@
     "name": "method_call_on_primitive",
     "code": "//@version=6\nindicator(\"Primitive Method Call\")\nvalue = close\nvalue.normalize()\nplot(value)\n",
     "expect": {
-      "errors": [
-        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
-      ],
-      "warnings": []
+      "errors": [],
+      "warnings": [
+        "PSV6-METHOD-INVALID"
+      ]
     }
   },
   {

@@ -752,8 +752,8 @@ export class FunctionValidator implements ValidationModule {
           this.addError(
             call.line,
             call.column,
-            `Unknown function in library context: ${call.name}`,
-            'PSV6-FUNCTION-UNKNOWN'
+            `Undefined property '${funcName}' on '${namespace}' namespace`,
+            'PSV6-UNDEFINED-NAMESPACE-MEMBER'
           );
           return;
         }
@@ -761,8 +761,8 @@ export class FunctionValidator implements ValidationModule {
           this.addError(
             call.line,
             call.column,
-            `Function '${call.name}' is not allowed in libraries`,
-            'PSV6-FUNCTION-NAMESPACE'
+            `Undefined property '${funcName}' on '${namespace}' namespace`,
+            'PSV6-UNDEFINED-NAMESPACE-MEMBER'
           );
           return;
         }
@@ -827,18 +827,10 @@ export class FunctionValidator implements ValidationModule {
     if (this.allowedInstanceMethods.has(methodName)) {
       return;
     }
-    const methodCall: FunctionCall = {
-      name: methodName,
-      arguments: originalCall.arguments,
-      line: originalCall.line,
-      column: originalCall.column,
-      startIndex: originalCall.startIndex,
-      inLoop: originalCall.inLoop,
-      astNode: originalCall.astNode,
-      astPath: originalCall.astPath,
-    };
-
-    this.validateUserFunctionCall(methodCall);
+    
+    // For method calls on primitive values, let EnhancedMethodValidator handle them
+    // Don't produce PSV6-FUNCTION-UNKNOWN - let the method validator produce PSV6-METHOD-INVALID
+    return;
   }
 
   private validateBuiltInFunctionCall(call: FunctionCall): void {
@@ -901,7 +893,9 @@ export class FunctionValidator implements ValidationModule {
             `Function '${funcName}' should be in '${correctNamespace}' namespace, not '${namespace}'`, 
             'PSV6-FUNCTION-NAMESPACE');
         } else {
-          this.addError(call.line, call.column, `Unknown function: ${call.name}`, 'PSV6-FUNCTION-UNKNOWN');
+          // For namespace member access, let NamespaceValidator handle undefined members
+          // Don't produce PSV6-FUNCTION-UNKNOWN for namespace member access
+          return;
         }
         return;
       }
