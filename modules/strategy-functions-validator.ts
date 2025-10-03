@@ -391,7 +391,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
     const expectedParams = functionRules.parameters;
     
     // Check parameter count - be more lenient
-    const requiredParams = expectedParams.filter((p: any) => p.required).length;
+    const requiredParams = expectedParams.filter((p: { required?: boolean }) => p.required).length;
     const positionalArgs = parameters.filter(p => !p.includes('='));
     if (positionalArgs.length < requiredParams) {
       this.addError(
@@ -840,7 +840,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
 
     // Consult typeMap for identifiers
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(param)) {
-      const ti: any = this.context.typeMap.get(param);
+      const ti = this.context.typeMap.get(param);
       if (ti && ti.type && ti.type !== 'unknown') {
         if (/^series/.test(ti.type)) return 'series';
         return ti.type;

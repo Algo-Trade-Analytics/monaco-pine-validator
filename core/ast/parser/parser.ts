@@ -73,10 +73,10 @@ import {
   createWhileStatementRule,
 } from './rules/control-flow';
 
-type ConsumeMethod = (tokenType: any, options?: unknown) => IToken;
-type SubruleMethod = (...args: any[]) => any;
-type DslMethod = (...args: any[]) => any;
-type RuleMethod<T> = (...args: any[]) => T;
+type ConsumeMethod = (tokenType: IToken, options?: unknown) => IToken;
+type SubruleMethod = (...args: unknown[]) => unknown;
+type DslMethod = (...args: unknown[]) => unknown;
+type RuleMethod<T> = (...args: unknown[]) => T;
 type OrAlternative<T> = { ALT: () => T } & Record<string, unknown>;
 type ActionMethod = (callback: () => void) => void;
 type BacktrackMethod = <T>(production: () => T) => () => T;
@@ -134,7 +134,7 @@ export class PineParser extends EmbeddedActionsParser {
 
   public assignmentStatement = createAssignmentStatementRule(this);
 
-  public ifStatement: RuleMethod<IfStatementNode> = createIfStatementRule(this);
+  public ifStatement: () => IfStatementNode = createIfStatementRule(this);
 
   public forStatement = createForStatementRule(this);
 
@@ -223,7 +223,7 @@ export class PineParser extends EmbeddedActionsParser {
 
   public identifierExpression = createIdentifierExpressionRule(this);
 
-  public ifExpression: RuleMethod<IfExpressionNode> = createIfExpressionRule(this);
+  public ifExpression: () => IfExpressionNode = createIfExpressionRule(this);
 
   public forExpression = createForExpressionRule(this);
 
@@ -285,7 +285,7 @@ export class PineParser extends EmbeddedActionsParser {
     return method(alternatives) as T;
   }
 
-  public createRule<R extends RuleMethod<any>>(name: string, implementation: R): R {
+  public createRule<R extends (...args: unknown[]) => unknown>(name: string, implementation: R): R {
     return this.RULE(name, implementation) as R;
   }
 

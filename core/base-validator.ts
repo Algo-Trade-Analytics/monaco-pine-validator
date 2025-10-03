@@ -382,7 +382,9 @@ export abstract class BaseValidator {
     
     // If pre-check found errors, add them to diagnostics
     if (preCheckErrors.length > 0 && context.astDiagnostics) {
-      (context.astDiagnostics as any).preCheckErrors = preCheckErrors;
+      if (context.astDiagnostics) {
+        (context.astDiagnostics as { preCheckErrors?: ValidationError[] }).preCheckErrors = preCheckErrors;
+      }
     }
 
     context.typeMap = this.typeMap;

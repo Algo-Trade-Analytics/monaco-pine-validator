@@ -339,7 +339,7 @@ export class TAFunctionsValidator implements ValidationModule {
     const expectedParams = functionRules.parameters;
     
     // Check parameter count - be more lenient
-    const requiredParams = expectedParams.filter((p: any) => p.required).length;
+    const requiredParams = expectedParams.filter((p: { required?: boolean }) => p.required).length;
     if (parameters.length < requiredParams) {
       // Emit both TA-specific and generic codes so different test suites can assert either
       this.addError(
@@ -595,7 +595,7 @@ export class TAFunctionsValidator implements ValidationModule {
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(param)) {
       const typeInfo = this.context.typeMap.get(param);
       if (typeInfo) {
-        if (typeInfo.isSeries || typeInfo.type === 'series' || (typeInfo as any).type?.startsWith?.('series ')) {
+        if (typeInfo.isSeries || typeInfo.type === 'series' || (typeInfo.type?.startsWith?.('series '))) {
           return 'series';
         }
       }

@@ -18,6 +18,7 @@ import type {
   ExpressionNode,
   ExpressionStatementNode,
   ProgramNode,
+  StatementNode,
   ReturnStatementNode,
   TupleExpressionNode,
   SwitchCaseNode,
@@ -439,7 +440,7 @@ export class SwitchValidator implements ValidationModule {
       });
     };
 
-    const visitStatementNode = (stmt: any, depth: number) => {
+    const visitStatementNode = (stmt: StatementNode, depth: number) => {
       if (!stmt) {
         return;
       }
@@ -460,7 +461,9 @@ export class SwitchValidator implements ValidationModule {
           visitExpression((stmt as VariableDeclarationNode).initializer as ExpressionNode, depth);
           break;
         case 'BlockStatement':
-          (stmt as any).body?.forEach((inner: any) => visitStatementNode(inner, depth));
+          if (stmt.kind === 'BlockStatement') {
+            stmt.body.forEach((inner) => visitStatementNode(inner, depth));
+          }
           break;
         default:
           break;

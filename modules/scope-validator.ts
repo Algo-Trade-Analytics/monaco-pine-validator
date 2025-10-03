@@ -13,10 +13,11 @@ import {
   type ValidationResult,
   type AstValidationContext,
   type SymbolKind,
+  type ScopeGraph,
   type SymbolRecord,
 } from '../core/types';
 import { KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT } from '../core/constants';
-import type { IdentifierNode, ProgramNode, TypeDeclarationNode } from '../core/ast/nodes';
+import type { IdentifierNode, ProgramNode, TypeDeclarationNode, Node } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 
 export class ScopeValidator implements ValidationModule {
@@ -354,9 +355,9 @@ export class ScopeValidator implements ValidationModule {
     }
   }
 
-  private isReferenceInScopes(referencePath: NodePath<IdentifierNode>, targetScopes: string[], scopeGraph: any): boolean {
+  private isReferenceInScopes(referencePath: NodePath<IdentifierNode>, targetScopes: string[], scopeGraph: ScopeGraph): boolean {
     // Find which scope this reference is in by walking up the AST
-    let current: NodePath<any> | null = referencePath;
+    let current: NodePath<Node> | null = referencePath;
     
     while (current) {
       const node = current.node;
@@ -369,7 +370,7 @@ export class ScopeValidator implements ValidationModule {
             // Check if reference position is within scope's range
             const refStart = node.range[0];
             const scopeRange = scopeNode.metadata?.range;
-            if (scopeRange && refStart >= scopeRange[0] && refStart <= scopeRange[1]) {
+            if (Array.isArray(scopeRange) && scopeRange.length >= 2 && refStart >= scopeRange[0] && refStart <= scopeRange[1]) {
               return true;
             }
           }

@@ -24,23 +24,24 @@ describe('core AST nodes traversal', () => {
     const visited: string[] = [];
 
     visit(program, {
-      Program: { enter: () => visited.push('Program') },
-      VersionDirective: { enter: () => visited.push('VersionDirective') },
-      ScriptDeclaration: { enter: () => visited.push('ScriptDeclaration') },
-      FunctionDeclaration: { enter: () => visited.push('FunctionDeclaration') },
-      Parameter: { enter: () => visited.push('Parameter') },
-      BlockStatement: { enter: () => visited.push('BlockStatement') },
-      ReturnStatement: { enter: () => visited.push('ReturnStatement') },
-      ExpressionStatement: { enter: () => visited.push('ExpressionStatement') },
-      CallExpression: { enter: () => visited.push('CallExpression') },
+      Program: { enter: () => { visited.push('Program'); return undefined; } },
+      VersionDirective: { enter: () => { visited.push('VersionDirective'); return undefined; } },
+      ScriptDeclaration: { enter: () => { visited.push('ScriptDeclaration'); return undefined; } },
+      FunctionDeclaration: { enter: () => { visited.push('FunctionDeclaration'); return undefined; } },
+      Parameter: { enter: () => { visited.push('Parameter'); return undefined; } },
+      BlockStatement: { enter: () => { visited.push('BlockStatement'); return undefined; } },
+      ReturnStatement: { enter: () => { visited.push('ReturnStatement'); return undefined; } },
+      ExpressionStatement: { enter: () => { visited.push('ExpressionStatement'); return undefined; } },
+      CallExpression: { enter: () => { visited.push('CallExpression'); return undefined; } },
       Argument: {
         enter: (path) => {
           visited.push(path.node.name ? `Argument:${path.node.name.name}` : 'Argument');
+          return undefined;
         },
       },
-      Identifier: { enter: (path) => visited.push(`Identifier:${path.node.name}`) },
-      StringLiteral: { enter: (path) => visited.push(`String:${path.node.value}`) },
-      NumberLiteral: { enter: (path) => visited.push(`Number:${path.node.value}`) },
+      Identifier: { enter: (path) => { visited.push(`Identifier:${path.node.name}`); return undefined; } },
+      StringLiteral: { enter: (path) => { visited.push(`String:${path.node.value}`); return undefined; } },
+      NumberLiteral: { enter: (path) => { visited.push(`Number:${path.node.value}`); return undefined; } },
     });
 
     expect(visited).toEqual([

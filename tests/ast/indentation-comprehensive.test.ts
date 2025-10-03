@@ -281,25 +281,25 @@ result = double(5)`;
     });
   });
 
-  describe('Else-If Chains', () => {
-    // NOTE: If expressions are not supported by our parser yet
-    // This is a known parser limitation that needs to be addressed
-    // it('should accept else-if at same level as if', () => {
-    //   const code = `//@version=6
-    // indicator("Test")
-    // getValue(x) =>
-    //     result = if x > 10
-    //         "high"
-    //     else if x > 5
-    //         "medium"
-    //     else
-    //         "low"
-    //     result`;
-    //   
-    //   const errors = validate(code);
-    //   expect(errors).toHaveLength(0);
-    // });
-  });
+  // NOTE: Else-If Chains tests are commented out because if expressions are not supported by our parser yet
+  // This is a known parser limitation that needs to be addressed
+  // describe('Else-If Chains', () => {
+  //   it('should accept else-if at same level as if', () => {
+  //     const code = `//@version=6
+  // indicator("Test")
+  // getValue(x) =>
+  //     result = if x > 10
+  //         "high"
+  //     else if x > 5
+  //         "medium"
+  //     else
+  //         "low"
+  //     result`;
+  //   
+  //     const errors = validate(code);
+  //     expect(errors).toHaveLength(0);
+  //   });
+  // });
 });
 
 describe('Indentation Validation - Real-World Examples', () => {

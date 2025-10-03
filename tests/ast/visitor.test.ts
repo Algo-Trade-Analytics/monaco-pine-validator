@@ -21,12 +21,12 @@ describe('PineScript AST visitor infrastructure', () => {
     class RecordingVisitor extends NodeVisitor {
       readonly visited: string[] = [];
 
-      override visit_FunctionDef(node: FunctionDef) {
+      visit_FunctionDef(node: FunctionDef) {
         this.visited.push(`FunctionDef:${node.name}`);
         return this.genericVisit(node);
       }
 
-      override visit_Name(node: Name) {
+      visit_Name(node: Name) {
         this.visited.push(`Name:${node.id}`);
         return node;
       }
@@ -57,7 +57,7 @@ describe('PineScript AST visitor infrastructure', () => {
     });
 
     class Transformer extends NodeTransformer {
-      override visit_Name(node: Name) {
+      visit_Name(node: Name) {
         if (node.id === 'x') {
           return new Name({ id: 'y' });
         }
@@ -67,7 +67,7 @@ describe('PineScript AST visitor infrastructure', () => {
         return node;
       }
 
-      override visit_Assign(node: Assign) {
+      visit_Assign(node: Assign) {
         const replacement = super.genericVisit(node) as Assign;
         return [replacement, new Assign({
           target: new Name({ id: 'y' }),
@@ -75,7 +75,7 @@ describe('PineScript AST visitor infrastructure', () => {
         })];
       }
 
-      override visit_Expr() {
+      visit_Expr() {
         return null;
       }
     }

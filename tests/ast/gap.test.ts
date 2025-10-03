@@ -75,7 +75,7 @@ describe('Python ↔︎ TypeScript AST parity', () => {
       const instance = new ctor();
       for (const fieldName of info.dataclass_fields) {
         expect(instance).toHaveProperty(fieldName);
-        const value = (instance as Record<string, unknown>)[fieldName];
+        const value = (instance as unknown as Record<string, unknown>)[fieldName];
         const defaultInfo = info.defaults[fieldName];
         switch (defaultInfo?.kind) {
           case 'list':

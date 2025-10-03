@@ -5,13 +5,13 @@ export type FieldEntry = [string, unknown];
 export function* iterFields(node: AST): IterableIterator<FieldEntry> {
   for (const field of node._fields ?? []) {
     if (Object.prototype.hasOwnProperty.call(node, field)) {
-      yield [field, (node as any)[field]];
+      yield [field, (node as unknown as Record<string, unknown>)[field]];
     }
   }
 }
 
 export function* iterChildNodes(node: AST): IterableIterator<AST> {
-  for (const [, value] of iterFields(node)) {
+  for (const [, value] of Array.from(iterFields(node))) {
     if (value instanceof AST) {
       yield value;
     } else if (Array.isArray(value)) {
@@ -29,11 +29,11 @@ const LOCATION_ATTRS = ['lineno', 'col_offset', 'end_lineno', 'end_col_offset'] 
 export function copyLocation<T extends AST>(newNode: T, oldNode: AST): T {
   for (const attr of LOCATION_ATTRS) {
     if (oldNode._attributes.includes(attr) && newNode._attributes.includes(attr)) {
-      const value = (oldNode as any)[attr];
+      const value = (oldNode as unknown as Record<string, unknown>)[attr];
       if (value !== undefined && value !== null) {
-        (newNode as any)[attr] = value;
+        (newNode as unknown as Record<string, unknown>)[attr] = value;
       } else if (attr.startsWith('end_') && Object.prototype.hasOwnProperty.call(oldNode, attr)) {
-        (newNode as any)[attr] = value;
+        (newNode as unknown as Record<string, unknown>)[attr] = value;
       }
     }
   }
@@ -46,33 +46,33 @@ function fixLocations(node: AST, lineno: number, colOffset: number, endLineno: n
       continue;
     }
     if (attr === 'lineno') {
-      if ((node as any).lineno == null) {
-        (node as any).lineno = lineno;
+      if ((node as unknown as Record<string, unknown>).lineno == null) {
+        (node as unknown as Record<string, unknown>).lineno = lineno;
       } else {
-        lineno = (node as any).lineno ?? lineno;
+        lineno = (node as unknown as Record<string, unknown>).lineno as number ?? lineno;
       }
     } else if (attr === 'col_offset') {
-      if ((node as any).col_offset == null) {
-        (node as any).col_offset = colOffset;
+      if ((node as unknown as Record<string, unknown>).col_offset == null) {
+        (node as unknown as Record<string, unknown>).col_offset = colOffset;
       } else {
-        colOffset = (node as any).col_offset ?? colOffset;
+        colOffset = (node as unknown as Record<string, unknown>).col_offset as number ?? colOffset;
       }
     } else if (attr === 'end_lineno') {
-      if ((node as any).end_lineno == null) {
-        (node as any).end_lineno = endLineno;
+      if ((node as unknown as Record<string, unknown>).end_lineno == null) {
+        (node as unknown as Record<string, unknown>).end_lineno = endLineno;
       } else {
-        endLineno = (node as any).end_lineno ?? endLineno;
+        endLineno = (node as unknown as Record<string, unknown>).end_lineno as number ?? endLineno;
       }
     } else if (attr === 'end_col_offset') {
-      if ((node as any).end_col_offset == null) {
-        (node as any).end_col_offset = endColOffset;
+      if ((node as unknown as Record<string, unknown>).end_col_offset == null) {
+        (node as unknown as Record<string, unknown>).end_col_offset = endColOffset;
       } else {
-        endColOffset = (node as any).end_col_offset ?? endColOffset;
+        endColOffset = (node as unknown as Record<string, unknown>).end_col_offset as number ?? endColOffset;
       }
     }
   }
 
-  for (const child of iterChildNodes(node)) {
+  for (const child of Array.from(iterChildNodes(node))) {
     fixLocations(child, lineno, colOffset, endLineno, endColOffset);
   }
 }
@@ -83,15 +83,15 @@ export function fixMissingLocations<T extends AST>(node: T): T {
 }
 
 export function incrementLineno<T extends AST>(node: T, n = 1): T {
-  for (const child of walk(node)) {
+  for (const child of Array.from(walk(node))) {
     if (child._attributes.includes('lineno')) {
-      const current = (child as any).lineno ?? 0;
-      (child as any).lineno = current + n;
+      const current = (child as unknown as Record<string, unknown>).lineno as number ?? 0;
+      (child as unknown as Record<string, unknown>).lineno = current + n;
     }
     if (child._attributes.includes('end_lineno')) {
-      const current = (child as any).end_lineno;
+      const current = (child as unknown as Record<string, unknown>).end_lineno;
       if (typeof current === 'number') {
-        (child as any).end_lineno = current + n;
+        (child as unknown as Record<string, unknown>).end_lineno = current + n;
       }
     }
   }
@@ -123,10 +123,10 @@ function padWhitespace(source: string): string {
 }
 
 export function getSourceSegment(source: string, node: AST, { padded = false }: { padded?: boolean } = {}): string | undefined {
-  const startLine = (node as any).lineno;
-  const endLine = (node as any).end_lineno ?? startLine;
-  const startOffset = (node as any).col_offset ?? 0;
-  const endOffset = (node as any).end_col_offset ?? 0;
+  const startLine = (node as unknown as Record<string, unknown>).lineno as number;
+  const endLine = (node as unknown as Record<string, unknown>).end_lineno as number ?? startLine;
+  const startOffset = (node as unknown as Record<string, unknown>).col_offset as number ?? 0;
+  const endOffset = (node as unknown as Record<string, unknown>).end_col_offset as number ?? 0;
 
   if (startLine == null) {
     return undefined;
@@ -158,7 +158,7 @@ export function* walk(node: AST): IterableIterator<AST> {
   const queue: AST[] = [node];
   while (queue.length > 0) {
     const current = queue.shift()!;
-    queue.push(...iterChildNodes(current));
+    queue.push(...Array.from(iterChildNodes(current)));
     yield current;
   }
 }
@@ -199,7 +199,7 @@ function formatNode(node: AST, level: number, indent: string | null, annotate: b
   let allSimple = true;
 
   for (const field of node._fields) {
-    const value = (node as any)[field];
+    const value = (node as unknown as Record<string, unknown>)[field];
     const [formatted, simple] = formatValue(value, level + 1, indent, annotate, includeAttrs);
     allSimple &&= simple;
     if (annotate) {
@@ -212,7 +212,7 @@ function formatNode(node: AST, level: number, indent: string | null, annotate: b
   if (includeAttrs) {
     for (const attr of node._attributes) {
       if (Object.prototype.hasOwnProperty.call(node, attr)) {
-        const value = (node as any)[attr];
+        const value = (node as unknown as Record<string, unknown>)[attr];
         const [formatted] = formatValue(value, level + 1, indent, annotate, includeAttrs);
         args.push(`${attr}=${formatted}`);
       }
@@ -228,7 +228,7 @@ function formatNode(node: AST, level: number, indent: string | null, annotate: b
 
 export function dump(node: AST, options: DumpOptions = {}): string {
   if (!(node instanceof AST)) {
-    throw new TypeError(`expected AST, got ${String((node as any)?.constructor?.name ?? typeof node)}`);
+    throw new TypeError(`expected AST, got ${String((node as { constructor?: { name?: string } })?.constructor?.name ?? typeof node)}`);
   }
 
   let indentString: string | null = null;

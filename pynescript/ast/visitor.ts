@@ -4,7 +4,7 @@ import { AST } from './node';
 export class NodeVisitor {
   visit<T = unknown>(node: AST): T {
     const methodName = `visit_${node.constructor.name}`;
-    const visitor = (this as any)[methodName];
+    const visitor = (this as Record<string, unknown>)[methodName];
     if (typeof visitor === 'function') {
       return visitor.call(this, node);
     }
@@ -12,7 +12,7 @@ export class NodeVisitor {
   }
 
   protected genericVisit(node: AST): unknown {
-    for (const [, value] of iterFields(node)) {
+    for (const [, value] of Array.from(iterFields(node))) {
       if (value instanceof AST) {
         this.visit(value);
       } else if (Array.isArray(value)) {

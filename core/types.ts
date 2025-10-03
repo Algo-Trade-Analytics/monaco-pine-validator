@@ -175,6 +175,16 @@ export interface BuiltinFunctionRule {
     min?: number;
     max?: number;
   }>;
+  overloads?: Array<{
+    parameters?: Array<{
+      name: string;
+      type: string;
+      qualifier?: Qualifier;
+      required?: boolean;
+      min?: number;
+      max?: number;
+    }>;
+  }>;
   deprecatedParams?: string[];
   v6Changes?: string;
   disallowedArgTypes?: string[];

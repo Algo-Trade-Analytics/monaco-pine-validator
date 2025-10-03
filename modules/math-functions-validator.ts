@@ -257,7 +257,7 @@ export class MathFunctionsValidator implements ValidationModule {
     const expectedParams = functionRules.parameters;
     
     // Check parameter count - be more lenient
-    const requiredParams = expectedParams.filter((p: any) => p.required).length;
+    const requiredParams = expectedParams.filter((p: { required?: boolean }) => p.required).length;
     if (parameters.length < requiredParams) {
       this.addError(
         lineNumber,

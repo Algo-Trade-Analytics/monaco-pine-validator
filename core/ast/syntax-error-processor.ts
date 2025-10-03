@@ -16,8 +16,8 @@ export function convertAstDiagnosticsToErrors(
   const errors: ValidationError[] = [];
 
   for (const syntaxError of diagnostics.syntaxErrors) {
-    const line = (syntaxError as any).lineno ?? 1;
-    const column = (syntaxError as any).offset ?? 1;
+    const line = (syntaxError as { lineno?: number }).lineno ?? 1;
+    const column = (syntaxError as { offset?: number }).offset ?? 1;
     
     // Translate the error message
     const friendly = processParserError(syntaxError.message, line, column, sourceCode);

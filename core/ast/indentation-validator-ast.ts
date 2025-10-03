@@ -270,9 +270,9 @@ export class ASTIndentationValidator {
     if (node.fields) {
       for (const field of node.fields) {
         // Fields can be TypeField or FunctionDeclaration (methods)
-        if ((field as any).kind === 'FunctionDeclaration') {
+        if ((field as Node).kind === 'FunctionDeclaration') {
           // Method inside type - validate with current context
-          this.validateNode(field as any);
+          this.validateNode(field as Node);
         }
         // TypeField nodes don't need indentation validation (handled by parser)
       }
@@ -427,7 +427,7 @@ export class ASTIndentationValidator {
     // Special handling for assignment with switch expression
     // result = switch ...
     if (stmt.kind === 'AssignmentStatement') {
-      const assignStmt = stmt as any;
+      const assignStmt = stmt as AssignmentStatementNode;
       if (assignStmt.right && assignStmt.right.kind === 'SwitchStatement') {
         // This is a switch expression - validate the switch, not as wrapped lines
         this.validateSwitchStatement(assignStmt.right as SwitchStatementNode);
@@ -881,23 +881,23 @@ export class ASTIndentationValidator {
   /**
    * Recursively validate child nodes
    */
-  private validateChildren(node: any): void {
+  private validateChildren(node: Node): void {
     if (!node) return;
 
     // Iterate through all properties looking for child nodes
     for (const key in node) {
       if (key === 'parent' || key === 'loc') continue; // Skip parent refs and location info
       
-      const value = node[key];
+      const value = (node as unknown as Record<string, unknown>)[key];
       
       if (Array.isArray(value)) {
         value.forEach(child => {
-          if (child && typeof child === 'object' && child.type) {
-            this.validateNode(child);
+          if (child && typeof child === 'object' && 'type' in child) {
+            this.validateNode(child as Node);
           }
         });
-      } else if (value && typeof value === 'object' && value.type) {
-        this.validateNode(value);
+      } else if (value && typeof value === 'object' && 'type' in value) {
+        this.validateNode(value as unknown as Node);
       }
     }
   }

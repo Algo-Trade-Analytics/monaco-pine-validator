@@ -6,7 +6,7 @@ const STRUCTURE_NODES = new Set([ForTo, ForIn, While, If, Switch]);
 type Structure = ForTo | ForIn | While | If | Switch;
 
 function isStructure(node: unknown): node is Structure {
-  for (const ctor of STRUCTURE_NODES) {
+  for (const ctor of Array.from(STRUCTURE_NODES)) {
     if (node instanceof ctor) {
       return true;
     }
@@ -15,79 +15,81 @@ function isStructure(node: unknown): node is Structure {
 }
 
 export class StatementCollector extends NodeVisitor {
-  override visit_Script(node: any): Iterable<stmt> {
+  visit_Script(node: any): Iterable<stmt> {
     return this.collectFromList(node.body);
   }
 
-  override visit_FunctionDef(node: any): Iterable<stmt> {
+  visit_FunctionDef(node: any): Iterable<stmt> {
     return this.visitWithBody(node);
   }
 
-  override visit_TypeDef(node: any): Iterable<stmt> {
+  visit_TypeDef(node: any): Iterable<stmt> {
     return this.visitWithBody(node);
   }
 
-  override visit_EnumDef(node: EnumDef): Iterable<stmt> {
+  visit_EnumDef(node: EnumDef): Iterable<stmt> {
     return [node];
   }
 
-  override visit_Assign(node: any): Iterable<stmt> {
+  visit_Assign(node: any): Iterable<stmt> {
     return this.visitWithValue(node);
   }
 
-  override visit_ReAssign(node: any): Iterable<stmt> {
+  visit_ReAssign(node: any): Iterable<stmt> {
     return this.visitWithValue(node);
   }
 
-  override visit_AugAssign(node: any): Iterable<stmt> {
+  visit_AugAssign(node: any): Iterable<stmt> {
     return this.visitWithValue(node);
   }
 
-  override visit_Import(node: stmt): Iterable<stmt> {
+  visit_Import(node: stmt): Iterable<stmt> {
     return [node];
   }
 
-  override visit_Expr(node: any): Iterable<stmt> {
+  visit_Expr(node: any): Iterable<stmt> {
     const items: stmt[] = [node];
     if (isStructure(node.value)) {
-      items.push(...this.visit(node.value));
+      const result = this.visit<Iterable<stmt>>(node.value);
+      items.push(...Array.from(result));
     }
     return items;
   }
 
-  override visit_Break(node: stmt): Iterable<stmt> {
+  visit_Break(node: stmt): Iterable<stmt> {
     return [node];
   }
 
-  override visit_Continue(node: stmt): Iterable<stmt> {
+  visit_Continue(node: stmt): Iterable<stmt> {
     return [node];
   }
 
-  override visit_ForTo(node: ForTo): Iterable<stmt> {
+  visit_ForTo(node: ForTo): Iterable<stmt> {
     return this.collectFromList(node.body);
   }
 
-  override visit_ForIn(node: ForIn): Iterable<stmt> {
+  visit_ForIn(node: ForIn): Iterable<stmt> {
     return this.collectFromList(node.body);
   }
 
-  override visit_While(node: While): Iterable<stmt> {
+  visit_While(node: While): Iterable<stmt> {
     return this.collectFromList(node.body);
   }
 
-  override visit_If(node: If): Iterable<stmt> {
+  visit_If(node: If): Iterable<stmt> {
     return [...this.collectFromList(node.body), ...this.collectFromList(node.orelse)];
   }
 
-  override visit_Switch(node: Switch): Iterable<stmt> {
+  visit_Switch(node: Switch): Iterable<stmt> {
     const items: stmt[] = [];
     for (const caseNode of node.cases) {
-      items.push(...this.visit(caseNode));
+      const result = this.visit<Iterable<stmt>>(caseNode);
+      items.push(...Array.from(result));
     }
     return items;
   }
 
-  override visit_Case(node: any): Iterable<stmt> {
+  visit_Case(node: any): Iterable<stmt> {
     return this.collectFromList(node.body);
   }
 
@@ -100,7 +102,8 @@ export class StatementCollector extends NodeVisitor {
   private visitWithValue(node: any): Iterable<stmt> {
     const items: stmt[] = [node];
     if (isStructure(node.value)) {
-      items.push(...this.visit(node.value));
+      const result = this.visit<Iterable<stmt>>(node.value);
+      items.push(...Array.from(result));
     }
     return items;
   }
@@ -116,7 +119,7 @@ export class StatementCollector extends NodeVisitor {
         if (Array.isArray(result)) {
           items.push(...result);
         } else if (typeof (result as any)[Symbol.iterator] === 'function') {
-          items.push(...(result as Iterable<stmt>));
+          items.push(...Array.from(result as Iterable<stmt>));
         } else if (result instanceof stmt) {
           items.push(result);
         }

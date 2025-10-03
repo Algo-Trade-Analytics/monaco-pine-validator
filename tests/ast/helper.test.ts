@@ -122,8 +122,8 @@ describe('PineScript AST helper utilities', () => {
         | readonly string[]
         | undefined;
       if (attributes?.includes('lineno')) {
-        expect(node.lineno).not.toBeNull();
-        expect(node.end_lineno).not.toBeNull();
+        expect((node as unknown as Record<string, unknown>).lineno).not.toBeNull();
+        expect((node as unknown as Record<string, unknown>).end_lineno).not.toBeNull();
       }
     }
   });

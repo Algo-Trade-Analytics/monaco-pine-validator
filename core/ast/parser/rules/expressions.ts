@@ -614,7 +614,8 @@ export function createArgumentRule(parser: PineParser) {
 }
 
 export function createBracketExpressionRule(parser: PineParser) {
-  return parser.createRule('bracketExpression', (mode: 'expression' | 'tuple' = 'expression'): ExpressionNode => {
+  return parser.createRule('bracketExpression', (...args: unknown[]): ExpressionNode => {
+    const mode = (args[0] as 'expression' | 'tuple') ?? 'expression';
     const lBracket = parser.consumeToken(LBracket);
     const elements: (ExpressionNode | null)[] = [];
     let expectElement = true;
@@ -723,7 +724,7 @@ export function createPrimaryExpressionRule(parser: PineParser) {
       case While:
         return parser.invokeSubrule(parser.whileExpression);
       case LBracket:
-        return parser.invokeSubrule(parser.bracketExpression);
+        return parser.invokeSubrule(parser.bracketExpression) as ExpressionNode;
       case LParen: {
         if (isArrowFunctionStart(parser)) {
           return parser.invokeSubrule(parser.arrowFunctionExpression);
@@ -755,8 +756,9 @@ export function createIdentifierExpressionRule(parser: PineParser) {
   });
 }
 
-export function createIfExpressionRule(parser: PineParser) {
-  return parser.createRule('ifExpression', (baseIndentOverride?: number) => {
+export function createIfExpressionRule(parser: PineParser): () => IfExpressionNode {
+  return parser.createRule('ifExpression', (...args: unknown[]) => {
+    const baseIndentOverride = args[0] as number | undefined;
     const ifToken = parser.consumeToken(If);
     const test = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
     const baseIndent = baseIndentOverride ?? parser.getLineIndent(ifToken.startLine ?? 1);

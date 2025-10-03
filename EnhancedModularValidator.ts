@@ -257,7 +257,7 @@ export class EnhancedModularValidator extends BaseValidator {
    * @param position - The cursor position in the code
    * @returns Array of completion items
    */
-  getCompletions(position?: { line: number; column: number }): any[] {
+  getCompletions(position?: { line: number; column: number }): Array<{ label: string; kind: string; detail: string }> {
     // This would be implemented by aggregating completions from all modules
     // For now, return a basic set of completions
     return [
@@ -429,7 +429,7 @@ export class EnhancedModularValidator extends BaseValidator {
         isSeries: true,
         declaredAt: { line: 0, column: 0 },
         usages: []
-      } as any);
+      });
     });
     seriesVars.forEach(varName => {
       this.context.typeMap.set(varName, {
@@ -438,7 +438,7 @@ export class EnhancedModularValidator extends BaseValidator {
         isSeries: true,
         declaredAt: { line: 0, column: 0 },
         usages: []
-      } as any);
+      });
     });
 
     // Built-in constants
@@ -450,7 +450,7 @@ export class EnhancedModularValidator extends BaseValidator {
         isSeries: false,
         declaredAt: { line: 0, column: 0 },
         usages: []
-      } as any);
+      });
     });
 
     // Built-in na
@@ -460,7 +460,7 @@ export class EnhancedModularValidator extends BaseValidator {
       isSeries: false,
       declaredAt: { line: 0, column: 0 },
       usages: []
-    } as any);
+    });
 
     // Built-in namespace objects
     this.context.typeMap.set('timeframe', {
@@ -469,7 +469,7 @@ export class EnhancedModularValidator extends BaseValidator {
       isSeries: false,
       declaredAt: { line: 0, column: 0 },
       usages: []
-    } as any);
+    });
     
     this.context.typeMap.set('session', {
       type: 'unknown', // Namespace object
@@ -477,7 +477,7 @@ export class EnhancedModularValidator extends BaseValidator {
       isSeries: false,
       declaredAt: { line: 0, column: 0 },
       usages: []
-    } as any);
+    });
     
     // Initialize built-in functions in context
     this.initializeBuiltInFunctions();

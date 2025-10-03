@@ -5,6 +5,7 @@ import {
   type ValidatorConfig,
   type ValidationError,
   type ValidationResult,
+  type BuiltinFunctionRule,
 } from '../core/types';
 import { ensureAstContext } from '../core/ast/context-utils';
 import {
@@ -231,7 +232,7 @@ export class FunctionValidator implements ValidationModule {
   ]);
 
   private isDebugEnabled(): boolean {
-    const env = (globalThis as any)?.process?.env;
+    const env = (globalThis as { process?: { env?: Record<string, string> } })?.process?.env;
     return !!env && env.DEBUG_FUNC === '1';
   }
 
@@ -387,7 +388,7 @@ export class FunctionValidator implements ValidationModule {
 
     // Update the shared context with function information early so downstream checks see method definitions
     if (this.context.functionNames) {
-      for (const funcName of this.functionNames) {
+      for (const funcName of Array.from(this.functionNames)) {
         this.context.functionNames.add(funcName);
       }
     }
@@ -433,20 +434,20 @@ export class FunctionValidator implements ValidationModule {
   private initializeSeriesLikeIdentifiers(program: ProgramNode): void {
     this.seriesLikeIdentifiers.clear();
 
-    for (const builtin of FunctionValidator.BUILTIN_SERIES_IDENTIFIERS) {
+    for (const builtin of Array.from(FunctionValidator.BUILTIN_SERIES_IDENTIFIERS)) {
       this.seriesLikeIdentifiers.add(builtin);
     }
 
     const typeEnv = this.astContext?.typeEnvironment ?? null;
     if (typeEnv) {
-      for (const [identifier, metadata] of typeEnv.identifiers.entries()) {
+      for (const [identifier, metadata] of Array.from(typeEnv.identifiers.entries())) {
         if (metadata.kind === 'series') {
           this.seriesLikeIdentifiers.add(identifier);
         }
       }
     }
 
-    for (const [name, info] of this.context.typeMap.entries()) {
+    for (const [name, info] of Array.from(this.context.typeMap.entries())) {
       if (name.includes('.')) {
         continue;
       }
@@ -769,7 +770,7 @@ export class FunctionValidator implements ValidationModule {
       }
       if (delegatedNamespaces.has(namespace)) {
         // If function is in the wrong namespace, surface a namespace error
-        const members: any = (NS_MEMBERS as any)[namespace];
+        const members: Set<string> | undefined = NS_MEMBERS[namespace];
         if (!members || (members instanceof Set && !members.has(funcName))) {
           const fullQualified = call.name;
           if (parts.length > 2 && BUILTIN_FUNCTIONS_V6_RULES[fullQualified]) {
@@ -840,7 +841,7 @@ export class FunctionValidator implements ValidationModule {
       return;
     }
 
-    let rules: any;
+    let rules: BuiltinFunctionRule | undefined;
     let fullName: string;
 
     // Check if it's a namespaced function
@@ -958,8 +959,8 @@ export class FunctionValidator implements ValidationModule {
     return names;
   }
 
-  private getFunctionParameterCandidates(rules: any) {
-    const candidates: Array<{ parameters: any[]; required: number; max: number }> = [];
+  private getFunctionParameterCandidates(rules: BuiltinFunctionRule) {
+    const candidates: Array<{ parameters: BuiltinFunctionRule['parameters']; required: number; max: number }> = [];
 
     const addCandidate = (parameters: unknown): void => {
       if (!Array.isArray(parameters) || parameters.length === 0) {
@@ -989,7 +990,7 @@ export class FunctionValidator implements ValidationModule {
     return candidates;
   }
 
-  private selectFunctionParameterSet(rules: any, call: FunctionCall) {
+  private selectFunctionParameterSet(rules: BuiltinFunctionRule, call: FunctionCall) {
     const candidates = this.getFunctionParameterCandidates(rules);
     if (candidates.length === 0) {
       return null;
@@ -1008,10 +1009,12 @@ export class FunctionValidator implements ValidationModule {
       }
 
       const parameterNames = new Set<string>();
-      for (const parameter of candidate.parameters) {
-        if (!parameter || typeof parameter !== 'object') continue;
-        if (typeof parameter.name === 'string') {
-          parameterNames.add(parameter.name);
+      if (candidate.parameters) {
+        for (const parameter of candidate.parameters) {
+          if (!parameter || typeof parameter !== 'object') continue;
+          if (typeof parameter.name === 'string') {
+            parameterNames.add(parameter.name);
+          }
         }
       }
 
@@ -1029,7 +1032,7 @@ export class FunctionValidator implements ValidationModule {
 
     if (viable.length === 0) {
       if (call.name === 'fill' && process.env.DEBUG_FUNC === '1') {
-        console.log('[FunctionValidator] fill no viable candidate', { argumentCount, namedArgs: Array.from(namedArgs), candidates: candidates.map(c => ({ required: c.required, max: c.max, names: c.parameters.map((p: any) => p && p.name) })) });
+        console.log('[FunctionValidator] fill no viable candidate', { argumentCount, namedArgs: Array.from(namedArgs), candidates: candidates.map(c => ({ required: c.required, max: c.max, names: c.parameters?.map((p) => p && p.name) })) });
       }
       return null;
     }
@@ -1044,7 +1047,7 @@ export class FunctionValidator implements ValidationModule {
     return viable[0];
   }
 
-  private validateFunctionParameters(funcName: string, rules: any, call: FunctionCall): void {
+  private validateFunctionParameters(funcName: string, rules: BuiltinFunctionRule, call: FunctionCall): void {
     const match = this.selectFunctionParameterSet(rules, call);
 
     if (!match) {
@@ -1082,7 +1085,7 @@ export class FunctionValidator implements ValidationModule {
       );
     }
 
-    if (call.arguments.length > params.length) {
+    if (params && call.arguments.length > params.length) {
       this.addError(
         call.line,
         call.column,
@@ -1092,7 +1095,8 @@ export class FunctionValidator implements ValidationModule {
     }
 
     // Validate parameter types and qualifiers (extracted from UltimateValidator)
-    for (let i = 0; i < params.length && i < call.arguments.length; i++) {
+    if (params) {
+      for (let i = 0; i < params.length && i < call.arguments.length; i++) {
       const param = params[i];
       const arg = call.arguments[i];
       
@@ -1123,9 +1127,10 @@ export class FunctionValidator implements ValidationModule {
         this.validateParameterType(funcName, param, argValue, call.line, call.column);
       }
     }
+    }
   }
 
-  private validateParameterType(funcName: string, param: any, argValue: string, line: number, column: number): void {
+  private validateParameterType(funcName: string, param: NonNullable<BuiltinFunctionRule['parameters']>[0], argValue: string, line: number, column: number): void {
     const trimmedArg = argValue.trim();
 
     if (param.type === 'chart.point' && trimmedArg === 'na') {

@@ -14,6 +14,7 @@ import {
   ValidationError,
   ValidationResult,
   ScopeInfo,
+  TypeInfo,
 } from '../core/types';
 import {
   KEYWORDS, PSEUDO_VARS, WILDCARD_IDENT, IDENT
@@ -1985,12 +1986,12 @@ export class CoreValidator implements ValidationModule {
         continue;
       }
 
-      const typeInfo: any = {
+      const typeInfo: TypeInfo = {
         type: normalizedType,
         isConst: false,
         isSeries: meta.isSeries ?? (normalizedType === 'series'),
         declaredAt: { line: lineNum, column: 1 },
-        usages: [] as Array<{ line: number; column: number }>
+        usages: []
       };
 
       if (meta.elementType) {
@@ -2222,7 +2223,12 @@ export class CoreValidator implements ValidationModule {
         ty = s.includes('.') || /e[+\-]/i.test(s) ? 'float' : 'int';
     }
     else if (/^color\.(?:\w+)\b/.test(s) || /^color\.new\s*\(/.test(s)) ty = 'color';
-    else if (/\b(line|label|box|table)\.new\s*\(/.test(s)) ty = s.match(/\b(line|label|box|table)\.new/)![1] as any;
+    else if (/\b(line|label|box|table)\.new\s*\(/.test(s)) {
+      const match = s.match(/\b(line|label|box|table)\.new/);
+      if (match) {
+        ty = match[1] as 'line' | 'label' | 'box' | 'table';
+      }
+    }
     else if (/\barray\./.test(s)) ty = 'array';
     else if (/\bmatrix\./.test(s)) ty = 'matrix';
     else if (/\bmap\./.test(s)) ty = 'map';

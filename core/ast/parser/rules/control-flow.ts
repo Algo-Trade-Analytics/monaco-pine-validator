@@ -4,6 +4,7 @@ import type {
   BlockStatementNode,
   ExpressionNode,
   IdentifierNode,
+  IfStatementNode,
   StatementNode,
   SwitchCaseNode,
   SwitchStatementNode,
@@ -166,7 +167,7 @@ export function createTupleAssignmentStatementRule(parser: PineParser) {
     ]);
     const right = parser.invokeSubrule(parser.expression);
     const endToken = parser.lookAhead(0);
-    const assignment = createAssignmentStatementNode(left, right, operator, endToken);
+    const assignment = createAssignmentStatementNode(left, right as ExpressionNode | undefined, operator, endToken);
     const operatorImage = operator.image;
     if ((operatorImage === '=' || operatorImage === ':=') && right) {
       attachLoopResultBinding(right, {
@@ -193,7 +194,7 @@ export function createAssignmentStatementRule(parser: PineParser) {
     ]);
     const right = parser.invokeSubrule(parser.expression);
     const endToken = parser.lookAhead(0);
-    const assignment = createAssignmentStatementNode(left, right, operator, endToken);
+    const assignment = createAssignmentStatementNode(left, right as ExpressionNode | undefined, operator, endToken);
     const operatorImage = operator.image;
     if ((operatorImage === '=' || operatorImage === ':=') && right) {
       attachLoopResultBinding(right, {
@@ -206,8 +207,9 @@ export function createAssignmentStatementRule(parser: PineParser) {
   });
 }
 
-export function createIfStatementRule(parser: PineParser) {
-  return parser.createRule('ifStatement', (indentOverride?: number) => {
+export function createIfStatementRule(parser: PineParser): () => IfStatementNode {
+  return parser.createRule('ifStatement', (...args: unknown[]) => {
+    const indentOverride = args[0] as number | undefined;
     const ifToken = parser.consumeToken(If);
     const test = parser.invokeSubrule(parser.expression);
     const indent = indentOverride ?? tokenIndent(ifToken);
@@ -332,7 +334,7 @@ export function createForIteratorTargetRule(parser: PineParser) {
     const next = parser.lookAhead(1);
     if (next.tokenType === LBracket) {
       const tuple = parser.invokeSubrule(parser.bracketExpression, 1, { ARGS: ['tuple'] });
-      return tuple ?? createPlaceholderExpression();
+      return (tuple as ExpressionNode) ?? createPlaceholderExpression();
     }
 
     const identifierToken = parser.consumeToken(IdentifierToken);

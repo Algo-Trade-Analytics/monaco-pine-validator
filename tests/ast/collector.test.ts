@@ -77,7 +77,7 @@ describe('StatementCollector', () => {
 
     const script = new Script({ body: [enumDef] });
     const collector = new StatementCollector();
-    const statements = Array.from(collector.visit(script));
+    const statements = Array.from(collector.visit(script) as Iterable<unknown>);
 
     expect(statements).toContain(enumDef);
   });

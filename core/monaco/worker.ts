@@ -13,7 +13,7 @@ import type {
 // Declare DedicatedWorkerGlobalScope for Web Worker environment
 declare global {
   interface DedicatedWorkerGlobalScope {
-    postMessage(message: any): void;
+    postMessage(message: unknown): void;
     onmessage: ((event: MessageEvent) => void) | null;
   }
 }

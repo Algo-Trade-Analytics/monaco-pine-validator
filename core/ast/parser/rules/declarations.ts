@@ -133,7 +133,8 @@ export function createParameterListRule(parser: PineParser) {
 }
 
 export function createFunctionDeclarationRule(parser: PineParser) {
-  return parser.createRule('functionDeclaration', (providedExport?: IToken) => {
+  return parser.createRule('functionDeclaration', (...args: unknown[]) => {
+    const providedExport = args[0] as IToken | undefined;
     let startToken: IToken | undefined = providedExport;
     let exportToken: IToken | undefined = providedExport;
 
@@ -242,7 +243,8 @@ export function createImportDeclarationRule(parser: PineParser) {
 }
 
 export function createEnumMemberRule(parser: PineParser) {
-  return parser.createRule('enumMember', (_parentIndent: number) => {
+  return parser.createRule('enumMember', (...args: unknown[]) => {
+    const _parentIndent = args[0] as number;
     const identifierToken = parser.consumeToken(IdentifierToken);
     const identifier = createIdentifierNode(identifierToken);
 
@@ -260,7 +262,8 @@ export function createEnumMemberRule(parser: PineParser) {
 }
 
 export function createEnumDeclarationRule(parser: PineParser) {
-  return parser.createRule('enumDeclaration', (providedExport?: IToken) => {
+  return parser.createRule('enumDeclaration', (...args: unknown[]) => {
+    const providedExport = args[0] as IToken | undefined;
     let exportToken: IToken | undefined = providedExport;
     if (!exportToken && isExportKeywordToken(parser.lookAhead(1))) {
       exportToken = parser.consumeToken(IdentifierToken);
@@ -291,7 +294,7 @@ export function createEnumDeclarationRule(parser: PineParser) {
         break;
       }
 
-      const member = parser.invokeSubrule(parser.enumMember, 1, { ARGS: [baseIndent] });
+      const member = parser.invokeSubrule(parser.enumMember, 1, { ARGS: [baseIndent] }) as EnumMemberNode;
       members.push(member);
 
       while (parser.lookAhead(1).tokenType === Newline) {
@@ -321,7 +324,8 @@ export function createTypeFieldRule(parser: PineParser) {
 }
 
 export function createTypeDeclarationRule(parser: PineParser) {
-  return parser.createRule('typeDeclaration', (providedExport?: IToken) => {
+  return parser.createRule('typeDeclaration', (...args: unknown[]) => {
+    const providedExport = args[0] as IToken | undefined;
     let exportToken: IToken | undefined = providedExport;
     if (!exportToken && isExportKeywordToken(parser.lookAhead(1))) {
       exportToken = parser.consumeToken(IdentifierToken);
@@ -397,7 +401,7 @@ export function createVariableDeclarationRule(parser: PineParser) {
     const identifierToken = parser.consumeToken(IdentifierToken);
     const identifier = createIdentifierNode(identifierToken);
 
-    const debugMode = process.env.DEBUG_PARSER === '1' && !(parser as any).RECORDING_PHASE;
+    const debugMode = process.env.DEBUG_PARSER === '1' && !(parser as { RECORDING_PHASE?: boolean }).RECORDING_PHASE;
 
     if (colonIndex >= 0) {
       parser.consumeToken(Colon);
