@@ -657,7 +657,7 @@ export class CoreValidator implements ValidationModule {
         return;
       }
 
-      if (element.kind === 'Identifier') {
+      if (element && element.kind === 'Identifier') {
         const identifier = element as IdentifierNode;
         if (identifier.name === '_') {
           return;
@@ -666,7 +666,7 @@ export class CoreValidator implements ValidationModule {
         return;
       }
 
-      if (element.kind === 'MemberExpression') {
+      if (element && element.kind === 'MemberExpression') {
         const member = element as MemberExpressionNode;
         this.addWarning(
           member.loc.start.line,
