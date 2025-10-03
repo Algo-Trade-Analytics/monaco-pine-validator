@@ -1497,7 +1497,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   },
   'strategy.risk.allow_entry_in': {
     parameters: [
-      { name: 'direction', type: 'int', qualifier: 'simple', required: true }
+      { name: 'direction', type: 'string', qualifier: 'simple', required: true }
     ],
     returnType: 'void',
     v6Changes: 'Risk management function to control entry direction permissions.'
@@ -1511,14 +1511,17 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   },
   'strategy.risk.max_drawdown': {
     parameters: [
-      { name: 'amount', type: 'float', qualifier: 'simple', required: true, min: 0 }
+      { name: 'value', type: 'float', qualifier: 'simple', required: true, min: 0 },
+      { name: 'type', type: 'string', qualifier: 'simple', required: true },
+      { name: 'alert_message', type: 'string', qualifier: 'simple', required: false }
     ],
     returnType: 'void',
     v6Changes: 'Risk management function to limit maximum allowable drawdown.'
   },
   'strategy.risk.max_intraday_filled_orders': {
     parameters: [
-      { name: 'count', type: 'int', qualifier: 'simple', required: true, min: 1 }
+      { name: 'count', type: 'int', qualifier: 'simple', required: true, min: 1 },
+      { name: 'alert_message', type: 'string', qualifier: 'simple', required: false }
     ],
     returnType: 'void',
     v6Changes: 'Risk management to limit the number of intraday filled orders.'

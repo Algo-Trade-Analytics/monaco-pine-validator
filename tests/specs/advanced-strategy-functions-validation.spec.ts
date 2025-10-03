@@ -102,7 +102,7 @@ strategy.risk.max_position_size(0)`;
       const code = `//@version=6
 strategy("Max Drawdown Test")
 
-strategy.risk.max_drawdown(20.0)
+strategy.risk.max_drawdown(20.0, strategy.percent_of_equity)
 strategy.entry("Long", strategy.long)`;
       const result = createValidator().validate(code);
       expect(result.isValid).toBe(true);

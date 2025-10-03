@@ -379,6 +379,11 @@ export const NAMESPACE_MEMBERS = {
     'long', 'short', 'all'
   ]),
   
+  'strategy.risk': new Set([
+    'allow_entry_in', 'max_cons_loss_days', 'max_drawdown', 
+    'max_intraday_filled_orders', 'max_intraday_loss', 'max_position_size'
+  ]),
+  
   'dividends': new Set([
     'gross', 'net', 'future_amount', 'future_ex_date', 'future_pay_date'
   ]),
@@ -677,50 +682,6 @@ export const NAMESPACE_MEMBERS = {
     'arguments', 'signatures', 'qualifier'
   ]),
   
-  // Specialized namespaces
-  'a': new Set([
-    'put'
-  ]),
-  
-  'activationLine': new Set([
-    'stopExtend'
-  ]),
-  
-  'b': new Set([
-    'put'
-  ]),
-  
-  'l': new Set([
-    'set_extend', 'set_x2'
-  ]),
-  
-  'labelArray': new Set([
-    'push'
-  ]),
-  
-  'longLimit': new Set([
-    'stopExtend'
-  ]),
-  
-  'lossStop': new Set([
-    'stopExtend'
-  ]),
-  
-  'oddMap': new Set([
-    'put'
-  ]),
-  
-  'points': new Set([
-    'push'
-  ]),
-  
-  'profitLimit': new Set([
-    'stopExtend'
-  ]),
-  
-  'shortLimit': new Set([
-    'stopExtend'
-  ])
 };
 
 /**

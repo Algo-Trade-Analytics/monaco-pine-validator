@@ -450,6 +450,12 @@ export class StrategyFunctionsValidator implements ValidationModule {
       case 'strategy.risk.max_intraday_filled_orders':
         this.validateMaxIntradayFilledOrders(parameters, lineNumber, column);
         break;
+      case 'strategy.risk.max_intraday_loss':
+        this.validateMaxIntradayLoss(parameters, lineNumber, column);
+        break;
+      case 'strategy.risk.max_cons_loss_days':
+        this.validateMaxConsLossDays(parameters, lineNumber, column);
+        break;
     }
   }
 
@@ -498,23 +504,27 @@ export class StrategyFunctionsValidator implements ValidationModule {
   }
 
   private validateMaxDrawdown(parameters: string[], lineNumber: number, column: number): void {
-    if (parameters.length < 1) {
+    if (parameters.length < 2) {
       this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-DRAWDOWN-PARAMS', 
-        'strategy.risk.max_drawdown requires 1 parameter: amount');
+        'strategy.risk.max_drawdown requires 2 parameters: value and type');
       return;
     }
 
-    const amount = parameters[0].trim();
-    const numValue = parseFloat(amount);
+    const value = parameters[0].trim();
+    const type = parameters[1].trim();
+    const numValue = parseFloat(value);
     
     if (!isNaN(numValue)) {
       if (numValue <= 0) {
         this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-DRAWDOWN-VALUE', 
-          'Maximum drawdown must be greater than 0');
-      } else if (numValue > 50) {
-        this.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-DRAWDOWN-HIGH', 
-          `High maximum drawdown (${numValue}%) may indicate excessive risk tolerance`);
+          'Maximum drawdown value must be greater than 0');
       }
+    }
+
+    const validTypes = ['strategy.percent_of_equity', 'strategy.cash'];
+    if (!validTypes.includes(type) && !this.isVariableOrExpression(type)) {
+      this.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-DRAWDOWN-TYPE', 
+        `Expected type to be strategy.percent_of_equity or strategy.cash, got: ${type}`);
     }
 
     this.addInfo(lineNumber, column, 'PSV6-STRATEGY-DRAWDOWN-PROTECTION', 
@@ -546,6 +556,58 @@ export class StrategyFunctionsValidator implements ValidationModule {
 
     this.addInfo(lineNumber, column, 'PSV6-STRATEGY-ORDER-CONTROL', 
       'Order frequency limit helps control trading costs and slippage');
+  }
+
+  private validateMaxIntradayLoss(parameters: string[], lineNumber: number, column: number): void {
+    if (parameters.length < 2) {
+      this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-INTRADAY-LOSS-PARAMS', 
+        'strategy.risk.max_intraday_loss requires 2 parameters: value and type');
+      return;
+    }
+
+    const value = parameters[0].trim();
+    const type = parameters[1].trim();
+    const numValue = parseFloat(value);
+    
+    if (!isNaN(numValue)) {
+      if (numValue <= 0) {
+        this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-INTRADAY-LOSS-VALUE', 
+          'Maximum intraday loss value must be greater than 0');
+      }
+    }
+
+    const validTypes = ['strategy.percent_of_equity', 'strategy.cash'];
+    if (!validTypes.includes(type) && !this.isVariableOrExpression(type)) {
+      this.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-INTRADAY-LOSS-TYPE', 
+        `Expected type to be strategy.percent_of_equity or strategy.cash, got: ${type}`);
+    }
+
+    this.addInfo(lineNumber, column, 'PSV6-STRATEGY-INTRADAY-LOSS-PROTECTION', 
+      'Intraday loss limit provides important daily risk control');
+  }
+
+  private validateMaxConsLossDays(parameters: string[], lineNumber: number, column: number): void {
+    if (parameters.length < 1) {
+      this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-CONS-LOSS-PARAMS', 
+        'strategy.risk.max_cons_loss_days requires 1 parameter: count');
+      return;
+    }
+
+    const count = parameters[0].trim();
+    const numValue = parseInt(count);
+    
+    if (!isNaN(numValue)) {
+      if (numValue <= 0) {
+        this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-CONS-LOSS-VALUE', 
+          'Maximum consecutive loss days must be greater than 0');
+      } else if (numValue > 30) {
+        this.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-CONS-LOSS-HIGH', 
+          `High consecutive loss days (${numValue}) may indicate strategy issues`);
+      }
+    }
+
+    this.addInfo(lineNumber, column, 'PSV6-STRATEGY-CONS-LOSS-PROTECTION', 
+      'Consecutive loss protection helps prevent extended drawdown periods');
   }
 
   private isVariableOrExpression(value: string): boolean {
@@ -759,7 +821,9 @@ export class StrategyFunctionsValidator implements ValidationModule {
       'strategy.risk.allow_entry_in',
       'strategy.risk.max_position_size', 
       'strategy.risk.max_drawdown',
-      'strategy.risk.max_intraday_filled_orders'
+      'strategy.risk.max_intraday_filled_orders',
+      'strategy.risk.max_intraday_loss',
+      'strategy.risk.max_cons_loss_days'
     ];
     if (voidFunctions.includes(functionName)) return 'void';
     

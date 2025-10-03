@@ -1,0 +1,330 @@
+{
+  "totalEntries": 919,
+  "byType": {
+    "variable": 160,
+    "constant": 238,
+    "function": 457,
+    "keyword": 15,
+    "type": 18,
+    "operator": 21,
+    "annotation": 10
+  },
+  "byCategory": {
+    "Variables": 919
+  },
+  "namespaces": {
+    "barstate": {
+      "variables": 7,
+      "functions": 0,
+      "constants": 0
+    },
+    "box": {
+      "variables": 1,
+      "functions": 29,
+      "constants": 0
+    },
+    "chart": {
+      "variables": 11,
+      "functions": 5,
+      "constants": 0
+    },
+    "dividends": {
+      "variables": 3,
+      "functions": 0,
+      "constants": 2
+    },
+    "earnings": {
+      "variables": 4,
+      "functions": 0,
+      "constants": 3
+    },
+    "label": {
+      "variables": 1,
+      "functions": 21,
+      "constants": 21
+    },
+    "line": {
+      "variables": 1,
+      "functions": 21,
+      "constants": 6
+    },
+    "linefill": {
+      "variables": 1,
+      "functions": 5,
+      "constants": 0
+    },
+    "polyline": {
+      "variables": 1,
+      "functions": 2,
+      "constants": 0
+    },
+    "session": {
+      "variables": 7,
+      "functions": 0,
+      "constants": 2
+    },
+    "strategy": {
+      "variables": 35,
+      "functions": 47,
+      "constants": 14
+    },
+    "syminfo": {
+      "variables": 39,
+      "functions": 2,
+      "constants": 0
+    },
+    "ta": {
+      "variables": 10,
+      "functions": 59,
+      "constants": 0
+    },
+    "table": {
+      "variables": 1,
+      "functions": 22,
+      "constants": 0
+    },
+    "timeframe": {
+      "variables": 11,
+      "functions": 3,
+      "constants": 0
+    },
+    "adjustment": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 3
+    },
+    "alert": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 3
+    },
+    "backadjustment": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 3
+    },
+    "barmerge": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 4
+    },
+    "color": {
+      "variables": 0,
+      "functions": 7,
+      "constants": 17
+    },
+    "currency": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 56
+    },
+    "dayofweek": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 7
+    },
+    "display": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 6
+    },
+    "extend": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 4
+    },
+    "font": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 2
+    },
+    "format": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 5
+    },
+    "hline": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 3
+    },
+    "location": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 5
+    },
+    "math": {
+      "variables": 0,
+      "functions": 24,
+      "constants": 4
+    },
+    "order": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 2
+    },
+    "plot": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 14
+    },
+    "position": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 9
+    },
+    "scale": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 3
+    },
+    "settlement_as_close": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 3
+    },
+    "shape": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 12
+    },
+    "size": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 6
+    },
+    "splits": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 2
+    },
+    "text": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 10
+    },
+    "xloc": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 2
+    },
+    "yloc": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 3
+    },
+    "array": {
+      "variables": 0,
+      "functions": 55,
+      "constants": 0
+    },
+    "input": {
+      "variables": 0,
+      "functions": 13,
+      "constants": 0
+    },
+    "log": {
+      "variables": 0,
+      "functions": 3,
+      "constants": 0
+    },
+    "map": {
+      "variables": 0,
+      "functions": 11,
+      "constants": 0
+    },
+    "matrix": {
+      "variables": 0,
+      "functions": 49,
+      "constants": 0
+    },
+    "request": {
+      "variables": 0,
+      "functions": 10,
+      "constants": 0
+    },
+    "runtime": {
+      "variables": 0,
+      "functions": 1,
+      "constants": 0
+    },
+    "str": {
+      "variables": 0,
+      "functions": 18,
+      "constants": 0
+    },
+    "ticker": {
+      "variables": 0,
+      "functions": 9,
+      "constants": 0
+    },
+    "for": {
+      "variables": 0,
+      "functions": 0,
+      "constants": 0
+    }
+  },
+  "samples": {
+    "variables": [
+      {
+        "name": "ask",
+        "type_info": "series float"
+      },
+      {
+        "name": "bar_index",
+        "type_info": "series int"
+      },
+      {
+        "name": "barstate.isconfirmed",
+        "type_info": "series bool"
+      },
+      {
+        "name": "barstate.isfirst",
+        "type_info": "series bool"
+      },
+      {
+        "name": "barstate.ishistory",
+        "type_info": "series bool"
+      }
+    ],
+    "functions": [
+      {
+        "name": "alert()"
+      },
+      {
+        "name": "alertcondition()"
+      },
+      {
+        "name": "array.abs()"
+      },
+      {
+        "name": "array.avg()"
+      },
+      {
+        "name": "array.binary_search()"
+      }
+    ],
+    "constants": [
+      {
+        "name": "adjustment.dividends",
+        "type_info": "const string"
+      },
+      {
+        "name": "adjustment.none",
+        "type_info": "const string"
+      },
+      {
+        "name": "adjustment.splits",
+        "type_info": "const string"
+      },
+      {
+        "name": "alert.freq_all",
+        "type_info": "const string"
+      },
+      {
+        "name": "alert.freq_once_per_bar",
+        "type_info": "const string"
+      }
+    ]
+  }
+}
