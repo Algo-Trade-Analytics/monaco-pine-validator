@@ -4,12 +4,28 @@
  */
 
 export const NAMESPACE_MEMBERS = {
+  // Global functions and built-in variables
+  'global': new Set([
+    // Built-in variables
+    'open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'hlcc4',
+    'bar_index', 'last_bar_index', 'last_bar_time', 'time_tradingday', 'timenow',
+    'ask', 'bid', 'second',
+    // Global functions
+    'alert', 'alertcondition', 'plot', 'plotshape', 'plotchar', 'plotarrow', 'plotbar', 'plotcandle',
+    'indicator', 'strategy', 'library', 'hline', 'fill', 'bgcolor', 'barcolor',
+    'na', 'nz', 'fixnan', 'if', 'bool', 'int', 'float', 'string',
+    'time', 'timestamp', 'time_close', 'hour', 'minute', 'dayofmonth', 'dayofweek', 'month', 'year', 'weekofyear',
+    'max_bars_back', 'log', 'runtime'
+  ]),
+  
   'color': new Set([
     // Color constants
     'aqua', 'black', 'blue', 'fuchsia', 'gray', 'green', 'lime', 'maroon',
     'navy', 'olive', 'orange', 'purple', 'red', 'silver', 'teal', 'white', 'yellow',
     // Color functions
-    'new', 'rgb', 'from_gradient', 'r', 'g', 'b', 't'
+    'new', 'rgb', 'from_gradient', 'r', 'g', 'b', 't',
+    // Missing members from gap analysis
+    'arguments', 'signatures'
   ]),
   
   'ta': new Set([
@@ -31,7 +47,9 @@ export const NAMESPACE_MEMBERS = {
     'correlation', 'covariance', 'percentile_linear_interpolation', 'percentile_nearest_rank', 'percentrank',
     // Other
     'barssince', 'cog', 'cum', 'dmi', 'highest', 'highestbars', 'iii', 'kc', 'kcw', 'linreg',
-    'lowest', 'lowestbars', 'macd', 'max', 'median', 'min', 'range', 'sar', 'supertrend', 'tr', 'valuewhen', 'vwap'
+    'lowest', 'lowestbars', 'macd', 'max', 'median', 'min', 'range', 'sar', 'supertrend', 'tr', 'valuewhen', 'vwap',
+    // Missing ta members
+    'mode', 'rci'
   ]),
   
   'math': new Set([
@@ -77,12 +95,14 @@ export const NAMESPACE_MEMBERS = {
     'percentile', 'percentile_linear_interpolation', 'percentile_nearest_rank',
     'percentrank',
     // Utility functions
-    'join'
+    'join',
+    // Missing array members
+    'abs', 'every', 'some', 'new<type>'
   ]),
   
   'request': new Set([
     'security', 'dividends', 'earnings', 'financial', 'quandl', 'seed', 'splits',
-    'economic', 'currency_rate'
+    'economic', 'currency_rate', 'security_lower_tf'
   ]),
   
   'input': new Set([
@@ -90,13 +110,17 @@ export const NAMESPACE_MEMBERS = {
     'bool', 'int', 'float', 'string', 'color',
     // Advanced input types
     'source', 'symbol', 'timeframe', 'session', 'time',
-    'text_area', 'price', 'resolution'
+    'text_area', 'price', 'resolution',
+    // Missing members from gap analysis
+    'arguments', 'enum', 'signatures'
   ]),
   
   'plot': new Set([
     'style_line', 'style_linebr', 'style_stepline', 'style_steplinebr',
     'style_histogram', 'style_cross', 'style_area', 'style_areabr', 'style_columns',
-    'style_circles', 'style_line_diamond', 'style_cross_diamond', 'style_linebreak', 'style_stepline_diamond'
+    'style_circles', 'style_line_diamond', 'style_cross_diamond', 'style_linebreak', 'style_stepline_diamond',
+    // Missing members from gap analysis
+    'arguments', 'signatures'
   ]),
   
   'line': new Set([
@@ -110,7 +134,9 @@ export const NAMESPACE_MEMBERS = {
     // Styles
     'style_solid', 'style_dotted', 'style_dashed', 'style_arrow_left', 'style_arrow_right', 'style_arrow_both',
     // Extend modes
-    'extend_none', 'extend_right', 'extend_left', 'extend_both'
+    'extend_none', 'extend_right', 'extend_left', 'extend_both',
+    // Missing members from gap analysis
+    'arguments', 'set_first_point', 'signatures'
   ]),
   
   'label': new Set([
@@ -126,7 +152,9 @@ export const NAMESPACE_MEMBERS = {
     'style_flag', 'style_circle', 'style_arrowup', 'style_arrowdown',
     'style_label_up', 'style_label_down', 'style_label_left', 'style_label_right',
     'style_label_lower_left', 'style_label_lower_right', 'style_label_upper_left',
-    'style_label_upper_right', 'style_label_center', 'style_square', 'style_diamond'
+    'style_label_upper_right', 'style_label_center', 'style_square', 'style_diamond',
+    // Missing members from gap analysis
+    'arguments', 'set_point', 'set_text_font_family', 'set_text_formatting', 'signatures', 'style_text_outline'
   ]),
   
   'box': new Set([
@@ -144,6 +172,8 @@ export const NAMESPACE_MEMBERS = {
     'set_text_halign', 'set_text_valign', 'set_text_font_family', 'set_text_wrap',
     // Border styles
     'border_style_double', 'border_style_solid', 'border_style_dashed',
+    // Missing members from gap analysis
+    'arguments', 'set_bottom_right_point', 'set_text_formatting', 'set_top_left_point', 'signatures',
     // Note: box.get_text and box.set_text_font do NOT exist in Pine Script v6
     // They are intentionally excluded to catch errors
   ]),
@@ -155,7 +185,9 @@ export const NAMESPACE_MEMBERS = {
     'cell_set_width', 'cell_set_height', 'set_bgcolor', 'set_border_color',
     'set_border_width', 'set_frame_color', 'set_frame_width', 'set_position',
     // Cell merge constants
-    'cell_merge_horizontal', 'cell_merge_vertical', 'cell_merge_none'
+    'cell_merge_horizontal', 'cell_merge_vertical', 'cell_merge_none',
+    // Missing members from gap analysis
+    'arguments', 'cell_set_text_formatting', 'merge_cells', 'signatures', 'all'
   ]),
   
   'strategy': new Set([
@@ -169,7 +201,21 @@ export const NAMESPACE_MEMBERS = {
     // Strategy directions
     'long', 'short',
     // Nested constants
-    'commission', 'oca', 'direction'
+    'commission', 'oca', 'direction',
+    // Additional strategy members
+    'convert_to_account', 'convert_to_symbol', 'default_entry_qty', 'order',
+    'account_currency', 'avg_losing_trade', 'avg_losing_trade_percent', 'avg_trade',
+    'avg_trade_percent', 'avg_winning_trade', 'avg_winning_trade_percent',
+    'max_consecutive_losses', 'max_consecutive_wins', 'max_drawdown',
+    'max_drawdown_percent', 'max_runup', 'max_runup_percent',
+    'profit_factor', 'recovery_factor', 'sharpe_ratio', 'sortino_ratio',
+    'total_closed_trades', 'total_open_trades', 'total_trades',
+    // Missing strategy members from gap analysis
+    'grossloss_percent', 'grossprofit_percent', 'margin_liquidation_price',
+    'max_contracts_held_all', 'max_contracts_held_long', 'max_contracts_held_short',
+    'netprofit_percent', 'openprofit',
+    // Final missing strategy members
+    'arguments', 'signatures', 'openprofit_percent', 'position_entry_name'
   ]),
   
   'syminfo': new Set([
@@ -201,12 +247,15 @@ export const NAMESPACE_MEMBERS = {
     'quick_ratio', 'return_on_assets', 'return_on_equity', 'revenue',
     'revenue_per_share', 'total_debt', 'total_debt_to_equity', 'total_revenue',
     // Additional specialized variables
-    'pe_ratio', 'beta', 'avg_volume_30d', 'contract_size', 'tick_value', 'margin_requirement'
+    'pe_ratio', 'beta', 'avg_volume_30d', 'contract_size', 'tick_value', 'margin_requirement',
+    // Missing syminfo members
+    'main_tickerid', 'minmove', 'pricescale'
   ]),
   
   'timeframe': new Set([
     'period', 'multiplier', 'isdaily', 'isweekly', 'ismonthly', 'isdwm',
-    'isintraday', 'isseconds', 'isminutes', 'isticks'
+    'isintraday', 'isseconds', 'isminutes', 'isticks',
+    'change', 'from_seconds', 'in_seconds', 'main_period'
   ]),
   
   'barstate': new Set([
@@ -233,7 +282,9 @@ export const NAMESPACE_MEMBERS = {
     'avg', 'max', 'min', 'median', 'mode', 'sum', 'stdev', 'variance',
     'covariance', 'percentile_linear_interpolation', 'percentile_nearest_rank',
     // Linear algebra
-    'det', 'rank', 'trace', 'eigenvalues', 'eigenvectors', 'kron'
+    'det', 'rank', 'trace', 'eigenvalues', 'eigenvectors', 'kron',
+    // Missing members from gap analysis
+    'new<type>'
   ]),
   
   'ticker': new Set([
@@ -246,7 +297,9 @@ export const NAMESPACE_MEMBERS = {
     'align_top', 'align_bottom',
     'wrap_none', 'wrap_auto',
     'format_bold', 'format_italic', 'format_normal',
-    'format_bold_italic', 'format_underline', 'format_strikethrough'
+    'format_bold_italic', 'format_underline', 'format_strikethrough',
+    // Missing members from gap analysis
+    'format_none'
   ]),
   
   'polyline': new Set([
@@ -257,7 +310,9 @@ export const NAMESPACE_MEMBERS = {
   'linefill': new Set([
     'new', 'delete', 'all', 'copy',
     'get_line1', 'get_line2',
-    'set_color'
+    'set_color',
+    // Missing members from gap analysis
+    'arguments', 'signatures'
   ]),
   
   'size': new Set([
@@ -270,7 +325,8 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'chart': new Set([
-    'point', 'point.new', 'point.now', 'point.from_index'
+    'point', 'point.new', 'point.now', 'point.from_index',
+    'bg_color', 'fg_color', 'is_heikinashi', 'is_kagi', 'is_linebreak', 'is_pnf', 'is_range', 'is_renko', 'is_standard', 'left_visible_bar_time', 'right_visible_bar_time'
   ]),
   
   'chart.point': new Set([
@@ -278,7 +334,10 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'map': new Set([
-    'new', 'put', 'get', 'remove', 'clear', 'size', 'keys', 'values', 'contains', 'copy'
+    'new', 'put', 'get', 'remove', 'clear', 'size', 'keys', 'values', 'contains', 'copy',
+    'put_all',
+    // Missing members from gap analysis
+    'new<keyType, valueType>', 'new<type,type>'
   ]),
   
   'font': new Set([
@@ -287,7 +346,7 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'format': new Set([
-    'volume', 'price', 'percent', 'date', 'time', 'inherit'
+    'volume', 'price', 'percent', 'date', 'time', 'inherit', 'mintick'
   ]),
   
   'barmerge': new Set([
@@ -296,7 +355,15 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'currency': new Set([
-    'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD', 'CNY', 'KRW', 'INR', 'BRL', 'MXN', 'RUB', 'ZAR'
+    'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD', 'CNY', 'KRW', 'INR', 'BRL', 'MXN', 'RUB', 'ZAR',
+    'AED', 'ARS', 'BDT', 'BHD', 'CLP', 'COP', 'EGP', 'HKD', 'IDR', 'ILS',
+    'MYR', 'PHP', 'QAR', 'SAR', 'SGD', 'THB', 'TWD', 'VND',
+    // Additional missing currencies from gap analysis
+    'CZK', 'DKK', 'HUF', 'ISK', 'KES', 'KWD', 'LKR', 'MAD', 'NGN', 'NOK',
+    'PKR', 'PLN', 'RON', 'SEK', 'SZL', 'TRY', 'UAH', 'UGX', 'UYU', 'VES',
+    // Final missing currencies
+    'NONE', 'PEN', 'RSD', 'TND',
+    'Bitcoin', 'Ethereum', 'Tether'
   ]),
   
   // Nested strategy constants
@@ -313,7 +380,7 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'dividends': new Set([
-    'gross', 'net'
+    'gross', 'net', 'future_amount', 'future_ex_date', 'future_pay_date'
   ]),
   
   'extend': new Set([
@@ -330,13 +397,329 @@ export const NAMESPACE_MEMBERS = {
   
   'shape': new Set([
     'none', 'xcross', 'cross', 'triangleup', 'triangledown',
-    'flag', 'circle', 'arrowup', 'arrowdown', 'square', 'diamond'
+    'flag', 'circle', 'arrowup', 'arrowdown', 'square', 'diamond',
+    // Missing members from gap analysis
+    'labeldown', 'labelup'
   ]),
   
   'position': new Set([
     'top_left', 'top_center', 'top_right',
     'middle_left', 'middle_center', 'middle_right',
     'bottom_left', 'bottom_center', 'bottom_right'
+  ]),
+  
+  // Missing namespaces from context analysis
+  'dayofweek': new Set([
+    'friday', 'monday', 'saturday', 'sunday', 'thursday', 'tuesday', 'wednesday',
+    // Metadata members from gap analysis
+    'arguments', 'signatures', 'qualifier'
+  ]),
+  
+  'session': new Set([
+    'extended', 'regular', 'isfirstbar', 'isfirstbar_regular', 'islastbar', 'islastbar_regular',
+    'ismarket', 'ispostmarket', 'ispremarket'
+  ]),
+  
+  'earnings': new Set([
+    'actual', 'estimate', 'standardized', 'future_eps', 'future_period_end_time',
+    'future_revenue', 'future_time'
+  ]),
+  
+  'adjustment': new Set([
+    'dividends', 'none', 'splits'
+  ]),
+  
+  'backadjustment': new Set([
+    'inherit', 'off', 'on'
+  ]),
+  
+  'settlement_as_close': new Set([
+    'inherit', 'off', 'on'
+  ]),
+  
+  'splits': new Set([
+    'denominator', 'numerator'
+  ]),
+  
+  'order': new Set([
+    'ascending', 'descending'
+  ]),
+  
+  'scale': new Set([
+    'left', 'none', 'right'
+  ]),
+  
+  'xloc': new Set([
+    'bar_index', 'bar_time'
+  ]),
+  
+  // Crypto currency namespaces
+  'Bitcoin': new Set([
+    'qualifier'
+  ]),
+  
+  'Ethereum': new Set([
+    'qualifier'
+  ]),
+  
+  'Euro': new Set([
+    'qualifier'
+  ]),
+  
+  'Tether': new Set([
+    'qualifier'
+  ]),
+  
+  // Built-in variable namespaces
+  'ask': new Set([
+    'qualifier'
+  ]),
+  
+  'bar_index': new Set([
+    'qualifier'
+  ]),
+  
+  'bid': new Set([
+    'qualifier'
+  ]),
+  
+  'close': new Set([
+    'qualifier'
+  ]),
+  
+  'high': new Set([
+    'qualifier'
+  ]),
+  
+  'hl2': new Set([
+    'qualifier'
+  ]),
+  
+  'hlc3': new Set([
+    'qualifier'
+  ]),
+  
+  'hlcc4': new Set([
+    'qualifier'
+  ]),
+  
+  'last_bar_index': new Set([
+    'qualifier'
+  ]),
+  
+  'last_bar_time': new Set([
+    'qualifier'
+  ]),
+  
+  'low': new Set([
+    'qualifier'
+  ]),
+  
+  'ohlc4': new Set([
+    'qualifier'
+  ]),
+  
+  'open': new Set([
+    'qualifier'
+  ]),
+  
+  'second': new Set([
+    'qualifier'
+  ]),
+  
+  'time_tradingday': new Set([
+    'qualifier'
+  ]),
+  
+  'timenow': new Set([
+    'qualifier'
+  ]),
+  
+  'volume': new Set([
+    'qualifier'
+  ]),
+  
+  // Function namespaces with signatures
+  'alert': new Set([
+    'arguments', 'signatures', 'freq_all', 'freq_once_per_bar', 'freq_once_per_bar_close'
+  ]),
+  
+  'alertcondition': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'barcolor': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'bgcolor': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'bool': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'fill': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'fixnan': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'float': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'hline': new Set([
+    'arguments', 'signatures', 'style_dashed', 'style_dotted', 'style_solid'
+  ]),
+  
+  'if': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'indicator': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'int': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'library': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'log': new Set([
+    'error', 'info', 'warning'
+  ]),
+  
+  'max_bars_back': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'na': new Set([
+    'arguments', 'signatures', 'qualifier'
+  ]),
+  
+  'nz': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'plotarrow': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'plotbar': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'plotcandle': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'plotchar': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'plotshape': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'reopenPositionAfter': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'runtime': new Set([
+    'error'
+  ]),
+  
+  'string': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  'time': new Set([
+    'arguments', 'signatures', 'qualifier'
+  ]),
+  
+  'time_close': new Set([
+    'arguments', 'signatures', 'qualifier'
+  ]),
+  
+  'timestamp': new Set([
+    'arguments', 'signatures'
+  ]),
+  
+  // Time-related namespaces
+  'dayofmonth': new Set([
+    'arguments', 'signatures', 'qualifier'
+  ]),
+  
+  'hour': new Set([
+    'arguments', 'signatures', 'qualifier'
+  ]),
+  
+  'minute': new Set([
+    'arguments', 'signatures', 'qualifier'
+  ]),
+  
+  'month': new Set([
+    'arguments', 'signatures', 'qualifier'
+  ]),
+  
+  'weekofyear': new Set([
+    'arguments', 'signatures', 'qualifier'
+  ]),
+  
+  'year': new Set([
+    'arguments', 'signatures', 'qualifier'
+  ]),
+  
+  // Specialized namespaces
+  'a': new Set([
+    'put'
+  ]),
+  
+  'activationLine': new Set([
+    'stopExtend'
+  ]),
+  
+  'b': new Set([
+    'put'
+  ]),
+  
+  'l': new Set([
+    'set_extend', 'set_x2'
+  ]),
+  
+  'labelArray': new Set([
+    'push'
+  ]),
+  
+  'longLimit': new Set([
+    'stopExtend'
+  ]),
+  
+  'lossStop': new Set([
+    'stopExtend'
+  ]),
+  
+  'oddMap': new Set([
+    'put'
+  ]),
+  
+  'points': new Set([
+    'push'
+  ]),
+  
+  'profitLimit': new Set([
+    'stopExtend'
+  ]),
+  
+  'shortLimit': new Set([
+    'stopExtend'
   ])
 };
 

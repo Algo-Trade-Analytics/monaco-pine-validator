@@ -1,0 +1,494 @@
+🔍 Pine Script v6 Comprehensive Gap Analysis
+==========================================
+
+📊 Context Analysis:
+Total namespaces in context: 111
+Total members in context: 847
+
+📋 Gap Analysis Results:
+========================
+
+🔸 a (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): put
+
+🔸 activationLine (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): stopExtend
+
+🔸 alert (MISSING)
+   Coverage: 0.0% (0/5)
+   ❌ Missing (5): arguments, signatures, freq_all, freq_once_per_bar, freq_once_per_bar_close
+
+🔸 alertcondition (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 b (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): put
+
+🔸 barcolor (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 bgcolor (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 bool (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 dayofmonth (MISSING)
+   Coverage: 0.0% (0/3)
+   ❌ Missing (3): arguments, signatures, qualifier
+
+🔸 fill (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 fixnan (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 float (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 hline (MISSING)
+   Coverage: 0.0% (0/5)
+   ❌ Missing (5): arguments, signatures, style_dashed, style_dotted, style_solid
+
+🔸 hour (MISSING)
+   Coverage: 0.0% (0/3)
+   ❌ Missing (3): arguments, signatures, qualifier
+
+🔸 if (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 indicator (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 int (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 l (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): set_extend, set_x2
+
+🔸 labelArray (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): push
+
+🔸 library (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 log (MISSING)
+   Coverage: 0.0% (0/3)
+   ❌ Missing (3): error, info, warning
+
+🔸 longLimit (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): stopExtend
+
+🔸 lossStop (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): stopExtend
+
+🔸 max_bars_back (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 minute (MISSING)
+   Coverage: 0.0% (0/3)
+   ❌ Missing (3): arguments, signatures, qualifier
+
+🔸 month (MISSING)
+   Coverage: 0.0% (0/3)
+   ❌ Missing (3): arguments, signatures, qualifier
+
+🔸 na (MISSING)
+   Coverage: 0.0% (0/3)
+   ❌ Missing (3): arguments, signatures, qualifier
+
+🔸 nz (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 oddMap (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): put
+
+🔸 plotarrow (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 plotbar (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 plotcandle (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 plotchar (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 plotshape (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 points (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): push
+
+🔸 profitLimit (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): stopExtend
+
+🔸 reopenPositionAfter (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 runtime (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): error
+
+🔸 shortLimit (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): stopExtend
+
+🔸 string (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 time (MISSING)
+   Coverage: 0.0% (0/3)
+   ❌ Missing (3): arguments, signatures, qualifier
+
+🔸 time_close (MISSING)
+   Coverage: 0.0% (0/3)
+   ❌ Missing (3): arguments, signatures, qualifier
+
+🔸 timestamp (MISSING)
+   Coverage: 0.0% (0/2)
+   ❌ Missing (2): arguments, signatures
+
+🔸 weekofyear (MISSING)
+   Coverage: 0.0% (0/3)
+   ❌ Missing (3): arguments, signatures, qualifier
+
+🔸 year (MISSING)
+   Coverage: 0.0% (0/3)
+   ❌ Missing (3): arguments, signatures, qualifier
+
+🔸 Bitcoin (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 Ethereum (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 Euro (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 Tether (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 ask (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 bar_index (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 bid (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 close (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 high (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 hl2 (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 hlc3 (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 hlcc4 (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 last_bar_index (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 last_bar_time (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 low (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 ohlc4 (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 open (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 second (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 time_tradingday (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 timenow (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 volume (MISSING)
+   Coverage: 0.0% (0/1)
+   ❌ Missing (1): qualifier
+
+🔸 linefill
+   Coverage: 60.0% (3/5)
+   ❌ Missing (2): arguments, signatures
+   ⚠️  Extra (4): new, copy, get_line1, get_line2
+
+🔸 dayofweek
+   Coverage: 70.0% (7/10)
+   ❌ Missing (3): arguments, signatures, qualifier
+
+🔸 strategy
+   Coverage: 77.8% (42/54)
+   ❌ Missing (12): arguments, signatures, grossloss_percent, grossprofit_percent, margin_liquidation_price, max_contracts_held_all, max_contracts_held_long, max_contracts_held_short, netprofit_percent, openprofit...
+   ⚠️  Extra (10): account, max_consecutive_losses, max_consecutive_wins, profit_factor, recovery_factor, sharpe_ratio, sortino_ratio, total_closed_trades, total_open_trades, total_trades
+
+🔸 input
+   Coverage: 80.0% (12/15)
+   ❌ Missing (3): arguments, enum, signatures
+   ⚠️  Extra (1): resolution
+
+🔸 table
+   Coverage: 80.0% (20/25)
+   ❌ Missing (5): arguments, cell_set_text_formatting, merge_cells, signatures, all
+   ⚠️  Extra (3): cell_merge_horizontal, cell_merge_vertical, cell_merge_none
+
+🔸 box
+   Coverage: 83.3% (25/30)
+   ❌ Missing (5): arguments, set_bottom_right_point, set_text_formatting, set_top_left_point, signatures
+   ⚠️  Extra (4): set_extend, border_style_double, border_style_solid, border_style_dashed
+
+🔸 map
+   Coverage: 83.3% (10/12)
+   ❌ Missing (2): new<keyType, valueType>, new<type,type>
+   ⚠️  Extra (1): new
+
+🔸 shape
+   Coverage: 83.3% (10/12)
+   ❌ Missing (2): labeldown, labelup
+   ⚠️  Extra (1): none
+
+🔸 plot
+   Coverage: 84.6% (11/13)
+   ❌ Missing (2): arguments, signatures
+   ⚠️  Extra (3): style_line_diamond, style_cross_diamond, style_linebreak
+
+🔸 label
+   Coverage: 86.7% (39/45)
+   ❌ Missing (6): arguments, set_point, set_text_font_family, set_text_formatting, signatures, style_text_outline
+
+🔸 line
+   Coverage: 89.3% (25/28)
+   ❌ Missing (3): arguments, set_first_point, signatures
+   ⚠️  Extra (5): set_style, extend_none, extend_right, extend_left, extend_both
+
+🔸 request
+   Coverage: 90.0% (9/10)
+   ❌ Missing (1): security_lower_tf
+
+🔸 text
+   Coverage: 90.0% (9/10)
+   ❌ Missing (1): format_none
+   ⚠️  Extra (4): format_normal, format_bold_italic, format_underline, format_strikethrough
+
+🔸 color
+   Coverage: 92.3% (24/26)
+   ❌ Missing (2): arguments, signatures
+
+🔸 currency
+   Coverage: 92.3% (48/52)
+   ❌ Missing (4): NONE, PEN, RSD, TND
+   ⚠️  Extra (8): EUR, SZL, UAH, UGX, UYU, Bitcoin, Ethereum, Tether
+
+🔸 matrix
+   Coverage: 98.0% (48/49)
+   ❌ Missing (1): new<type>
+   ⚠️  Extra (8): new, abs, sqrt, stdev, variance, covariance, percentile_linear_interpolation, percentile_nearest_rank
+
+🔸 array
+   Coverage: 98.2% (54/55)
+   ❌ Missing (1): new<type>
+   ⚠️  Extra (2): new, percentile
+
+🔸 global
+   Coverage: 100.0% (0/0)
+   ⚠️  Extra (53): open, high, low, close, volume, hl2, hlc3, ohlc4, hlcc4, bar_index...
+
+🔸 ta
+   Coverage: 100.0% (67/67)
+   ⚠️  Extra (1): covariance
+
+🔸 math
+   Coverage: 100.0% (28/28)
+   ⚠️  Extra (3): atan2, median, mode
+
+🔸 str
+   Coverage: 100.0% (18/18)
+   ⚠️  Extra (4): capitalize, trim_left, trim_right, join
+
+🔸 syminfo
+   Coverage: 100.0% (39/39)
+   ⚠️  Extra (46): target_price_mode, target_price_stddev, recommendation_mean, recommendation_all, recommendation_buy, recommendation_hold, recommendation_sell, recommendation_strong_buy, recommendation_strong_sell, earnings_per_share...
+
+🔸 timeframe
+   Coverage: 100.0% (14/14)
+
+🔸 barstate
+   Coverage: 100.0% (7/7)
+
+🔸 ticker
+   Coverage: 100.0% (9/9)
+
+🔸 polyline
+   Coverage: 100.0% (3/3)
+   ⚠️  Extra (5): copy, from_line, get_point, clear, set_point
+
+🔸 size
+   Coverage: 100.0% (6/6)
+
+🔸 display
+   Coverage: 100.0% (6/6)
+   ⚠️  Extra (2): price_scale_only, data_window_only
+
+🔸 chart
+   Coverage: 100.0% (12/12)
+   ⚠️  Extra (3): point.new, point.now, point.from_index
+
+🔸 chart.point
+   Coverage: 100.0% (0/0)
+   ⚠️  Extra (4): new, now, from_index, from_time
+
+🔸 font
+   Coverage: 100.0% (2/2)
+   ⚠️  Extra (7): default, monospace, monospace_bold, serif, serif_bold, sans_serif, sans_serif_bold
+
+🔸 format
+   Coverage: 100.0% (5/5)
+   ⚠️  Extra (2): date, time
+
+🔸 barmerge
+   Coverage: 100.0% (4/4)
+   ⚠️  Extra (3): gaps_left, gaps_right, gaps_middle
+
+🔸 strategy.commission
+   Coverage: 100.0% (0/0)
+   ⚠️  Extra (2): percent, cash
+
+🔸 strategy.oca
+   Coverage: 100.0% (0/0)
+   ⚠️  Extra (2): cancel, reduce
+
+🔸 strategy.direction
+   Coverage: 100.0% (0/0)
+   ⚠️  Extra (3): long, short, all
+
+🔸 dividends
+   Coverage: 100.0% (5/5)
+
+🔸 extend
+   Coverage: 100.0% (4/4)
+
+🔸 yloc
+   Coverage: 100.0% (3/3)
+
+🔸 location
+   Coverage: 100.0% (5/5)
+
+🔸 position
+   Coverage: 100.0% (9/9)
+
+🔸 session
+   Coverage: 100.0% (9/9)
+
+🔸 earnings
+   Coverage: 100.0% (7/7)
+
+🔸 adjustment
+   Coverage: 100.0% (3/3)
+
+🔸 backadjustment
+   Coverage: 100.0% (3/3)
+
+🔸 settlement_as_close
+   Coverage: 100.0% (3/3)
+
+🔸 splits
+   Coverage: 100.0% (2/2)
+
+🔸 order
+   Coverage: 100.0% (2/2)
+
+🔸 scale
+   Coverage: 100.0% (3/3)
+
+🔸 xloc
+   Coverage: 100.0% (2/2)
+
+📈 Summary:
+===========
+Total context members: 847
+Total missing: 171
+Total extra: 194
+Overall coverage: 79.8%
+
+🚨 Critical Gaps (High Priority):
+==================================
+❌ dayofweek: 70.0% coverage (3 missing)
+❌ strategy: 77.8% coverage (12 missing)
+
+💡 Recommendations:
+===================
+1. Add 171 missing members to namespace-members.ts
+2. Review 194 extra members - may be outdated or incorrect
+3. Add 66 missing namespaces: a, activationLine, alert, alertcondition, b, barcolor, bgcolor, bool, dayofmonth, fill, fixnan, float, hline, hour, if, indicator, int, l, labelArray, library, log, longLimit, lossStop, max_bars_back, minute, month, na, nz, oddMap, plotarrow, plotbar, plotcandle, plotchar, plotshape, points, profitLimit, reopenPositionAfter, runtime, shortLimit, string, time, time_close, timestamp, weekofyear, year, Bitcoin, Ethereum, Euro, Tether, ask, bar_index, bid, close, high, hl2, hlc3, hlcc4, last_bar_index, last_bar_time, low, ohlc4, open, second, time_tradingday, timenow, volume
+
+🎯 Next Steps:
+==============
+1. Review critical gaps and prioritize implementation
+2. Add missing members to namespace-members.ts
+3. Remove or verify extra members
+4. Add missing namespaces
+5. Run tests to ensure no regressions

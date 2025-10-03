@@ -23,9 +23,7 @@
     "name": "strategy_metrics",
     "code": "//@version=6\nstrategy(\"Percent Metrics\", overlay=false)\nif ta.crossover(close, ta.sma(close, 10))\n    strategy.entry(\"Long\", strategy.long)\nplot(strategy.netprofit_percent)\n",
     "expect": {
-      "errors": [
-        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
-      ],
+      "errors": [],
       "warnings": []
     }
   },
@@ -558,9 +556,7 @@
     "name": "request_security_lower_tf_missing",
     "code": "//@version=6\nindicator(\"Request Security Lower TF\")\nres = request.security_lower_tf(\"AAPL\", \"D\")\nplot(res)\n",
     "expect": {
-      "errors": [
-        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
-      ],
+      "errors": [],
       "warnings": []
     }
   },
@@ -863,9 +859,7 @@
     "name": "request_security_ignore_invalid_timeframe",
     "code": "//@version=6\nindicator(\"Request Security Ignore TF\")\nres = request.security_lower_tf(\"AAPL\", \"60\", close, ignore_invalid_timeframe = true)\nplot(res)",
     "expect": {
-      "errors": [
-        "PSV6-UNDEFINED-NAMESPACE-MEMBER"
-      ],
+      "errors": [],
       "warnings": []
     }
   },
