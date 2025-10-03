@@ -3,8 +3,7 @@ import { EnhancedModularValidator } from '../../EnhancedModularValidator';
 import { expectHas } from './test-utils';
 
 const createValidator = () => new EnhancedModularValidator({
-  version: '6',
-  scriptType: 'indicator',
+  targetVersion: 6,
   strictMode: true,
 });
 

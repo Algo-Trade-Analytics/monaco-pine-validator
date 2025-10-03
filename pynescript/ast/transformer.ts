@@ -25,9 +25,9 @@ export class NodeTransformer extends NodeVisitor {
       } else if (oldValue instanceof AST) {
         const newNode = this.visit(oldValue);
         if (newNode === null || newNode === undefined) {
-          delete (node as any)[field];
+          delete (node as unknown as Record<string, unknown>)[field];
         } else {
-          (node as any)[field] = newNode;
+          (node as unknown as Record<string, unknown>)[field] = newNode;
         }
       }
     }

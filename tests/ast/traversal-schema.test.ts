@@ -73,7 +73,7 @@ describe('core AST nodes traversal', () => {
 
     visit(program, {
       BlockStatement: { enter: () => 'skip' },
-      ReturnStatement: { enter: () => visited.push('ReturnStatement') },
+      ReturnStatement: { enter: () => { visited.push('ReturnStatement'); return undefined; } },
     });
 
     expect(visited).toEqual([]);
@@ -137,8 +137,8 @@ describe('core AST nodes traversal', () => {
     const visited: string[] = [];
 
     visit(program, {
-      MemberExpression: { enter: () => visited.push('MemberExpression') },
-      Identifier: { enter: (path) => visited.push(`Identifier:${path.node.name}`) },
+      MemberExpression: { enter: () => { visited.push('MemberExpression'); return undefined; } },
+      Identifier: { enter: (path) => { visited.push(`Identifier:${path.node.name}`); return undefined; } },
     });
 
     expect(visited).toEqual([
@@ -159,12 +159,12 @@ describe('core AST nodes traversal', () => {
     const visited: string[] = [];
 
     visit(program, {
-      IfStatement: { enter: () => visited.push('IfStatement') },
-      ConditionalExpression: { enter: () => visited.push('ConditionalExpression') },
-      WhileStatement: { enter: () => visited.push('WhileStatement') },
-      ForStatement: { enter: () => visited.push('ForStatement') },
-      VariableDeclaration: { enter: (path) => visited.push(`Var:${path.node.identifier.name}`) },
-      Identifier: { enter: (path) => visited.push(`Identifier:${path.node.name}`) },
+      IfStatement: { enter: () => { visited.push('IfStatement'); return undefined; } },
+      ConditionalExpression: { enter: () => { visited.push('ConditionalExpression'); return undefined; } },
+      WhileStatement: { enter: () => { visited.push('WhileStatement'); return undefined; } },
+      ForStatement: { enter: () => { visited.push('ForStatement'); return undefined; } },
+      VariableDeclaration: { enter: (path) => { visited.push(`Var:${path.node.identifier.name}`); return undefined; } },
+      Identifier: { enter: (path) => { visited.push(`Identifier:${path.node.name}`); return undefined; } },
     });
 
     expect(visited).toEqual([
@@ -201,14 +201,15 @@ describe('core AST nodes traversal', () => {
     const visited: string[] = [];
 
     visit(program, {
-      SwitchStatement: { enter: () => visited.push('SwitchStatement') },
+      SwitchStatement: { enter: () => { visited.push('SwitchStatement'); return undefined; } },
       SwitchCase: {
         enter: (path) => {
           visited.push(path.node.test ? 'SwitchCase:test' : 'SwitchCase:default');
+          return undefined;
         },
       },
-      MatrixLiteral: { enter: () => visited.push('MatrixLiteral') },
-      IndexExpression: { enter: () => visited.push('IndexExpression') },
+      MatrixLiteral: { enter: () => { visited.push('MatrixLiteral'); return undefined; } },
+      IndexExpression: { enter: () => { visited.push('IndexExpression'); return undefined; } },
     });
 
     expect(visited).toEqual([

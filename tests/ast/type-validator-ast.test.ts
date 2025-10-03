@@ -25,7 +25,7 @@ import { createLocation, createPosition, createRange, type ProgramNode } from '.
 class TypeValidatorHarness extends BaseValidator {
   constructor(service: FunctionAstService, overrides: Partial<ValidatorConfig> = {}) {
     const { ast: astOverrides, ...rest } = overrides;
-    const astConfig = astOverrides ? { ...astOverrides, service } : { mode: 'primary', service };
+    const astConfig = astOverrides ? { ...astOverrides, service } : { mode: 'primary' as const, service };
     super({ ...rest, ast: astConfig });
     this.registerModule(new CoreValidator());
     this.registerModule(new TypeValidator());

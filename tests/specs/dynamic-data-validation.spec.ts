@@ -29,9 +29,15 @@ describe('Dynamic Data Validation (TDD)', () => {
     };
     config = {
       targetVersion: 6,
-      strictMode: true,
+      allowDeprecated: false,
+      enableTypeChecking: true,
+      enableControlFlowAnalysis: true,
+      enablePerformanceAnalysis: true,
       enablePerformanceChecks: true,
-      enableStyleChecks: true
+      enableStyleChecks: true,
+      strictMode: true,
+      customRules: [],
+      ignoredCodes: []
     };
   });
 

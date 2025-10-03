@@ -1353,7 +1353,7 @@ export class DynamicDataValidator implements ValidationModule {
 
     // Check if it's an identifier (variable)
     if (arg.node && arg.node.kind === 'Identifier') {
-      const identifierName = (arg.node as any).name;
+      const identifierName = (arg.node as { name: string }).name;
       // Check if the variable comes from input.timeframe() or input.symbol()
       if (this.isVariableFromInputFunction(identifierName)) {
         return true;
@@ -1398,7 +1398,7 @@ export class DynamicDataValidator implements ValidationModule {
       return false;
     }
     if (arg.node && arg.node.kind === 'NumberLiteral') {
-      const numberNode = arg.node as any;
+      const numberNode = arg.node as { value: number };
       return Number.isInteger(numberNode.value);
     }
     return this.isIntegerLiteral(arg.value);

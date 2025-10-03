@@ -48,7 +48,9 @@ describe('BaseValidator AST pipeline integration', () => {
     const result = validator.validate('//@version=6\nindicator("example")');
 
     expect(parse).toHaveBeenCalledTimes(1);
-    const [, options] = parse.mock.calls[0];
+    const callArgs = parse.mock.calls[0] as unknown as [string, { filename?: string }];
+    expect(callArgs).toHaveLength(2);
+    const options = callArgs[1];
     expect(options?.filename).toBeDefined();
 
     expect(result.isValid).toBe(true);

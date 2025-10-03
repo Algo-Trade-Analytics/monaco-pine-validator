@@ -96,7 +96,7 @@ describe('Monaco worker client', () => {
       version: 2,
       markers: [],
       syntaxMarkers: [],
-      result: { errors: [], warnings: [], scriptType: 'indicator' },
+      result: { errors: [], warnings: [], scriptType: 'indicator', isValid: true, info: [], typeMap: new Map() },
       scriptType: 'indicator',
       semanticModel: { ast: null, symbols: [], scopes: { root: null, nodes: [] }, controlFlow: { entry: null, exit: null, nodes: [] }, types: [] },
       hoverData: [],

@@ -160,7 +160,7 @@ export class EnhancedStrategyValidator implements ValidationModule {
           const node = path.node as ScriptDeclarationNode;
           if (node.scriptType === 'strategy') {
             const namedArgs = this.collectNamedArguments(node.arguments);
-            data.strategyCalls.push({ node: node as any, namedArgs });
+            data.strategyCalls.push({ node: node as unknown as CallExpressionNode, namedArgs });
           }
         },
       },

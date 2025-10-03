@@ -4,7 +4,6 @@ import { expectHas } from './test-utils';
 
 const createValidator = () => new EnhancedModularValidator({
   targetVersion: 6,
-  scriptType: 'strategy',
   strictMode: true,
   enablePerformanceAnalysis: true,
 });

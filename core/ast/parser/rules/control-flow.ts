@@ -78,7 +78,7 @@ function extractLoopResult(block: BlockStatementNode): ExpressionNode | null {
   return null;
 }
 
-function isStatementTerminator(tokenType: any): boolean {
+function isStatementTerminator(tokenType: unknown): boolean {
   return tokenType === Newline || tokenType === EOF || tokenType === Else;
 }
 

@@ -361,7 +361,7 @@ export class V6FeaturesValidator implements ValidationModule {
   private inferLiteralType(expression: ExpressionNode): string | null {
     switch (expression.kind) {
       case 'NumberLiteral':
-        return Number.isInteger((expression as any).value) ? 'int' : 'float';
+        return Number.isInteger((expression as { value: number }).value) ? 'int' : 'float';
       case 'BooleanLiteral':
         return 'bool';
       case 'StringLiteral':

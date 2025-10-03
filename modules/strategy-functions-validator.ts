@@ -919,7 +919,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
       Codes.STRATEGY_MAX_DRAWDOWN_VALUE,
       Codes.STRATEGY_MAX_ORDERS_VALUE
     ];
-    if (hardErrorCodes.includes(code as any)) return true;
+    if (hardErrorCodes.includes(code as typeof hardErrorCodes[number])) return true;
     
     // For performance and best practice issues, generate warnings
     return false;

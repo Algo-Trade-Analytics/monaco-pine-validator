@@ -922,8 +922,8 @@ export class TypeInferenceValidator implements ValidationModule {
       return rules.returnType;
     }
 
-    if (Array.isArray((rules as any).overloads)) {
-      for (const overload of (rules as any).overloads) {
+    if (Array.isArray((rules as { overloads?: unknown }).overloads)) {
+      for (const overload of (rules as { overloads: Array<{ returnType?: string }> }).overloads) {
         if (typeof overload.returnType === 'string' && overload.returnType.length > 0) {
           return overload.returnType;
         }
@@ -1458,9 +1458,13 @@ export class TypeInferenceValidator implements ValidationModule {
       'chart.point',
       'udt',
       'analysis',
+      'unknown',
     ] satisfies Array<TypeInfo['type']>);
 
-    if (validTypes.has(normalized as any)) {
+    if (normalized === 'unknown') {
+      return 'unknown';
+    }
+    if (validTypes.has(normalized as TypeInfo['type'])) {
       return normalized as TypeInfo['type'];
     }
 

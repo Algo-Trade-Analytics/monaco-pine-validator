@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AstValidationContext, ValidatorConfig } from '../../core/types';
 import { BaseValidator } from '../../core/base-validator';
 import { CoreValidator } from '../../modules/core-validator';
+import { EnhancedModularValidator } from '../../EnhancedModularValidator';
 import { FunctionAstService } from '../../core/ast/service';
 import { createAstDiagnostics } from '../../core/ast/types';
 import {
@@ -104,7 +105,8 @@ function createWorker(options: Partial<CreateWorkerOptions>) {
     postMessage: (message: MonacoWorkerOutboundMessage) => {
       messages.push(message);
     },
-  } satisfies Pick<DedicatedWorkerGlobalScope, 'postMessage'>;
+    onmessage: null,
+  } satisfies Pick<DedicatedWorkerGlobalScope, 'postMessage' | 'onmessage'>;
 
   const worker = createMonacoValidationWorker({
     globalScope: scope,
@@ -151,7 +153,14 @@ describe('Monaco validation worker', () => {
 
     const { worker, messages } = createWorker({
       astService,
-      createValidator: (config) => new CoreWorkerValidator(config),
+      createValidator: (config) => {
+        const validator = new EnhancedModularValidator(config);
+        return Object.assign(validator, {
+          getAstContext(): AstValidationContext {
+            return (validator as unknown as { context: AstValidationContext }).context;
+          }
+        });
+      },
     });
 
     const ready = messages.shift();
@@ -196,12 +205,17 @@ describe('Monaco validation worker', () => {
         diagnostics: createAstDiagnostics(),
       })),
       createValidator: (config) => {
-        class ThrowingValidator extends CoreWorkerValidator {
+        class ThrowingValidator extends EnhancedModularValidator {
           validate(): never {
             throw new Error('validator failure');
           }
         }
-        return new ThrowingValidator(config);
+        const validator = new ThrowingValidator(config);
+        return Object.assign(validator, {
+          getAstContext(): AstValidationContext {
+            return (validator as unknown as { context: AstValidationContext }).context;
+          }
+        });
       },
     });
 

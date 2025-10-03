@@ -15,15 +15,15 @@ function isStructure(node: unknown): node is Structure {
 }
 
 export class StatementCollector extends NodeVisitor {
-  visit_Script(node: any): Iterable<stmt> {
-    return this.collectFromList(node.body);
+  visit_Script(node: unknown): Iterable<stmt> {
+    return this.collectFromList((node as { body: stmt[] }).body);
   }
 
-  visit_FunctionDef(node: any): Iterable<stmt> {
+  visit_FunctionDef(node: unknown): Iterable<stmt> {
     return this.visitWithBody(node);
   }
 
-  visit_TypeDef(node: any): Iterable<stmt> {
+  visit_TypeDef(node: unknown): Iterable<stmt> {
     return this.visitWithBody(node);
   }
 
@@ -31,15 +31,15 @@ export class StatementCollector extends NodeVisitor {
     return [node];
   }
 
-  visit_Assign(node: any): Iterable<stmt> {
+  visit_Assign(node: unknown): Iterable<stmt> {
     return this.visitWithValue(node);
   }
 
-  visit_ReAssign(node: any): Iterable<stmt> {
+  visit_ReAssign(node: unknown): Iterable<stmt> {
     return this.visitWithValue(node);
   }
 
-  visit_AugAssign(node: any): Iterable<stmt> {
+  visit_AugAssign(node: unknown): Iterable<stmt> {
     return this.visitWithValue(node);
   }
 
@@ -47,10 +47,11 @@ export class StatementCollector extends NodeVisitor {
     return [node];
   }
 
-  visit_Expr(node: any): Iterable<stmt> {
-    const items: stmt[] = [node];
-    if (isStructure(node.value)) {
-      const result = this.visit<Iterable<stmt>>(node.value);
+  visit_Expr(node: unknown): Iterable<stmt> {
+    const items: stmt[] = [node as stmt];
+    const nodeWithValue = node as { value: unknown };
+    if (isStructure(nodeWithValue.value)) {
+      const result = this.visit<Iterable<stmt>>(nodeWithValue.value);
       items.push(...Array.from(result));
     }
     return items;
@@ -89,20 +90,21 @@ export class StatementCollector extends NodeVisitor {
     return items;
   }
 
-  visit_Case(node: any): Iterable<stmt> {
-    return this.collectFromList(node.body);
+  visit_Case(node: unknown): Iterable<stmt> {
+    return this.collectFromList((node as { body: stmt[] }).body);
   }
 
-  private visitWithBody(node: any): Iterable<stmt> {
-    const items: stmt[] = [node];
-    items.push(...this.collectFromList(node.body));
+  private visitWithBody(node: unknown): Iterable<stmt> {
+    const items: stmt[] = [node as stmt];
+    items.push(...this.collectFromList((node as { body: stmt[] }).body));
     return items;
   }
 
-  private visitWithValue(node: any): Iterable<stmt> {
-    const items: stmt[] = [node];
-    if (isStructure(node.value)) {
-      const result = this.visit<Iterable<stmt>>(node.value);
+  private visitWithValue(node: unknown): Iterable<stmt> {
+    const items: stmt[] = [node as stmt];
+    const nodeWithValue = node as { value: unknown };
+    if (isStructure(nodeWithValue.value)) {
+      const result = this.visit<Iterable<stmt>>(nodeWithValue.value);
       items.push(...Array.from(result));
     }
     return items;
@@ -118,7 +120,7 @@ export class StatementCollector extends NodeVisitor {
         }
         if (Array.isArray(result)) {
           items.push(...result);
-        } else if (typeof (result as any)[Symbol.iterator] === 'function') {
+        } else if (typeof (result as unknown as { [Symbol.iterator]?: unknown })[Symbol.iterator] === 'function') {
           items.push(...Array.from(result as Iterable<stmt>));
         } else if (result instanceof stmt) {
           items.push(result);

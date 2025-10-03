@@ -109,7 +109,7 @@ bgcolor(current_trend == Trend.BULLISH ? color.new(color.green, 90) :
         current_trend == Trend.BEARISH ? color.new(color.red, 90) : 
         color.new(color.yellow, 95))`;
 
-    const v = new EnhancedModularValidator({ version: '6', scriptType: 'indicator', strictMode: true });
+    const v = new EnhancedModularValidator({ targetVersion: 6, strictMode: true });
     const res = v.validate(code);
     const filtered = res.errors.filter(error => 
       !error.message.includes('Unknown function') &&

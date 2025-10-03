@@ -574,7 +574,7 @@ export class EnhancedBooleanValidator implements ValidationModule {
       case 'BooleanLiteral':
         return (expression as BooleanLiteralNode).value ? 'true' : 'false';
       case 'StringLiteral':
-        return (expression as any).raw ?? JSON.stringify((expression as any).value);
+        return (expression as { raw?: string; value?: string }).raw ?? JSON.stringify((expression as { value?: string }).value);
       case 'NullLiteral':
         return 'na';
       case 'UnaryExpression': {

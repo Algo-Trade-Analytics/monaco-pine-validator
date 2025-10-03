@@ -44,22 +44,22 @@ describe('PineScript AST node definitions', () => {
           value: new Nodes.Name({ id: 'OrderSide.BUY' })
         })
       ],
-      annotations: [new Uint8Array([64, 118, 54])] // //@version=6 in UTF-8
+      annotations: ['//@version=6'] // Version directive annotation
     });
 
     expect(enumDef.name).toBe('OrderSide');
     expect(enumDef.values).toHaveLength(2);
-    expect(enumDef.annotations[0]).toBeInstanceOf(Uint8Array);
-    expect(enumDef.values[1]!.value).toBeInstanceOf(Nodes.Name);
+    expect(enumDef.annotations[0]).toBe('//@version=6');
+    expect((enumDef.values[1] as unknown as { name: string }).name).toBe('SELL');
   });
 
-  it('accepts Uint8Array payloads for py_string fields', () => {
-    const kindBytes = new Uint8Array([107]);
-    const constant = new Nodes.Constant({ kind: kindBytes });
-    const comment = new Nodes.Comment({ value: kindBytes });
+  it('accepts string payloads for py_string fields', () => {
+    const kindString = 'test';
+    const constant = new Nodes.Constant({ kind: kindString });
+    const comment = new Nodes.Comment({ value: kindString });
 
-    expect(constant.kind).toBe(kindBytes);
-    expect(comment.value).toBe(kindBytes);
+    expect(constant.kind).toBe(kindString);
+    expect(comment.value).toBe(kindString);
   });
 
   it('creates fresh mutable field defaults for each instance', () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { EnhancedModularValidator } from '../../../EnhancedModularValidator';
 
-const V = () => new EnhancedModularValidator({ version: '6', scriptType: 'indicator', strictMode: true });
+const V = () => new EnhancedModularValidator({ targetVersion: 6, strictMode: true });
 
 describe('Debug: deeply nested expressions', () => {
   it('prints errors for nested TA chain', () => {

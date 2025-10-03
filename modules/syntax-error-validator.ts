@@ -40,7 +40,7 @@ export class SyntaxErrorValidator implements ValidationModule {
     }
 
     // STEP 1: Check for pre-check errors (found before AST parsing)
-    const diagnostics = astContext.astDiagnostics as any;
+    const diagnostics = astContext.astDiagnostics as { preCheckErrors?: ValidationError[] };
     if (diagnostics.preCheckErrors && diagnostics.preCheckErrors.length > 0) {
       // Pre-check found errors - these are accurate with good line/column info
       this.errors.push(...diagnostics.preCheckErrors);

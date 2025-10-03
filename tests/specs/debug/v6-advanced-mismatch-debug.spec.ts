@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { EnhancedModularValidator } from '../../../EnhancedModularValidator';
 
-const create = () => new EnhancedModularValidator({ version: '6', scriptType: 'indicator', strictMode: true });
+const create = () => new EnhancedModularValidator({ targetVersion: 6, strictMode: true });
 
 describe('Debug: qualifier/type mismatch from function return', () => {
   it('prints errors for rsiLength from ta.highest used in ta.rsi length', () => {

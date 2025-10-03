@@ -944,7 +944,7 @@ export class MapValidator implements ValidationModule {
     }
     if (expression.kind === 'NumberLiteral') {
       const literal = expression as NumberLiteralNode;
-      const raw = typeof literal.raw === 'string' ? literal.raw : String((literal as any).value ?? '');
+      const raw = typeof literal.raw === 'string' ? literal.raw : String((literal as { value?: number }).value ?? '');
       return raw.includes('.') ? 'float' : 'int';
     }
     if (expression.kind === 'UnaryExpression') {

@@ -31,9 +31,18 @@ describe('Matrix Validation (TDD)', () => {
       firstVersionLine: null
     };
     config = {
+      targetVersion: 6,
+      allowDeprecated: false,
+      enableTypeChecking: true,
+      enableControlFlowAnalysis: true,
+      enablePerformanceAnalysis: true,
+      enablePerformanceChecks: true,
+      enableStyleChecks: true,
       strictMode: true,
       enableWarnings: true,
-      enableInfo: true
+      enableInfo: true,
+      customRules: [],
+      ignoredCodes: []
     };
   });
 
@@ -302,7 +311,7 @@ plot(close)`;
       // For this test, we only care about matrix-specific warnings
       // Function parameter type inference is handled by other validators
       const matrixWarnings = result.warnings.filter(warning => 
-        warning.code.startsWith('PSV6-MATRIX-')
+        warning.code?.startsWith('PSV6-MATRIX-')
       );
       
       expect(matrixWarnings.some(w => w.code === 'PSV6-MATRIX-PERF-LOOP')).toBe(true);

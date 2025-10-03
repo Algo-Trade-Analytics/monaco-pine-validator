@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BaseValidator } from '../../core/base-validator';
 import type { AstValidationContext, AstService, ValidatorConfig } from '../../core/types';
 import { CoreValidator } from '../../modules/core-validator';
+import { EnhancedModularValidator } from '../../EnhancedModularValidator';
 import { FunctionAstService } from '../../core/ast/service';
 import { createAstDiagnostics } from '../../core/ast/types';
 import {
@@ -98,7 +99,14 @@ describe('Monaco worker harness', () => {
     const harness = createMonacoWorkerHarness({
       markerSource: 'worker',
       astService,
-      createValidator: (config) => new CoreWorkerValidator(config),
+      createValidator: (config) => {
+        const validator = new EnhancedModularValidator(config);
+        return Object.assign(validator, {
+          getAstContext(): AstValidationContext {
+            return (validator as unknown as { context: AstValidationContext }).context;
+          }
+        });
+      },
     });
 
     const response = await harness.validate({ code: source, version: 1 });
@@ -124,6 +132,7 @@ describe('Monaco worker harness', () => {
       filename: 'script.pine',
       lineno: 2,
       offset: 5,
+      text: 'Unexpected token',
       end_lineno: 2,
       end_offset: 6,
     });
@@ -136,7 +145,14 @@ describe('Monaco worker harness', () => {
     const harness = createMonacoWorkerHarness({
       markerSource: 'worker',
       astService,
-      createValidator: (config) => new CoreWorkerValidator(config),
+      createValidator: (config) => {
+        const validator = new EnhancedModularValidator(config);
+        return Object.assign(validator, {
+          getAstContext(): AstValidationContext {
+            return (validator as unknown as { context: AstValidationContext }).context;
+          }
+        });
+      },
     });
 
     const response = await harness.validate({
@@ -179,7 +195,14 @@ describe('Monaco worker harness', () => {
 
     const harness = createMonacoWorkerHarness({
       astService: service,
-      createValidator: (config) => new CoreWorkerValidator(config),
+      createValidator: (config) => {
+        const validator = new EnhancedModularValidator(config);
+        return Object.assign(validator, {
+          getAstContext(): AstValidationContext {
+            return (validator as unknown as { context: AstValidationContext }).context;
+          }
+        });
+      },
     });
 
     const first = await harness.validate({ code: source, version: 1 });

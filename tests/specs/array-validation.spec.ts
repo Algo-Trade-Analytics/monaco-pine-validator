@@ -97,7 +97,7 @@ plot(close)`;
           isValid: result.isValid,
           errors: result.errors.map(err => ({ line: err.line, code: err.code })),
           warnings: result.warnings.map(err => ({ line: err.line, code: err.code })),
-          astDiagnostics: result.astDiagnostics ?? validator.context?.astDiagnostics,
+          astDiagnostics: (validator as unknown as { context?: { astDiagnostics?: unknown } }).context?.astDiagnostics,
         });
       }
       expect(result.isValid).toBe(false);

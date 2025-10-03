@@ -73,13 +73,13 @@ import {
   createWhileStatementRule,
 } from './rules/control-flow';
 
-type ConsumeMethod = (tokenType: IToken, options?: unknown) => IToken;
+type ConsumeMethod = (tokenType: unknown, options?: unknown) => IToken;
 type SubruleMethod = (...args: unknown[]) => unknown;
 type DslMethod = (...args: unknown[]) => unknown;
 type RuleMethod<T> = (...args: unknown[]) => T;
 type OrAlternative<T> = { ALT: () => T } & Record<string, unknown>;
-type ActionMethod = (callback: () => void) => void;
-type BacktrackMethod = <T>(production: () => T) => () => T;
+type ActionMethod = (callback: unknown) => void;
+type BacktrackMethod = <T>(production: unknown) => () => T;
 
 export class PineParser extends EmbeddedActionsParser {
   private lineIndentCache = new Map<number, number>();
@@ -231,7 +231,7 @@ export class PineParser extends EmbeddedActionsParser {
 
   public switchExpression = createSwitchExpressionRule(this);
 
-  private getDslMethod<T extends (...args: any[]) => any>(baseName: string, occurrence: number): T {
+  private getDslMethod<T extends (...args: unknown[]) => unknown>(baseName: string, occurrence: number): T {
     const methodName = occurrence <= 1 ? baseName : `${baseName}${occurrence}`;
     const bound = (this as Record<string, unknown>)[methodName];
     if (typeof bound !== 'function') {
@@ -248,7 +248,7 @@ export class PineParser extends EmbeddedActionsParser {
     return this.input;
   }
 
-  public consumeToken(tokenType: any, occurrence = 1, options?: unknown): IToken {
+  public consumeToken(tokenType: unknown, occurrence = 1, options?: unknown): IToken {
     if (!tokenType) {
       // Fallback for cases where helpers pass through a previously consumed token instance.
       // Chevrotain's lexer adapter exposes a consumeToken helper that advances the input.
@@ -260,7 +260,7 @@ export class PineParser extends EmbeddedActionsParser {
     return options === undefined ? method(tokenType) : method(tokenType, options);
   }
 
-  public invokeSubrule<R extends (...args: any[]) => any>(
+  public invokeSubrule<R extends (...args: unknown[]) => unknown>(
     rule: R,
     occurrence = 1,
     options?: unknown,

@@ -18,6 +18,7 @@ import {
 import {
   type CallExpressionNode,
   type ExpressionNode,
+  type MemberExpressionNode,
   type ProgramNode,
   type TypeReferenceNode,
 } from '../core/ast/nodes';
@@ -182,7 +183,7 @@ export class ChartValidator implements ValidationModule {
     }
 
     if (expression.kind === 'MemberExpression') {
-      const member = expression as any;
+      const member = expression as MemberExpressionNode;
       const objectName = this.getExpressionQualifiedName(member.object);
       if (!objectName) {
         return null;

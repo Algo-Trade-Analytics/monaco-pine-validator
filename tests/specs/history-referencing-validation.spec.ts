@@ -19,9 +19,6 @@ describe('History Referencing Validation (TDD)', () => {
     context = {
       cleanLines: [],
       lines: [],
-      lineFeeds: [],
-      comments: [],
-      regions: [],
       userFunctions: new Map(),
       functionCalls: [],
       functionNames: new Set(),
@@ -37,9 +34,14 @@ describe('History Referencing Validation (TDD)', () => {
 
     config = {
       targetVersion: 6,
-      strictMode: true,
+      allowDeprecated: false,
+      enableTypeChecking: true,
+      enableControlFlowAnalysis: true,
       enablePerformanceAnalysis: true,
-      enableStyleChecks: true
+      enableStyleChecks: true,
+      strictMode: true,
+      customRules: [],
+      ignoredCodes: []
     };
   });
 
@@ -60,7 +62,7 @@ plot(close)`;
       
       const result = validator.validate(context, config);
       // Only check history-specific errors
-      const historyErrors = result.errors.filter(e => e.code.startsWith('PSV6-HISTORY'));
+      const historyErrors = result.errors.filter(e => e.code?.startsWith('PSV6-HISTORY'));
       expect(historyErrors).toEqual([]);
     });
 
@@ -184,7 +186,7 @@ plot(close)`;
       
       const result = validator.validate(context, config);
       // Only check history-specific errors
-      const historyErrors = result.errors.filter(e => e.code.startsWith('PSV6-HISTORY'));
+      const historyErrors = result.errors.filter(e => e.code?.startsWith('PSV6-HISTORY'));
       expect(historyErrors).toEqual([]);
     });
 
@@ -222,7 +224,7 @@ plot(close)`;
       
       const result = validator.validate(context, config);
       // Only check history-specific errors
-      const historyErrors = result.errors.filter(e => e.code.startsWith('PSV6-HISTORY'));
+      const historyErrors = result.errors.filter(e => e.code?.startsWith('PSV6-HISTORY'));
       expect(historyErrors).toEqual([]);
     });
 
@@ -242,7 +244,7 @@ plot(close)`;
       
       const result = validator.validate(context, config);
       // Only check history-specific errors
-      const historyErrors = result.errors.filter(e => e.code.startsWith('PSV6-HISTORY'));
+      const historyErrors = result.errors.filter(e => e.code?.startsWith('PSV6-HISTORY'));
       expect(historyErrors).toEqual([]);
     });
   });

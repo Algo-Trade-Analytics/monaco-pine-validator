@@ -719,7 +719,7 @@ export class EnumValidator implements ValidationModule {
       hints.set(paramName, enumName);
     };
 
-    visit(body as any, {
+    visit(body as BlockStatementNode, {
       BinaryExpression: {
         enter: (path) => {
           const node = path.node as BinaryExpressionNode;

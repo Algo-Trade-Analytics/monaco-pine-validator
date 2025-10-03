@@ -14,14 +14,12 @@ describe('LinefillValidator', () => {
       cleanLines: [],
       typeMap: new Map(),
       functionNames: new Set(),
-      variableNames: new Set(),
       imports: new Map(),
       exports: new Set()
     };
     config = {
       targetVersion: 6,
       enablePerformanceAnalysis: true,
-      enableBestPractices: true,
       maxComplexity: 100,
       maxNesting: 10
     };
@@ -381,8 +379,8 @@ describe('LinefillValidator', () => {
   describe('Integration with Other Validators', () => {
     it('should work with line validator results', () => {
       // Simulate type information from LineValidator
-      context.typeMap.set('line1', { type: 'line', isConst: false, isSeries: false });
-      context.typeMap.set('line2', { type: 'line', isConst: false, isSeries: false });
+      context.typeMap.set('line1', { type: 'line', isConst: false, isSeries: false, declaredAt: { line: 1, column: 1 }, usages: [] });
+      context.typeMap.set('line2', { type: 'line', isConst: false, isSeries: false, declaredAt: { line: 1, column: 1 }, usages: [] });
       
       context.cleanLines = [
         'fill = linefill.new(line1, line2)'
