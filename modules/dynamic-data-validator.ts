@@ -193,18 +193,21 @@ export class DynamicDataValidator implements ValidationModule {
         enter: () => loopStack.push('for'),
         exit: () => {
           loopStack.pop();
+          return undefined;
         },
       },
       WhileStatement: {
         enter: () => loopStack.push('while'),
         exit: () => {
           loopStack.pop();
+          return undefined;
         },
       },
       IfStatement: {
         enter: () => conditionalStack.push('if'),
         exit: () => {
           conditionalStack.pop();
+          return undefined;
         },
       },
       CallExpression: {

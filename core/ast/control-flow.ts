@@ -298,7 +298,7 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
 
     if (initializerSegment && iterableSegment) {
       for (const exit of initializerExits ?? []) {
-        connect(exit, iterableSegment.entry, 'loop-init');
+        connect(exit, iterableSegment.entry, 'normal');
       }
     }
 

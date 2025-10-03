@@ -487,11 +487,6 @@ function inferExpression(
       const resultType = analyzeWhileStatement(environment, whileExpression) ?? createUnknown('while:result');
       return annotateNode(environment, expression, resultType);
     }
-    case 'RepeatStatement': {
-      const repeatExpression = expression as RepeatStatementNode;
-      const resultType = analyzeRepeatStatement(environment, repeatExpression) ?? createUnknown('repeat:result');
-      return annotateNode(environment, expression, resultType);
-    }
     case 'SwitchStatement': {
       const switchExpression = expression as SwitchStatementNode;
       const resultType = analyzeSwitchStatement(environment, switchExpression) ?? createUnknown('switch:result');
@@ -908,7 +903,7 @@ function visitStatement(environment: TypeEnvironment, statement: StatementNode):
       assignIdentifier(
         environment,
         (statement as TypeDeclarationNode).identifier,
-        createTypeMetadata('udt', 'type:declaration', 'certain'),
+        createTypeMetadata('unknown', 'type:declaration', 'certain'),
         'type:declaration',
       );
       break;

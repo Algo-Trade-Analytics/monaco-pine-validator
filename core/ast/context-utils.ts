@@ -10,10 +10,9 @@ import {
   createEmptyTypeEnvironment,
   type AstConfig,
   type AstDiagnostics,
-  type AstValidationContext,
   type AstParseResult,
 } from './types';
-import type { ValidationContext, ValidatorConfig } from '../types';
+import type { ValidationContext, ValidatorConfig, AstValidationContext } from '../types';
 
 const DEFAULT_AST_FILENAME = 'input.pine';
 

@@ -624,7 +624,7 @@ export class EnhancedQualityValidator implements ValidationModule {
     };
 
     const traverseIfExpression = (expr: IfExpressionNode, depth: number): void => {
-      updateDepth(depth, expr);
+      updateDepth(depth, expr as unknown as StatementNode);
       traverseExpressionBranch(expr.consequent, depth + 1);
       if (expr.alternate) {
         if (expr.alternate.kind === 'IfExpression') {

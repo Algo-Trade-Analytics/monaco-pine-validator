@@ -10,7 +10,7 @@ export interface SyntaxErrorDetails {
 export class SyntaxError extends Error {
   readonly details?: SyntaxErrorDetails;
 
-  constructor(message: string, ...details: [SyntaxErrorDetails] | [string, number, number, string, number?, number?]) {
+  constructor(message: string, ...details: [] | [SyntaxErrorDetails] | [string, number, number, string, number?, number?]) {
     super(message);
     this.name = 'SyntaxError';
     if (details.length === 1 && typeof details[0] === 'object') {

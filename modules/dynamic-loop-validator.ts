@@ -370,7 +370,7 @@ export class DynamicLoopValidator implements ValidationModule {
     if (expression.kind === 'Identifier' && (expression as IdentifierNode).name === indexName) {
       return false;
     }
-    return this.isDynamicNumericExpression(expression, null);
+    return this.isDynamicNumericExpression(expression, undefined);
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {

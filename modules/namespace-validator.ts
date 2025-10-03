@@ -20,6 +20,10 @@ export class NamespaceValidator implements ValidationModule {
 
   private errors: ValidationError[] = [];
 
+  getDependencies(): string[] {
+    return [];
+  }
+
   validate(context: ValidationContext, _config: ValidatorConfig): ValidationResult {
     this.errors = [];
     

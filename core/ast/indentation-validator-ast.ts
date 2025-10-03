@@ -750,7 +750,7 @@ export class ASTIndentationValidator {
           );
         }
       }
-      return;
+      return false;
     }
 
     // Invalid: First line at column 0 or wrong multiple of 4

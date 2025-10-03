@@ -23,6 +23,10 @@ export class SyntaxErrorValidator implements ValidationModule {
   private errors: ValidationError[] = [];
   private sourceCode: string = '';
 
+  getDependencies(): string[] {
+    return [];
+  }
+
   validate(context: ValidationContext, _config: ValidatorConfig): ValidationResult {
     this.errors = [];
     
