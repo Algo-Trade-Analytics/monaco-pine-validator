@@ -110,28 +110,28 @@ export function preCheckSyntax(sourceCode: string): ValidationError[] {
     if (!isFunctionDeclaration && /[=+\-*/%<>!&|,(]$/.test(trimmed)) {
       const nextIndent = nextLine.match(/^(\s*)/)?.[0].replace(/\t/g, '    ').length || 0;
       
-      // Rule 1: At global scope (indent 0), continuation at multiple of 4 is likely invalid
-      if (lineIndent === 0 && nextIndent > 0 && nextIndent % 4 === 0) {
-        const suggested = nextIndent - 1;
+      // Rule 1: At global scope (indent 0), continuation at multiple of 4 (including 0) is likely invalid
+      if (lineIndent === 0 && nextIndent % 4 === 0) {
+        const suggested = nextIndent === 0 ? 1 : nextIndent - 1;
         errors.push({
           line: i + 2,
           column: nextIndent + 1,
           message: `Line continuation at column ${nextIndent} (multiple of 4) will likely fail in TradingView. Use non-multiple-of-4 indentation.`,
-          severity: 'warning',
+          severity: 'error',
           code: 'PSV6-INDENT-WRAP-MULTIPLE-OF-4',
           suggestion: `Try ${suggested} spaces or ${nextIndent + 1} spaces (non-multiple-of-4).`
         });
       }
-      // Rule 2: Inside a block (indent = multiple of 4), continuation at same level or next block level is invalid
+      // Rule 2: Inside a block (indent = multiple of 4), continuation at block boundaries is invalid
       else if (lineIndent % 4 === 0 && lineIndent > 0) {
-        // If continuation is at same block level (lineIndent) or next block level (lineIndent + 4)
-        if (nextIndent === lineIndent || nextIndent === lineIndent + 4) {
+        // If continuation is at any multiple of 4 (0, 4, 8, 12...) it's invalid
+        if (nextIndent % 4 === 0) {
           const suggested = lineIndent + 1;
           errors.push({
             line: i + 2,
             column: nextIndent + 1,
-            message: `Line continuation inside block cannot be at ${nextIndent} spaces. Must be beyond block level (${lineIndent}) using non-multiple-of-4.`,
-            severity: 'warning',
+            message: `Line continuation inside block cannot be at ${nextIndent} spaces (multiple of 4). Must be beyond block level (${lineIndent}) using non-multiple-of-4.`,
+            severity: 'error',
             code: 'PSV6-INDENT-WRAP-BLOCK',
             suggestion: `Try ${suggested} spaces or ${lineIndent + 2} spaces (block + non-multiple-of-4).`
           });
