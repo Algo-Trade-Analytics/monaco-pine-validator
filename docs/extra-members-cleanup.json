@@ -1,0 +1,238 @@
+{
+  "extraMembersByNamespace": {
+    "global": [
+      "strategy",
+      "if",
+      "log",
+      "runtime"
+    ],
+    "ta": [
+      "covariance"
+    ],
+    "math": [
+      "atan2",
+      "median",
+      "mode"
+    ],
+    "str": [
+      "capitalize",
+      "trim_left",
+      "trim_right",
+      "join"
+    ],
+    "array": [
+      "new",
+      "percentile"
+    ],
+    "input": [
+      "resolution"
+    ],
+    "plot": [
+      "style_line_diamond",
+      "style_cross_diamond",
+      "style_linebreak"
+    ],
+    "line": [
+      "extend_none",
+      "extend_right",
+      "extend_left",
+      "extend_both"
+    ],
+    "box": [
+      "border_style_double",
+      "border_style_solid",
+      "border_style_dashed"
+    ],
+    "table": [
+      "cell_merge_horizontal",
+      "cell_merge_vertical",
+      "cell_merge_none"
+    ],
+    "strategy": [
+      "risk",
+      "opentrades",
+      "closedtrades",
+      "account",
+      "commission",
+      "oca",
+      "direction",
+      "max_consecutive_losses",
+      "max_consecutive_wins",
+      "profit_factor",
+      "recovery_factor",
+      "sharpe_ratio",
+      "sortino_ratio",
+      "total_closed_trades",
+      "total_open_trades",
+      "total_trades"
+    ],
+    "syminfo": [
+      "target_price_mode",
+      "target_price_stddev",
+      "recommendation_mean",
+      "recommendation_all",
+      "recommendation_buy",
+      "recommendation_hold",
+      "recommendation_sell",
+      "recommendation_strong_buy",
+      "recommendation_strong_sell",
+      "earnings_per_share",
+      "earnings_per_share_basic",
+      "earnings_per_share_diluted",
+      "book_value",
+      "cash_flow_per_share",
+      "current_ratio",
+      "debt_to_equity",
+      "dividend_yield",
+      "ebitda",
+      "enterprise_value",
+      "enterprise_value_ebitda",
+      "enterprise_value_revenue",
+      "gross_profit",
+      "gross_profit_margin",
+      "market_cap",
+      "net_income",
+      "net_income_margin",
+      "operating_margin",
+      "price_to_book",
+      "price_to_cash_flow",
+      "price_to_earnings",
+      "price_to_earnings_forward",
+      "price_to_sales",
+      "quick_ratio",
+      "return_on_assets",
+      "return_on_equity",
+      "revenue",
+      "revenue_per_share",
+      "total_debt",
+      "total_debt_to_equity",
+      "total_revenue",
+      "pe_ratio",
+      "beta",
+      "avg_volume_30d",
+      "contract_size",
+      "tick_value",
+      "margin_requirement"
+    ],
+    "matrix": [
+      "new",
+      "abs",
+      "sqrt",
+      "stdev",
+      "variance",
+      "covariance",
+      "percentile_linear_interpolation",
+      "percentile_nearest_rank"
+    ],
+    "text": [
+      "format_normal",
+      "format_bold_italic",
+      "format_underline",
+      "format_strikethrough"
+    ],
+    "polyline": [
+      "copy",
+      "from_line",
+      "get_point",
+      "clear",
+      "set_point"
+    ],
+    "linefill": [
+      "copy"
+    ],
+    "display": [
+      "price_scale_only",
+      "data_window_only"
+    ],
+    "chart": [
+      "point"
+    ],
+    "map": [
+      "new"
+    ],
+    "font": [
+      "default",
+      "monospace",
+      "monospace_bold",
+      "serif",
+      "serif_bold",
+      "sans_serif",
+      "sans_serif_bold"
+    ],
+    "format": [
+      "date",
+      "time"
+    ],
+    "barmerge": [
+      "gaps_left",
+      "gaps_right",
+      "gaps_middle"
+    ],
+    "currency": [
+      "SZL",
+      "UAH",
+      "UGX",
+      "UYU"
+    ],
+    "strategy.commission": [
+      "cash"
+    ],
+    "shape": [
+      "none"
+    ]
+  },
+  "fakeNamespaces": [
+    "ask",
+    "bar_index",
+    "bid",
+    "close",
+    "high",
+    "hl2",
+    "hlc3",
+    "hlcc4",
+    "last_bar_index",
+    "last_bar_time",
+    "low",
+    "ohlc4",
+    "open",
+    "second",
+    "time_tradingday",
+    "timenow",
+    "volume",
+    "alertcondition",
+    "barcolor",
+    "bgcolor",
+    "bool",
+    "fill",
+    "fixnan",
+    "float",
+    "if",
+    "indicator",
+    "int",
+    "library",
+    "max_bars_back",
+    "na",
+    "nz",
+    "plotarrow",
+    "plotbar",
+    "plotcandle",
+    "plotchar",
+    "plotshape",
+    "reopenPositionAfter",
+    "string",
+    "time",
+    "time_close",
+    "timestamp",
+    "dayofmonth",
+    "hour",
+    "minute",
+    "month",
+    "weekofyear",
+    "year"
+  ],
+  "summary": {
+    "totalExtraMembers": 130,
+    "totalFakeNamespaces": 47,
+    "totalToRemove": 177
+  }
+}

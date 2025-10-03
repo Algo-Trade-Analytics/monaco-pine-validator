@@ -14,10 +14,10 @@ export const NAMESPACE_MEMBERS = {
     'true', 'false',
     // Global functions
     'alert', 'alertcondition', 'plot', 'plotshape', 'plotchar', 'plotarrow', 'plotbar', 'plotcandle',
-    'indicator', 'strategy', 'library', 'hline', 'fill', 'bgcolor', 'barcolor',
-    'na', 'nz', 'fixnan', 'if', 'bool', 'int', 'float', 'string',
+    'indicator', 'library', 'hline', 'fill', 'bgcolor', 'barcolor',
+    'na', 'nz', 'fixnan', 'bool', 'int', 'float', 'string',
     'time', 'timestamp', 'time_close', 'hour', 'minute', 'dayofmonth', 'dayofweek', 'month', 'year', 'weekofyear',
-    'max_bars_back', 'log', 'runtime'
+    'max_bars_back'
   ]),
   
   'color': new Set([
@@ -46,7 +46,7 @@ export const NAMESPACE_MEMBERS = {
     // Crosses and patterns
     'cross', 'crossover', 'crossunder', 'falling', 'rising',
     // Statistics
-    'correlation', 'covariance', 'percentile_linear_interpolation', 'percentile_nearest_rank', 'percentrank',
+    'correlation', 'percentile_linear_interpolation', 'percentile_nearest_rank', 'percentrank',
     // Other
     'barssince', 'cog', 'cum', 'dmi', 'highest', 'highestbars', 'iii', 'kc', 'kcw', 'linreg',
     'lowest', 'lowestbars', 'macd', 'max', 'median', 'min', 'range', 'sar', 'supertrend', 'tr', 'valuewhen', 'vwap',
@@ -56,30 +56,28 @@ export const NAMESPACE_MEMBERS = {
   
   'math': new Set([
     // Basic math
-    'abs', 'acos', 'asin', 'atan', 'atan2', 'avg', 'ceil', 'cos', 'exp', 'floor', 'log',
+    'abs', 'acos', 'asin', 'atan', 'avg', 'ceil', 'cos', 'exp', 'floor', 'log',
     'log10', 'max', 'min', 'pow', 'random', 'round', 'round_to_mintick', 'sign',
     'sin', 'sqrt', 'sum', 'tan', 'todegrees', 'toradians',
     // Constants
-    'pi', 'e', 'phi', 'rphi',
-    // Statistics (v6)
-    'median', 'mode'
+    'pi', 'e', 'phi', 'rphi'
   ]),
   
   'str': new Set([
     // String inspection
     'contains', 'endswith', 'startswith', 'length', 'match', 'pos',
     // String transformation
-    'lower', 'upper', 'capitalize', 'trim', 'trim_left', 'trim_right',
+    'lower', 'upper', 'trim',
     'replace', 'replace_all', 'repeat',
     // String manipulation
-    'split', 'substring', 'format', 'format_time', 'join',
+    'split', 'substring', 'format', 'format_time',
     // String conversion
     'tonumber', 'tostring'
   ]),
   
   'array': new Set([
     // Creation functions
-    'new', 'new_bool', 'new_int', 'new_float', 'new_string', 'new_color',
+    'new_bool', 'new_int', 'new_float', 'new_string', 'new_color',
     'new_line', 'new_label', 'new_box', 'new_table', 'new_linefill',
     'from', 'copy',
     // Access functions
@@ -94,7 +92,7 @@ export const NAMESPACE_MEMBERS = {
     'size', 'sum', 'avg', 'min', 'max', 'median', 'mode', 'range',
     // Statistical functions
     'variance', 'stdev', 'covariance', 'standardize',
-    'percentile', 'percentile_linear_interpolation', 'percentile_nearest_rank',
+    'percentile_linear_interpolation', 'percentile_nearest_rank',
     'percentrank',
     // Utility functions
     'join',
@@ -112,7 +110,7 @@ export const NAMESPACE_MEMBERS = {
     'bool', 'int', 'float', 'string', 'color',
     // Advanced input types
     'source', 'symbol', 'timeframe', 'session', 'time',
-    'text_area', 'price', 'resolution',
+    'text_area', 'price',
     // Missing members from gap analysis
     'arguments', 'enum', 'signatures'
   ]),
@@ -120,7 +118,7 @@ export const NAMESPACE_MEMBERS = {
   'plot': new Set([
     'style_line', 'style_linebr', 'style_stepline', 'style_steplinebr',
     'style_histogram', 'style_cross', 'style_area', 'style_areabr', 'style_columns',
-    'style_circles', 'style_line_diamond', 'style_cross_diamond', 'style_linebreak', 'style_stepline_diamond',
+    'style_circles', 'style_stepline_diamond',
     // Line styles
     'linestyle_dashed', 'linestyle_dotted', 'linestyle_solid',
     // Missing members from gap analysis
@@ -138,8 +136,6 @@ export const NAMESPACE_MEMBERS = {
     'set_first_point', 'set_second_point',
     // Styles
     'style_solid', 'style_dotted', 'style_dashed', 'style_arrow_left', 'style_arrow_right', 'style_arrow_both',
-    // Extend modes
-    'extend_none', 'extend_right', 'extend_left', 'extend_both',
     // Missing members from gap analysis
     'arguments', 'signatures'
   ]),
@@ -175,52 +171,44 @@ export const NAMESPACE_MEMBERS = {
     // Text setters (v6)
     'set_text', 'set_text_color', 'set_text_size',
     'set_text_halign', 'set_text_valign', 'set_text_font_family', 'set_text_wrap',
-    // Border styles
-    'border_style_double', 'border_style_solid', 'border_style_dashed',
     // Missing members from gap analysis
-    'arguments', 'set_bottom_right_point', 'set_text_formatting', 'set_top_left_point', 'signatures',
-    // Note: box.get_text and box.set_text_font do NOT exist in Pine Script v6
-    // They are intentionally excluded to catch errors
+    'arguments', 'set_bottom_right_point', 'set_text_formatting', 'set_top_left_point', 'signatures'
   ]),
   
   'table': new Set([
-    'new', 'delete', 'clear', 'cell', 'cell_set_bgcolor', 'cell_set_text',
-    'cell_set_text_color', 'cell_set_text_font_family', 'cell_set_text_halign',
-    'cell_set_text_valign', 'cell_set_text_size', 'cell_set_tooltip',
-    'cell_set_width', 'cell_set_height', 'set_bgcolor', 'set_border_color',
-    'set_border_width', 'set_frame_color', 'set_frame_width', 'set_position',
-    // Cell merge constants
-    'cell_merge_horizontal', 'cell_merge_vertical', 'cell_merge_none',
+    // Creation/deletion
+    'new', 'delete', 'clear', 'all',
+    // Cell modification
+    'cell', 'cell_set_bgcolor', 'cell_set_text',
+    'cell_set_text_size', 'cell_set_text_font_family', 'cell_set_text_formatting',
+    'cell_set_text_color', 'cell_set_text_halign', 'cell_set_text_valign',
+    'cell_set_width', 'cell_set_height', 'cell_set_tooltip',
+    // Table setters
+    'set_bgcolor', 'set_border_color', 'set_border_width', 'set_frame_color', 
+    'set_frame_width', 'set_position',
     // Missing members from gap analysis
-    'arguments', 'cell_set_text_formatting', 'merge_cells', 'signatures', 'all'
+    'arguments', 'merge_cells', 'signatures'
   ]),
   
   'strategy': new Set([
-    'entry', 'exit', 'close', 'close_all', 'cancel', 'cancel_all', 'risk',
-    'opentrades', 'position_size', 'position_avg_price', 'closedtrades',
+    'entry', 'exit', 'close', 'close_all', 'cancel', 'cancel_all',
+    'position_size', 'position_avg_price',
     // Quantity types
     'percent_of_equity', 'fixed', 'cash',
     // Strategy properties
     'wintrades', 'losstrades', 'eventrades', 'grossprofit', 'grossloss',
-    'netprofit', 'account', 'equity', 'initial_capital',
+    'netprofit', 'equity', 'initial_capital',
     // Strategy directions
     'long', 'short',
-    // Nested constants
-    'commission', 'oca', 'direction',
     // Additional strategy members
     'convert_to_account', 'convert_to_symbol', 'default_entry_qty', 'order',
     'account_currency', 'avg_losing_trade', 'avg_losing_trade_percent', 'avg_trade',
     'avg_trade_percent', 'avg_winning_trade', 'avg_winning_trade_percent',
-    'max_consecutive_losses', 'max_consecutive_wins', 'max_drawdown',
-    'max_drawdown_percent', 'max_runup', 'max_runup_percent',
-    'profit_factor', 'recovery_factor', 'sharpe_ratio', 'sortino_ratio',
-    'total_closed_trades', 'total_open_trades', 'total_trades',
+    'max_drawdown', 'max_drawdown_percent', 'max_runup', 'max_runup_percent',
     // Missing strategy members from gap analysis
     'grossloss_percent', 'grossprofit_percent', 'margin_liquidation_price',
     'max_contracts_held_all', 'max_contracts_held_long', 'max_contracts_held_short',
-    'netprofit_percent', 'openprofit',
-    // Final missing strategy members
-    'arguments', 'signatures', 'openprofit_percent', 'position_entry_name'
+    'netprofit_percent', 'openprofit', 'openprofit_percent', 'position_entry_name'
   ]),
   
   'syminfo': new Set([
@@ -232,29 +220,14 @@ export const NAMESPACE_MEMBERS = {
     'employees', 'shareholders', 'sector', 'industry',
     // Shares outstanding
     'shares_outstanding_float', 'shares_outstanding_total',
-    // Fundamental variables
-    'country', 'target_price_average', 'target_price_median', 'target_price_mode',
-    'target_price_high', 'target_price_low', 'target_price_stddev', 'target_price_estimates', 'target_price_date',
-    // Recommendations (both old and new naming)
-    'recommendation_mean', 'recommendation_all', 'recommendation_buy',
-    'recommendation_hold', 'recommendation_sell', 'recommendation_strong_buy',
-    'recommendation_strong_sell', 'recommendations_buy', 'recommendations_hold',
-    'recommendations_sell', 'recommendations_buy_strong', 'recommendations_sell_strong',
-    'recommendations_total', 'recommendations_date',
-    // Financial data
-    'earnings_per_share', 'earnings_per_share_basic',
-    'earnings_per_share_diluted', 'book_value', 'cash_flow_per_share',
-    'current_ratio', 'debt_to_equity', 'dividend_yield', 'ebitda',
-    'enterprise_value', 'enterprise_value_ebitda', 'enterprise_value_revenue',
-    'gross_profit', 'gross_profit_margin', 'market_cap', 'net_income',
-    'net_income_margin', 'operating_margin', 'price_to_book', 'price_to_cash_flow',
-    'price_to_earnings', 'price_to_earnings_forward', 'price_to_sales',
-    'quick_ratio', 'return_on_assets', 'return_on_equity', 'revenue',
-    'revenue_per_share', 'total_debt', 'total_debt_to_equity', 'total_revenue',
-    // Additional specialized variables
-    'pe_ratio', 'beta', 'avg_volume_30d', 'contract_size', 'tick_value', 'margin_requirement',
-    // Missing syminfo members
-    'main_tickerid', 'minmove', 'pricescale'
+    // Official fundamental variables from v6 docs
+    'country', 'target_price_average', 'target_price_median',
+    'target_price_high', 'target_price_low', 'target_price_estimates', 'target_price_date',
+    // Official recommendations from v6 docs
+    'recommendations_buy', 'recommendations_buy_strong', 'recommendations_sell',
+    'recommendations_sell_strong', 'recommendations_hold', 'recommendations_total', 'recommendations_date',
+    // Info
+    'minmove', 'pricescale', 'main_tickerid'
   ]),
   
   'timeframe': new Set([
@@ -270,7 +243,7 @@ export const NAMESPACE_MEMBERS = {
   
   'matrix': new Set([
     // Creation
-    'new', 'copy',
+    'copy',
     // Access
     'get', 'set', 'row', 'col', 'submatrix',
     // Modification
@@ -282,10 +255,9 @@ export const NAMESPACE_MEMBERS = {
     'is_binary', 'is_identity', 'is_stochastic', 'is_symmetric',
     'is_antisymmetric', 'is_triangular', 'is_antidiagonal', 'is_diagonal',
     // Operations
-    'transpose', 'pinv', 'inv', 'mult', 'pow', 'diff', 'abs', 'sqrt',
+    'transpose', 'pinv', 'inv', 'mult', 'pow', 'diff',
     // Statistics
-    'avg', 'max', 'min', 'median', 'mode', 'sum', 'stdev', 'variance',
-    'covariance', 'percentile_linear_interpolation', 'percentile_nearest_rank',
+    'avg', 'max', 'min', 'median', 'mode', 'sum',
     // Linear algebra
     'det', 'rank', 'trace', 'eigenvalues', 'eigenvectors', 'kron',
     // Missing members from gap analysis
@@ -301,19 +273,17 @@ export const NAMESPACE_MEMBERS = {
     'align_left', 'align_center', 'align_right',
     'align_top', 'align_bottom',
     'wrap_none', 'wrap_auto',
-    'format_bold', 'format_italic', 'format_normal',
-    'format_bold_italic', 'format_underline', 'format_strikethrough',
+    'format_bold', 'format_italic',
     // Missing members from gap analysis
     'format_none'
   ]),
   
   'polyline': new Set([
-    'new', 'delete', 'all', 'copy', 'from_line',
-    'get_point', 'clear', 'set_point'
+    'new', 'delete', 'all'
   ]),
   
   'linefill': new Set([
-    'new', 'delete', 'all', 'copy',
+    'new', 'delete', 'all',
     'get_line1', 'get_line2',
     'set_color',
     // Missing members from gap analysis
@@ -325,12 +295,11 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'display': new Set([
-    'none', 'all', 'data_window', 'pane', 'price_scale', 'status_line',
-    'price_scale_only', 'data_window_only'
+    'none', 'all', 'data_window', 'pane', 'price_scale', 'status_line'
   ]),
   
   'chart': new Set([
-    'point', 'point.new', 'point.now', 'point.from_index', 'point.from_time', 'point.copy',
+    'point.new', 'point.now', 'point.from_index', 'point.from_time', 'point.copy',
     'bg_color', 'fg_color', 'is_heikinashi', 'is_kagi', 'is_linebreak', 'is_pnf', 'is_range', 'is_renko', 'is_standard', 'left_visible_bar_time', 'right_visible_bar_time'
   ]),
   
@@ -339,23 +308,22 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'map': new Set([
-    'new', 'put', 'get', 'remove', 'clear', 'size', 'keys', 'values', 'contains', 'copy',
+    'put', 'get', 'remove', 'clear', 'size', 'keys', 'values', 'contains', 'copy',
     'put_all',
     // Missing members from gap analysis
     'new<keyType, valueType>', 'new<type,type>'
   ]),
   
   'font': new Set([
-    'default', 'monospace', 'monospace_bold', 'serif', 'serif_bold', 'sans_serif', 'sans_serif_bold',
     'family_default', 'family_monospace'
   ]),
   
   'format': new Set([
-    'volume', 'price', 'percent', 'date', 'time', 'inherit', 'mintick'
+    'volume', 'price', 'percent', 'inherit', 'mintick'
   ]),
   
   'barmerge': new Set([
-    'gaps_off', 'gaps_on', 'gaps_left', 'gaps_right', 'gaps_middle',
+    'gaps_off', 'gaps_on',
     'lookahead_off', 'lookahead_on'
   ]),
   
@@ -363,10 +331,10 @@ export const NAMESPACE_MEMBERS = {
     'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD', 'CNY', 'KRW', 'INR', 'BRL', 'MXN', 'RUB', 'ZAR',
     'AED', 'ARS', 'BDT', 'BHD', 'CLP', 'COP', 'EGP', 'HKD', 'IDR', 'ILS',
     'MYR', 'PHP', 'QAR', 'SAR', 'SGD', 'THB', 'TWD', 'VND',
-    // Additional missing currencies from gap analysis
+    // Additional currencies from gap analysis
     'CZK', 'DKK', 'HUF', 'ISK', 'KES', 'KWD', 'LKR', 'MAD', 'NGN', 'NOK',
-    'PKR', 'PLN', 'RON', 'SEK', 'SZL', 'TRY', 'UAH', 'UGX', 'UYU', 'VES',
-    // Final missing currencies
+    'PKR', 'PLN', 'RON', 'SEK', 'TRY', 'VES',
+    // Final currencies
     'NONE', 'PEN', 'RSD', 'TND',
     // Cryptocurrencies (official names from Pine Script v6 docs)
     'BTC', 'ETH', 'USDT'
@@ -374,7 +342,7 @@ export const NAMESPACE_MEMBERS = {
   
   // Nested strategy constants
   'strategy.commission': new Set([
-    'percent', 'cash', 'cash_per_contract', 'cash_per_order'
+    'percent', 'cash_per_contract', 'cash_per_order'
   ]),
   
   'strategy.oca': new Set([
@@ -424,7 +392,7 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'shape': new Set([
-    'none', 'xcross', 'cross', 'triangleup', 'triangledown',
+    'xcross', 'cross', 'triangleup', 'triangledown',
     'flag', 'circle', 'arrowup', 'arrowdown', 'square', 'diamond',
     // Missing members from gap analysis
     'labeldown', 'labelup'
@@ -481,211 +449,24 @@ export const NAMESPACE_MEMBERS = {
     'bar_index', 'bar_time'
   ]),
   
-  // Built-in variable namespaces (these are incorrect - variables shouldn't have namespaces)
-  'ask': new Set([
-    'qualifier'
-  ]),
-  
-  'bar_index': new Set([
-    'qualifier'
-  ]),
-  
-  'bid': new Set([
-    'qualifier'
-  ]),
-  
-  'close': new Set([
-    'qualifier'
-  ]),
-  
-  'high': new Set([
-    'qualifier'
-  ]),
-  
-  'hl2': new Set([
-    'qualifier'
-  ]),
-  
-  'hlc3': new Set([
-    'qualifier'
-  ]),
-  
-  'hlcc4': new Set([
-    'qualifier'
-  ]),
-  
-  'last_bar_index': new Set([
-    'qualifier'
-  ]),
-  
-  'last_bar_time': new Set([
-    'qualifier'
-  ]),
-  
-  'low': new Set([
-    'qualifier'
-  ]),
-  
-  'ohlc4': new Set([
-    'qualifier'
-  ]),
-  
-  'open': new Set([
-    'qualifier'
-  ]),
-  
-  'second': new Set([
-    'qualifier'
-  ]),
-  
-  'time_tradingday': new Set([
-    'qualifier'
-  ]),
-  
-  'timenow': new Set([
-    'qualifier'
-  ]),
-  
-  'volume': new Set([
-    'qualifier'
-  ]),
-  
-  // Function namespaces with signatures
+  // Alert namespace (v6)
   'alert': new Set([
-    'arguments', 'signatures', 'freq_all', 'freq_once_per_bar', 'freq_once_per_bar_close'
+    'freq_all', 'freq_once_per_bar', 'freq_once_per_bar_close'
   ]),
   
-  'alertcondition': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'barcolor': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'bgcolor': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'bool': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'fill': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'fixnan': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'float': new Set([
-    'arguments', 'signatures'
-  ]),
-  
+  // Hline namespace (v6)
   'hline': new Set([
-    'arguments', 'signatures', 'style_dashed', 'style_dotted', 'style_solid'
+    'style_dashed', 'style_dotted', 'style_solid'
   ]),
   
-  'if': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'indicator': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'int': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'library': new Set([
-    'arguments', 'signatures'
-  ]),
-  
+  // Log namespace (v6)
   'log': new Set([
     'error', 'info', 'warning'
   ]),
   
-  'max_bars_back': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'na': new Set([
-    'arguments', 'signatures', 'qualifier'
-  ]),
-  
-  'nz': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'plotarrow': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'plotbar': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'plotcandle': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'plotchar': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'plotshape': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'reopenPositionAfter': new Set([
-    'arguments', 'signatures'
-  ]),
-  
+  // Runtime namespace (v6)
   'runtime': new Set([
     'error'
-  ]),
-  
-  'string': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  'time': new Set([
-    'arguments', 'signatures', 'qualifier'
-  ]),
-  
-  'time_close': new Set([
-    'arguments', 'signatures', 'qualifier'
-  ]),
-  
-  'timestamp': new Set([
-    'arguments', 'signatures'
-  ]),
-  
-  // Time-related namespaces
-  'dayofmonth': new Set([
-    'arguments', 'signatures', 'qualifier'
-  ]),
-  
-  'hour': new Set([
-    'arguments', 'signatures', 'qualifier'
-  ]),
-  
-  'minute': new Set([
-    'arguments', 'signatures', 'qualifier'
-  ]),
-  
-  'month': new Set([
-    'arguments', 'signatures', 'qualifier'
-  ]),
-  
-  'weekofyear': new Set([
-    'arguments', 'signatures', 'qualifier'
-  ]),
-  
-  'year': new Set([
-    'arguments', 'signatures', 'qualifier'
   ]),
   
 };

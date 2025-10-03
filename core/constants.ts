@@ -105,7 +105,7 @@ export const KEYWORDS = new Set([
 // Pine Script namespaces
 export const NAMESPACES = new Set([
   'ta','math','str','array','matrix','map','color','line','label','box','table',
-  'barstate','syminfo','timeframe','session','timezone','request','input','strategy','runtime',
+  'barstate','syminfo','timeframe','session','timezone','request','input','strategy',
   'chart', 'dividends', 'earnings', 'linefill', 'polyline',
   // additional namespaces for constants
   'adjustment','alert','backadjustment','barmerge','currency','dayofweek','display',
