@@ -12,8 +12,7 @@ import { EnhancedModularValidator } from '../..';
 
 describe('String Functions Validation (TDD)', () => {
   const createValidator = () => new EnhancedModularValidator({
-    version: '6',
-    scriptType: 'indicator',
+    targetVersion: 6,
     strictMode: true,
     enableWarnings: true
   });

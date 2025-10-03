@@ -17,13 +17,11 @@ describe('UDT Validation (TDD)', () => {
     });
 
     context = {
+      rawLines: [],
       cleanLines: [],
       lines: [],
-      lineFeeds: [],
-      comments: [],
-      regions: [],
-      userFunctions: new Map(),
-      functionCalls: [],
+      usedVars: new Set(),
+      declaredVars: new Map(),
       functionNames: new Set(),
       functionParams: new Map(),
       methodNames: new Set(),
@@ -31,14 +29,19 @@ describe('UDT Validation (TDD)', () => {
       hasVersion: false,
       firstVersionLine: 0,
       scriptType: 'indicator',
-      isLibrary: false
+      version: 6,
     };
 
     config = {
       targetVersion: 6,
-      strictMode: true,
+      allowDeprecated: false,
+      enableTypeChecking: true,
+      enableControlFlowAnalysis: true,
       enablePerformanceAnalysis: true,
-      enableStyleChecks: true
+      enableStyleChecks: true,
+      strictMode: true,
+      customRules: [],
+      ignoredCodes: []
     };
   });
 
@@ -64,7 +67,7 @@ plot(close)`;
       
       const result = validator.validate(context, config);
       // Only check UDT-specific errors, not type inference errors
-      const udtErrors = result.errors.filter(e => e.code.startsWith('PSV6-UDT') || e.code.startsWith('PSV6-METHOD'));
+      const udtErrors = result.errors.filter(e => e.code?.startsWith('PSV6-UDT') || e.code?.startsWith('PSV6-METHOD'));
       expect(udtErrors).toEqual([]);
     });
 
@@ -297,7 +300,7 @@ plot(close)`;
       
       const result = validator.validate(context, config);
       // Only check UDT-specific errors, not type inference errors
-      const udtErrors = result.errors.filter(e => e.code.startsWith('PSV6-UDT') || e.code.startsWith('PSV6-METHOD'));
+      const udtErrors = result.errors.filter(e => e.code?.startsWith('PSV6-UDT') || e.code?.startsWith('PSV6-METHOD'));
       expect(udtErrors).toEqual([]);
     });
 
@@ -327,7 +330,7 @@ plot(close)`;
       
       const result = validator.validate(context, config);
       // Only check UDT-specific errors, not type inference errors
-      const udtErrors = result.errors.filter(e => e.code.startsWith('PSV6-UDT') || e.code.startsWith('PSV6-METHOD'));
+      const udtErrors = result.errors.filter(e => e.code?.startsWith('PSV6-UDT') || e.code?.startsWith('PSV6-METHOD'));
       expect(udtErrors).toEqual([]);
     });
   });

@@ -17,19 +17,19 @@ describe('History Referencing Validation (TDD)', () => {
     });
 
     context = {
+      rawLines: [],
       cleanLines: [],
       lines: [],
-      userFunctions: new Map(),
-      functionCalls: [],
+      usedVars: new Set(),
+      declaredVars: new Map(),
       functionNames: new Set(),
       functionParams: new Map(),
       methodNames: new Set(),
       typeMap: new Map(),
-      udtTypes: new Map(),
-      varipVariables: new Set(),
-      switchStatements: [],
-      whileLoops: [],
-      requestCalls: []
+      scriptType: null,
+      version: 6,
+      hasVersion: false,
+      firstVersionLine: null,
     };
 
     config = {

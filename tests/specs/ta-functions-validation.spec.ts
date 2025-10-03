@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { EnhancedModularValidator } from '../../EnhancedModularValidator';
 
 const createValidator = () => new EnhancedModularValidator({
-  version: '6',
-  scriptType: 'indicator',
+  targetVersion: 6,
   strictMode: true,
 });
 

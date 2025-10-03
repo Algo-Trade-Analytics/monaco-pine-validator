@@ -421,7 +421,7 @@ plot(close)`;
       // For this test, we only care about matrix-specific info messages
       // Function parameter type inference is handled by other validators
       const matrixInfo = result.info.filter(info => 
-        info.code.startsWith('PSV6-MATRIX-')
+        info.code?.startsWith('PSV6-MATRIX-')
       );
       
       expect(matrixInfo.some(i => i.code === 'PSV6-MATRIX-MEMORY-SUGGESTION')).toBe(true);
@@ -475,7 +475,7 @@ plot(close)`;
       // For this test, we only care about matrix-specific errors
       // Function parameter type inference is handled by other validators
       const matrixErrors = result.errors.filter(error => 
-        error.code.startsWith('PSV6-MATRIX-')
+        error.code?.startsWith('PSV6-MATRIX-')
       );
       
       expect(matrixErrors).toEqual([]);

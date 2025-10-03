@@ -5,7 +5,6 @@ import { runModuleValidation } from './test-utils';
 const validate = (code: string) =>
   runModuleValidation(new StrategyFunctionsValidator(), code, {
     targetVersion: 6,
-    scriptType: 'strategy',
     strictMode: true,
     enablePerformanceAnalysis: true,
   });

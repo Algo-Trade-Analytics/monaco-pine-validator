@@ -10,18 +10,31 @@ describe('LinefillValidator', () => {
   beforeEach(() => {
     validator = new LinefillValidator();
     context = {
+      rawLines: [],
       lines: [],
       cleanLines: [],
-      typeMap: new Map(),
+      usedVars: new Set(),
+      declaredVars: new Map(),
+      methodNames: new Set(),
       functionNames: new Set(),
-      imports: new Map(),
-      exports: new Set()
+      functionParams: new Map(),
+      typeMap: new Map(),
+      hasVersion: false,
+      firstVersionLine: null,
+      scriptType: null,
+      version: 6,
     };
     config = {
       targetVersion: 6,
+      allowDeprecated: false,
+      enableTypeChecking: true,
+      enableControlFlowAnalysis: true,
       enablePerformanceAnalysis: true,
-      maxComplexity: 100,
-      maxNesting: 10
+      enablePerformanceChecks: true,
+      enableStyleChecks: true,
+      strictMode: true,
+      customRules: [],
+      ignoredCodes: []
     };
   });
 

@@ -17,29 +17,31 @@ describe('Text Formatting Validation (TDD)', () => {
     });
 
     context = {
+      rawLines: [],
       cleanLines: [],
       lines: [],
-      lineFeeds: [],
-      comments: [],
-      regions: [],
-      userFunctions: new Map(),
-      functionCalls: [],
+      usedVars: new Set(),
+      declaredVars: new Map(),
       functionNames: new Set(),
       functionParams: new Map(),
       methodNames: new Set(),
       typeMap: new Map(),
-      udtTypes: new Map(),
-      varipVariables: new Set(),
-      switchStatements: [],
-      whileLoops: [],
-      requestCalls: []
+      scriptType: null,
+      version: 6,
+      hasVersion: false,
+      firstVersionLine: null,
     };
 
     config = {
       targetVersion: 6,
-      strictMode: true,
+      allowDeprecated: false,
+      enableTypeChecking: true,
+      enableControlFlowAnalysis: true,
       enablePerformanceAnalysis: true,
-      enableStyleChecks: true
+      enableStyleChecks: true,
+      strictMode: true,
+      customRules: [],
+      ignoredCodes: []
     };
   });
 
@@ -60,7 +62,7 @@ plot(close)`;
       
       const result = validator.validate(context, config);
       // Only check text formatting-specific errors
-      const textErrors = result.errors.filter(e => e.code.startsWith('PSV6-TEXT'));
+      const textErrors = result.errors.filter(e => e.code?.startsWith('PSV6-TEXT'));
       expect(textErrors).toEqual([]);
     });
 
@@ -114,7 +116,7 @@ plot(close)`;
       
       const result = validator.validate(context, config);
       // Only check text formatting-specific errors
-      const textErrors = result.errors.filter(e => e.code.startsWith('PSV6-TEXT'));
+      const textErrors = result.errors.filter(e => e.code?.startsWith('PSV6-TEXT'));
       expect(textErrors).toEqual([]);
     });
 
@@ -167,7 +169,7 @@ plot(close)`;
       
       const result = validator.validate(context, config);
       // Only check text formatting-specific errors
-      const textErrors = result.errors.filter(e => e.code.startsWith('PSV6-TEXT'));
+      const textErrors = result.errors.filter(e => e.code?.startsWith('PSV6-TEXT'));
       expect(textErrors).toEqual([]);
     });
 
@@ -255,7 +257,7 @@ plot(close)`;
       
       const result = validator.validate(context, config);
       // Only check text formatting-specific errors
-      const textErrors = result.errors.filter(e => e.code.startsWith('PSV6-TEXT'));
+      const textErrors = result.errors.filter(e => e.code?.startsWith('PSV6-TEXT'));
       expect(textErrors).toEqual([]);
     });
 
@@ -275,7 +277,7 @@ plot(close)`;
       
       const result = validator.validate(context, config);
       // Only check text formatting-specific errors
-      const textErrors = result.errors.filter(e => e.code.startsWith('PSV6-TEXT'));
+      const textErrors = result.errors.filter(e => e.code?.startsWith('PSV6-TEXT'));
       expect(textErrors).toEqual([]);
     });
   });
