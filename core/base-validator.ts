@@ -29,6 +29,7 @@ import { buildScopeGraph } from './ast/scope';
 import { inferTypes } from './ast/type-inference';
 import { buildControlFlowGraph } from './ast/control-flow';
 import { preCheckSyntax } from './ast/syntax-pre-checker';
+import { validateIndentationWithAST } from './ast/indentation-validator-ast';
 
 type ConfigLayer = Partial<ValidatorConfig> | undefined;
 
@@ -290,6 +291,21 @@ export abstract class BaseValidator {
         this.context.symbolTable = symbolTable;
         this.context.typeEnvironment = inferTypes(result.ast);
         this.context.controlFlowGraph = buildControlFlowGraph(result.ast);
+
+        // AST-based indentation validation
+        // ✅ Fixed: Switch expression handling
+        // ✅ Fixed: Nested block statements  
+        // ✅ Fixed: Arrow function handling
+        // ✅ Fixed: Else-if handling
+        // ✅ Fixed: Mixed tabs/spaces detection
+        const indentDiagnostics = validateIndentationWithAST(source, result.ast);
+        indentDiagnostics.forEach(diagnostic => {
+          if (diagnostic.severity === 'warning') {
+            this.addWarning(diagnostic.line, diagnostic.column, diagnostic.message, diagnostic.code, diagnostic.suggestion);
+          } else {
+            this.addError(diagnostic.line, diagnostic.column, diagnostic.message, diagnostic.code);
+          }
+        });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

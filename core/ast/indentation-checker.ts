@@ -34,9 +34,12 @@ export function checkIndentation(sourceCode: string): ValidationError[] {
   let firstBodyLine = false;
   let usesSpaces = false;
   let usesTabs = false;
+  
+  // Global ternary tracking (works for both top-level and inside blocks)
   let ternaryIndents: number[] = []; // Track all ternary line indents to find the mode
   let ternaryLineNumbers: number[] = []; // Track actual line numbers
   let inTernaryChain = false;
+  
   let functionCallIndents: number[] = []; // Track multi-line function call parameter indents
   let functionCallLineNumbers: number[] = []; // Track line numbers
   let inFunctionCall = false;
@@ -69,6 +72,30 @@ export function checkIndentation(sourceCode: string): ValidationError[] {
     const indent = getIndentationLength(line);
     const trimmed = line.trim();
     
+    // Check for ternary operator lines (works for both top-level and inside blocks)
+    // Single-line ternary: has both ? and : on the same line - don't track these
+    const isSingleLineTernary = trimmed.includes('?') && trimmed.includes(':');
+    const isMultiLineTernaryStart = trimmed.endsWith('?');
+    const isTernaryContinuation = trimmed.startsWith('?') || 
+                                 (trimmed.includes(':') && !trimmed.includes('=') && inTernaryChain);
+    
+    // Track ternary chain globally (only for multi-line ternaries)
+    if (isMultiLineTernaryStart || isTernaryContinuation) {
+      if (!inTernaryChain) {
+        inTernaryChain = true;
+        ternaryIndents = [];
+        ternaryLineNumbers = [];
+      }
+      ternaryIndents.push(indent);
+      ternaryLineNumbers.push(lineNum);
+    } else if (inTernaryChain && !isSingleLineTernary) {
+      // End of ternary chain - validate consistency
+      validateTernaryChain(ternaryIndents, ternaryLineNumbers, errors);
+      ternaryIndents = [];
+      ternaryLineNumbers = [];
+      inTernaryChain = false;
+    }
+    
     // Detect block start (function, if, for, while)
     const isBlockStart = trimmed.includes('=>') || 
                          trimmed.startsWith('if ') ||
@@ -76,6 +103,11 @@ export function checkIndentation(sourceCode: string): ValidationError[] {
                          trimmed.startsWith('while ');
     
     if (isBlockStart) {
+      // Before starting new block, validate any pending ternary chain
+      if (inTernaryChain && ternaryIndents.length > 1) {
+        validateTernaryChain(ternaryIndents, ternaryLineNumbers, errors);
+      }
+      
       inBlock = true;
       blockIndent = indent;
       firstBodyLine = true;
@@ -187,33 +219,11 @@ export function checkIndentation(sourceCode: string): ValidationError[] {
         continue; // Don't check other rules while in function call
       }
       
-      // Check for ternary operator lines
-      const hasTernary = (trimmed.includes('?') && trimmed.includes(':')) || 
-                         trimmed.endsWith(':');
-      const isTernaryContinuation = trimmed.startsWith('?') || trimmed.startsWith(':');
-      
-      // Track ternary chain
-      if (hasTernary || isTernaryContinuation) {
-        if (!inTernaryChain) {
-          inTernaryChain = true;
-          ternaryIndents = [];
-          ternaryLineNumbers = [];
-        }
-        ternaryIndents.push(indent);
-        ternaryLineNumbers.push(lineNum);
-      } else if (inTernaryChain) {
-        // End of ternary chain - validate consistency
-        validateTernaryChain(ternaryIndents, ternaryLineNumbers, errors);
-        ternaryIndents = [];
-        ternaryLineNumbers = [];
-        inTernaryChain = false;
-      }
-      
       // For non-ternary, non-function-call lines, check against expected indent
       // Skip lines that are part of multi-line function calls (they have their own validation)
       const isPartOfMultiLineCall = multiLineCallLines.has(lineNum);
       
-      if (!hasTernary && !inTernaryChain && !isPartOfMultiLineCall && indent !== expectedIndent) {
+      if (!isSingleLineTernary && !isMultiLineTernaryStart && !inTernaryChain && !isPartOfMultiLineCall && indent !== expectedIndent) {
         const diff = Math.abs(indent - expectedIndent);
         errors.push({
           line: lineNum,
@@ -340,7 +350,11 @@ function getIndentationLength(line: string): number {
 }
 
 /**
- * Validate that all lines in a ternary chain have consistent indentation
+ * Validate ternary chain indentation according to Pine Script rules:
+ * - Wrapped/continuation lines must be indented (> first line)
+ * - Wrapped lines must NOT be indented with multiples of 4 (4, 8, 12, 16, etc.)
+ * - Any other indentation (1, 2, 3, 5, 6, 7, 9, 10, 11, etc.) is valid
+ * - Consistency is NOT required - different lines can have different indentation
  */
 function validateTernaryChain(
   ternaryIndents: number[],
@@ -349,23 +363,61 @@ function validateTernaryChain(
 ): void {
   if (ternaryIndents.length <= 1) return;
   
-  const mode = getModeIndent(ternaryIndents);
+  // Get the base indent (first line of ternary expression we detected)
+  const baseIndent = ternaryIndents[0];
   
-  // Check if any line deviates from the mode
-  for (let j = 0; j < ternaryIndents.length; j++) {
-    if (ternaryIndents[j] !== mode) {
+  // If the first detected line has indentation that's NOT a multiple of 4,
+  // it's likely a continuation line itself (the actual base line came before).
+  // In this case, all lines in the chain are continuation lines at the same level,
+  // so we only check that none use multiples of 4.
+  const firstLineIsContinuation = baseIndent > 0 && baseIndent % 4 !== 0;
+  
+  if (firstLineIsContinuation) {
+    // All lines are continuation lines - just check they don't use multiples of 4
+    for (let j = 0; j < ternaryIndents.length; j++) {
+      const indent = ternaryIndents[j];
       const lineNum = lineNumbers[j];
-      const diff = Math.abs(ternaryIndents[j] - mode);
-      errors.push({
-        line: lineNum,
-        column: ternaryIndents[j] + 1,
-        message: `Inconsistent indentation in ternary chain (expected ${mode} spaces, got ${ternaryIndents[j]} spaces)`,
-        severity: 'error',
-        code: 'PSV6-INDENT-INCONSISTENT',
-        suggestion: ternaryIndents[j] > mode
-          ? `Remove ${diff} space${diff > 1 ? 's' : ''} to match other lines in this ternary chain.`
-          : `Add ${diff} space${diff > 1 ? 's' : ''} to match other lines in this ternary chain.`
-      });
+      
+      if (indent % 4 === 0 && indent > 0) {
+        errors.push({
+          line: lineNum,
+          column: indent + 1,
+          message: `Line wrapping: continuation line indentation cannot be a multiple of 4 (got ${indent} spaces)`,
+          severity: 'error',
+          code: 'PSV6-INDENT-INCONSISTENT',
+          suggestion: `Change indentation to ${indent + 1} or ${indent - 1} spaces (must not be multiple of 4).`
+        });
+      }
+    }
+  } else {
+    // First line is the base - validate continuation lines relative to it
+    for (let j = 1; j < ternaryIndents.length; j++) {
+      const indent = ternaryIndents[j];
+      const lineNum = lineNumbers[j];
+      
+      // Rule 1: Continuation line must be indented MORE than the base line
+      if (indent <= baseIndent) {
+        errors.push({
+          line: lineNum,
+          column: indent + 1,
+          message: `Line wrapping: continuation line must be indented more than the first line (expected > ${baseIndent} spaces, got ${indent} spaces)`,
+          severity: 'error',
+          code: 'PSV6-INDENT-INCONSISTENT',
+          suggestion: `Add at least ${baseIndent + 1 - indent} space${baseIndent + 1 - indent > 1 ? 's' : ''} to indent this continuation line.`
+        });
+      }
+      // Rule 2: Continuation line indentation must NOT be a multiple of 4
+      // (only check if it passes Rule 1)
+      else if (indent % 4 === 0) {
+        errors.push({
+          line: lineNum,
+          column: indent + 1,
+          message: `Line wrapping: continuation line indentation cannot be a multiple of 4 (got ${indent} spaces)`,
+          severity: 'error',
+          code: 'PSV6-INDENT-INCONSISTENT',
+          suggestion: `Change indentation to ${indent + 1} or ${indent - 1} spaces (must not be multiple of 4).`
+        });
+      }
     }
   }
 }

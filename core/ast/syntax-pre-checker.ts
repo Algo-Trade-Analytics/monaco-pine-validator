@@ -52,19 +52,13 @@ const SYNTAX_PATTERNS: SyntaxPattern[] = [
 
 /**
  * Pre-check source code for common syntax errors before parsing
+ * 
+ * Note: Indentation checking is now done via AST-based validation
  */
 export function preCheckSyntax(sourceCode: string): ValidationError[] {
   const errors: ValidationError[] = [];
   
-  // STEP 1: Check indentation (critical in Pine Script)
-  const indentErrors = checkIndentation(sourceCode);
-  if (indentErrors.length > 0) {
-    errors.push(...indentErrors);
-    // Return early - indentation errors prevent proper parsing
-    return errors;
-  }
-  
-  // STEP 2: Check for empty parameters and other patterns
+  // Check for empty parameters and other patterns
   const lines = sourceCode.split('\n');
   
   lines.forEach((line, lineIndex) => {
