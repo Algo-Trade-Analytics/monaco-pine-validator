@@ -99,9 +99,6 @@ plot(close)`;
       expect(mixedError?.message).toContain('Mixed tabs and spaces');
     });
 
-    it.skip('duplicate test - removed', () => {
-      // This is a duplicate of the previous test
-    });
   });
 
   describe('Correct Indentation Acceptance', () => {

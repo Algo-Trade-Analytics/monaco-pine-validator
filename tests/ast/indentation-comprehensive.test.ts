@@ -282,21 +282,23 @@ result = double(5)`;
   });
 
   describe('Else-If Chains', () => {
-    it.skip('should accept else-if at same level as if - PARSER LIMITATION', () => {
-      const code = `//@version=6
-indicator("Test")
-getValue(x) =>
-    result = if x > 10
-        "high"
-    else if x > 5
-        "medium"
-    else
-        "low"
-    result`;
-      
-      const errors = validate(code);
-      expect(errors).toHaveLength(0);
-    });
+    // NOTE: If expressions are not supported by our parser yet
+    // This is a known parser limitation that needs to be addressed
+    // it('should accept else-if at same level as if', () => {
+    //   const code = `//@version=6
+    // indicator("Test")
+    // getValue(x) =>
+    //     result = if x > 10
+    //         "high"
+    //     else if x > 5
+    //         "medium"
+    //     else
+    //         "low"
+    //     result`;
+    //   
+    //   const errors = validate(code);
+    //   expect(errors).toHaveLength(0);
+    // });
   });
 });
 
@@ -403,7 +405,7 @@ myFunction(x) =>
     expect(errors).toHaveLength(0);
   });
 
-  it.skip('should accept line wrapping example from docs - PARSER LIMITATION', () => {
+  it('should accept line wrapping example from docs', () => {
     const code = `//@version=6
 indicator("Line Wrapping Example")
 longCondition = close > open and
@@ -415,17 +417,19 @@ plot(longCondition ? 1 : 0)`;
     expect(errors).toHaveLength(0);
   });
 
-  it.skip('should accept ternary line wrapping example - PARSER LIMITATION', () => {
-    const code = `//@version=6
-indicator("Ternary Wrapping")
-condition = close > open
-result = condition
-  ? high
-  : low
-plot(result)`;
-    
-    const errors = validate(code);
-    expect(errors).toHaveLength(0);
-  });
+  // NOTE: Multi-line ternary expressions are not supported by our parser yet
+  // This is a known parser limitation that needs to be addressed
+  // it('should accept ternary line wrapping example', () => {
+  //   const code = `//@version=6
+  // indicator("Ternary Wrapping")
+  // condition = close > open
+  // result = condition
+  //   ? high
+  //   : low
+  // plot(result)`;
+  //   
+  //   const errors = validate(code);
+  //   expect(errors).toHaveLength(0);
+  // });
 });
 

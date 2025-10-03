@@ -58,7 +58,7 @@ describe('UltimateValidator Enhanced Features', () => {
       expectHas(result, { errors: ['PSV6-FUTURE-DATA'] });
     });
 
-    it.skip('warns on unconfirmed HTF data usage - FEATURE NOT IMPLEMENTED', () => {
+    it('warns on unconfirmed HTF data usage', () => {
       const code = `//@version=6
 indicator("Test")
 htf_close = request.security(syminfo.tickerid, timeframe.period, close)
@@ -71,7 +71,7 @@ if htf_close > htf_close[1]
   });
 
   describe('Strategy-Specific Validation', () => {
-    it.skip('warns when strategy lacks commission settings - FEATURE NOT IMPLEMENTED', () => {
+    it('warns when strategy lacks commission settings', () => {
       const code = `//@version=6
 strategy("Test Strategy", overlay=true)
 if close > open
@@ -93,7 +93,7 @@ if close > open
       expect(result.warnings.filter(w => w.code === 'PSV6-STRATEGY-REALISM')).toEqual([]);
     });
 
-    it.skip('suggests risk management for strategies - FEATURE NOT IMPLEMENTED', () => {
+    it('suggests risk management for strategies', () => {
       const code = `//@version=6
 strategy("Test Strategy", overlay=true)
 if close > open
@@ -103,7 +103,7 @@ if close > open
       expectHas(result, { info: ['PSV6-STRATEGY-RISK'] });
     });
 
-    it.skip('warns on excessive position size - FEATURE NOT IMPLEMENTED', () => {
+    it('warns on excessive position size', () => {
       const code = `//@version=6
 strategy("Test Strategy", overlay=true)
 if close > open
@@ -113,7 +113,7 @@ if close > open
       expectHas(result, { warnings: ['PSV6-STRATEGY-POSITION-SIZE'] });
     });
 
-    it.skip('warns on missing stop loss in strategy - FEATURE NOT IMPLEMENTED', () => {
+    it('warns on missing stop loss in strategy', () => {
       const code = `//@version=6
 strategy("Test Strategy", overlay=true)
 if close > open
@@ -204,7 +204,7 @@ plot(result)`;
       expectHas(result, { warnings: ['PSV6-MEMORY-ARRAYS'] });
     });
 
-    it.skip('warns on expensive TA functions in nested loops - FEATURE NOT IMPLEMENTED', () => {
+    it('warns on expensive TA functions in nested loops', () => {
       const code = `//@version=6
 indicator("Test")
 for i = 0 to 10
@@ -214,7 +214,7 @@ plot(highest_val)`;
       
       // Performance issues in nested loops are warnings, not errors
       const result = validator.validate(code);
-      expectHas(result, { warnings: ['PSV6-PERF-NESTED-TA'] });
+      expectHas(result, { warnings: ['PSV6-FUNCTION-PERF-LOOP', 'PSV6-TA-PERF-LOOP'] });
     });
 
     it('warns on large collection allocations', () => {
@@ -229,7 +229,7 @@ plot(highest_val)`;
       expectHas(result, { warnings: ['PSV6-MEMORY-LARGE-COLLECTION'] });
     });
 
-    it.skip('warns on nested loops with high complexity - FEATURE NOT IMPLEMENTED', () => {
+    it('warns on nested loops with high complexity', () => {
       const code = `//@version=6
 indicator("Test")
 for i = 0 to 1000

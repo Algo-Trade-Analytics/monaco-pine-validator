@@ -107,7 +107,12 @@ export function preCheckSyntax(sourceCode: string): ValidationError[] {
     // But exclude function declarations (ending with ) =>, => )
     const isFunctionDeclaration = /\)\s*=>|=>\s*$/.test(trimmed);
     
-    if (!isFunctionDeclaration && /[=+\-*/%<>!&|,(]$/.test(trimmed)) {
+    // Only check for line continuation if the line ends with an operator/punctuation
+    // but NOT if it's part of a comment (ends with // or contains //)
+    const hasComment = trimmed.includes('//');
+    const endsWithOperator = /[=+\-*/%<>!&|,(]$/.test(trimmed);
+    
+    if (!isFunctionDeclaration && endsWithOperator && !hasComment) {
       const nextIndent = nextLine.match(/^(\s*)/)?.[0].replace(/\t/g, '    ').length || 0;
       
       // Rule 1: At global scope (indent 0), continuation at multiple of 4 (including 0) is likely invalid

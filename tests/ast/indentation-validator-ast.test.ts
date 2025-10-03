@@ -5,12 +5,18 @@
 import { describe, it, expect } from 'vitest';
 import { validateIndentationWithAST } from '../../core/ast/indentation-validator-ast';
 import { ChevrotainAstService } from '../../core/ast/service';
+import { EnhancedModularValidator } from '../../EnhancedModularValidator';
 
 const astService = new ChevrotainAstService();
 
 function parseCode(code: string) {
   const result = astService.parse(code, { filename: 'test.pine', allowErrors: true });
   return result.ast;
+}
+
+function validateWithFullValidator(code: string) {
+  const validator = new EnhancedModularValidator();
+  return validator.validate(code);
 }
 
 describe('ASTIndentationValidator', () => {
@@ -203,18 +209,17 @@ plot(longValue)`;
       expect(errors).toHaveLength(0);
     });
 
-    it.skip('should error on line wrapping with multiple of 4 - PARSER LIMITATION', () => {
+    it('should error on line wrapping with multiple of 4', () => {
       // Parser treats line 4 as separate statement, not continuation
       const code = `//@version=6
 indicator("Test")
 longValue =
     ta.sma(close, 20)`;
 
-      const ast = parseCode(code);
-      const errors = validateIndentationWithAST(code, ast);
+      const result = validateWithFullValidator(code);
+      const wrapErrors = result.errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4');
 
-      expect(errors.length).toBeGreaterThan(0);
-      expect(errors.some(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toBe(true);
+      expect(wrapErrors.length).toBeGreaterThan(0);
     });
 
     it('should accept multi-line ternary with valid wrapping', () => {
@@ -232,7 +237,7 @@ plot(close, color=col)`;
       expect(errors).toHaveLength(0);
     });
 
-    it.skip('should error on multi-line ternary with multiple of 4 - PARSER LIMITATION', () => {
+    it('should error on multi-line ternary with multiple of 4', () => {
       // Parser treats these as separate statements, not continuation
       const code = `//@version=6
 indicator("Test")
@@ -240,11 +245,10 @@ col =
     close > open
     ? color.green`;
 
-      const ast = parseCode(code);
-      const errors = validateIndentationWithAST(code, ast);
+      const result = validateWithFullValidator(code);
+      const wrapErrors = result.errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4');
 
-      expect(errors.length).toBeGreaterThan(0);
-      expect(errors.some(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toBe(true);
+      expect(wrapErrors.length).toBeGreaterThan(0);
     });
   });
 
