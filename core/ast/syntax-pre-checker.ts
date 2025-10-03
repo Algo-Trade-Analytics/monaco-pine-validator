@@ -61,6 +61,85 @@ export function preCheckSyntax(sourceCode: string): ValidationError[] {
   // Check for empty parameters and other patterns
   const lines = sourceCode.split('\n');
   
+  // First pass: Check for closing parenthesis at multiples of 4
+  // This is a TradingView rule that our parser doesn't enforce
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    
+    // Check if line is only a closing parenthesis or bracket
+    if (trimmed === ')' || trimmed === ']') {
+      const indent = line.match(/^(\s*)/)?.[0].replace(/\t/g, '    ').length || 0;
+      
+      // If at a multiple of 4, it's invalid in TradingView
+      if (indent % 4 === 0) {
+        const suggested = indent > 0 ? indent - 1 : 1;
+        errors.push({
+          line: i + 1,
+          column: indent + 1,
+          message: `Closing ${trimmed} at column ${indent} (multiple of 4) will fail in TradingView. Use non-multiple-of-4 indentation for line continuations.`,
+          severity: 'error',
+          code: 'PSV6-SYNTAX-CLOSING-PAREN',
+          suggestion: `Move to column ${suggested} (or any non-multiple-of-4 like ${indent + 1}, ${indent + 2}).`
+        });
+      }
+    }
+  }
+  
+  // Second pass: Check for line wrapping with multiples of 4
+  // Pattern: Line ends with operator/= and next line is at wrong indent
+  for (let i = 0; i < lines.length - 1; i++) {
+    const line = lines[i];
+    const nextLine = lines[i + 1];
+    
+    if (!line || !nextLine) continue;
+    
+    const lineIndent = line.match(/^(\s*)/)?.[0].replace(/\t/g, '    ').length || 0;
+    const trimmed = line.trim();
+    const nextTrimmed = nextLine.trim();
+    
+    // Skip comments and empty lines
+    if (trimmed.startsWith('//') || trimmed === '' || nextTrimmed.startsWith('//') || nextTrimmed === '') {
+      continue;
+    }
+    
+    // Check if line ends with operators/punctuation that suggest continuation
+    // But exclude function declarations (ending with ) =>, => )
+    const isFunctionDeclaration = /\)\s*=>|=>\s*$/.test(trimmed);
+    
+    if (!isFunctionDeclaration && /[=+\-*/%<>!&|,(]$/.test(trimmed)) {
+      const nextIndent = nextLine.match(/^(\s*)/)?.[0].replace(/\t/g, '    ').length || 0;
+      
+      // Rule 1: At global scope (indent 0), continuation at multiple of 4 is likely invalid
+      if (lineIndent === 0 && nextIndent > 0 && nextIndent % 4 === 0) {
+        const suggested = nextIndent - 1;
+        errors.push({
+          line: i + 2,
+          column: nextIndent + 1,
+          message: `Line continuation at column ${nextIndent} (multiple of 4) will likely fail in TradingView. Use non-multiple-of-4 indentation.`,
+          severity: 'warning',
+          code: 'PSV6-INDENT-WRAP-MULTIPLE-OF-4',
+          suggestion: `Try ${suggested} spaces or ${nextIndent + 1} spaces (non-multiple-of-4).`
+        });
+      }
+      // Rule 2: Inside a block (indent = multiple of 4), continuation at same level or next block level is invalid
+      else if (lineIndent % 4 === 0 && lineIndent > 0) {
+        // If continuation is at same block level (lineIndent) or next block level (lineIndent + 4)
+        if (nextIndent === lineIndent || nextIndent === lineIndent + 4) {
+          const suggested = lineIndent + 1;
+          errors.push({
+            line: i + 2,
+            column: nextIndent + 1,
+            message: `Line continuation inside block cannot be at ${nextIndent} spaces. Must be beyond block level (${lineIndent}) using non-multiple-of-4.`,
+            severity: 'warning',
+            code: 'PSV6-INDENT-WRAP-BLOCK',
+            suggestion: `Try ${suggested} spaces or ${lineIndent + 2} spaces (block + non-multiple-of-4).`
+          });
+        }
+      }
+    }
+  }
+  
   lines.forEach((line, lineIndex) => {
     const lineNum = lineIndex + 1;
     

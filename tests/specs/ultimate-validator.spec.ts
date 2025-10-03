@@ -129,14 +129,13 @@ y = close[1`;
     // PS009 and PS010 might not trigger due to early parser error detection
   });
 
-  it('warns on mixed tabs/spaces and inconsistent indent', () => {
+  it('errors on mixed tabs/spaces (PSI02 is now an error like PS018 in TV)', () => {
     const code = `//@version=6
 indicator("Indent")
 \tif close > open
       plot(close)`;
     const { codes } = run(code);
-    expectHas(codes, { warnings: ['PSI02'] }); // Mixed tabs/spaces should be detected
-    // PS018 might not trigger in this specific case
+    expectHas(codes, { errors: ['PSI02'] }); // Mixed tabs/spaces is an error (like PS018 in TV)
   });
 });
 

@@ -97,7 +97,10 @@ export const Codes = {
   INVALID_OPERATOR: 'PSO01',
   ASSIGNMENT_IN_CONDITION: 'PSO02',
   MIXED_TABS_SPACES: 'PSI02',
-  CURLY_BRACES: 'PS011'
+  CURLY_BRACES: 'PS011',
+  
+  // Syntax pre-check codes
+  SYNTAX_CLOSING_PAREN: 'PSV6-SYNTAX-CLOSING-PAREN'
 } as const;
 
 export type Code = (typeof Codes)[keyof typeof Codes];

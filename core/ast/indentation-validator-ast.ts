@@ -111,11 +111,11 @@ export class ASTIndentationValidator {
         firstSpaceLine = i + 1;
       }
 
-      // If we've seen both tabs and spaces, report it
+      // If we've seen both tabs and spaces, report it as an error
       if (firstTabLine > 0 && firstSpaceLine > 0) {
-        const warningLine = Math.max(firstTabLine, firstSpaceLine);
-        this.addWarning(
-          warningLine,
+        const errorLine = Math.max(firstTabLine, firstSpaceLine);
+        this.addError(
+          errorLine,
           1,
           `Mixed tabs and spaces in indentation (tabs on line ${firstTabLine}, spaces on line ${firstSpaceLine})`,
           'PSI02'
@@ -180,6 +180,7 @@ export class ASTIndentationValidator {
    * Rules:
    * - Function header at global scope: column 0
    * - Function body: header indent + 4
+   * - Check for invalid line wrapping after =>
    */
   private validateFunctionDeclaration(node: FunctionDeclarationNode): void {
     const headerLine = node.loc.start.line - 1; // 0-indexed
@@ -200,6 +201,10 @@ export class ASTIndentationValidator {
       );
     }
 
+    // Check for invalid line wrapping after function declaration
+    // This returns true if the function is in wrap format (and validation is complete)
+    const isWrapFormat = this.validateFunctionLineWrapping(node);
+
     // Push new context for function body
     const bodyContext: IndentationContext = {
       blockIndent: headerIndent + 4,
@@ -213,7 +218,8 @@ export class ASTIndentationValidator {
     this.context = bodyContext;
 
     // Validate function body
-    if (node.body) {
+    // Skip if wrap format (already validated) or arrow function (single line)
+    if (node.body && !isWrapFormat) {
       // For arrow functions, the body can be on the same line as the header
       // In that case, don't validate indentation (it's part of the function declaration line)
       const bodyStartLine = node.body.loc.start.line;
@@ -264,9 +270,9 @@ export class ASTIndentationValidator {
     if (node.fields) {
       for (const field of node.fields) {
         // Fields can be TypeField or FunctionDeclaration (methods)
-        if (field.kind === 'FunctionDeclaration') {
+        if ((field as any).kind === 'FunctionDeclaration') {
           // Method inside type - validate with current context
-          this.validateNode(field);
+          this.validateNode(field as any);
         }
         // TypeField nodes don't need indentation validation (handled by parser)
       }
@@ -350,15 +356,48 @@ export class ASTIndentationValidator {
         }
       }
 
-      // Continuation lines: must use wrap indentation (non-multiple-of-4)
+      // Check if this is a single expression with consistent indentation vs a wrapped statement
+      let hasConsistentIndent = true;
+      let firstNonEmptyIndent = stmtIndent;
+      
+      // Check if all non-empty lines have the same indentation
       for (let lineIdx = stmtStartLine + 1; lineIdx <= stmtEndLine; lineIdx++) {
         const line = this.sourceLines[lineIdx];
         if (!line || line.trim() === '' || line.trim().startsWith('//')) {
-          continue; // Skip empty lines and comments
+          continue;
         }
-
+        
         const lineIndent = this.getLineIndent(lineIdx);
-        this.validateWrapIndentation(lineIdx + 1, lineIndent, expectedIndent);
+        if (lineIndent !== firstNonEmptyIndent) {
+          hasConsistentIndent = false;
+          break;
+        }
+      }
+      
+      if (hasConsistentIndent) {
+        // This is a single expression with consistent indentation
+        // For function bodies, be more permissive - allow any consistent indentation > header
+        // This matches TradingView's more lenient behavior
+        if (stmtIndent < this.context.blockIndent) {
+          this.addError(
+            stmt.loc.start.line,
+            stmtIndent + 1,
+            `Statement should be indented at least ${this.context.blockIndent} spaces (got ${stmtIndent})`,
+            'PSV6-INDENT-BLOCK-MISMATCH'
+          );
+        }
+        // Note: We allow any indentation > header indent to match TradingView's leniency
+      } else {
+        // This is a wrapped statement - validate continuation lines as wraps
+        for (let lineIdx = stmtStartLine + 1; lineIdx <= stmtEndLine; lineIdx++) {
+          const line = this.sourceLines[lineIdx];
+          if (!line || line.trim() === '' || line.trim().startsWith('//')) {
+            continue; // Skip empty lines and comments
+          }
+
+          const lineIndent = this.getLineIndent(lineIdx);
+          this.validateWrapIndentation(lineIdx + 1, lineIndent, stmtIndent);
+        }
       }
     } else {
       // Single-line statement OR block statement: header should be at expected block indent
@@ -612,30 +651,212 @@ export class ASTIndentationValidator {
   }
 
   /**
-   * Validate wrap indentation for continuation lines
-   * Pine Script Rules:
-   * - Continuation lines must be indented MORE than the base line
-   * - Continuation lines must NOT use multiples of 4 spaces (reserved for blocks)
+   * Validate line wrapping after function declaration
+   * Pine Script function body rules:
+   * 1. Single-line format: Use non-multiple-of-4 indentation (wrap), comma-separated statements
+   * 2. Multi-line format: Use exactly +4 spaces for block, new statements at block level
+   * 3. Cannot mix: Once you start with wrap indent, all lines must be wrap (or comma-separated)
+   * 
+   * @returns true if the function is in wrap format (single-line), false otherwise
    */
-  private validateWrapIndentation(lineNum: number, indent: number, baseIndent: number): void {
-    // Rule 1: Wrapped line must be indented more than the base
-    if (indent <= baseIndent) {
-      this.addError(
-        lineNum,
-        indent + 1,
-        `Line continuation must be indented more than the base level (expected > ${baseIndent}, got ${indent})`,
-        'PSV6-INDENT-WRAP-INSUFFICIENT'
-      );
+  private validateFunctionLineWrapping(node: FunctionDeclarationNode): boolean {
+    const headerLineIndex = node.loc.start.line - 1; // 0-indexed
+    const headerLine = this.sourceLines[headerLineIndex];
+    const headerIndent = this.getLineIndent(headerLineIndex);
+    
+    // Only check if function header ends with =>
+    if (!headerLine || !headerLine.trim().endsWith('=>')) {
+      return false; // Not a wrap format check
+    }
+
+    // Calculate expected block indent early
+    const expectedBlockIndent = headerIndent + 4;
+
+    // Find all non-empty lines in the function body
+    const bodyStartLine = headerLineIndex + 1;
+    const bodyEndLine = node.body ? node.body.loc.end.line - 1 : headerLineIndex;
+    
+    // Check if function body is on same line as header (single-line function)
+    const isSingleLineFunctionOnHeader = node.body && node.body.loc.start.line === node.loc.start.line && bodyStartLine > bodyEndLine;
+    
+    // If body is on the same line as header, check what comes next
+    if (isSingleLineFunctionOnHeader) {
+      // Check if there's suspicious code on the next line
+      const nextLineIndex = headerLineIndex + 1;
+      if (nextLineIndex < this.sourceLines.length) {
+        const nextLine = this.sourceLines[nextLineIndex];
+        const nextLineIndent = this.getLineIndent(nextLineIndex);
+        
+        // If next line is at column 0 and looks like code (not blank/comment), it's likely meant to be in the function
+        if (nextLine && nextLine.trim() !== '' && !nextLine.trim().startsWith('//') && nextLineIndent === 0) {
+          this.addError(
+            nextLineIndex + 1,
+            1,
+            `Function body cannot start at column 0. Use ${expectedBlockIndent} spaces for block format, or ${expectedBlockIndent - 1} or fewer (non-multiple-of-4) for single-line format.`,
+            'PSV6-INDENT-WRAP-INVALID'
+          );
+        }
+      }
+      return false; // Function parsed but no actual body to validate
+    }
+
+    if (bodyStartLine > bodyEndLine) {
+      return false; // No body lines to validate
+    }
+
+    const bodyLines: Array<{ lineIndex: number; indent: number; text: string }> = [];
+    
+    for (let i = bodyStartLine; i <= bodyEndLine && i < this.sourceLines.length; i++) {
+      const line = this.sourceLines[i];
+      if (!line || line.trim() === '' || line.trim().startsWith('//')) {
+        continue;
+      }
+      
+      bodyLines.push({
+        lineIndex: i,
+        indent: this.getLineIndent(i),
+        text: line.trim()
+      });
+    }
+
+    if (bodyLines.length === 0) {
+      return false; // No body lines to validate
+    }
+
+    const firstBodyLine = bodyLines[0];
+    const firstBodyIndent = firstBodyLine.indent;
+
+    // Determine function format based on first line
+    const isBlockFormat = firstBodyIndent === expectedBlockIndent;
+    const isWrapFormat = firstBodyIndent > 0 && firstBodyIndent % 4 !== 0;
+    const isInvalidIndent = firstBodyIndent === 0 || (firstBodyIndent % 4 === 0 && firstBodyIndent !== expectedBlockIndent);
+
+    // Special case: If there are no body lines but the next line after => looks like it should be in the function
+    // This catches the case where column 0 causes parser to treat it as a global statement
+    if (bodyLines.length === 0) {
+      // Check if there's a line immediately after the function header
+      const nextLineIndex = headerLineIndex + 1;
+      if (nextLineIndex < this.sourceLines.length) {
+        const nextLine = this.sourceLines[nextLineIndex];
+        const nextLineIndent = this.getLineIndent(nextLineIndex);
+        
+        // If next line is at column 0 and looks like code (not blank/comment), warn about it
+        if (nextLine && nextLine.trim() !== '' && !nextLine.trim().startsWith('//') && nextLineIndent === 0) {
+          this.addError(
+            nextLineIndex + 1,
+            1,
+            `Function body cannot start at column 0. Use ${expectedBlockIndent} spaces for block format, or ${expectedBlockIndent - 1} or fewer (non-multiple-of-4) for single-line format.`,
+            'PSV6-INDENT-WRAP-INVALID'
+          );
+        }
+      }
       return;
     }
 
-    // Rule 2: Wrapped line must NOT be at a multiple-of-4 boundary
+    // Invalid: First line at column 0 or wrong multiple of 4
+    if (isInvalidIndent) {
+      this.addError(
+        firstBodyLine.lineIndex + 1,
+        1,
+        `Invalid function body indentation: use ${expectedBlockIndent} spaces for block format, or ${expectedBlockIndent - 1} or fewer (non-multiple-of-4) for single-line format.`,
+        'PSV6-INDENT-WRAP-INVALID'
+      );
+      return false; // Invalid format, not wrap format
+    }
+
+    // Validate remaining lines based on detected format
+    if (!isBlockFormat && isWrapFormat) {
+      // Wrap format (single-line): All lines should be wrap indents (non-multiple-of-4)
+      // Mixing block-level indents is invalid
+      this.validateWrapFormatBody(bodyLines, headerLineIndex);
+      return true; // This is wrap format, validation complete
+    }
+    
+    // Block format - let validateBlock handle it
+    return false;
+  }
+
+  /**
+   * Validate block format function body
+   * All statements must start at expectedBlockIndent (multiple of 4)
+   */
+  private validateBlockFormatBody(
+    bodyLines: Array<{ lineIndex: number; indent: number; text: string }>,
+    expectedBlockIndent: number,
+    headerLineIndex: number
+  ): void {
+    for (const line of bodyLines) {
+      // Check if this line starts a new statement (at block level) or is a continuation
+      if (line.indent === expectedBlockIndent) {
+        // New statement at correct block level - OK
+        continue;
+      } else if (line.indent > expectedBlockIndent && line.indent % 4 !== 0) {
+        // Wrap continuation within the block - OK
+        continue;
+      } else {
+        // Invalid: Wrong indentation
+        this.addError(
+          line.lineIndex + 1,
+          1,
+          `In block format, statements must start at ${expectedBlockIndent} spaces, wraps must use non-multiple-of-4 indentation.`,
+          'PSV6-INDENT-BLOCK-MISMATCH'
+        );
+      }
+    }
+  }
+
+  /**
+   * Validate wrap format function body (single-line with wraps)
+   * In wrap format, all lines must use non-multiple-of-4 indentation
+   * They don't need to be indented MORE than each other - just stay in wrap format
+   */
+  private validateWrapFormatBody(
+    bodyLines: Array<{ lineIndex: number; indent: number; text: string }>,
+    headerLineIndex: number
+  ): void {
+    for (let i = 0; i < bodyLines.length; i++) {
+      const line = bodyLines[i];
+      
+      // In wrap format, if a line is at a multiple-of-4 indent, it's trying to be a new statement
+      // but that's invalid without proper block format
+      if (line.indent % 4 === 0) {
+        this.addError(
+          line.lineIndex + 1,
+          1,
+          `In single-line format, all lines must use wrap indentation (non-multiple-of-4). Use block format (4 spaces) for multiple statements, or separate with commas.`,
+          'PSV6-INDENT-WRAP-INVALID'
+        );
+      }
+    }
+  }
+
+  /**
+   * Validate wrap indentation for continuation lines
+   * Pine Script Rules:
+   * - Continuation lines must NOT use multiples of 4 spaces (reserved for blocks)
+   * - At global scope (baseIndent=0), continuation must be > 0
+   * - Inside blocks, continuation can be ANY non-multiple-of-4 (including < block level)
+   */
+  private validateWrapIndentation(lineNum: number, indent: number, baseIndent: number): void {
+    // Rule 1: Wrapped line must NOT be at a multiple-of-4 boundary (reserved for blocks)
     if (indent % 4 === 0) {
       this.addError(
         lineNum,
         indent + 1,
         `Line continuation cannot use ${indent} spaces (multiples of 4 are reserved for blocks)`,
         'PSV6-INDENT-WRAP-MULTIPLE-OF-4'
+      );
+      return;
+    }
+
+    // Rule 2: At global scope, continuation must be indented (> 0)
+    // Inside blocks, any non-multiple-of-4 is allowed (can be less than block level)
+    if (baseIndent === 0 && indent === 0) {
+      this.addError(
+        lineNum,
+        1,
+        `Line continuation at column 0 is invalid. Use any non-multiple-of-4 indentation (1, 2, 3, 5...).`,
+        'PSV6-INDENT-WRAP-INSUFFICIENT'
       );
     }
   }
@@ -728,6 +949,8 @@ export class ASTIndentationValidator {
         return 'Use a non-multiple-of-4 indentation (e.g., 2, 3, 5, 6, 7 spaces) for line continuations.';
       case 'PSV6-INDENT-WRAP-INSUFFICIENT':
         return 'Indent continuation lines more than the block base level.';
+      case 'PSV6-INDENT-WRAP-INVALID':
+        return 'Either make it a single-line function or use proper indentation: 4+ spaces for function body, or 1-3 spaces for line wrapping.';
       case 'PSV6-INDENT-INCONSISTENT':
         return 'Use consistent indentation. Blocks use multiples of 4 spaces, wraps use non-multiples of 4.';
       default:
