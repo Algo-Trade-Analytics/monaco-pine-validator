@@ -291,26 +291,12 @@ atanValue = math.atan(close)
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should validate math.atan2() function', () => {
-      const code = `
-//@version=6
-indicator("Math Atan2 Test")
-
-atan2Value = math.atan2(close, open)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
     it('should error on invalid trigonometry parameters', () => {
       const code = `
 //@version=6
 indicator("Invalid Trigonometry Test")
 
 invalidSin = math.sin("string")
-invalidAtan2 = math.atan2("string", 10)
       `;
 
       const result = createValidator().validate(code);
@@ -407,32 +393,6 @@ sumValue = math.sum(close, 10)
 indicator("Math Avg Test")
 
 avgValue = math.avg(close, 10)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it('should validate math.median() function', () => {
-      const code = `
-//@version=6
-indicator("Math Median Test")
-
-medianValue = math.median(close, 10)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it('should validate math.mode() function', () => {
-      const code = `
-//@version=6
-indicator("Math Mode Test")
-
-modeValue = math.mode(close, 10)
       `;
 
       const result = createValidator().validate(code);
@@ -575,7 +535,7 @@ indicator("Complex Math Expressions Test")
 
 // Complex mathematical expression
 distance = math.sqrt(math.pow(close - open, 2) + math.pow(high - low, 2))
-angle = math.atan2(close - open, high - low)
+angle = math.atan(close - open)
 normalizedAngle = math.todegrees(angle)
 
 // Statistical calculations

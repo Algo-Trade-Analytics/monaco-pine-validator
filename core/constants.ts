@@ -112,7 +112,12 @@ export const NAMESPACES = new Set([
   'extend','font','format','hline','location','order','plot','position','scale','settlement_as_close',
   'shape','size','splits','text','xloc','yloc',
   // additional namespaces for functions
-  'log','runtime','ticker','timeframe'
+  'log','runtime','ticker','timeframe',
+  // Nested strategy namespaces (v6)
+  'strategy.commission', 'strategy.oca', 'strategy.direction', 'strategy.risk',
+  'strategy.closedtrades', 'strategy.opentrades',
+  // Nested chart namespace (v6)
+  'chart.point'
 ]);
 
 // Namespace members

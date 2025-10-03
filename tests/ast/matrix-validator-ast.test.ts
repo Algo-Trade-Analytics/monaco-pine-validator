@@ -81,7 +81,7 @@ describe('MatrixValidator (AST)', () => {
     const setStatement = createExpressionStatement(setCall, 0, 29, 2);
 
     const program = createProgram([declaration, setStatement], 0, 29, 1, 2);
-    const source = 'var mat = matrix.new("float", 2, 2)\nmatrix.set(mat, 0, 0, "oops")';
+    const source = 'var mat = matrix.new_float(2, 2)\nmatrix.set(mat, 0, 0, "oops")';
     const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
     const harness = new MatrixValidatorHarness(service);
 
@@ -121,7 +121,7 @@ describe('MatrixValidator (AST)', () => {
     const getStatement = createExpressionStatement(getCall, 0, 18, 2);
 
     const program = createProgram([declaration, getStatement], 0, 18, 1, 2);
-    const source = 'var mat = matrix.new("float", 2, 2)\nmatrix.get(mat, 0)';
+    const source = 'var mat = matrix.new_float(2, 2)\nmatrix.get(mat, 0)';
     const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
     const harness = new MatrixValidatorHarness(service);
 
@@ -164,7 +164,7 @@ describe('MatrixValidator (AST)', () => {
 
     const loop = createForStatement(null, null, null, loopBody, 0, 23, 2);
     const program = createProgram([declaration, loop], 0, 23, 1, 3);
-    const source = 'var mat = matrix.new("float", 2, 2)\nfor i = 0 to 1\n    matrix.fill(mat, 0)';
+    const source = 'var mat = matrix.new_float(2, 2)\nfor i = 0 to 1\n    matrix.fill(mat, 0)';
     const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
     const harness = new MatrixValidatorHarness(service);
 

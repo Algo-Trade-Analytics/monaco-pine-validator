@@ -1,9 +1,9 @@
 {
   "summary": {
-    "totalMatched": 660,
-    "totalMissing": 60,
-    "totalExtra": 265,
-    "coverage": "91.7%"
+    "totalMatched": 672,
+    "totalMissing": 48,
+    "totalExtra": 295,
+    "coverage": "93.3%"
   },
   "byNamespace": [
     {
@@ -83,103 +83,16 @@
       ]
     },
     {
-      "namespace": "plot",
-      "matched": 11,
-      "missing": 3,
-      "extra": 5,
-      "missingMembers": [
-        "linestyle_dashed",
-        "linestyle_dotted",
-        "linestyle_solid"
-      ],
-      "extraMembers": [
-        "arguments",
-        "signatures",
-        "style_cross_diamond",
-        "style_line_diamond",
-        "style_linebreak"
-      ]
-    },
-    {
-      "namespace": "currency",
-      "matched": 53,
-      "missing": 3,
-      "extra": 7,
-      "missingMembers": [
-        "BTC",
-        "ETH",
-        "USDT"
-      ],
-      "extraMembers": [
-        "Bitcoin",
-        "Ethereum",
-        "SZL",
-        "Tether",
-        "UAH",
-        "UGX",
-        "UYU"
-      ]
-    },
-    {
       "namespace": "global",
-      "matched": 49,
-      "missing": 2,
+      "matched": 51,
+      "missing": 0,
       "extra": 4,
-      "missingMembers": [
-        "false",
-        "true"
-      ],
+      "missingMembers": [],
       "extraMembers": [
         "if",
         "log",
         "runtime",
         "strategy"
-      ]
-    },
-    {
-      "namespace": "chart",
-      "matched": 14,
-      "missing": 2,
-      "extra": 1,
-      "missingMembers": [
-        "point.copy",
-        "point.from_time"
-      ],
-      "extraMembers": [
-        "point"
-      ]
-    },
-    {
-      "namespace": "line",
-      "matched": 27,
-      "missing": 1,
-      "extra": 6,
-      "missingMembers": [
-        "set_second_point"
-      ],
-      "extraMembers": [
-        "arguments",
-        "extend_both",
-        "extend_left",
-        "extend_none",
-        "extend_right",
-        "signatures"
-      ]
-    },
-    {
-      "namespace": "box",
-      "matched": 29,
-      "missing": 1,
-      "extra": 5,
-      "missingMembers": [
-        "set_xloc"
-      ],
-      "extraMembers": [
-        "arguments",
-        "border_style_dashed",
-        "border_style_double",
-        "border_style_solid",
-        "signatures"
       ]
     },
     {
@@ -260,6 +173,35 @@
       ]
     },
     {
+      "namespace": "plot",
+      "matched": 14,
+      "missing": 0,
+      "extra": 5,
+      "missingMembers": [],
+      "extraMembers": [
+        "arguments",
+        "signatures",
+        "style_cross_diamond",
+        "style_line_diamond",
+        "style_linebreak"
+      ]
+    },
+    {
+      "namespace": "line",
+      "matched": 28,
+      "missing": 0,
+      "extra": 6,
+      "missingMembers": [],
+      "extraMembers": [
+        "arguments",
+        "extend_both",
+        "extend_left",
+        "extend_none",
+        "extend_right",
+        "signatures"
+      ]
+    },
+    {
       "namespace": "label",
       "matched": 43,
       "missing": 0,
@@ -267,6 +209,20 @@
       "missingMembers": [],
       "extraMembers": [
         "arguments",
+        "signatures"
+      ]
+    },
+    {
+      "namespace": "box",
+      "matched": 30,
+      "missing": 0,
+      "extra": 5,
+      "missingMembers": [],
+      "extraMembers": [
+        "arguments",
+        "border_style_dashed",
+        "border_style_double",
+        "border_style_solid",
         "signatures"
       ]
     },
@@ -439,12 +395,23 @@
       ]
     },
     {
+      "namespace": "chart",
+      "matched": 16,
+      "missing": 0,
+      "extra": 1,
+      "missingMembers": [],
+      "extraMembers": [
+        "point"
+      ]
+    },
+    {
       "namespace": "chart.point",
       "matched": 0,
       "missing": 0,
-      "extra": 4,
+      "extra": 5,
       "missingMembers": [],
       "extraMembers": [
+        "copy",
         "from_index",
         "from_time",
         "new",
@@ -502,13 +469,28 @@
       ]
     },
     {
+      "namespace": "currency",
+      "matched": 56,
+      "missing": 0,
+      "extra": 4,
+      "missingMembers": [],
+      "extraMembers": [
+        "SZL",
+        "UAH",
+        "UGX",
+        "UYU"
+      ]
+    },
+    {
       "namespace": "strategy.commission",
       "matched": 0,
       "missing": 0,
-      "extra": 2,
+      "extra": 4,
       "missingMembers": [],
       "extraMembers": [
         "cash",
+        "cash_per_contract",
+        "cash_per_order",
         "percent"
       ]
     },
@@ -516,10 +498,11 @@
       "namespace": "strategy.oca",
       "matched": 0,
       "missing": 0,
-      "extra": 2,
+      "extra": 3,
       "missingMembers": [],
       "extraMembers": [
         "cancel",
+        "none",
         "reduce"
       ]
     },
@@ -548,6 +531,57 @@
         "max_intraday_filled_orders",
         "max_intraday_loss",
         "max_position_size"
+      ]
+    },
+    {
+      "namespace": "strategy.closedtrades",
+      "matched": 0,
+      "missing": 0,
+      "extra": 19,
+      "missingMembers": [],
+      "extraMembers": [
+        "commission",
+        "entry_bar_index",
+        "entry_comment",
+        "entry_id",
+        "entry_price",
+        "entry_time",
+        "exit_bar_index",
+        "exit_comment",
+        "exit_id",
+        "exit_price",
+        "exit_time",
+        "first_index",
+        "max_drawdown",
+        "max_drawdown_percent",
+        "max_runup",
+        "max_runup_percent",
+        "profit",
+        "profit_percent",
+        "size"
+      ]
+    },
+    {
+      "namespace": "strategy.opentrades",
+      "matched": 0,
+      "missing": 0,
+      "extra": 14,
+      "missingMembers": [],
+      "extraMembers": [
+        "capital_held",
+        "commission",
+        "entry_bar_index",
+        "entry_comment",
+        "entry_id",
+        "entry_price",
+        "entry_time",
+        "max_drawdown",
+        "max_drawdown_percent",
+        "max_runup",
+        "max_runup_percent",
+        "profit",
+        "profit_percent",
+        "size"
       ]
     },
     {
@@ -683,46 +717,6 @@
       "extra": 0,
       "missingMembers": [],
       "extraMembers": []
-    },
-    {
-      "namespace": "Bitcoin",
-      "matched": 0,
-      "missing": 0,
-      "extra": 1,
-      "missingMembers": [],
-      "extraMembers": [
-        "qualifier"
-      ]
-    },
-    {
-      "namespace": "Ethereum",
-      "matched": 0,
-      "missing": 0,
-      "extra": 1,
-      "missingMembers": [],
-      "extraMembers": [
-        "qualifier"
-      ]
-    },
-    {
-      "namespace": "Euro",
-      "matched": 0,
-      "missing": 0,
-      "extra": 1,
-      "missingMembers": [],
-      "extraMembers": [
-        "qualifier"
-      ]
-    },
-    {
-      "namespace": "Tether",
-      "matched": 0,
-      "missing": 0,
-      "extra": 1,
-      "missingMembers": [],
-      "extraMembers": [
-        "qualifier"
-      ]
     },
     {
       "namespace": "ask",

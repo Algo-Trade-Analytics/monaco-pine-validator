@@ -10,6 +10,8 @@ export const NAMESPACE_MEMBERS = {
     'open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'hlcc4',
     'bar_index', 'last_bar_index', 'last_bar_time', 'time_tradingday', 'timenow',
     'ask', 'bid', 'second',
+    // Boolean literals
+    'true', 'false',
     // Global functions
     'alert', 'alertcondition', 'plot', 'plotshape', 'plotchar', 'plotarrow', 'plotbar', 'plotcandle',
     'indicator', 'strategy', 'library', 'hline', 'fill', 'bgcolor', 'barcolor',
@@ -119,6 +121,8 @@ export const NAMESPACE_MEMBERS = {
     'style_line', 'style_linebr', 'style_stepline', 'style_steplinebr',
     'style_histogram', 'style_cross', 'style_area', 'style_areabr', 'style_columns',
     'style_circles', 'style_line_diamond', 'style_cross_diamond', 'style_linebreak', 'style_stepline_diamond',
+    // Line styles
+    'linestyle_dashed', 'linestyle_dotted', 'linestyle_solid',
     // Missing members from gap analysis
     'arguments', 'signatures'
   ]),
@@ -131,12 +135,13 @@ export const NAMESPACE_MEMBERS = {
     // Setters
     'set_color', 'set_extend', 'set_style', 'set_width', 
     'set_x1', 'set_x2', 'set_xy1', 'set_xy2', 'set_y1', 'set_y2', 'set_xloc',
+    'set_first_point', 'set_second_point',
     // Styles
     'style_solid', 'style_dotted', 'style_dashed', 'style_arrow_left', 'style_arrow_right', 'style_arrow_both',
     // Extend modes
     'extend_none', 'extend_right', 'extend_left', 'extend_both',
     // Missing members from gap analysis
-    'arguments', 'set_first_point', 'signatures'
+    'arguments', 'signatures'
   ]),
   
   'label': new Set([
@@ -164,7 +169,7 @@ export const NAMESPACE_MEMBERS = {
     'get_left', 'get_right', 'get_top', 'get_bottom',
     // Position setters
     'set_left', 'set_right', 'set_top', 'set_bottom',
-    'set_lefttop', 'set_rightbottom', 'set_extend',
+    'set_lefttop', 'set_rightbottom', 'set_extend', 'set_xloc',
     // Style setters
     'set_bgcolor', 'set_border_color', 'set_border_style', 'set_border_width',
     // Text setters (v6)
@@ -325,12 +330,12 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'chart': new Set([
-    'point', 'point.new', 'point.now', 'point.from_index',
+    'point', 'point.new', 'point.now', 'point.from_index', 'point.from_time', 'point.copy',
     'bg_color', 'fg_color', 'is_heikinashi', 'is_kagi', 'is_linebreak', 'is_pnf', 'is_range', 'is_renko', 'is_standard', 'left_visible_bar_time', 'right_visible_bar_time'
   ]),
   
   'chart.point': new Set([
-    'new', 'now', 'from_index', 'from_time'
+    'new', 'now', 'from_index', 'from_time', 'copy'
   ]),
   
   'map': new Set([
@@ -363,16 +368,17 @@ export const NAMESPACE_MEMBERS = {
     'PKR', 'PLN', 'RON', 'SEK', 'SZL', 'TRY', 'UAH', 'UGX', 'UYU', 'VES',
     // Final missing currencies
     'NONE', 'PEN', 'RSD', 'TND',
-    'Bitcoin', 'Ethereum', 'Tether'
+    // Cryptocurrencies (official names from Pine Script v6 docs)
+    'BTC', 'ETH', 'USDT'
   ]),
   
   // Nested strategy constants
   'strategy.commission': new Set([
-    'percent', 'cash'
+    'percent', 'cash', 'cash_per_contract', 'cash_per_order'
   ]),
   
   'strategy.oca': new Set([
-    'cancel', 'reduce'
+    'cancel', 'reduce', 'none'
   ]),
   
   'strategy.direction': new Set([
@@ -382,6 +388,23 @@ export const NAMESPACE_MEMBERS = {
   'strategy.risk': new Set([
     'allow_entry_in', 'max_cons_loss_days', 'max_drawdown', 
     'max_intraday_filled_orders', 'max_intraday_loss', 'max_position_size'
+  ]),
+  
+  // Strategy closedtrades namespace (v6)
+  'strategy.closedtrades': new Set([
+    'first_index',  // variable
+    'commission', 'entry_bar_index', 'entry_comment', 'entry_id', 'entry_price', 'entry_time',
+    'exit_bar_index', 'exit_comment', 'exit_id', 'exit_price', 'exit_time',
+    'max_drawdown', 'max_drawdown_percent', 'max_runup', 'max_runup_percent',
+    'profit', 'profit_percent', 'size'
+  ]),
+  
+  // Strategy opentrades namespace (v6)
+  'strategy.opentrades': new Set([
+    'capital_held',  // variable
+    'commission', 'entry_bar_index', 'entry_comment', 'entry_id', 'entry_price', 'entry_time',
+    'max_drawdown', 'max_drawdown_percent', 'max_runup', 'max_runup_percent',
+    'profit', 'profit_percent', 'size'
   ]),
   
   'dividends': new Set([
@@ -458,24 +481,7 @@ export const NAMESPACE_MEMBERS = {
     'bar_index', 'bar_time'
   ]),
   
-  // Crypto currency namespaces
-  'Bitcoin': new Set([
-    'qualifier'
-  ]),
-  
-  'Ethereum': new Set([
-    'qualifier'
-  ]),
-  
-  'Euro': new Set([
-    'qualifier'
-  ]),
-  
-  'Tether': new Set([
-    'qualifier'
-  ]),
-  
-  // Built-in variable namespaces
+  // Built-in variable namespaces (these are incorrect - variables shouldn't have namespaces)
   'ask': new Set([
     'qualifier'
   ]),

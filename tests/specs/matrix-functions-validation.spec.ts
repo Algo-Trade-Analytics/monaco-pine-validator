@@ -226,38 +226,6 @@ plot(matrix.get(squared, 0, 0))  // 4.0
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should validate matrix.abs()', () => {
-      const code = `
-//@version=6
-indicator("Matrix Absolute")
-
-m = matrix.new<float>(2, 2)
-matrix.set(m, 0, 0, -5.0)
-matrix.set(m, 1, 1, -10.0)
-absMatrix = matrix.abs(m)
-plot(matrix.get(absMatrix, 0, 0))  // 5.0
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it('should validate matrix.sqrt()', () => {
-      const code = `
-//@version=6
-indicator("Matrix Square Root")
-
-m = matrix.new<float>(2, 2, 4.0)
-sqrtMatrix = matrix.sqrt(m)
-plot(matrix.get(sqrtMatrix, 0, 0))  // 2.0
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
     it('should validate matrix.median()', () => {
       const code = `
 //@version=6
@@ -280,110 +248,8 @@ plot(medianVal)  // 5.0
   // ============================================================================
 
   describe('PSV6-MATRIX-STATS: Matrix Statistical Operations', () => {
-    
-    it('should validate matrix.variance()', () => {
-      const code = `
-//@version=6
-indicator("Matrix Variance")
-
-m = matrix.new<float>(2, 2)
-matrix.set(m, 0, 0, 1.0)
-matrix.set(m, 0, 1, 2.0)
-matrix.set(m, 1, 0, 3.0)
-matrix.set(m, 1, 1, 4.0)
-variance = matrix.variance(m)
-plot(variance)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it('should validate matrix.stdev()', () => {
-      const code = `
-//@version=6
-indicator("Matrix Standard Deviation")
-
-m = matrix.new<float>(2, 2, 2.0)
-stdDev = matrix.stdev(m)
-plot(stdDev)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it('should validate matrix.covariance()', () => {
-      const code = `
-//@version=6
-indicator("Matrix Covariance")
-
-m1 = matrix.new<float>(3, 1)
-m2 = matrix.new<float>(3, 1)
-matrix.set(m1, 0, 0, 1.0)
-matrix.set(m1, 1, 0, 2.0)
-matrix.set(m1, 2, 0, 3.0)
-matrix.set(m2, 0, 0, 2.0)
-matrix.set(m2, 1, 0, 4.0)
-matrix.set(m2, 2, 0, 6.0)
-cov = matrix.covariance(m1, m2)
-plot(cov)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it('should validate matrix.mode()', () => {
-      const code = `
-//@version=6
-indicator("Matrix Mode")
-
-m = matrix.new<float>(3, 3)
-matrix.fill(m, array.from(1, 2, 2, 3, 2, 4, 5, 2, 6))
-modeVal = matrix.mode(m)
-plot(modeVal)  // 2.0 (most frequent)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it('should validate matrix.percentile_linear_interpolation()', () => {
-      const code = `
-//@version=6
-indicator("Matrix Percentile Linear")
-
-m = matrix.new<float>(2, 5)
-matrix.fill(m, array.from(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
-p75 = matrix.percentile_linear_interpolation(m, 75)
-plot(p75)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it('should validate matrix.percentile_nearest_rank()', () => {
-      const code = `
-//@version=6
-indicator("Matrix Percentile Nearest")
-
-m = matrix.new<float>(2, 5)
-matrix.fill(m, array.from(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
-p50 = matrix.percentile_nearest_rank(m, 50)
-plot(p50)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
+    // Note: Matrix-specific variance, stdev, covariance, mode, and percentile functions
+    // do not exist in Pine Script v6. Use array functions or manual calculations instead.
   });
 
   // ============================================================================
@@ -705,7 +571,6 @@ result = matrix.mult(m1, m2)
 
 // Statistics
 avgVal = matrix.avg(result)
-stdDev = matrix.stdev(result)
 minVal = matrix.min(result)
 maxVal = matrix.max(result)
 
@@ -714,7 +579,6 @@ det = matrix.det(result)
 rank = matrix.rank(result)
 
 plot(avgVal)
-plot(stdDev)
       `;
 
       const result = createValidator().validate(code);

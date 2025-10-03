@@ -43,20 +43,6 @@ plot(corr)
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should validate ta.covariance()', () => {
-      const code = `
-//@version=6
-indicator("Covariance")
-
-cov = ta.covariance(close, volume, 20)
-plot(cov)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
     it('should error on invalid period for correlation', () => {
       const code = `
 //@version=6

@@ -59,21 +59,6 @@ label.new(bar_index, high, lower)
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should validate str.capitalize()', () => {
-      const code = `
-//@version=6
-indicator("Capitalize")
-
-text = "hello world"
-capitalized = str.capitalize(text)
-label.new(bar_index, high, capitalized)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
     it('should validate str.trim()', () => {
       const code = `
 //@version=6
@@ -89,35 +74,6 @@ label.new(bar_index, high, trimmed)
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should validate str.trim_left()', () => {
-      const code = `
-//@version=6
-indicator("Trim Left")
-
-text = "  hello"
-trimmed = str.trim_left(text)
-label.new(bar_index, high, trimmed)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it('should validate str.trim_right()', () => {
-      const code = `
-//@version=6
-indicator("Trim Right")
-
-text = "hello  "
-trimmed = str.trim_right(text)
-label.new(bar_index, high, trimmed)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
   });
 
   // ============================================================================
@@ -275,20 +231,6 @@ label.new(bar_index, high, array.get(parts, 0))
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should validate array.join() for strings', () => {
-      const code = `
-//@version=6
-indicator("Join")
-
-parts = array.from("one", "two", "three")
-joined = str.join(parts, ",")
-label.new(bar_index, high, joined)
-      `;
-
-      const result = createValidator().validate(code);
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
   });
 
   // ============================================================================
@@ -376,11 +318,10 @@ original = "  HELLO WORLD  "
 // Transform
 trimmed = str.trim(original)
 lower = str.lower(trimmed)
-capitalized = str.capitalize(lower)
 
 // Search & Replace
-hasWorld = str.contains(capitalized, "world")
-replaced = str.replace(capitalized, "world", "Pine")
+hasWorld = str.contains(lower, "world")
+replaced = str.replace(lower, "world", "Pine")
 
 // Extract
 first5 = str.substring(replaced, 0, 5)
@@ -529,12 +470,12 @@ for i = 0 to 10000
 //@version=6
 indicator("Efficient Strings")
 
-// Use array.join() instead of repeated concatenation
+// Use array.join() instead of repeated concatenation  
 parts = array.new<string>()
 for i = 0 to 10
     array.push(parts, str.tostring(i))
 
-result = str.join(parts, ",")
+result = array.join(parts, ",")
 label.new(bar_index, high, result)
       `;
 

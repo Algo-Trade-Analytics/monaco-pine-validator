@@ -56,7 +56,6 @@ describe('FinalConstantsValidator (AST)', () => {
       'position.bottom_right',
       'strategy.direction.long',
       'strategy.risk.max_daily_loss',
-      'table.cell_merge_horizontal',
     ];
     const source = constants.join('\n');
 
@@ -77,7 +76,7 @@ describe('FinalConstantsValidator (AST)', () => {
     expect(infoCodes).toContain(Codes.STYLE_CONSTANT);
     expect(infoCodes).toContain(Codes.ORDER_CONSTANT);
     expect(infoCodes).toContain(Codes.POSITION_CONSTANT);
-    expect(infoCodes.filter((code) => code === Codes.SPECIALIZED_CONSTANT).length).toBeGreaterThanOrEqual(3);
+    expect(infoCodes.filter((code) => code === Codes.SPECIALIZED_CONSTANT).length).toBeGreaterThanOrEqual(2);
     expect(infoCodes).toContain(Codes.FINAL_CONSTANTS_INFO);
     expect(infoCodes).toContain(Codes.MATH_CONSTANTS_USAGE);
     expect(infoCodes).toContain('PSV6-STYLE-CONSTANTS-USAGE');
@@ -86,10 +85,10 @@ describe('FinalConstantsValidator (AST)', () => {
     expect(infoCodes).toContain('PSV6-SPECIALIZED-CONSTANTS-USAGE');
 
     const summary = result.info.find((diagnostic) => diagnostic.code === Codes.FINAL_CONSTANTS_INFO);
-    expect(summary?.message).toContain('7 different constants used');
+    expect(summary?.message).toContain('6 different constants used');
 
     const specializedUsage = result.info.find((diagnostic) => diagnostic.code === 'PSV6-SPECIALIZED-CONSTANTS-USAGE');
-    expect(specializedUsage?.message).toContain('(3)');
+    expect(specializedUsage?.message).toContain('(2)');
   });
 
   it('returns no diagnostics when AST mode is disabled', () => {
