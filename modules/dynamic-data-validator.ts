@@ -190,21 +190,30 @@ export class DynamicDataValidator implements ValidationModule {
 
     visit(program, {
       ForStatement: {
-        enter: () => loopStack.push('for'),
+        enter: () => {
+          loopStack.push('for');
+          return undefined;
+        },
         exit: () => {
           loopStack.pop();
           return undefined;
         },
       },
       WhileStatement: {
-        enter: () => loopStack.push('while'),
+        enter: () => {
+          loopStack.push('while');
+          return undefined;
+        },
         exit: () => {
           loopStack.pop();
           return undefined;
         },
       },
       IfStatement: {
-        enter: () => conditionalStack.push('if'),
+        enter: () => {
+          conditionalStack.push('if');
+          return undefined;
+        },
         exit: () => {
           conditionalStack.pop();
           return undefined;
@@ -1232,7 +1241,7 @@ export class DynamicDataValidator implements ValidationModule {
         return true;
       case 'TupleExpression': {
         const tuple = node as TupleExpressionNode;
-        return tuple.elements.some((element) => this.expressionIsDynamic(element));
+        return tuple.elements.some((element) => element && this.expressionIsDynamic(element));
       }
       case 'ArrayLiteral': {
         const arrayLiteral = node as ArrayLiteralNode;
