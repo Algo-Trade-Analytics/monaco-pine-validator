@@ -92,7 +92,9 @@ export const StringLiteral = createToken({
 export const NumberLiteral = createToken({
   name: 'NumberLiteral',
   // Pine numeric literals follow standard decimal syntax with optional fraction.
-  pattern: /\d+(?:_?\d)*(?:\.\d+(?:_?\d)*)?/,
+  // Supports trailing decimal point (e.g., "6." is valid and equals "6.0")
+  // Supports scientific notation (e.g., "1e12", "1.5e-6")
+  pattern: /\d+(?:_?\d)*(?:\.\d*(?:_?\d)*)?(?:[eE][+-]?\d+)?/,
 });
 
 export const ColorLiteral = createToken({

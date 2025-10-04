@@ -32,7 +32,7 @@ export interface ValidationResult {
 }
 
 export interface TypeInfo {
-  type: 'int' | 'float' | 'bool' | 'string' | 'color' | 'series' | 'line' | 'label' | 'box' | 'table' | 'linefill' | 'polyline' | 'chart.point' | 'array' | 'matrix' | 'map' | 'udt' | 'analysis' | 'unknown';
+  type: 'int' | 'float' | 'bool' | 'string' | 'color' | 'series' | 'line' | 'label' | 'box' | 'table' | 'linefill' | 'polyline' | 'chart.point' | 'array' | 'matrix' | 'map' | 'udt' | 'analysis' | 'enum' | 'unknown';
   isConst: boolean;
   isSeries: boolean;
   declaredAt: { line: number; column: number };

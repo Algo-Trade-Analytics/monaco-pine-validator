@@ -16,7 +16,7 @@ import {
   type ScopeGraph,
   type SymbolRecord,
 } from '../core/types';
-import { KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT } from '../core/constants';
+import { KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT, NS_MEMBERS } from '../core/constants';
 import type { IdentifierNode, ProgramNode, TypeDeclarationNode, Node } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 
@@ -284,6 +284,15 @@ export class ScopeValidator implements ValidationModule {
     const declaredNames = new Set<string>();
     const scopedDeclarations = new Map<string, string[]>(); // name -> scopeIds where declared
     
+    // Also check typeMap for enum declarations
+    if (context.typeMap) {
+      for (const [name, typeInfo] of context.typeMap) {
+        if (typeInfo.type === 'enum' && typeInfo.isConst) {
+          declaredNames.add(name);
+        }
+      }
+    }
+    
     for (const record of context.symbolTable.values()) {
       if (!record.declarations.length) {
         continue;
@@ -490,9 +499,17 @@ export class ScopeValidator implements ValidationModule {
       case 'CallExpression':
         return key !== 'callee';
       case 'MemberExpression':
-        return key !== 'property';
+        // For properties in member expressions, never check them for undefined
+        // because they're part of the member expression syntax, not standalone identifiers
+        if (key === 'property') {
+          return false; // Don't emit undefined error for properties
+        }
+        // For objects in member expressions, still check them
+        return true;
       case 'Argument':
-        return key !== 'name';
+        // For named arguments like 'group = GRP_PAL', we want to check the value (GRP_PAL)
+        // but not the name (group). The key 'name' refers to the argument name, 'value' refers to the argument value.
+        return key === 'value';
       case 'TypeReference':
         return false;
       default:

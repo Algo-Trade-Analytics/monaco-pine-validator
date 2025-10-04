@@ -105,6 +105,7 @@ interface FallbackCallArgInfo {
 
 export class EnumValidator implements ValidationModule {
   name = 'EnumValidator';
+  priority = 85; // Run before ScopeValidator to register enum types
   
   private errors: Array<{ line: number; column: number; message: string; code: string }> = [];
   private warnings: Array<{ line: number; column: number; message: string; code: string }> = [];
@@ -235,7 +236,7 @@ export class EnumValidator implements ValidationModule {
     const enumName = node.identifier.name;
     const { line, column } = node.identifier.loc.start;
 
-    this.setTypeMapEntry(enumName, node.identifier, { isConst: true, isSeries: false });
+    this.setTypeMapEntry(enumName, node.identifier, { type: 'enum', isConst: true, isSeries: false });
     this.recordTypeUsage(enumName, node.identifier);
 
     if (!ENUM_NAME_PATTERN.test(enumName)) {
@@ -278,7 +279,7 @@ export class EnumValidator implements ValidationModule {
         this.addInfo(memberLoc.line, memberLoc.column, `Consider using UPPER_CASE for enum values: ${memberName}`, 'PSV6-ENUM-VALUE-NAMING-SUGGESTION');
       }
 
-      this.setTypeMapEntry(`${enumName}.${memberName}`, member.identifier, { isConst: true, isSeries: false });
+      this.setTypeMapEntry(`${enumName}.${memberName}`, member.identifier, { type: 'enum', isConst: true, isSeries: false });
       this.recordTypeUsage(`${enumName}.${memberName}`, member.identifier);
     }
 

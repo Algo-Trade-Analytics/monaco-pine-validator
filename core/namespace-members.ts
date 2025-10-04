@@ -77,7 +77,7 @@ export const NAMESPACE_MEMBERS = {
   
   'array': new Set([
     // Creation functions
-    'new_bool', 'new_int', 'new_float', 'new_string', 'new_color',
+    'new', 'new_bool', 'new_int', 'new_float', 'new_string', 'new_color',
     'new_line', 'new_label', 'new_box', 'new_table', 'new_linefill',
     'from', 'copy',
     // Access functions

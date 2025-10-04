@@ -56,6 +56,7 @@ const INPUT_RETURN_TYPES: Record<string, { type: TypeInfo['type']; isSeries?: bo
   time: { type: 'int' },
   text_area: { type: 'string' },
   price: { type: 'float' },
+  enum: { type: 'enum' },
 };
 
 export class InputFunctionsValidator implements ValidationModule {
@@ -298,6 +299,9 @@ export class InputFunctionsValidator implements ValidationModule {
         break;
       case 'price':
         this.validateInputPrice(args, parameters, lineNum, column);
+        break;
+      case 'enum':
+        this.validateInputEnum(args, parameters, lineNum, column);
         break;
       default:
         this.addError(lineNum, column, `Unknown input function: input.${functionName}`, 'PSV6-INPUT-UNKNOWN-FUNCTION');
@@ -1038,6 +1042,23 @@ export class InputFunctionsValidator implements ValidationModule {
     
     const cleanValue = value.replace(/^"|"$|^'|'$/g, '');
     return cleanValue.length > 100;
+  }
+
+  private validateInputEnum(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
+    // Validate required parameters for input.enum()
+    if (args.length < 2) {
+      this.addError(lineNum, column, 'input.enum() requires at least 2 arguments: default value and title', 'PSV6-INPUT-ENUM-ARGS');
+      return;
+    }
+
+    // Validate default value is an enum member reference
+    const defaultValue = args[0];
+    if (!defaultValue.includes('.')) {
+      this.addError(lineNum, column, 'input.enum() default value must be an enum member (e.g., MyEnum.VALUE)', 'PSV6-INPUT-ENUM-DEFAULT');
+    }
+
+    // Validate optional parameters
+    this.validateInputParameters(parameters, lineNum, column, 'enum');
   }
 
   // Getter methods for other modules
