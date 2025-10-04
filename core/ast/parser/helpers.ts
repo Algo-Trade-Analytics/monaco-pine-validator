@@ -528,7 +528,13 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
       }
 
       const statementStartToken = parser.lookAhead(1);
-      const statement = parser.invokeSubrule(parser.statement);
+      let statement: StatementNode;
+      if (statementStartToken.tokenType === LBracket && !parser.isTupleAssignmentStart()) {
+        const expression = parser.invokeSubrule(parser.expression);
+        statement = createExpressionStatementNode(expression);
+      } else {
+        statement = parser.invokeSubrule(parser.statement);
+      }
       statements.push(statement);
       firstStatementToken = firstStatementToken ?? statementStartToken;
       lastToken = parser.lookAhead(0);

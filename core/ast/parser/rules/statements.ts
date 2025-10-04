@@ -1,5 +1,6 @@
 import type { StatementNode } from '../../nodes';
 import type { PineParser } from '../parser';
+import { createExpressionStatementNode } from '../node-builders';
 import {
   Enum,
   For,
@@ -19,11 +20,46 @@ import {
   Strategy,
   Library,
   Identifier as IdentifierToken,
+  NumberLiteral as NumberToken,
+  StringLiteral as StringToken,
+  ColorLiteral as ColorToken,
+  True,
+  False,
+  NaToken,
+  Plus,
+  Minus,
+  Increment,
+  Decrement,
+  Bang,
+  Not,
 } from '../tokens';
 import { isExportKeywordToken, isTokenKeyword } from '../parser-utils';
 
+function isExpressionStatementStartToken(tokenType: unknown): boolean {
+  return (
+    tokenType === NumberToken ||
+    tokenType === StringToken ||
+    tokenType === ColorToken ||
+    tokenType === True ||
+    tokenType === False ||
+    tokenType === NaToken ||
+    tokenType === Plus ||
+    tokenType === Minus ||
+    tokenType === Increment ||
+    tokenType === Decrement ||
+    tokenType === Bang ||
+    tokenType === Not ||
+    tokenType === LParen
+  );
+}
+
 export function createStatementRule(parser: PineParser) {
   return parser.createRule('statement', (): StatementNode => {
+    if (isExpressionStatementStartToken(parser.lookAhead(1).tokenType)) {
+      const expression = parser.invokeSubrule(parser.expression);
+      return createExpressionStatementNode(expression);
+    }
+
     return parser.choose<StatementNode>([
       {
         GATE: () => {

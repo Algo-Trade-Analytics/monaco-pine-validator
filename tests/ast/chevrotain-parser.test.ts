@@ -141,6 +141,34 @@ describe('Chevrotain parser', () => {
     expect(declaration.arguments).toHaveLength(0);
   });
 
+  it('parses literal expression statements inside indented blocks', () => {
+    const source = ['f() =>', '    [1, 2, 3]', '    (foo)', '    42', ''].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(1);
+
+    const declaration = program.body[0] as FunctionDeclarationNode;
+    expect(declaration.kind).toBe('FunctionDeclaration');
+    expect(declaration.body.body).toHaveLength(3);
+
+    const [arrayStatement, groupedStatement, numberStatement] =
+      declaration.body.body as ExpressionStatementNode[];
+
+    expect(arrayStatement.kind).toBe('ExpressionStatement');
+    expect(arrayStatement.expression.kind).toBe('ArrayLiteral');
+
+    expect(groupedStatement.kind).toBe('ExpressionStatement');
+    expect(groupedStatement.expression.kind).toBe('Identifier');
+
+    expect(numberStatement.kind).toBe('ExpressionStatement');
+    expect(numberStatement.expression.kind).toBe('NumberLiteral');
+  });
+
   it('tolerates missing closing tokens when error recovery is enabled', () => {
     const source = 'indicator(';
 

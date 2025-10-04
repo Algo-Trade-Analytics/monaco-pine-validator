@@ -1,4 +1,4 @@
-import { EmbeddedActionsParser, type IToken } from 'chevrotain';
+import { EmbeddedActionsParser, type IToken, type TokenType } from 'chevrotain';
 import { AllTokens, LBracket } from './tokens';
 import type { ExpressionNode, IfExpressionNode, IfStatementNode, StatementNode } from '../nodes';
 
@@ -109,7 +109,15 @@ export class PineParser extends EmbeddedActionsParser {
       maxLookahead: 1,
       skipValidations: true,
     });
+    const baseTokenMatcher = this.tokenMatcher;
+    this.tokenMatcher = ((token, tokType) => {
+      if (!tokType) {
+        return false;
+      }
+      return baseTokenMatcher.call(this, token, tokType);
+    }) as typeof this.tokenMatcher;
     this.performSelfAnalysis();
+    this.removeInvalidRecoveryTokens();
   }
 
   public override reset(): void {
@@ -313,5 +321,27 @@ export class PineParser extends EmbeddedActionsParser {
   public backtrack<T>(production: () => T): () => T {
     const method = this.getDslMethod<BacktrackMethod>('BACKTRACK', 1);
     return method(production);
+  }
+
+  private removeInvalidRecoveryTokens(): void {
+    const parserInternals = this as unknown as {
+      resyncFollows?: Record<string, (TokenType | undefined)[]>;
+    };
+
+    const { resyncFollows } = parserInternals;
+    if (!resyncFollows) {
+      return;
+    }
+
+    for (const followKey of Object.keys(resyncFollows)) {
+      const followSet = resyncFollows[followKey];
+      if (!Array.isArray(followSet)) {
+        continue;
+      }
+
+      resyncFollows[followKey] = followSet.filter(
+        (tokenType): tokenType is TokenType => tokenType !== undefined,
+      );
+    }
   }
 }
