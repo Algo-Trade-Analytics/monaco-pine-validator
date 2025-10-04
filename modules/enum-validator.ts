@@ -629,6 +629,19 @@ export class EnumValidator implements ValidationModule {
     if (objectType === 'udt') {
       return null;
     }
+    
+    // Check if this is a variable (loop iterator, parameter, local variable)
+    // These should not be treated as enum references
+    // But enum type names ARE in the symbol table, so we need to check if it's actually an enum
+    const symbolInfo = this.context.symbolTable.get(object.name);
+    if (symbolInfo && symbolInfo.declarations.length > 0) {
+      // Check if this is an enum type (not a variable)
+      const isEnumType = this.astEnumDeclarations.has(object.name) || objectInfo?.type === 'enum';
+      if (!isEnumType) {
+        // This is a variable, not an enum type
+        return null;
+      }
+    }
 
     return { enumName: object.name, memberName: property.name, node: member };
   }

@@ -220,6 +220,7 @@ export const Enum = createToken({
   name: 'Enum',
   pattern: /enum/,
   longer_alt: Identifier,
+  categories: [Identifier],
 });
 
 export const Type = createToken({

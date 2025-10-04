@@ -1,0 +1,8 @@
+//@version=6
+indicator("Test", scale = scale.none)
+
+enum PaletteOpt
+    RAINBOW
+    FIRE
+
+PaletteOpt paletteChoice = input.enum(PaletteOpt.FIRE, "Palette")

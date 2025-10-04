@@ -17,6 +17,8 @@ import { SyntaxValidator } from './modules/syntax-validator';
 import { V6FeaturesValidator } from './modules/v6-features-validator';
 import { PerformanceValidator } from './modules/performance-validator';
 import { StyleValidator } from './modules/style-validator';
+import { EnumValidator } from './modules/enum-validator';
+import { UDTValidator } from './modules/udt-validator';
 import { ensureAstContext } from './core/ast/context-utils';
 
 export class ModularUltimateValidator extends BaseValidator {
@@ -25,9 +27,11 @@ export class ModularUltimateValidator extends BaseValidator {
     
     // Register validation modules (in order of priority)
     this.registerModule(new CoreValidator());           // Core validation (priority 100)
+    this.registerModule(new SyntaxValidator());         // Basic syntax (priority 90)
+    this.registerModule(new UDTValidator());            // UDT validation (priority 85)
+    this.registerModule(new EnumValidator());           // Enum validation (priority 85)
     this.registerModule(new TypeValidator());           // Type system (priority 85)
     this.registerModule(new ScopeValidator());          // Scope management (priority 80)
-    this.registerModule(new SyntaxValidator());         // Basic syntax (priority 90)
     this.registerModule(new V6FeaturesValidator());     // V6 features (priority 80)
     this.registerModule(new PerformanceValidator());    // Performance (priority 70)
     this.registerModule(new StyleValidator());          // Style & quality (priority 60)
