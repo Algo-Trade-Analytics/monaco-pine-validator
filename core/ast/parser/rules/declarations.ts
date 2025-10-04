@@ -49,6 +49,7 @@ import type {
   ParameterNode,
   TypeFieldNode,
   VariableDeclarationKind,
+  VariableDeclarationNode,
 } from '../../nodes';
 import {
   isDeclarationKeywordToken,
@@ -426,25 +427,19 @@ export function createVariableDeclarationRule(parser: PineParser) {
     }
 
     const startToken = declarationToken ?? typeTokens[0] ?? identifierToken;
-    const variableDeclaration = createVariableDeclarationNode(
+    const declarations: VariableDeclarationNode[] = [];
+    const operatorImage = operatorToken?.image ?? null;
+
+    const firstDeclaration = createVariableDeclarationNode(
       declarationKind,
       identifier,
       identifierToken,
       typeAnnotation,
       initializer,
-      operatorToken ? ((operatorToken.image === ':=' ? ':=' : '=') as '=' | ':=') : null,
+      operatorImage === ':=' || operatorImage === '=' ? (operatorImage as '=' | ':=') : null,
       startToken,
     );
-
-    if (debugMode) {
-      console.log('[Parser] variableDeclaration', {
-        identifier: identifier.name,
-        hasPrefixType: Boolean(typeTokens.length > 0),
-        hasColonType: Boolean(colonIndex >= 0),
-        initializerPresent: Boolean(initializer),
-        operator: operatorToken?.image ?? null,
-      });
-    }
+    declarations.push(firstDeclaration);
 
     if (
       initializer &&
@@ -458,6 +453,77 @@ export function createVariableDeclarationRule(parser: PineParser) {
         declarationKind,
       });
     }
-    return variableDeclaration;
+
+    const sharedTypeTokens = colonIndex >= 0 ? colonTypeTokens : typeTokens;
+
+    while (parser.lookAhead(1).tokenType === Comma) {
+      parser.consumeToken(Comma);
+
+      while (parser.lookAhead(1).tokenType === Newline) {
+        parser.consumeToken(Newline);
+      }
+
+      const nextIdentifierToken = parser.consumeToken(IdentifierToken);
+      const nextIdentifier = createIdentifierNode(nextIdentifierToken);
+
+      let nextInitializer: ExpressionNode | undefined;
+      let nextOperatorToken: IToken | undefined;
+      const lookaheadType = parser.lookAhead(1).tokenType;
+      if (lookaheadType === Equal) {
+        nextOperatorToken = parser.consumeToken(Equal);
+        nextInitializer = parser.invokeSubrule(parser.expression);
+      } else if (lookaheadType === ColonEqual) {
+        nextOperatorToken = parser.consumeToken(ColonEqual);
+        nextInitializer = parser.invokeSubrule(parser.expression, 2);
+      }
+
+      const nextTypeAnnotation =
+        sharedTypeTokens.length > 0 ? buildTypeReferenceFromTokens(sharedTypeTokens) : null;
+
+      const declaration = createVariableDeclarationNode(
+        declarationKind,
+        nextIdentifier,
+        nextIdentifierToken,
+        nextTypeAnnotation,
+        nextInitializer,
+        nextOperatorToken &&
+        (nextOperatorToken.image === ':=' || nextOperatorToken.image === '=')
+          ? ((nextOperatorToken.image === ':=' ? ':=' : '=') as '=' | ':=')
+          : null,
+        nextIdentifierToken,
+      );
+
+      if (
+        nextInitializer &&
+        nextOperatorToken &&
+        (nextOperatorToken.image === '=' || nextOperatorToken.image === ':=')
+      ) {
+        attachLoopResultBinding(nextInitializer, {
+          kind: 'variableDeclaration',
+          target: nextIdentifier,
+          operator: nextOperatorToken.image,
+          declarationKind,
+        });
+      }
+
+      declarations.push(declaration);
+    }
+
+    if (debugMode) {
+      console.log('[Parser] variableDeclaration', {
+        identifier: identifier.name,
+        hasPrefixType: Boolean(typeTokens.length > 0),
+        hasColonType: Boolean(colonIndex >= 0),
+        initializerPresent: Boolean(initializer),
+        operator: operatorToken?.image ?? null,
+        additionalDeclarations: declarations.length - 1,
+      });
+    }
+
+    for (let index = 1; index < declarations.length; index += 1) {
+      parser.enqueuePendingStatement(declarations[index]);
+    }
+
+    return declarations[0];
   });
 }

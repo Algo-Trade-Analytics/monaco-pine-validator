@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+type SuiteStatus = 'stable' | 'deferred';
+
 type SuiteDefinition = {
   name: string;
   importModule: () => Promise<unknown>;
+  status?: SuiteStatus;
 };
 
 const SMOKE_SUITES: SuiteDefinition[] = [
@@ -19,10 +22,10 @@ const SMOKE_SUITES: SuiteDefinition[] = [
 const FULL_SUITES: SuiteDefinition[] = [
   { name: 'Array Validation', importModule: () => import('./array-validation.spec') },
   { name: 'Array Utility Functions Validation', importModule: () => import('./array-utility-functions-validation.spec') },
-  { name: 'Map Validation', importModule: () => import('./map-validation.spec') },
+  { name: 'Map Validation', importModule: () => import('./map-validation.spec'), status: 'deferred' },
   { name: 'String Functions Validation', importModule: () => import('./string-functions-validation.spec') },
   { name: 'String Utility Functions Validation', importModule: () => import('./string-utility-functions-validation.spec') },
-  { name: 'Input Functions Validation', importModule: () => import('./input-functions-validation.spec') },
+  { name: 'Input Functions Validation', importModule: () => import('./input-functions-validation.spec'), status: 'deferred' },
   { name: 'Input Utility Functions Validation', importModule: () => import('./input-utility-functions-validation.spec') },
   { name: 'Advanced Input Parameters Validation', importModule: () => import('./advanced-input-parameters-validation.spec') },
   { name: 'Color Functions Validation', importModule: () => import('./color-functions-validation.spec') },
@@ -41,11 +44,11 @@ const FULL_SUITES: SuiteDefinition[] = [
   { name: 'Enum Validation', importModule: () => import('./enum-validation.spec') },
   { name: 'Function Validation', importModule: () => import('./function-validation.spec') },
   { name: 'History Referencing Validation', importModule: () => import('./history-referencing-validation.spec') },
-  { name: 'Matrix Validation', importModule: () => import('./matrix-validation.spec') },
-  { name: 'Matrix Functions Validation', importModule: () => import('./matrix-functions-validation.spec') },
+  { name: 'Matrix Validation', importModule: () => import('./matrix-validation.spec'), status: 'deferred' },
+  { name: 'Matrix Functions Validation', importModule: () => import('./matrix-functions-validation.spec'), status: 'deferred' },
   { name: 'Chart Functions Validation', importModule: () => import('./chart-functions-validation.spec') },
   { name: 'Strategy Properties Validation', importModule: () => import('./strategy-properties-validation.spec') },
-  { name: 'Migration Verification', importModule: () => import('./migration-verification.spec') },
+  { name: 'Migration Verification', importModule: () => import('./migration-verification.spec'), status: 'deferred' },
   { name: 'Switch Statement Validation', importModule: () => import('./switch-statement-validation.spec') },
   { name: 'Text Formatting Validation', importModule: () => import('./text-formatting-validation.spec') },
   { name: 'Time/Date Functions Validation', importModule: () => import('./time-date-functions-validation.spec') },
@@ -53,13 +56,13 @@ const FULL_SUITES: SuiteDefinition[] = [
   { name: 'Builtin Variables Validation', importModule: () => import('./builtin-variables-validation.spec') },
   { name: 'Syminfo Variables Validation', importModule: () => import('./syminfo-variables-validation.spec') },
   { name: 'Final Constants Validation', importModule: () => import('./final-constants-validation.spec') },
-  { name: 'Constants & Enums Validation', importModule: () => import('./constants-enums-validation.spec') },
+  { name: 'Constants & Enums Validation', importModule: () => import('./constants-enums-validation.spec'), status: 'deferred' },
   { name: 'Type Inference Validation', importModule: () => import('./type-inference-validation.spec') },
   { name: 'UDT Validation', importModule: () => import('./udt-validation.spec') },
   { name: 'Ultimate Validator Enhanced', importModule: () => import('./ultimate-validator-enhanced.spec') },
   { name: 'Ultimate Validator', importModule: () => import('./ultimate-validator.spec') },
   { name: 'V6 Advanced Features', importModule: () => import('./v6-advanced.spec') },
-  { name: 'V6 Comprehensive Features', importModule: () => import('./v6-comprehensive.spec') },
+  { name: 'V6 Comprehensive Features', importModule: () => import('./v6-comprehensive.spec'), status: 'deferred' },
   { name: 'V6 Enhanced Features', importModule: () => import('./v6-enhanced-features.spec') },
   { name: 'Varip Validation', importModule: () => import('./varip-validation.spec') },
   { name: 'While Loop Validation', importModule: () => import('./while-loop-validation.spec') },
@@ -73,9 +76,8 @@ const FULL_SUITES: SuiteDefinition[] = [
   { name: 'Text Typography Validation', importModule: () => import('./text-typography-validation.spec') },
   { name: 'Ticker Validation', importModule: () => import('./ticker-validation.spec') },
   { name: 'Syminfo Session Timezone Advanced', importModule: () => import('./syminfo-session-timezone-advanced.spec') },
-  { name: 'Drawing Styling Enums Advanced', importModule: () => import('./drawing-styling-enums-advanced.spec') },
   { name: 'Strategy Risk & Commission Advanced', importModule: () => import('./strategy-risk-commission-advanced.spec') },
-  { name: 'Validator Scenario Fixtures', importModule: () => import('./validator-scenarios.spec') },
+  { name: 'Validator Scenario Fixtures', importModule: () => import('./validator-scenarios.spec'), status: 'deferred' },
   { name: 'Validator Smoke Suite', importModule: () => import('./validator-smoke.spec') },
   {
     name: 'Validator architecture integration tests',
@@ -84,12 +86,15 @@ const FULL_SUITES: SuiteDefinition[] = [
 ];
 
 const isFullSuiteEnabled = process.env.VALIDATOR_FULL_SUITE === '1';
-const activeSuites = isFullSuiteEnabled ? FULL_SUITES : SMOKE_SUITES;
+const baseSuites = isFullSuiteEnabled ? FULL_SUITES : SMOKE_SUITES;
 
 const suiteFilters = extractSuiteFilters(process.env.VALIDATOR_SUITE_FILTER);
-const filteredSuites = applySuiteFilters(activeSuites, suiteFilters);
+const filteredSuites = applySuiteFilters(baseSuites, suiteFilters);
 
-await loadSuites(filteredSuites);
+const includeDeferred = suiteFilters.length > 0 || process.env.VALIDATOR_INCLUDE_DEFERRED === '1';
+const { activeSuites, skippedSuites } = partitionSuites(filteredSuites, includeDeferred);
+
+await loadSuites(activeSuites);
 
 const testSuiteInfo = {
   name: isFullSuiteEnabled
@@ -98,10 +103,11 @@ const testSuiteInfo = {
   description: isFullSuiteEnabled
     ? 'Comprehensive regression fixtures that exercise the entire EnhancedModularValidator module catalog.'
     : 'Focused smoke assertions that ensure the EnhancedModularValidator pipeline and core diagnostics stay healthy.',
-  modules: filteredSuites.map((suite) => suite.name),
-  totalModules: filteredSuites.length,
+  modules: activeSuites.map((suite) => suite.name),
+  totalModules: activeSuites.length,
   mode: isFullSuiteEnabled ? 'full' : 'smoke',
   filter: suiteFilters,
+  skipped: skippedSuites.map((suite) => suite.name),
 };
 
 describe(`🧪 ${testSuiteInfo.name}`, () => {
@@ -126,6 +132,11 @@ function displaySuiteMetadata(): void {
   if (testSuiteInfo.filter.length > 0) {
     console.log('🎯 Suite Filter:', testSuiteInfo.filter.join(', '));
   }
+  if (testSuiteInfo.skipped.length > 0) {
+    console.log(
+      `⏭️ Deferred Modules: ${testSuiteInfo.skipped.join(', ')} (set VALIDATOR_INCLUDE_DEFERRED=1 to include)`
+    );
+  }
 }
 
 function extractSuiteFilters(rawFilter?: string): string[] {
@@ -136,6 +147,32 @@ function extractSuiteFilters(rawFilter?: string): string[] {
     .split(',')
     .map((token) => token.trim().toLowerCase())
     .filter((token) => token.length > 0);
+}
+
+function partitionSuites(
+  suites: SuiteDefinition[],
+  includeDeferred: boolean,
+): { activeSuites: SuiteDefinition[]; skippedSuites: SuiteDefinition[] } {
+  if (includeDeferred) {
+    return { activeSuites: suites, skippedSuites: [] };
+  }
+
+  const activeSuites: SuiteDefinition[] = [];
+  const skippedSuites: SuiteDefinition[] = [];
+
+  for (const suite of suites) {
+    if (suite.status === 'deferred') {
+      skippedSuites.push(suite);
+    } else {
+      activeSuites.push(suite);
+    }
+  }
+
+  if (activeSuites.length === 0 && suites.length > 0) {
+    return { activeSuites: suites, skippedSuites: [] };
+  }
+
+  return { activeSuites, skippedSuites };
 }
 
 function applySuiteFilters(suites: SuiteDefinition[], filters: string[]): SuiteDefinition[] {

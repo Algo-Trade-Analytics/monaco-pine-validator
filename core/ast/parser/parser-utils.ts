@@ -9,14 +9,17 @@ import {
   type VariableDeclarationKind,
   type VariableDeclarationNode,
 } from '../nodes';
-import { Dot, Identifier as IdentifierToken, Less } from './tokens';
+import { Dot, Identifier as IdentifierToken, Less, NumberLiteral as NumberToken } from './tokens';
 
-function hasIdentifierCategory(token: IToken): boolean {
-  const categories = (token.tokenType as unknown as { CATEGORIES?: unknown[] })?.CATEGORIES;
-  if (!Array.isArray(categories)) {
+function tokenBelongsTo(token: IToken | undefined, tokenType: unknown): boolean {
+  if (!token) {
     return false;
   }
-  return categories.includes(IdentifierToken);
+  if (token.tokenType === tokenType) {
+    return true;
+  }
+  const categories = (token.tokenType as unknown as { CATEGORIES?: unknown[] })?.CATEGORIES;
+  return Array.isArray(categories) && categories.includes(tokenType);
 }
 
 type AnnotatableStatementNode =
@@ -93,7 +96,7 @@ export function splitDeclarationTokens(
   let lastIdentifierIndex = -1;
   for (let index = tokens.length - 1; index >= 0; index -= 1) {
     const token = tokens[index];
-    if (token && (token.tokenType === IdentifierToken || hasIdentifierCategory(token))) {
+    if (tokenBelongsTo(token, IdentifierToken)) {
       lastIdentifierIndex = index;
       break;
     }
@@ -130,10 +133,11 @@ export function isTokenKeyword(token: IToken | undefined, keyword: string): bool
 }
 
 export function isIdentifierLikeToken(token: IToken | undefined): boolean {
-  if (!token) {
-    return false;
-  }
-  return token.tokenType === IdentifierToken || hasIdentifierCategory(token);
+  return tokenBelongsTo(token, IdentifierToken);
+}
+
+export function isNumberLiteralToken(token: IToken | undefined): boolean {
+  return tokenBelongsTo(token, NumberToken);
 }
 
 export function splitFunctionHeadTokens(tokens: IToken[]): { typeTokens: IToken[]; nameTokens: IToken[] } {

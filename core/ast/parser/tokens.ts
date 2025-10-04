@@ -91,10 +91,26 @@ export const StringLiteral = createToken({
 
 export const NumberLiteral = createToken({
   name: 'NumberLiteral',
-  // Pine numeric literals follow standard decimal syntax with optional fraction.
-  // Supports trailing decimal point (e.g., "6." is valid and equals "6.0")
-  // Supports scientific notation (e.g., "1e12", "1.5e-6")
-  pattern: /\d+(?:_?\d)*(?:\.\d*(?:_?\d)*)?(?:[eE][+-]?\d+)?/,
+  // Pine numeric literals follow standard decimal syntax with optional fraction
+  // and optional scientific notation component (e.g., "1e12", "1.5e-6").
+  // The fractional part requires at least one digit when present. Trailing
+  // decimal literals such as "6." are handled by the
+  // `TrailingNumberLiteral` token defined below so that we can keep the core
+  // pattern simple for Chevrotain's error recovery logic.
+  pattern: /\d+(?:_?\d)*(?:\.\d+(?:_?\d)*)?(?:[eE][+-]?\d+)?/,
+});
+
+export const TrailingNumberLiteral = createToken({
+  name: 'TrailingNumberLiteral',
+  // Matches numeric literals that end with a decimal point and no fractional
+  // digits, optionally followed by a scientific exponent (e.g., "6." or
+  // "6.e3"). The trailing literal must not be followed by identifier
+  // characters so that member access such as `6.foo` still tokenises as
+  // `NumberLiteral` + `Dot` + `Identifier`. The token is categorised as a
+  // NumberLiteral so parser rules that expect NumberLiteral continue to work
+  // without modification.
+  pattern: /\d+(?:_?\d)*\.(?:[eE][+-]?\d+)?(?![_\dA-Za-z])/,
+  categories: [NumberLiteral],
 });
 
 export const ColorLiteral = createToken({
@@ -236,6 +252,7 @@ export const AllTokens = [
   CompilerAnnotation,
   LineComment,
   StringLiteral,
+  TrailingNumberLiteral,
   NumberLiteral,
   ColorLiteral,
   Indicator,

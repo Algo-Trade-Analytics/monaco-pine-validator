@@ -32,6 +32,14 @@ export function createProgramRule(parser: PineParser) {
       const statementNode = parser.invokeSubrule(parser.statement);
       attachCompilerAnnotations(statementNode, annotations);
       body.push(statementNode);
+
+      const pending = parser.consumePendingStatements();
+      if (pending.length > 0) {
+        for (const extra of pending) {
+          attachCompilerAnnotations(extra, annotations);
+          body.push(extra);
+        }
+      }
       parser.repeatMany(() => parser.consumeToken(Newline, 4), 6);
     }, 5);
 

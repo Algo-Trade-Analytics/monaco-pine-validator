@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseWithChevrotain } from '../../core/ast/parser';
+import { Dot, NumberLiteral as NumberToken, PineLexer } from '../../core/ast/parser/tokens';
 import type {
   AssignmentStatementNode,
   BlockStatementNode,
@@ -164,6 +165,68 @@ describe('Chevrotain parser', () => {
     const program = ast as ProgramNode;
     expect(Array.isArray(program.body)).toBe(true);
     expect(() => program.body.map((statement) => statement?.kind)).not.toThrow();
+  });
+
+  it('splits multi-variable declarations into individual AST statements', () => {
+    const source = [
+      'float a = 1.0, b = 2.0, c = 3.0',
+      'var foo : int = 4, bar = 5',
+      'if condition',
+      '    float nestedA = 6., nestedB = 7.',
+      'else',
+      '    int altA = 8, altB = 9',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(6);
+
+    const [first, second, third, fourth, fifth, sixth] = program.body;
+
+    expect(first.kind).toBe('VariableDeclaration');
+    expect((first as VariableDeclarationNode).identifier.name).toBe('a');
+    expect((first as VariableDeclarationNode).typeAnnotation?.name.name).toBe('float');
+
+    expect(second.kind).toBe('VariableDeclaration');
+    expect((second as VariableDeclarationNode).identifier.name).toBe('b');
+    expect((second as VariableDeclarationNode).typeAnnotation?.name.name).toBe('float');
+
+    expect(third.kind).toBe('VariableDeclaration');
+    expect((third as VariableDeclarationNode).identifier.name).toBe('c');
+    expect((third as VariableDeclarationNode).typeAnnotation?.name.name).toBe('float');
+
+    expect(fourth.kind).toBe('VariableDeclaration');
+    expect((fourth as VariableDeclarationNode).identifier.name).toBe('foo');
+    expect((fourth as VariableDeclarationNode).typeAnnotation?.name.name).toBe('int');
+
+    expect(fifth.kind).toBe('VariableDeclaration');
+    expect((fifth as VariableDeclarationNode).identifier.name).toBe('bar');
+    expect((fifth as VariableDeclarationNode).typeAnnotation?.name.name).toBe('int');
+
+    expect(sixth.kind).toBe('IfStatement');
+    const ifStatement = sixth as IfStatementNode;
+
+    expect(ifStatement.consequent.kind).toBe('BlockStatement');
+    const consequentBlock = ifStatement.consequent as BlockStatementNode;
+    expect(consequentBlock.body).toHaveLength(2);
+    expect(consequentBlock.body.every((node) => node.kind === 'VariableDeclaration')).toBe(true);
+    const [nestedA, nestedB] = consequentBlock.body as VariableDeclarationNode[];
+    expect(nestedA.identifier.name).toBe('nestedA');
+    expect(nestedB.identifier.name).toBe('nestedB');
+
+    expect(ifStatement.alternate?.kind).toBe('BlockStatement');
+    const alternateBlock = ifStatement.alternate as BlockStatementNode;
+    expect(alternateBlock.body).toHaveLength(2);
+    const [altA, altB] = alternateBlock.body as VariableDeclarationNode[];
+    expect(altA.identifier.name).toBe('altA');
+    expect(altB.identifier.name).toBe('altB');
+    expect(altA.typeAnnotation?.name.name).toBe('int');
+    expect(altB.typeAnnotation?.name.name).toBe('int');
   });
 
   it('keeps partial AST data when deeply nested expressions miss closing parentheses', () => {
@@ -860,6 +923,57 @@ describe('Chevrotain parser', () => {
     expect((tuple.elements[1] as IdentifierNode).name).toBe('item');
     expect(secondLoop.iterable?.kind).toBe('Identifier');
     expect((secondLoop.iterable as IdentifierNode).name).toBe('array');
+  });
+
+  it('parses deeply nested loops that include trailing decimal divisors', () => {
+    const source = [
+      'for y = 0 to gy - 1',
+      '    float cy = math.cos(y / 6.) * 3',
+      '    for x = 0 to gx - 1',
+      '        float base = math.sin(x / 4.) * 5 + cy',
+      '        float add  = 0.0',
+      '        for pk in peaks',
+      '            float dx = float(x) - pk.x',
+      '            float dy = float(y) - pk.y',
+      '            add += pk.z * math.exp(-(dx*dx + dy*dy) / (2 * 3.2 * 3.2))',
+      '        M.set(y, x, Point3D.new(float(x), float(y), base + add))',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(1);
+    const outerLoop = program.body[0] as ForStatementNode;
+    expect(outerLoop.kind).toBe('ForStatement');
+    expect(outerLoop.body.body).toHaveLength(2);
+
+    const [outerDeclaration, nestedLoop] = outerLoop.body.body;
+    expect(outerDeclaration?.kind).toBe('VariableDeclaration');
+    expect(nestedLoop?.kind).toBe('ForStatement');
+
+    const nestedLoopNode = nestedLoop as ForStatementNode;
+    expect(nestedLoopNode.body.body.length).toBeGreaterThan(0);
+    const innermostLoop = nestedLoopNode.body.body.find(
+      (statement): statement is ForStatementNode => statement.kind === 'ForStatement',
+    );
+    expect(innermostLoop).toBeDefined();
+  });
+
+  it('keeps member access after integers tokenised as dot access', () => {
+    const source = 'value = 6.exponent';
+    const { tokens, errors } = PineLexer.tokenize(source);
+
+    expect(errors).toHaveLength(0);
+
+    const numberToken = tokens.find((token) => token.image === '6');
+    const dotToken = tokens.find((token) => token.tokenType === Dot);
+
+    expect(numberToken?.tokenType).toBe(NumberToken);
+    expect(dotToken).toBeDefined();
   });
 
   it('parses loop expressions with trailing result values', () => {

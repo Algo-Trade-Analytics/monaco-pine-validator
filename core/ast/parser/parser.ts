@@ -1,6 +1,6 @@
 import { EmbeddedActionsParser, type IToken } from 'chevrotain';
 import { AllTokens, LBracket } from './tokens';
-import type { ExpressionNode, IfExpressionNode, IfStatementNode } from '../nodes';
+import type { ExpressionNode, IfExpressionNode, IfStatementNode, StatementNode } from '../nodes';
 
 import {
   createAssignmentStartGuard,
@@ -83,6 +83,7 @@ type BacktrackMethod = <T>(production: unknown) => () => T;
 
 export class PineParser extends EmbeddedActionsParser {
   private lineIndentCache = new Map<number, number>();
+  private pendingStatements: StatementNode[] = [];
 
   public nextSignificantToken = createNextSignificantTokenHelper(this);
 
@@ -114,6 +115,21 @@ export class PineParser extends EmbeddedActionsParser {
   public override reset(): void {
     super.reset();
     this.lineIndentCache.clear();
+    this.pendingStatements = [];
+  }
+
+  public enqueuePendingStatement(statement: StatementNode): void {
+    this.pendingStatements.push(statement);
+  }
+
+  public consumePendingStatements(): StatementNode[] {
+    if (this.pendingStatements.length === 0) {
+      return [];
+    }
+
+    const statements = this.pendingStatements;
+    this.pendingStatements = [];
+    return statements;
   }
 
   public program = createProgramRule(this);

@@ -533,6 +533,15 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
       firstStatementToken = firstStatementToken ?? statementStartToken;
       lastToken = parser.lookAhead(0);
       attachCompilerAnnotations(statement, annotations);
+
+      const pending = parser.consumePendingStatements();
+      if (pending.length > 0) {
+        for (const extra of pending) {
+          statements.push(extra);
+          attachCompilerAnnotations(extra, annotations);
+          lastToken = parser.lookAhead(0);
+        }
+      }
     }
 
     return createBlockStatementNode(

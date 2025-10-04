@@ -17,6 +17,7 @@ import {
   createBreakStatementNode,
   createContinueStatementNode,
   createExpressionStatementNode,
+  createBlockStatementNode,
   createForStatementNode,
   createIdentifierNode,
   createIfStatementNode,
@@ -232,7 +233,13 @@ export function createIfStatementRule(parser: PineParser): () => IfStatementNode
       } else if (parser.lookAhead(1).tokenType === Newline) {
         alternate = parser.parseIndentedBlock(tokenIndent(elseToken));
       } else {
-        alternate = parser.invokeSubrule(parser.statement, 2);
+        const alternateStatement = parser.invokeSubrule(parser.statement, 2);
+        const pending = parser.consumePendingStatements();
+        if (pending.length > 0) {
+          alternate = createBlockStatementNode([alternateStatement, ...pending], undefined, undefined);
+        } else {
+          alternate = alternateStatement;
+        }
       }
     }
 

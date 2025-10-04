@@ -1,6 +1,6 @@
 import { EOF, type IToken } from 'chevrotain';
 import type { PineParser } from '../parser';
-import { isIdentifierLikeToken } from '../parser-utils';
+import { isIdentifierLikeToken, isNumberLiteralToken } from '../parser-utils';
 import {
   type ArgumentNode,
   type BlockStatementNode,
@@ -91,7 +91,7 @@ function createLiteralFromToken(token: IToken) {
   if (token.tokenType === StringToken) {
     return createStringNode(token);
   }
-  if (token.tokenType === NumberToken) {
+  if (isNumberLiteralToken(token)) {
     return createNumberNode(token);
   }
   if (token.tokenType === ColorToken) {
@@ -700,13 +700,16 @@ export function createBracketExpressionRule(parser: PineParser) {
 export function createPrimaryExpressionRule(parser: PineParser) {
   return parser.createRule('primaryExpression', (): ExpressionNode => {
     const token = parser.lookAhead(1);
+
+    if (isNumberLiteralToken(token)) {
+      return createLiteralFromToken(parser.consumeToken(NumberToken));
+    }
+
     switch (token.tokenType) {
       case IdentifierToken:
         return parser.invokeSubrule(parser.identifierExpression);
       case StringToken:
         return createLiteralFromToken(parser.consumeToken(StringToken));
-      case NumberToken:
-        return createLiteralFromToken(parser.consumeToken(NumberToken));
       case ColorToken:
         return createLiteralFromToken(parser.consumeToken(ColorToken));
       case True:
