@@ -62,6 +62,11 @@ export class NamespaceValidator implements ValidationModule {
       const secondMember = match[3];
       const column = match.index + 1;
       
+      // Check if this is a type annotation context
+      if (this.isTypeAnnotationContext(line, match.index, match[0])) {
+        continue;
+      }
+      
       let namespace = baseNamespace;
       let member = firstMember;
       
@@ -111,6 +116,64 @@ export class NamespaceValidator implements ValidationModule {
         }
       }
     }
+  }
+
+  /**
+   * Check if a namespace pattern appears in a type annotation context
+   * This covers all cases where namespaces are used as types, not function calls
+   */
+  private isTypeAnnotationContext(line: string, matchIndex: number, matchText: string): boolean {
+    const before = line.slice(0, matchIndex);
+    const after = line.slice(matchIndex + matchText.length);
+    
+    // 1. Function parameter type: "function(chart.point cp, ...)"
+    // Check if followed by space + identifier + comma/closing paren
+    if (/^\s+[a-zA-Z_][a-zA-Z0-9_]*\s*[,\)]/.test(after)) {
+      return true;
+    }
+    
+    // 2. Variable declaration type: "chart.point myVar = ..."
+    // Check if followed by space + identifier + equals/colon
+    if (/^\s+[a-zA-Z_][a-zA-Z0-9_]*\s*[=:]/.test(after)) {
+      return true;
+    }
+    
+    // 3. Inside generic type: "array<chart.point>" or "matrix<chart.point>"
+    // Already handled by negative lookbehind (?<!<) in the pattern, but double-check
+    if (/<[^>]*$/.test(before) && /^[^<]*>/.test(after)) {
+      return true;
+    }
+    
+    // 4. Type field in UDT/type declaration: "type MyType\n    chart.point field"
+    // Check if preceded by indentation at start of line
+    if (/^\s+$/.test(before) || /^\s+[a-zA-Z_][a-zA-Z0-9_]*\s+$/.test(before)) {
+      // And followed by identifier
+      if (/^\s+[a-zA-Z_][a-zA-Z0-9_]*\s*$/.test(after)) {
+        return true;
+      }
+    }
+    
+    // 5. Method parameter with "this" type: "method myMethod(chart.point this, ...)"
+    if (/^\s+this\s*[,\)]/.test(after)) {
+      return true;
+    }
+    
+    // 6. Return type annotation (if Pine Script supports it): "function() -> chart.point"
+    if (/->?\s*$/.test(before)) {
+      return true;
+    }
+    
+    // 7. Colon-based type annotation: "identifier : chart.point"
+    if (/:\s*$/.test(before)) {
+      return true;
+    }
+    
+    // 8. After type keywords: "var chart.point myVar" or "const chart.point myVar"
+    if (/\b(var|const|varip|int|float|bool|string|color)\s+$/.test(before)) {
+      return true;
+    }
+    
+    return false;
   }
 
   /**
