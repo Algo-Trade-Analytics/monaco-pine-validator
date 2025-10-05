@@ -48,6 +48,7 @@ import type {
   IdentifierNode,
   ParameterNode,
   TypeFieldNode,
+  TypeReferenceNode,
   VariableDeclarationKind,
   VariableDeclarationNode,
 } from '../../nodes';
@@ -463,6 +464,32 @@ export function createVariableDeclarationRule(parser: PineParser) {
         parser.consumeToken(Newline);
       }
 
+      // Check if the next variable has its own type annotation (e.g., "float ux = 1.0, float uy = 2.0")
+      let nextTypeAnnotation: TypeReferenceNode | null = null;
+      if (isDeclarationKeywordToken(parser.lookAhead(1))) {
+        // Consume the declaration keyword (e.g., "float")
+        parser.consumeToken(IdentifierToken);
+      }
+
+      // Check if there's a type annotation before the identifier
+      const nextCollected = parser.collectDeclarationTokens(1);
+      const nextTokens = nextCollected?.tokens ?? [];
+      if (nextTokens.length > 0) {
+        const { typeTokens: nextTypeTokens } = splitDeclarationTokens(nextTokens);
+        if (nextTypeTokens.length > 0) {
+          nextTypeAnnotation = buildTypeReferenceFromTokens(nextTypeTokens);
+          // Consume the type tokens
+          for (const token of nextTypeTokens) {
+            parser.consumeToken(token.tokenType);
+          }
+        }
+      }
+
+      // If no explicit type for this variable, use the shared type from the first declaration
+      if (!nextTypeAnnotation) {
+        nextTypeAnnotation = sharedTypeTokens.length > 0 ? buildTypeReferenceFromTokens(sharedTypeTokens) : null;
+      }
+
       const nextIdentifierToken = parser.consumeToken(IdentifierToken);
       const nextIdentifier = createIdentifierNode(nextIdentifierToken);
 
@@ -476,9 +503,6 @@ export function createVariableDeclarationRule(parser: PineParser) {
         nextOperatorToken = parser.consumeToken(ColonEqual);
         nextInitializer = parser.invokeSubrule(parser.expression, 2);
       }
-
-      const nextTypeAnnotation =
-        sharedTypeTokens.length > 0 ? buildTypeReferenceFromTokens(sharedTypeTokens) : null;
 
       const declaration = createVariableDeclarationNode(
         declarationKind,
