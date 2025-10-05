@@ -1681,10 +1681,10 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   },
   'color.rgb': {
     parameters: [
-      { name: 'red', type: 'int', qualifier: 'simple', required: true, min: 0, max: 255 },
-      { name: 'green', type: 'int', qualifier: 'simple', required: true, min: 0, max: 255 },
-      { name: 'blue', type: 'int', qualifier: 'simple', required: true, min: 0, max: 255 },
-      { name: 'transparency', type: 'int', qualifier: 'simple', required: false, min: 0, max: 100 }
+      { name: 'red', type: 'int', qualifier: 'series', required: true, min: 0, max: 255 },
+      { name: 'green', type: 'int', qualifier: 'series', required: true, min: 0, max: 255 },
+      { name: 'blue', type: 'int', qualifier: 'series', required: true, min: 0, max: 255 },
+      { name: 'transparency', type: 'int', qualifier: 'series', required: false, min: 0, max: 100 }
     ],
     returnType: 'color'
   },

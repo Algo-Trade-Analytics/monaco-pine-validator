@@ -1,0 +1,22 @@
+//@version=6
+indicator("Function Param Types Test")
+
+// Test 1: Function with untyped parameters
+GradientColorSingle1(c, size, max)=>
+    factor = max > 0 ? size / max : 0.0
+    factor := math.min(1.0, math.max(0.0, factor))
+    transp = math.round(90 * (1 - factor) + 10 * factor)
+    color.new(c, transp)
+
+// Test 2: Function with typed parameters
+GradientColorSingle2(color c, float size, float max)=>
+    factor = max > 0 ? size / max : 0.0
+    factor := math.min(1.0, math.max(0.0, factor))
+    transp = int(math.round(90 * (1 - factor) + 10 * factor))
+    color.new(c, transp)
+
+// Test calls
+c1 = GradientColorSingle1(color.blue, 50.0, 100.0)
+c2 = GradientColorSingle2(color.blue, 50.0, 100.0)
+
+plot(close, color=c1)

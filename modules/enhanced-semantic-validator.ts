@@ -333,13 +333,16 @@ export class EnhancedSemanticValidator implements ValidationModule {
       return false;
     }
 
+    // Only flag if explicitly declared as 'simple'
     if (typeInfo.qualifier === 'simple') {
       return true;
     }
 
-    if (typeInfo.baseType && this.isPrimitiveType(typeInfo.baseType)) {
-      return true;
-    }
+    // In Pine Script v6, primitive types without a qualifier default to 'series', not 'simple'
+    // So we should NOT flag them when qualifier is null
+    // if (typeInfo.baseType && this.isPrimitiveType(typeInfo.baseType)) {
+    //   return true;
+    // }
 
     return false;
   }

@@ -465,13 +465,13 @@ for i = 0 to 10
 
   describe('Semantic Type Analysis', () => {
     describe('PSV6-TYPE-FLOW: Advanced type checking', () => {
-      it('should fail on series to simple assignment', () => {
+      it('should allow primitive types without qualifier (defaults to series)', () => {
         const code = `//@version=6
 indicator("Test")
-series float x = ta.sma(close, 14)
-simple int len = x`;
+float x = ta.sma(close, 14)
+float y = close * volume`;
         const { codes } = run(code);
-        expectHas(codes, { errors: ['PSV6-TYPE-FLOW'] });
+        expectLacks(codes, { errors: ['PSV6-TYPE-FLOW'] });
       });
 
       it('should fail on input to series assignment in wrong context', () => {

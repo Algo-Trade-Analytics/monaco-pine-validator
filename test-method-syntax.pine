@@ -1,0 +1,19 @@
+//@version=6
+indicator("Method Syntax Test")
+
+type MyType
+    float value
+
+// Test 1: Traditional 'this' syntax
+method test1(MyType this) =>
+    this.value
+
+// Test 2: Named parameter (should work in TV)
+method test2(MyType arr) =>
+    arr.value
+
+// Test 3: No type annotation on this
+method test3(this) =>
+    this.value
+
+plot(close)

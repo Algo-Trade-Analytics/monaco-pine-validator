@@ -1466,8 +1466,8 @@ export class FunctionValidator implements ValidationModule {
         return true;
       }
     }
-    if (expectedType === 'int' && (actualType === 'int' || actualType === 'float' || actualType === 'series')) return true;
-    if (expectedType === 'float' && (actualType === 'float' || actualType === 'int' || actualType === 'series')) return true;
+    if (expectedType === 'int' && (actualType === 'int' || actualType === 'float' || actualType === 'series' || actualType === 'unknown')) return true;
+    if (expectedType === 'float' && (actualType === 'float' || actualType === 'int' || actualType === 'series' || actualType === 'unknown')) return true;
     if (expectedType === 'string' && (actualType === 'string' || actualType === 'series')) return true;
     if (expectedType === 'bool' && actualType === 'bool') return true;
     if (expectedType === 'color' && actualType === 'color') return true;
