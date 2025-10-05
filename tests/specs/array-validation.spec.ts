@@ -513,10 +513,8 @@ result = processArray(prices)
 
 plot(close)`;
 
-      context.lines = code.split('\n');
-      context.cleanLines = code.split('\n');
-
-      const result = validator.validate(context, config);
+      // Use the modern validation approach
+      const result = validator.validate(code);
 
       // For this test, we only care about array-specific errors
       // Function parameter type inference is handled by other validators
@@ -524,6 +522,8 @@ plot(close)`;
         error.code?.startsWith('PSV6-ARRAY-')
       );
 
+      // The validator should not generate array-specific errors for function parameters
+      // as they are properly handled by the type inference system
       expect(arrayErrors).toEqual([]);
     });
 

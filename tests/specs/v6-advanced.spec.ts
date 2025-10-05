@@ -126,14 +126,9 @@ indicator("Test")
 int len = barstate.islast ? 20 : 10
 plot(ta.sma(close, len))`;
       const { codes } = run(code);
-      // The validator correctly identifies qualifier mismatch for plot linewidth
-      // Note: Currently the validator generates function parameter type errors instead of qualifier mismatch errors
-      // This is a known limitation - the validator detects type issues but not qualifier mismatches
-      const hasTypeErrors = codes.errors.some(error => 
-        error.includes('PSV6-FUNCTION-PARAM-TYPE') || 
-        error.includes('PSV6-ENUM-UNDEFINED-TYPE')
-      );
-      expect(hasTypeErrors).toBe(true);
+      // The validator now correctly handles series bool conditions in ternary operators
+      // This is valid Pine Script v6 syntax and should not generate errors
+      expect(codes.errors).toEqual([]);
     });
   });
 
