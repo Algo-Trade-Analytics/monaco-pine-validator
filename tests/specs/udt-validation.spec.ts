@@ -109,7 +109,7 @@ plot(close)`;
   });
 
   describe('PSV6-METHOD: Method Declaration Validation', () => {
-    it('should error on method without this parameter', () => {
+    it('should accept method with typed first parameter (any name)', () => {
       const code = `//@version=6
 indicator("Method Test")
 
@@ -118,6 +118,26 @@ type Point
     float y
 
 method draw(Point p) =>
+    label.new(p.x, p.y, "Valid Method")
+
+plot(close)`;
+      
+      context.lines = code.split('\n');
+      context.cleanLines = code.split('\n');
+      
+      const result = validator.validate(context, config);
+      expectLacks(result, { errors: ['PSV6-METHOD-THIS'] });
+    });
+
+    it('should error on method without type annotation on first parameter', () => {
+      const code = `//@version=6
+indicator("Method Test")
+
+type Point
+    float x
+    float y
+
+method draw(p) =>
     label.new(p.x, p.y, "Invalid Method")
 
 plot(close)`;

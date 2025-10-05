@@ -33,7 +33,7 @@ import {
 import { createPlaceholderExpression } from './expressions';
 import { createIdentifierNode } from './identifiers';
 import { createStringNode } from './literals';
-import { Comma, Greater, Identifier as IdentifierToken, Less, Return } from '../tokens';
+import { Comma, Greater, Identifier as IdentifierToken, LBracket, Less, RBracket, Return } from '../tokens';
 import { isIdentifierLikeToken } from '../parser-utils';
 
 export function createParameterNode(
@@ -352,15 +352,36 @@ export function buildTypeReferenceFromTokens(tokens: IToken[]): TypeReferenceNod
       endToken = child.endToken;
     }
 
-    return {
-      node: {
-        kind: 'TypeReference',
-        name,
-        generics,
-        ...spanFromTokens(nameToken, endToken),
-      },
-      endToken,
+    let node: TypeReferenceNode = {
+      kind: 'TypeReference',
+      name,
+      generics,
+      ...spanFromTokens(nameToken, endToken),
     };
+
+    while (index < tokens.length && tokens[index]?.tokenType === LBracket) {
+      const bracketStart = tokens[index];
+      index += 1;
+
+      const closingBracket = tokens[index]?.tokenType === RBracket ? tokens[index] : undefined;
+      if (closingBracket) {
+        index += 1;
+      } else {
+        // If we don't have a closing bracket, stop processing array suffixes to avoid infinite loops
+        break;
+      }
+
+      const arrayToken = createSyntheticToken('array', IdentifierToken, nameToken);
+      node = {
+        kind: 'TypeReference',
+        name: createIdentifierNode(arrayToken),
+        generics: [node],
+        ...spanFromTokens(nameToken, closingBracket),
+      };
+      endToken = closingBracket;
+    }
+
+    return { node, endToken };
   }
 
   return parseType().node;

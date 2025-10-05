@@ -126,7 +126,9 @@ export function createCollectDeclarationTokensHelper(parser: PineParser) {
         tokenType === Less ||
         tokenType === Greater ||
         tokenType === Comma ||
-        tokenType === Dot
+        tokenType === Dot ||
+        tokenType === LBracket ||
+        tokenType === RBracket
       ) {
         tokens.push(token);
         offset += 1;
@@ -162,7 +164,9 @@ export function createCollectFunctionHeadTokensHelper(parser: PineParser) {
         tokenType === Less ||
         tokenType === Greater ||
         tokenType === Comma ||
-        tokenType === Dot
+        tokenType === Dot ||
+        tokenType === LBracket ||
+        tokenType === RBracket
       ) {
         tokens.push(token);
         offset += 1;
@@ -207,7 +211,9 @@ export function createCollectParameterTokensHelper(parser: PineParser) {
         tokenType === Less ||
         tokenType === Greater ||
         tokenType === Comma ||
-        tokenType === Dot
+        tokenType === Dot ||
+        tokenType === LBracket ||
+        tokenType === RBracket
       ) {
         tokens.push(token);
         offset += 1;

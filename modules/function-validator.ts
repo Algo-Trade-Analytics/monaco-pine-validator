@@ -1450,6 +1450,8 @@ export class FunctionValidator implements ValidationModule {
     // Basic type checking with more flexible rules
     // Tolerate unknowns for object-like or collection types to avoid false negatives before type inference
     if ((expectedType === 'array' || expectedType === 'polyline') && actualType === 'unknown') return true;
+    // Also tolerate unknown for color, as function parameters without type annotations will be unknown
+    if (expectedType === 'color' && actualType === 'unknown') return true;
     // Treat 'na' as compatible with numeric/series parameters
     if (actualType === 'na' && (expectedType === 'float' || expectedType === 'int' || expectedType === 'series' || expectedType === 'any')) return true;
     if (expectedType === 'series' && (actualType === 'series' || actualType === 'float' || actualType === 'int' || actualType === 'bool' || actualType === 'literal')) return true;
@@ -1464,8 +1466,8 @@ export class FunctionValidator implements ValidationModule {
         return true;
       }
     }
-    if (expectedType === 'int' && (actualType === 'int' || actualType === 'float')) return true;
-    if (expectedType === 'float' && (actualType === 'float' || actualType === 'int')) return true;
+    if (expectedType === 'int' && (actualType === 'int' || actualType === 'float' || actualType === 'series')) return true;
+    if (expectedType === 'float' && (actualType === 'float' || actualType === 'int' || actualType === 'series')) return true;
     if (expectedType === 'string' && (actualType === 'string' || actualType === 'series')) return true;
     if (expectedType === 'bool' && actualType === 'bool') return true;
     if (expectedType === 'color' && actualType === 'color') return true;

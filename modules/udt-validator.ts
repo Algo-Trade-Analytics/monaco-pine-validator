@@ -261,8 +261,29 @@ export class UDTValidator implements ValidationModule {
 
     const fullName = node.identifier.name;
     const firstParam = node.params[0] ?? null;
-    const hasThis = Boolean(firstParam && firstParam.identifier.name === 'this');
     const hasMethodModifier = node.modifiers?.includes('method') ?? false;
+    
+    // In Pine Script v6, a method's first parameter can have ANY name (not just 'this')
+    // as long as it has a type annotation. Check if first param has a UDT type annotation.
+    let thisTypeName: string | null = null;
+    let hasValidFirstParam = false;
+    
+    if (firstParam?.typeAnnotation) {
+      const rawType = this.stringifyAstTypeReference(firstParam.typeAnnotation);
+      const parsed = this.parseFieldType(rawType);
+      if (parsed.baseType === 'udt' && parsed.udtName) {
+        thisTypeName = parsed.udtName;
+        hasValidFirstParam = true;
+      } else if (parsed.baseType !== 'unknown') {
+        thisTypeName = parsed.baseType;
+        hasValidFirstParam = true;
+      }
+    }
+    
+    // Also accept parameter named 'this' even without type annotation (for backward compatibility)
+    const hasThisParam = Boolean(firstParam && firstParam.identifier.name === 'this');
+    const hasThis = hasThisParam || hasValidFirstParam;
+    
     const isMethodCandidate = fullName.includes('.') || hasThis || hasMethodModifier;
 
     if (!isMethodCandidate) {
@@ -276,17 +297,6 @@ export class UDTValidator implements ValidationModule {
       const [maybeType] = fullName.split('.');
       if (maybeType) {
         udtName = maybeType;
-      }
-    }
-
-    let thisTypeName: string | null = null;
-    if (firstParam?.typeAnnotation) {
-      const rawType = this.stringifyAstTypeReference(firstParam.typeAnnotation);
-      const parsed = this.parseFieldType(rawType);
-      if (parsed.baseType === 'udt' && parsed.udtName) {
-        thisTypeName = parsed.udtName;
-      } else if (parsed.baseType !== 'unknown') {
-        thisTypeName = parsed.baseType;
       }
     }
 
@@ -327,7 +337,7 @@ export class UDTValidator implements ValidationModule {
         this.addError(
           metadata.line,
           metadata.column,
-          `Method '${metadata.methodName}' must have 'this' as first parameter`,
+          `Method '${metadata.methodName}' must have a first parameter with a type annotation (e.g., 'Arrays this' or 'Arrays arr')`,
           'PSV6-METHOD-THIS',
         );
         continue;
@@ -337,7 +347,7 @@ export class UDTValidator implements ValidationModule {
         this.addInfo(
           metadata.line,
           metadata.column,
-          "Consider adding type annotation to 'this' parameter",
+          "Consider adding type annotation to the first parameter for clarity",
           'PSV6-METHOD-TYPE',
         );
       }
