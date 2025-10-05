@@ -125,7 +125,8 @@ export function createCollectDeclarationTokensHelper(parser: PineParser) {
         isIdentifierLikeToken(token) ||
         tokenType === Less ||
         tokenType === Greater ||
-        tokenType === Comma
+        tokenType === Comma ||
+        tokenType === Dot
       ) {
         tokens.push(token);
         offset += 1;
