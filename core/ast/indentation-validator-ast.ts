@@ -333,6 +333,9 @@ export class ASTIndentationValidator {
     const stmtStartLine = stmt.loc.start.line - 1;
     const stmtEndLine = stmt.loc.end.line - 1;
     const stmtIndent = this.getLineIndent(stmtStartLine);
+    const parentBlockIndent = this.context.parentContext
+      ? this.context.parentContext.blockIndent
+      : null;
 
     // Skip validation for ExpressionStatements containing comma operator sequences (TupleExpression)
     // These are synthesized by the parser for comma operators (e.g., "a := 1, b := 2")
@@ -413,7 +416,14 @@ export class ASTIndentationValidator {
       }
     } else {
       // Single-line statement OR block statement: header should be at expected block indent
-      if (stmtIndent !== expectedIndent) {
+      const allowControlFlowSibling =
+        isBlockStatement &&
+        this.isControlFlowBlockContext() &&
+        parentBlockIndent !== null &&
+        parentBlockIndent > 0 &&
+        stmtIndent === parentBlockIndent;
+
+      if (!allowControlFlowSibling && stmtIndent !== expectedIndent) {
         this.addError(
           stmt.loc.start.line,
           stmtIndent + 1,
@@ -428,6 +438,15 @@ export class ASTIndentationValidator {
       this.validateNode(stmt);
     }
     // Don't recurse for simple statements - their indentation is already validated
+  }
+
+  private isControlFlowBlockContext(): boolean {
+    const blockType = this.context.blockType;
+    return blockType === 'if' ||
+      blockType === 'else' ||
+      blockType === 'for' ||
+      blockType === 'while' ||
+      blockType === 'switch';
   }
 
   /**
@@ -850,25 +869,32 @@ export class ASTIndentationValidator {
    * - Inside blocks, continuation can be ANY non-multiple-of-4 (including < block level)
    */
   private validateWrapIndentation(lineNum: number, indent: number, baseIndent: number): void {
-    // Rule 1: Wrapped line must NOT be at a multiple-of-4 boundary (reserved for blocks)
-    if (indent % 4 === 0) {
+    const relativeIndent = indent - baseIndent;
+    const wrapIndent = Math.abs(relativeIndent);
+
+    // Rule 1: Continuation must actually change indentation relative to the statement header
+    if (wrapIndent === 0) {
+      const message = baseIndent === 0
+        ? 'Line continuation at column 0 is invalid. Use any non-multiple-of-4 indentation (1, 2, 3, 5...).'
+        : 'Line continuation must change indentation relative to the statement start. Use a non-multiple-of-4 offset (1, 2, 3, 5...).';
+
       this.addError(
         lineNum,
         indent + 1,
-        `Line continuation cannot use ${indent} spaces (multiples of 4 are reserved for blocks)`,
-        'PSV6-INDENT-WRAP-MULTIPLE-OF-4'
+        message,
+        'PSV6-INDENT-WRAP-INSUFFICIENT'
       );
       return;
     }
 
-    // Rule 2: At global scope, continuation must be indented (> 0)
-    // Inside blocks, any non-multiple-of-4 is allowed (can be less than block level)
-    if (baseIndent === 0 && indent === 0) {
+    // Rule 2: Wrapped line must NOT use a multiple-of-4 relative offset (reserved for blocks)
+    if (wrapIndent % 4 === 0) {
+      const spaceLabel = wrapIndent === 1 ? 'space' : 'spaces';
       this.addError(
         lineNum,
-        1,
-        `Line continuation at column 0 is invalid. Use any non-multiple-of-4 indentation (1, 2, 3, 5...).`,
-        'PSV6-INDENT-WRAP-INSUFFICIENT'
+        indent + 1,
+        `Line continuation cannot use ${wrapIndent} ${spaceLabel} of relative indentation (multiples of 4 are reserved for blocks).`,
+        'PSV6-INDENT-WRAP-MULTIPLE-OF-4'
       );
     }
   }

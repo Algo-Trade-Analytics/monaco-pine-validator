@@ -209,6 +209,21 @@ plot(longValue)`;
       expect(errors).toHaveLength(0);
     });
 
+    it('should accept single-space continuation indentation', () => {
+      const code = `//@version=6
+indicator("Test")
+result = long_function_name(param1,
+ param2,
+ param3)
+
+plot(result)`;
+
+      const ast = parseCode(code);
+      const errors = validateIndentationWithAST(code, ast);
+
+      expect(errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toHaveLength(0);
+    });
+
     it('should error on line wrapping with multiple of 4', () => {
       // Parser treats line 4 as separate statement, not continuation
       const code = `//@version=6
@@ -317,6 +332,26 @@ plot(myFunc(close))`;
       const errors = validateIndentationWithAST(code, ast);
 
       expect(errors).toHaveLength(0);
+    });
+
+    it('should accept sibling control flow statements aligned with parent indentation', () => {
+      const code = `//@version=6
+indicator("Test")
+myFunc(cond1, cond2) =>
+    value = 0
+    if cond1
+        if cond2
+            value := 1
+        if not cond2
+            value := 2
+    value
+
+plot(myFunc(true, false))`;
+
+      const ast = parseCode(code);
+      const errors = validateIndentationWithAST(code, ast);
+
+      expect(errors.filter(e => e.code === 'PSV6-INDENT-BLOCK-MISMATCH')).toHaveLength(0);
     });
   });
 
