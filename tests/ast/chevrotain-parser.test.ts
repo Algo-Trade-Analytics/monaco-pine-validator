@@ -94,6 +94,36 @@ describe('Chevrotain parser', () => {
     expect(secondArg.value.kind).toBe('NumberLiteral');
   });
 
+  it('parses named arguments containing decimals without a leading zero', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'b = input.float(0.05, "test", step = .05)',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    const assignment = program.body[1] as AssignmentStatementNode;
+    expect(assignment.kind).toBe('AssignmentStatement');
+
+    const call = assignment.right as CallExpressionNode;
+    expect(call.kind).toBe('CallExpression');
+    expect(call.args).toHaveLength(3);
+
+    const [, , stepArg] = call.args;
+    expect(stepArg.name?.name).toBe('step');
+
+    const stepValue = stepArg.value as NumberLiteralNode;
+    expect(stepValue.kind).toBe('NumberLiteral');
+    expect(stepValue.raw).toBe('.05');
+    expect(stepValue.value).toBeCloseTo(0.05);
+  });
+
   it('parses import declarations with aliases', () => {
     const source = [
       'import "user/lib/1" as lib',

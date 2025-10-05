@@ -93,11 +93,12 @@ export const NumberLiteral = createToken({
   name: 'NumberLiteral',
   // Pine numeric literals follow standard decimal syntax with optional fraction
   // and optional scientific notation component (e.g., "1e12", "1.5e-6").
-  // The fractional part requires at least one digit when present. Trailing
-  // decimal literals such as "6." are handled by the
+  // Numbers without a leading zero such as ".05" are valid and should be
+  // tokenised as a single literal rather than a `Dot` token followed by a
+  // `NumberLiteral`. Trailing decimal literals such as "6." are handled by the
   // `TrailingNumberLiteral` token defined below so that we can keep the core
   // pattern simple for Chevrotain's error recovery logic.
-  pattern: /\d+(?:_?\d)*(?:\.\d+(?:_?\d)*)?(?:[eE][+-]?\d+)?/,
+  pattern: /(?:\d+(?:_?\d)*(?:\.\d+(?:_?\d)*)?|\.\d+(?:_?\d)*)(?:[eE][+-]?\d+)?/,
 });
 
 export const TrailingNumberLiteral = createToken({
