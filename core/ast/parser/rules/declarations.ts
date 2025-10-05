@@ -320,6 +320,20 @@ export function createTypeFieldRule(parser: PineParser) {
 
     const identifierToken = parser.consumeToken(IdentifierToken);
     const identifier = createIdentifierNode(identifierToken);
+    
+    // Consume default value if present (e.g., "= na")
+    if (parser.lookAhead(1).tokenType === Equal) {
+      parser.consumeToken(Equal);
+      // Consume the default value expression (everything until newline or EOF)
+      while (true) {
+        const next = parser.lookAhead(1);
+        if (next.tokenType === Newline || next.tokenType === EOF_TOKEN) {
+          break;
+        }
+        parser.consumeToken(next.tokenType);
+      }
+    }
+    
     const startToken = consumedTypeTokens[0] ?? identifierToken;
     return createTypeFieldNode(identifier, typeAnnotation, startToken, identifierToken);
   });
