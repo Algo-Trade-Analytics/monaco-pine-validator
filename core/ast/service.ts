@@ -26,7 +26,18 @@ export function createNullAstService(): AstService {
 export class ChevrotainAstService implements AstService {
   parse(source: string, options: AstParseOptions = {}): AstParseResult {
     try {
-      return parseWithChevrotain(source, options);
+      // Always request a best-effort AST so downstream validators can still
+      // reason about the script even when Chevrotain reports syntax errors.
+      //
+      // The module harness uses the FunctionAstService with
+      // `allowErrors: true`, which meant the harness received partial ASTs
+      // while the production validator (via ChevrotainAstService) returned
+      // `null`.  Modules such as the function/type validators silently
+      // skipped their AST-based logic, causing the full validator regression
+      // suite to miss diagnostics like PSV6-FUNCTION-RETURN-TYPE and PSDUP01.
+      // Align the production service with the harness behaviour so both
+      // environments analyse the same AST snapshot.
+      return parseWithChevrotain(source, { ...options, allowErrors: true });
     } catch (error) {
       const syntaxError =
         error instanceof SyntaxError

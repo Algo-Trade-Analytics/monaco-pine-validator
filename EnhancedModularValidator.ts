@@ -233,9 +233,18 @@ export class EnhancedModularValidator extends BaseValidator {
         // BEST PRACTICE: Early exit on critical errors (industry standard)
         // Prevents cascading false positives and matches user expectations
         // (ESLint, TypeScript, Python linters all do this)
-        if ((module.name === 'SyntaxErrorValidator' || module.name === 'NamespaceValidator') 
-            && this.errors.length > 0) {
-          return; // Stop validation - user should fix these fundamental errors first
+        if (module.name === 'SyntaxErrorValidator' || module.name === 'NamespaceValidator') {
+          const hasBlockingErrors = this.errors.some((error) => {
+            const code = error.code ?? '';
+            if (code.startsWith('PSV6-INDENT-')) {
+              return false; // stylistic indentation issues shouldn't short-circuit other modules
+            }
+            return true;
+          });
+
+          if (hasBlockingErrors) {
+            return; // Stop validation - user should fix these fundamental errors first
+          }
         }
       } catch (error) {
         this.addError(1, 1, `Error in ${module.name} module: ${error}`, 'MODULE-ERROR');

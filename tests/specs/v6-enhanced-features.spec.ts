@@ -185,7 +185,7 @@ import "user/library/123" as myLib`;
     });
 
     describe('PSV6-LIB-ALIAS: Alias conflicts', () => {
-      it('should fail when alias conflicts with user function', () => {
+    it('should fail when alias conflicts with user function', () => {
         const code = `//@version=6
 indicator("Test")
 myFunc() => 1
@@ -502,7 +502,7 @@ myVar = close > open ? 1.0 : 0.0`;
         expectHas(codes, { info: ['PSV6-TYPE-INFERENCE'] });
       });
 
-      it('should suggest type for function return', () => {
+    it('should suggest type for function return', () => {
         const code = `//@version=6
 indicator("Test")
 myFunc() => close > open ? 1 : 0`;
@@ -526,7 +526,7 @@ float myVar = close > open ? 1.0 : 0.0`;
 
   describe('Code Quality Metrics', () => {
     describe('PSV6-QUALITY-COMPLEXITY: Cyclomatic complexity', () => {
-      it('should warn about high cyclomatic complexity', () => {
+    it('should warn about high cyclomatic complexity', () => {
         const code = `//@version=6
 indicator("Test")
 complexFunc() =>
@@ -567,7 +567,7 @@ simpleFunc() =>
     });
 
     describe('PSV6-QUALITY-DEPTH: Nesting depth warnings', () => {
-      it('should warn about excessive nesting depth', () => {
+    it('should warn about excessive nesting depth', () => {
         const code = `//@version=6
 indicator("Test")
 deepFunc() =>
@@ -599,7 +599,7 @@ reasonableFunc() =>
     });
 
     describe('PSV6-QUALITY-LENGTH: Function length suggestions', () => {
-      it('should warn about very long functions', () => {
+    it('should warn about very long functions', () => {
         const longFunction = Array.from({length: 60}, (_, i) => `    line${i} = ${i}`).join('\n');
         const code = `//@version=6
 indicator("Test")

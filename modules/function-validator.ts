@@ -369,6 +369,7 @@ export class FunctionValidator implements ValidationModule {
     const program = this.astContext?.ast ?? null;
 
     if (!program) {
+      console.warn('[FunctionValidator] AST unavailable', { hasAst: Boolean((this.context as any)?.ast), mode: config.ast?.mode });
       this.validateInconsistentReturnTypesLegacy();
       return this.buildResult();
     }

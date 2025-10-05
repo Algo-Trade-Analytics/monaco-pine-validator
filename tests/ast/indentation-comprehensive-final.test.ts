@@ -300,7 +300,7 @@ volFrom(srcSeries) =>
       expect(errors).toHaveLength(0);
     });
 
-    it('should error on 4-space continuation (block boundary)', () => {
+    it('should warn on 4-space continuation (block boundary)', () => {
       const code = `//@version=6
 indicator("Test")
 volFrom(srcSeries) =>
@@ -311,11 +311,11 @@ volFrom(srcSeries) =>
 
       const result = validateWithFullValidator(code);
       
-      const wrapErrors = result.errors.filter(e => e.code === 'PSV6-INDENT-WRAP-BLOCK');
-      expect(wrapErrors.length).toBeGreaterThan(0);
+      const wrapWarnings = result.warnings.filter(w => w.code === 'PSV6-INDENT-WRAP-BLOCK');
+      expect(wrapWarnings.length).toBeGreaterThan(0);
     });
 
-    it('should error on 0-space continuation (block boundary)', () => {
+    it('should warn on 0-space continuation (block boundary)', () => {
       const code = `//@version=6
 indicator("Test")
 volFrom(srcSeries) =>
@@ -326,8 +326,8 @@ ta.sma(srcSeries, 20)), 20) * 1.4826
 
       const result = validateWithFullValidator(code);
       
-      const wrapErrors = result.errors.filter(e => e.code === 'PSV6-INDENT-WRAP-BLOCK');
-      expect(wrapErrors.length).toBeGreaterThan(0);
+      const wrapWarnings = result.warnings.filter(w => w.code === 'PSV6-INDENT-WRAP-BLOCK' || w.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4');
+      expect(wrapWarnings.length).toBeGreaterThan(0);
     });
   });
 

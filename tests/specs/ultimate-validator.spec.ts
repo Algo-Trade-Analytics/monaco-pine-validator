@@ -305,6 +305,7 @@ my.ns.func(close, open)`;
       !w.includes('PSU-PARAM') && 
       !w.includes('PSV6-TYPE-INFERENCE-PARAM-UNKNOWN') &&
       !w.includes('PSV6-FUNCTION-STYLE-DOCS') &&
+      !w.includes('PSV6-INDENT-WRAP-MULTIPLE-OF-4') &&
       !w.includes('PSU02')
     );
     expect(filteredWarnings).toEqual([]); // Currently not detecting unused params for dotted functions

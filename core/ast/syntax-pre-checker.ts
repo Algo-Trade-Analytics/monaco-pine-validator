@@ -139,7 +139,7 @@ export function preCheckSyntax(sourceCode: string): ValidationError[] {
           line: i + 2,
           column: nextIndent + 1,
           message: `Line continuation at column ${nextIndent} (multiple of 4) will likely fail in TradingView. Use non-multiple-of-4 indentation.`,
-          severity: 'error',
+          severity: 'warning',
           code: 'PSV6-INDENT-WRAP-MULTIPLE-OF-4',
           suggestion: `Try ${suggested} spaces or ${nextIndent + 1} spaces (non-multiple-of-4).`
         });
@@ -153,7 +153,7 @@ export function preCheckSyntax(sourceCode: string): ValidationError[] {
             line: i + 2,
             column: nextIndent + 1,
             message: `Line continuation inside block cannot be at ${nextIndent} spaces (multiple of 4). Must be beyond block level (${lineIndent}) using non-multiple-of-4.`,
-            severity: 'error',
+            severity: 'warning',
             code: 'PSV6-INDENT-WRAP-BLOCK',
             suggestion: `Try ${suggested} spaces or ${lineIndent + 2} spaces (block + non-multiple-of-4).`
           });
