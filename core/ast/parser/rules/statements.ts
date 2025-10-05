@@ -1,6 +1,6 @@
 import type { StatementNode } from '../../nodes';
 import type { PineParser } from '../parser';
-import { createExpressionStatementNode } from '../node-builders';
+import { createBlockStatementNode, createExpressionStatementNode } from '../node-builders';
 import {
   Enum,
   For,
@@ -8,6 +8,7 @@ import {
   Import,
   LParen,
   LBracket,
+  Comma,
   Repeat,
   Return,
   Switch,
@@ -163,7 +164,32 @@ export function createStatementRule(parser: PineParser) {
       },
       {
         GATE: () => parser.isAssignmentStart(),
-        ALT: () => parser.invokeSubrule(parser.assignmentStatement),
+        ALT: () => {
+          const startToken = parser.lookAhead(1);
+          const assignments = [parser.invokeSubrule(parser.assignmentStatement)];
+          let assignmentOccurrence = 2;
+
+          // Parse comma-separated assignments (e.g., "a := 1, b := 2")
+          while (parser.lookAhead(1).tokenType === Comma) {
+            parser.consumeToken(Comma);
+
+            // Allow newlines after comma
+            while (parser.lookAhead(1).tokenType === Newline) {
+              parser.consumeToken(Newline);
+            }
+
+            assignments.push(parser.invokeSubrule(parser.assignmentStatement, assignmentOccurrence));
+            assignmentOccurrence += 1;
+          }
+
+          // Return single assignment or BlockStatementNode for multiple
+          if (assignments.length === 1) {
+            return assignments[0];
+          }
+
+          const endToken = parser.lookAhead(0);
+          return createBlockStatementNode(assignments, startToken, endToken);
+        },
       },
       { ALT: () => parser.invokeSubrule(parser.expressionStatement) },
     ]);

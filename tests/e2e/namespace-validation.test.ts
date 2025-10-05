@@ -217,5 +217,194 @@ plot(close)`;
       expect(result.errors[0].column).toBeGreaterThan(10); // Somewhere near "color"
     });
   });
+
+  describe('Type Annotation Context Validation', () => {
+    it('should allow namespace members in function parameter type annotations', () => {
+      const code = `//@version=6
+indicator("Test")
+
+f_process(chart.point cp, color c) =>
+    label.new(cp.index, cp.price, "Test", color=c)
+
+f_draw(array<chart.point> points, matrix<Point3D> data) =>
+    for p in points
+        label.new(p.index, p.price, "Point")`;
+
+      const result = validator.validate(code);
+
+      // Should not have namespace validation errors for type annotations
+      const namespaceErrors = result.errors.filter(e => e.code === 'PSV6-UNDEFINED-NAMESPACE-MEMBER');
+      expect(namespaceErrors).toHaveLength(0);
+    });
+
+    it('should allow namespace members in variable declaration type annotations', () => {
+      const code = `//@version=6
+indicator("Test")
+
+array<chart.point> poly = array.new<chart.point>()
+matrix<Point3D> M = matrix.new<Point3D>(10, 10)
+map<string, bool> flags = map.new<string, bool>()`;
+
+      const result = validator.validate(code);
+
+      // Should not have namespace validation errors for type annotations
+      const namespaceErrors = result.errors.filter(e => e.code === 'PSV6-UNDEFINED-NAMESPACE-MEMBER');
+      expect(namespaceErrors).toHaveLength(0);
+    });
+
+    it('should allow namespace members in UDT field type annotations', () => {
+      const code = `//@version=6
+indicator("Test")
+
+type DataPoint
+    chart.point position
+    color pointColor
+    array<chart.point> neighbors
+
+type Camera
+    int anchorX
+    float anchorY
+    float cYaw
+    float sYaw`;
+
+      const result = validator.validate(code);
+
+      // Should not have namespace validation errors for type annotations
+      const namespaceErrors = result.errors.filter(e => e.code === 'PSV6-UNDEFINED-NAMESPACE-MEMBER');
+      expect(namespaceErrors).toHaveLength(0);
+    });
+
+    it('should allow namespace members in method this parameter type annotations', () => {
+      const code = `//@version=6
+indicator("Test")
+
+type Point3D
+    float x
+    float y
+    float z
+
+    method project(this<Point3D>, Camera cam) =>
+        array<chart.point> poly = array.new<chart.point>()
+        poly.push(cam.project(this))
+        poly`;
+
+      const result = validator.validate(code);
+
+      // Should not have namespace validation errors for type annotations
+      const namespaceErrors = result.errors.filter(e => e.code === 'PSV6-UNDEFINED-NAMESPACE-MEMBER');
+      expect(namespaceErrors).toHaveLength(0);
+    });
+
+    it('should allow namespace members in return type annotations', () => {
+      const code = `//@version=6
+indicator("Test")
+
+f_getPoint(): chart.point =>
+    chart.point.from_index(0, 0)
+
+f_getPoints(): array<chart.point> =>
+    array.new<chart.point>()`;
+
+      const result = validator.validate(code);
+
+      // Should not have namespace validation errors for type annotations
+      const namespaceErrors = result.errors.filter(e => e.code === 'PSV6-UNDEFINED-NAMESPACE-MEMBER');
+      expect(namespaceErrors).toHaveLength(0);
+    });
+
+    it('should allow namespace members in colon-based type annotations', () => {
+      const code = `//@version=6
+indicator("Test")
+
+f_process(points: array<chart.point>, data: matrix<Point3D>) =>
+    for p in points
+        label.new(p.index, p.price, "Point")`;
+
+      const result = validator.validate(code);
+
+      // Should not have namespace validation errors for type annotations
+      const namespaceErrors = result.errors.filter(e => e.code === 'PSV6-UNDEFINED-NAMESPACE-MEMBER');
+      expect(namespaceErrors).toHaveLength(0);
+    });
+
+    it('should still validate namespace members in method calls', () => {
+      const code = `//@version=6
+indicator("Test")
+
+// These should still be validated as method calls
+result = chart.point.nonexistent()
+data = array.invalid_method()
+matrix = matrix.wrong_function()`;
+
+      const result = validator.validate(code);
+
+      // Should have namespace validation errors for invalid method calls
+      const namespaceErrors = result.errors.filter(e => e.code === 'PSV6-UNDEFINED-NAMESPACE-MEMBER');
+      expect(namespaceErrors.length).toBeGreaterThan(0);
+    });
+
+    it('should validate nested namespace access in method calls', () => {
+      const code = `//@version=6
+indicator("Test")
+
+// Valid nested namespace access
+valid = chart.point.from_index(0, 0)
+
+// Invalid nested namespace access
+invalid = chart.point.nonexistent_method(0, 0)
+also_invalid = chart.invalid_namespace.from_index(0, 0)`;
+
+      const result = validator.validate(code);
+
+      // Should have namespace validation errors for invalid nested access
+      const namespaceErrors = result.errors.filter(e => e.code === 'PSV6-UNDEFINED-NAMESPACE-MEMBER');
+      expect(namespaceErrors.length).toBeGreaterThan(0);
+      
+      // Should not have errors for valid nested access
+      const validErrors = namespaceErrors.filter(e => e.message.includes('chart.point.from_index'));
+      expect(validErrors).toHaveLength(0);
+    });
+  });
+
+  describe('Built-in Namespace Members', () => {
+    it('should recognize all built-in namespace members', () => {
+      const code = `//@version=6
+indicator("Test")
+
+// Test various built-in namespace members
+a1 = array.new<int>()
+a2 = matrix.new<float>(10, 10)
+a3 = map.new<string, bool>()
+a4 = chart.point.from_index(0, 0)
+a5 = color.rgb(255, 0, 0)
+a6 = scale.none
+a7 = size.tiny
+a8 = style.solid`;
+
+      const result = validator.validate(code);
+
+      // Should not have namespace validation errors for built-in members
+      const namespaceErrors = result.errors.filter(e => e.code === 'PSV6-UNDEFINED-NAMESPACE-MEMBER');
+      expect(namespaceErrors).toHaveLength(0);
+    });
+
+    it('should detect invalid built-in namespace members', () => {
+      const code = `//@version=6
+indicator("Test")
+
+// Test invalid namespace members
+invalid1 = array.invalid_method()
+invalid2 = matrix.wrong_function()
+invalid3 = chart.point.nonexistent()
+invalid4 = color.invalid_property
+invalid5 = scale.wrong_scale`;
+
+      const result = validator.validate(code);
+
+      // Should have namespace validation errors for invalid members
+      const namespaceErrors = result.errors.filter(e => e.code === 'PSV6-UNDEFINED-NAMESPACE-MEMBER');
+      expect(namespaceErrors.length).toBeGreaterThan(0);
+    });
+  });
 });
 

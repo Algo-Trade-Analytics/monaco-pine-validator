@@ -306,6 +306,25 @@ export function createVariableDeclarationStartGuard(parser: PineParser) {
       return false;
     }
 
+    // Check if this is a member expression assignment (e.g., "foo.bar = baz")
+    // Member expressions contain Dot tokens outside generic brackets and should be handled as assignments
+    // But allow dots inside generics (e.g., "array<chart.point> poly = ...")
+    let genericDepth = 0;
+    let hasDotOutsideGenerics = false;
+    for (const token of collected.tokens) {
+      if (token.tokenType === Less) {
+        genericDepth++;
+      } else if (token.tokenType === Greater) {
+        genericDepth--;
+      } else if (token.tokenType === Dot && genericDepth === 0) {
+        hasDotOutsideGenerics = true;
+        break;
+      }
+    }
+    if (hasDotOutsideGenerics) {
+      return false;
+    }
+
     const identifierCount = collected.tokens.filter((token) => isIdentifierLikeToken(token)).length;
     return identifierCount >= 2;
   };

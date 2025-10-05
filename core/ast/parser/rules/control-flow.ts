@@ -28,7 +28,6 @@ import {
   createSwitchCaseNode,
   createSwitchStatementNode,
   createSyntheticToken,
-  createTupleExpressionNode,
   createWhileStatementNode,
   tokenIndent,
 } from '../node-builders';
@@ -152,26 +151,6 @@ function parseSwitchCaseConsequent(
 export function createExpressionStatementRule(parser: PineParser) {
   return parser.createRule('expressionStatement', () => {
     const expression = parser.invokeSubrule(parser.expression);
-    
-    // Support comma operator for sequence expressions (e.g., "a := 1, b := 2")
-    // Pine Script allows comma-separated expressions in statement position
-    if (parser.lookAhead(1).tokenType === Comma) {
-      const expressions: ExpressionNode[] = [expression];
-      while (parser.lookAhead(1).tokenType === Comma) {
-        parser.consumeToken(Comma);
-        // Allow newlines after comma
-        while (parser.lookAhead(1).tokenType === Newline) {
-          parser.consumeToken(Newline);
-        }
-        expressions.push(parser.invokeSubrule(parser.expression, expressions.length + 1));
-      }
-      // Wrap multiple expressions in a tuple expression to represent the sequence
-      const startToken = (expression as any).startToken || parser.lookAhead(0);
-      const endToken = (expressions[expressions.length - 1] as any).endToken || parser.lookAhead(0);
-      const tuple = createTupleExpressionNode(expressions, startToken, endToken);
-      return createExpressionStatementNode(tuple);
-    }
-    
     return createExpressionStatementNode(expression);
   });
 }

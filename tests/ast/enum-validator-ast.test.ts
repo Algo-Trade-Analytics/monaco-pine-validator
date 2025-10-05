@@ -177,5 +177,137 @@ describe('EnumValidator (AST)', () => {
 
     expect(errorCodes).toContain('PSV6-ENUM-UNDEFINED-TYPE');
   });
+
+  it('validates enum declarations with input.enum calls', () => {
+    const paletteEnum = createEnumDeclaration(
+      createIdentifier('PaletteOpt', 0, 1),
+      [
+        createEnumMember(createIdentifier('RAINBOW', 0, 2), null, 0, 6, 2),
+        createEnumMember(createIdentifier('SUNSET_WAVE', 0, 3), null, 0, 6, 3),
+      ],
+      0, 6, 1, 3
+    );
+
+    const inputEnumCall = createCallExpression(
+      createMemberExpression(createIdentifier('input', 0, 4), createIdentifier('enum', 0, 4)),
+      [
+        createArgument(createMemberExpression(createIdentifier('PaletteOpt', 0, 4), createIdentifier('SUNSET_WAVE', 0, 4))),
+        createArgument(createIdentifier('"Base Gradient Palette"', 0, 4)),
+      ],
+      0, 4
+    );
+
+    const variable = createVariableDeclaration(
+      'simple',
+      createIdentifier('paletteChoice', 0, 4),
+      createTypeReference(createIdentifier('PaletteOpt', 0, 4), []),
+      inputEnumCall,
+      '=',
+      0, 4
+    );
+
+    const program = createProgram([paletteEnum, variable], 0, 24, 1, 1);
+    const source = [
+      'enum PaletteOpt',
+      '    RAINBOW',
+      '    SUNSET_WAVE',
+      'PaletteOpt paletteChoice = input.enum(PaletteOpt.SUNSET_WAVE, "Base Gradient Palette")',
+    ].join('\n');
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new EnumValidatorHarness(service);
+
+    const result = harness.validate(source);
+    const errorCodes = result.errors.map((message) => message.code);
+
+    // Should not have any enum-related errors
+    expect(errorCodes).not.toContain('PSV6-ENUM-UNDEFINED-TYPE');
+    expect(errorCodes).not.toContain('PSU02');
+  });
+
+  it('distinguishes between enum types and loop variables', () => {
+    const pointEnum = createEnumDeclaration(
+      createIdentifier('PointType', 0, 1),
+      [
+        createEnumMember(createIdentifier('CIRCLE', 0, 2), null, 0, 6, 2),
+        createEnumMember(createIdentifier('SQUARE', 0, 3), null, 0, 6, 3),
+      ],
+      0, 6, 1, 3
+    );
+
+    // Create a for loop with iterator 'pk' (should not be flagged as enum)
+    const forLoop = createBlock([
+      createVariableDeclaration(
+        createIdentifier('pk', 0, 5),
+        0, 5,
+        1, 1,
+        {
+          declarationKind: 'simple',
+          initializer: createIdentifier('peaks', 0, 5),
+          initializerOperator: null
+        }
+      ),
+    ], 0, 5);
+
+    const program = createProgram([pointEnum, forLoop], 0, 24, 1, 1);
+    const source = [
+      'enum PointType',
+      '    CIRCLE',
+      '    SQUARE',
+      'for pk in peaks',
+      '    // pk should not be flagged as undefined enum',
+    ].join('\n');
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new EnumValidatorHarness(service);
+
+    const result = harness.validate(source);
+    const errorCodes = result.errors.map((message) => message.code);
+
+    // Should not flag 'pk' as an undefined enum type
+    expect(errorCodes).not.toContain('PSV6-ENUM-UNDEFINED-TYPE');
+  });
+
+  it('validates enum member references in switch statements', () => {
+    const statusEnum = createEnumDeclaration(
+      createIdentifier('Status', 0, 1),
+      [
+        createEnumMember(createIdentifier('ACTIVE', 0, 2), null, 0, 6, 2),
+        createEnumMember(createIdentifier('INACTIVE', 0, 3), null, 0, 6, 3),
+      ],
+      0, 6, 1, 3
+    );
+
+    const switchStmt = createSwitchStatement(
+      createMemberExpression(createIdentifier('Status', 0, 4), createIdentifier('ACTIVE', 0, 4)),
+      [
+        createSwitchCase(
+          createMemberExpression(createIdentifier('Status', 0, 5), createIdentifier('ACTIVE', 0, 5)),
+          [createExpressionStatement(createIdentifier('"Active"', 0, 6))]
+        ),
+        createSwitchCase(
+          createMemberExpression(createIdentifier('Status', 0, 7), createIdentifier('INACTIVE', 0, 7)),
+          [createExpressionStatement(createIdentifier('"Inactive"', 0, 8))]
+        ),
+      ],
+      0, 4
+    );
+
+    const program = createProgram([statusEnum, switchStmt], 0, 24, 1, 1);
+    const source = [
+      'enum Status',
+      '    ACTIVE',
+      '    INACTIVE',
+      'switch Status.ACTIVE',
+      '    Status.ACTIVE => "Active"',
+      '    Status.INACTIVE => "Inactive"',
+    ].join('\n');
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new EnumValidatorHarness(service);
+
+    const result = harness.validate(source);
+    const errorCodes = result.errors.map((message) => message.code);
+
+    // Should not have any enum-related errors
+    expect(errorCodes).not.toContain('PSV6-ENUM-UNDEFINED-TYPE');
+  });
 });
 

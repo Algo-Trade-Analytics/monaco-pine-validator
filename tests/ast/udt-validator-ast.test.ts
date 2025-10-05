@@ -195,4 +195,226 @@ describe('UDTValidator (AST)', () => {
 
     expect(warningCodes).toContain('PSV6-METHOD-INVALID');
   });
+
+  it('validates UDTs with generic type parameters in matrix declarations', () => {
+    const point3DType = createTypeDeclaration(
+      createIdentifier('Point3D', 0, 1),
+      [
+        createTypeField(createIdentifier('x', 0, 2), createTypeReference(createIdentifier('float', 0, 2), [])),
+        createTypeField(createIdentifier('y', 0, 3), createTypeReference(createIdentifier('float', 0, 3), [])),
+        createTypeField(createIdentifier('z', 0, 4), createTypeReference(createIdentifier('float', 0, 4), [])),
+      ],
+      0, 1
+    );
+
+    const matrixDecl = createVariableDeclaration(
+      'simple',
+      createIdentifier('M', 0, 5),
+      createTypeReference(createIdentifier('matrix', 0, 5), [
+        createTypeReference(createIdentifier('Point3D', 0, 5), [])
+      ]),
+      createCallExpression(
+        createMemberExpression(createIdentifier('matrix', 0, 5), createIdentifier('new', 0, 5)),
+        [
+          createArgument(createNumberLiteral(10, 0, 5)),
+          createArgument(createNumberLiteral(10, 0, 5)),
+        ],
+        0, 5
+      ),
+      '=',
+      0, 5
+    );
+
+    const program = createProgram([point3DType, matrixDecl], 0, 24, 1, 1);
+    const source = [
+      'type Point3D',
+      '    float x',
+      '    float y',
+      '    float z',
+      'matrix<Point3D> M = matrix.new<Point3D>(10, 10)',
+    ].join('\n');
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new UdtValidatorHarness(service);
+
+    const result = harness.validate(source);
+    const errorCodes = result.errors.map((message) => message.code);
+
+    // Should not have UDT-related errors
+    expect(errorCodes).not.toContain('PSV6-ENUM-UNDEFINED-TYPE');
+    expect(errorCodes).not.toContain('PSU02');
+  });
+
+  it('validates UDTs in method parameter type annotations', () => {
+    const point3DType = createTypeDeclaration(
+      createIdentifier('Point3D', 0, 1),
+      [
+        createTypeField(createIdentifier('x', 0, 2), createTypeReference(createIdentifier('float', 0, 2), [])),
+        createTypeField(createIdentifier('y', 0, 3), createTypeReference(createIdentifier('float', 0, 3), [])),
+        createTypeField(createIdentifier('z', 0, 4), createTypeReference(createIdentifier('float', 0, 4), [])),
+      ],
+      0, 1
+    );
+
+    const cameraType = createTypeDeclaration(
+      createIdentifier('Camera', 0, 5),
+      [
+        createTypeField(createIdentifier('anchorX', 0, 6), createTypeReference(createIdentifier('int', 0, 6), [])),
+        createTypeField(createIdentifier('anchorY', 0, 7), createTypeReference(createIdentifier('float', 0, 7), [])),
+      ],
+      0, 5
+    );
+
+    const methodDecl = createFunctionDeclaration(
+      createIdentifier('project', 0, 8),
+      [
+        createParameter(
+          createIdentifier('this', 0, 8),
+          createTypeReference(createIdentifier('Point3D', 0, 8), []),
+          null
+        ),
+        createParameter(
+          createIdentifier('cam', 0, 8),
+          createTypeReference(createIdentifier('Camera', 0, 8), []),
+          null
+        ),
+      ],
+      createBlock([
+        createExpressionStatement(createIdentifier('chart.point.from_index(0, 0)', 0, 9))
+      ], 0, 9),
+      null,
+      0, 8
+    );
+
+    const program = createProgram([point3DType, cameraType, methodDecl], 0, 24, 1, 1);
+    const source = [
+      'type Point3D',
+      '    float x',
+      '    float y',
+      '    float z',
+      'type Camera',
+      '    int anchorX',
+      '    float anchorY',
+      'method project(this<Point3D>, Camera cam) =>',
+      '    chart.point.from_index(0, 0)',
+    ].join('\n');
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new UdtValidatorHarness(service);
+
+    const result = harness.validate(source);
+    const errorCodes = result.errors.map((message) => message.code);
+
+    // Should not have UDT-related errors
+    expect(errorCodes).not.toContain('PSV6-ENUM-UNDEFINED-TYPE');
+    expect(errorCodes).not.toContain('PSU02');
+  });
+
+  it('validates UDTs in array declarations with generic types', () => {
+    const point3DType = createTypeDeclaration(
+      createIdentifier('Point3D', 0, 1),
+      [
+        createTypeField(createIdentifier('x', 0, 2), createTypeReference(createIdentifier('float', 0, 2), [])),
+        createTypeField(createIdentifier('y', 0, 3), createTypeReference(createIdentifier('float', 0, 3), [])),
+        createTypeField(createIdentifier('z', 0, 4), createTypeReference(createIdentifier('float', 0, 4), [])),
+      ],
+      0, 1
+    );
+
+    const arrayDecl = createVariableDeclaration(
+      'simple',
+      createIdentifier('points', 0, 5),
+      createTypeReference(createIdentifier('array', 0, 5), [
+        createTypeReference(createIdentifier('Point3D', 0, 5), [])
+      ]),
+      createCallExpression(
+        createMemberExpression(createIdentifier('array', 0, 5), createIdentifier('new', 0, 5)),
+        [],
+        0, 5
+      ),
+      '=',
+      0, 5
+    );
+
+    const program = createProgram([point3DType, arrayDecl], 0, 24, 1, 1);
+    const source = [
+      'type Point3D',
+      '    float x',
+      '    float y',
+      '    float z',
+      'array<Point3D> points = array.new<Point3D>()',
+    ].join('\n');
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new UdtValidatorHarness(service);
+
+    const result = harness.validate(source);
+    const errorCodes = result.errors.map((message) => message.code);
+
+    // Should not have UDT-related errors
+    expect(errorCodes).not.toContain('PSV6-ENUM-UNDEFINED-TYPE');
+    expect(errorCodes).not.toContain('PSU02');
+  });
+
+  it('validates UDTs in function return type annotations', () => {
+    const point3DType = createTypeDeclaration(
+      createIdentifier('Point3D', 0, 1),
+      [
+        createTypeField(createIdentifier('x', 0, 2), createTypeReference(createIdentifier('float', 0, 2), [])),
+        createTypeField(createIdentifier('y', 0, 3), createTypeReference(createIdentifier('float', 0, 3), [])),
+        createTypeField(createIdentifier('z', 0, 4), createTypeReference(createIdentifier('float', 0, 4), [])),
+      ],
+      0, 1
+    );
+
+    const functionDecl = createFunctionDeclaration(
+      createIdentifier('createPoint', 0, 5),
+      [
+        createParameter(
+          createIdentifier('x', 0, 5),
+          createTypeReference(createIdentifier('float', 0, 5), []),
+          null
+        ),
+        createParameter(
+          createIdentifier('y', 0, 5),
+          createTypeReference(createIdentifier('float', 0, 5), []),
+          null
+        ),
+        createParameter(
+          createIdentifier('z', 0, 5),
+          createTypeReference(createIdentifier('float', 0, 5), []),
+          null
+        ),
+      ],
+      createBlock([
+        createExpressionStatement(createCallExpression(
+          createMemberExpression(createIdentifier('Point3D', 0, 6), createIdentifier('new', 0, 6)),
+          [
+            createArgument(createIdentifier('x', 0, 6)),
+            createArgument(createIdentifier('y', 0, 6)),
+            createArgument(createIdentifier('z', 0, 6)),
+          ],
+          0, 6
+        ))
+      ], 0, 6),
+      createTypeReference(createIdentifier('Point3D', 0, 5), []),
+      0, 5
+    );
+
+    const program = createProgram([point3DType, functionDecl], 0, 24, 1, 1);
+    const source = [
+      'type Point3D',
+      '    float x',
+      '    float y',
+      '    float z',
+      'f_createPoint(float x, float y, float z): Point3D =>',
+      '    Point3D.new(x, y, z)',
+    ].join('\n');
+    const service = new FunctionAstService(() => ({ ast: program, diagnostics: createAstDiagnostics() }));
+    const harness = new UdtValidatorHarness(service);
+
+    const result = harness.validate(source);
+    const errorCodes = result.errors.map((message) => message.code);
+
+    // Should not have UDT-related errors
+    expect(errorCodes).not.toContain('PSV6-ENUM-UNDEFINED-TYPE');
+    expect(errorCodes).not.toContain('PSU02');
+  });
 });
