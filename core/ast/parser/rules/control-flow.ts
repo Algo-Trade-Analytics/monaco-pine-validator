@@ -224,7 +224,8 @@ export function createIfStatementRule(parser: PineParser): () => IfStatementNode
       offset += 1;
     }
     const potentialElse = parser.lookAhead(offset);
-    if (potentialElse.tokenType === Else && tokenIndent(potentialElse) <= indent) {
+    const elseIndent = tokenIndent(potentialElse);
+    if (potentialElse.tokenType === Else && elseIndent === indent) {
       while (parser.lookAhead(1).tokenType === Newline) {
         parser.consumeToken(Newline);
       }

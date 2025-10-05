@@ -18,7 +18,7 @@ export interface SyntaxPattern {
 /**
  * Common syntax error patterns to check before parsing
  */
-const CONTINUATION_SYMBOL_HINTS = ['(', '[', '{', ',', '+', '-', '*', '/', '%', '?', ':', '<', '>', '&', '|', '^', '.', '='];
+const CONTINUATION_SYMBOL_HINTS = ['(', '[', '{', '+', '-', '*', '/', '%', '?', ':', '<', '>', '&', '|', '^', '.', '='];
 const CONTINUATION_MULTI_CHAR_HINTS = ['<=', '>=', '==', '!=', ':=', '->', '=>', '+=', '-=', '*=', '/=', '%=', '&&', '||', '??'];
 const CONTINUATION_WORD_HINTS = ['and', 'or', 'xor', 'in', 'not'];
 
@@ -114,18 +114,23 @@ export function preCheckSyntax(sourceCode: string): ValidationError[] {
     // Only check for line continuation if the line ends with an operator/punctuation
     // but NOT if it's part of a comment (ends with // or contains //)
     const hasComment = trimmed.includes('//');
-    const continuationHint = hasContinuationHint(trimmed);
-
-    // Check if next line is a switch case expression
-    const isSwitchCase = /^\s*[^=]*\s*=>/.test(nextTrimmed);
-    
-    if (!isFunctionDeclaration && (continuationHint || isSwitchCase) && !hasComment) {
+        // Check for any continuation hint (comma, operators, etc.)
+        const continuationHint = hasContinuationHint(trimmed);
+        
+        // Only allow 4+ space continuations for very specific patterns
+        const isSwitchCase = /^\s*[^=]*\s*=>/.test(nextTrimmed);
+        const isSpecificContinuation = 
+          trimmed.endsWith('(') || trimmed.endsWith('[') || trimmed.endsWith('{') ||
+          trimmed.endsWith('&&') || trimmed.endsWith('||') || trimmed.endsWith('=>') || trimmed.endsWith('=') ||
+          (trimmed.endsWith(',') && isInsideFunctionCall(trimmed));
+        
+        if (!isFunctionDeclaration && (continuationHint || isSwitchCase) && !hasComment) {
       const nextIndent = nextLine.match(/^(\s*)/)?.[0].replace(/\t/g, '    ').length || 0;
       const relativeIndent = Math.abs(nextIndent - lineIndent);
 
       const allowMultipleOfFour =
         nextIndent >= 4 &&
-        (continuationHint || isSwitchCase);
+        (isSpecificContinuation || isSwitchCase);
 
       // Rule 1: At global scope (indent 0), continuation at multiple of 4 (including 0) is likely invalid
       if (lineIndent === 0 && nextIndent % 4 === 0 && !allowMultipleOfFour) {
@@ -219,6 +224,20 @@ function hasContinuationHint(line: string): boolean {
   }
 
   return false;
+}
+
+function isInsideFunctionCall(line: string): boolean {
+  // Simple heuristic: check if there are unmatched opening parentheses before the comma
+  let parenCount = 0;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '(') {
+      parenCount++;
+    } else if (line[i] === ')') {
+      parenCount--;
+    }
+  }
+  // If there are unmatched opening parentheses, we're likely in a function call
+  return parenCount > 0;
 }
 
 /**

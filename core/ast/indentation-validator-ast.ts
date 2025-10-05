@@ -28,7 +28,7 @@ import type {
   EnumDeclarationNode
 } from './nodes';
 
-const CONTINUATION_SYMBOL_HINTS = ['(', '[', '{', ',', '+', '-', '*', '/', '%', '?', ':', '<', '>', '&', '|', '^', '.', '='];
+const CONTINUATION_SYMBOL_HINTS = ['(', '[', '{', '+', '-', '*', '/', '%', '?', ':', '<', '>', '&', '|', '^', '.', '='];
 const CONTINUATION_MULTI_CHAR_HINTS = ['<=', '>=', '==', '!=', ':=', '->', '=>', '+=', '-=', '*=', '/=', '%=', '&&', '||', '??'];
 const CONTINUATION_WORD_HINTS = ['and', 'or', 'xor', 'in', 'not'];
 
@@ -952,7 +952,40 @@ export class ASTIndentationValidator {
       return true; // Switch cases should be allowed at 4+ spaces
     }
 
-    return hasContinuationHint(previousLine);
+    // Only allow 4+ space continuations for very specific patterns
+    const trimmed = previousLine.trimEnd();
+    
+    // Allow for opening parentheses, brackets, braces (function calls, arrays, objects)
+    if (trimmed.endsWith('(') || trimmed.endsWith('[') || trimmed.endsWith('{')) {
+      return true;
+    }
+    
+    // Allow for specific operators that commonly use multi-line expressions
+    if (trimmed.endsWith('&&') || trimmed.endsWith('||') || trimmed.endsWith('=>') || trimmed.endsWith('=')) {
+      return true;
+    }
+    
+    // Allow commas only in function call contexts (check if we're inside parentheses)
+    if (trimmed.endsWith(',')) {
+      return this.isInsideFunctionCall(previousLine);
+    }
+    
+    // Don't allow for other operators or general continuation hints
+    return false;
+  }
+
+  private isInsideFunctionCall(line: string): boolean {
+    // Simple heuristic: check if there are unmatched opening parentheses before the comma
+    let parenCount = 0;
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === '(') {
+        parenCount++;
+      } else if (line[i] === ')') {
+        parenCount--;
+      }
+    }
+    // If there are unmatched opening parentheses, we're likely in a function call
+    return parenCount > 0;
   }
 
   private isSwitchCaseExpression(line: string): boolean {

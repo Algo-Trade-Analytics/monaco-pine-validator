@@ -846,6 +846,70 @@ describe('Chevrotain parser', () => {
     expect(finalAssignment.right?.kind).toBe('Identifier');
   });
 
+  it('associates else blocks with the correct parent if based on indentation', () => {
+    const source = [
+      'if activeChart',
+      '    if time == chart.left_visible_bar_time',
+      '        vtop := high',
+      '        vbot := low',
+      '    if time > chart.left_visible_bar_time',
+      '        vtop := math.max(vtop, high)',
+      '        vbot := math.min(vbot, low)',
+      'else',
+      '    vtop := hi',
+      '    vbot := lo',
+      '    if bar_index > prd',
+      '        vstart += 1',
+      '    a.candlestickData()',
+      '    if a.v.size() > prd',
+      '        a.candlestickDataClean()',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    expect(program.body).toHaveLength(1);
+
+    const rootIf = program.body[0] as IfStatementNode;
+    expect(rootIf.kind).toBe('IfStatement');
+
+    const rootConsequent = rootIf.consequent as BlockStatementNode;
+    expect(rootConsequent.kind).toBe('BlockStatement');
+    expect(rootConsequent.body).toHaveLength(2);
+
+    const firstNestedIf = rootConsequent.body[0] as IfStatementNode;
+    expect(firstNestedIf.kind).toBe('IfStatement');
+    expect(firstNestedIf.alternate).toBeNull();
+
+    const secondNestedIf = rootConsequent.body[1] as IfStatementNode;
+    expect(secondNestedIf.kind).toBe('IfStatement');
+    expect(secondNestedIf.alternate).toBeNull();
+
+    const alternateBlock = rootIf.alternate as BlockStatementNode;
+    expect(alternateBlock.kind).toBe('BlockStatement');
+    expect(alternateBlock.body).toHaveLength(5);
+
+    const [assignTop, assignBot, firstInnerIf, callStatement, secondInnerIf] = [
+      alternateBlock.body[0],
+      alternateBlock.body[1],
+      alternateBlock.body[2],
+      alternateBlock.body[3],
+      alternateBlock.body[4],
+    ];
+
+    expect(assignTop.kind).toBe('AssignmentStatement');
+    expect(assignBot.kind).toBe('AssignmentStatement');
+    expect(firstInnerIf.kind).toBe('IfStatement');
+    expect((firstInnerIf as IfStatementNode).alternate).toBeNull();
+    expect(callStatement.kind).toBe('ExpressionStatement');
+    expect(secondInnerIf.kind).toBe('IfStatement');
+    expect((secondInnerIf as IfStatementNode).alternate).toBeNull();
+  });
+
   it('parses while loops and flow-control statements', () => {
     const source = [
       'while foo < 10',

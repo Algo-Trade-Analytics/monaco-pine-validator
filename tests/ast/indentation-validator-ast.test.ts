@@ -354,6 +354,31 @@ plot(myFunc(true, false))`;
 
       expect(errors.filter(e => e.code === 'PSV6-INDENT-BLOCK-MISMATCH')).toHaveLength(0);
     });
+
+    it('should allow else blocks aligned with parent when nested control flow is present', () => {
+      const code = `//@version=6
+indicator("Test")
+if activeChart
+    if time == chart.left_visible_bar_time
+        vTop := high
+        vBot := low
+    if time > chart.left_visible_bar_time
+        vTop := math.max(vTop, high)
+        vBot := math.min(vBot, low)
+else
+    vTop := hi
+    vBot := lo
+    if bar_index > prd
+        vStart += 1
+    a.CandlestickData()
+    if a.v.size() > prd
+        a.CandlestickDataClean()`;
+
+      const ast = parseCode(code);
+      const errors = validateIndentationWithAST(code, ast);
+
+      expect(errors.filter(e => e.code === 'PSV6-INDENT-BLOCK-MISMATCH')).toHaveLength(0);
+    });
   });
 
   describe('Real-World Example - Uptrick Functions', () => {
