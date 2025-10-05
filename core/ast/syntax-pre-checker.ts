@@ -18,6 +18,10 @@ export interface SyntaxPattern {
 /**
  * Common syntax error patterns to check before parsing
  */
+const CONTINUATION_SYMBOL_HINTS = ['(', '[', '{', ',', '+', '-', '*', '/', '%', '?', ':', '<', '>', '&', '|', '^', '.', '='];
+const CONTINUATION_MULTI_CHAR_HINTS = ['<=', '>=', '==', '!=', ':=', '->', '=>', '+=', '-=', '*=', '/=', '%=', '&&', '||', '??'];
+const CONTINUATION_WORD_HINTS = ['and', 'or', 'xor', 'in', 'not'];
+
 const SYNTAX_PATTERNS: SyntaxPattern[] = [
   // Empty parameter after opening parenthesis: func(, ...)
   {
@@ -110,13 +114,21 @@ export function preCheckSyntax(sourceCode: string): ValidationError[] {
     // Only check for line continuation if the line ends with an operator/punctuation
     // but NOT if it's part of a comment (ends with // or contains //)
     const hasComment = trimmed.includes('//');
-    const endsWithOperator = /[=+\-*/%<>!&|,(]$/.test(trimmed);
+    const continuationHint = hasContinuationHint(trimmed);
+
+    // Check if next line is a switch case expression
+    const isSwitchCase = /^\s*[^=]*\s*=>/.test(nextTrimmed);
     
-    if (!isFunctionDeclaration && endsWithOperator && !hasComment) {
+    if (!isFunctionDeclaration && (continuationHint || isSwitchCase) && !hasComment) {
       const nextIndent = nextLine.match(/^(\s*)/)?.[0].replace(/\t/g, '    ').length || 0;
-      
+      const relativeIndent = Math.abs(nextIndent - lineIndent);
+
+      const allowMultipleOfFour =
+        nextIndent >= 4 &&
+        (continuationHint || isSwitchCase);
+
       // Rule 1: At global scope (indent 0), continuation at multiple of 4 (including 0) is likely invalid
-      if (lineIndent === 0 && nextIndent % 4 === 0) {
+      if (lineIndent === 0 && nextIndent % 4 === 0 && !allowMultipleOfFour) {
         const suggested = nextIndent === 0 ? 1 : nextIndent - 1;
         errors.push({
           line: i + 2,
@@ -128,7 +140,7 @@ export function preCheckSyntax(sourceCode: string): ValidationError[] {
         });
       }
       // Rule 2: Inside a block (indent = multiple of 4), continuation at block boundaries is invalid
-      else if (lineIndent % 4 === 0 && lineIndent > 0) {
+      else if (lineIndent % 4 === 0 && lineIndent > 0 && !allowMultipleOfFour) {
         // If continuation is at any multiple of 4 (0, 4, 8, 12...) it's invalid
         if (nextIndent % 4 === 0) {
           const suggested = lineIndent + 1;
@@ -175,6 +187,38 @@ export function preCheckSyntax(sourceCode: string): ValidationError[] {
   });
   
   return errors;
+}
+
+function hasContinuationHint(line: string): boolean {
+  const withoutComment = line.split('//')[0];
+  const trimmed = withoutComment.trimEnd();
+
+  if (trimmed.trim() === '') {
+    return false;
+  }
+
+  const lowerTrimmed = trimmed.toLowerCase();
+
+  for (const hint of CONTINUATION_MULTI_CHAR_HINTS) {
+    if (lowerTrimmed.endsWith(hint)) {
+      return true;
+    }
+  }
+
+  const wordMatch = lowerTrimmed.match(/([a-z_][a-z0-9_]*)$/i);
+  if (wordMatch) {
+    const token = wordMatch[1].toLowerCase();
+    if (CONTINUATION_WORD_HINTS.includes(token)) {
+      return true;
+    }
+  }
+
+  const lastChar = trimmed.charAt(trimmed.length - 1);
+  if (CONTINUATION_SYMBOL_HINTS.includes(lastChar)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**

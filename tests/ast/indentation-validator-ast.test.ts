@@ -63,7 +63,7 @@ myFunc(x) =>
       expect(errors).toHaveLength(0);
     });
 
-    it('should error on invalid line wrapping (multiple of 4)', () => {
+    it('should accept 4-space continuation with context', () => {
       const code = `//@version=6
 indicator("Test")
 myFunc(x) =>
@@ -73,8 +73,8 @@ myFunc(x) =>
       const ast = parseCode(code);
       const errors = validateIndentationWithAST(code, ast);
 
-      expect(errors.length).toBeGreaterThan(0);
-      expect(errors.some(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toBe(true);
+      // 4-space continuation with context (previous line ends with =) should be allowed
+      expect(errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toHaveLength(0);
     });
   });
 
@@ -224,8 +224,8 @@ plot(result)`;
       expect(errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toHaveLength(0);
     });
 
-    it('should error on line wrapping with multiple of 4', () => {
-      // Parser treats line 4 as separate statement, not continuation
+    it('should accept 4-space continuation with context', () => {
+      // 4-space continuation with context (previous line ends with =) should be allowed
       const code = `//@version=6
 indicator("Test")
 longValue =
@@ -234,7 +234,7 @@ longValue =
       const result = validateWithFullValidator(code);
       const wrapErrors = result.errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4');
 
-      expect(wrapErrors.length).toBeGreaterThan(0);
+      expect(wrapErrors).toHaveLength(0);
     });
 
     it('should accept multi-line ternary with valid wrapping', () => {
@@ -252,8 +252,8 @@ plot(close, color=col)`;
       expect(errors).toHaveLength(0);
     });
 
-    it('should error on multi-line ternary with multiple of 4', () => {
-      // Parser treats these as separate statements, not continuation
+    it('should accept 4-space continuation in ternary with context', () => {
+      // 4-space continuation with context (previous line ends with =) should be allowed
       const code = `//@version=6
 indicator("Test")
 col =
@@ -263,7 +263,7 @@ col =
       const result = validateWithFullValidator(code);
       const wrapErrors = result.errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4');
 
-      expect(wrapErrors.length).toBeGreaterThan(0);
+      expect(wrapErrors).toHaveLength(0);
     });
   });
 
@@ -281,7 +281,8 @@ plot(
       expect(errors).toHaveLength(0);
     });
 
-    it('should error on multi-line function call with multiple of 4', () => {
+    it('should accept 4-space continuation in function call with context', () => {
+      // 4-space continuation with context (previous line ends with () should be allowed
       const code = `//@version=6
 indicator("Test")
 plot(
@@ -291,8 +292,8 @@ plot(
       const ast = parseCode(code);
       const errors = validateIndentationWithAST(code, ast);
 
-      expect(errors.length).toBeGreaterThan(0);
-      expect(errors.some(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toBe(true);
+      // 4-space continuation with context should be allowed
+      expect(errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toHaveLength(0);
     });
   });
 

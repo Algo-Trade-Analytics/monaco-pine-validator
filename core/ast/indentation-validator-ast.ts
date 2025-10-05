@@ -12,8 +12,8 @@
  */
 
 import type { ValidationError } from '../types';
-import type { 
-  Node, 
+import type {
+  Node,
   ProgramNode,
   FunctionDeclarationNode,
   IfStatementNode,
@@ -27,6 +27,40 @@ import type {
   TypeDeclarationNode,
   EnumDeclarationNode
 } from './nodes';
+
+const CONTINUATION_SYMBOL_HINTS = ['(', '[', '{', ',', '+', '-', '*', '/', '%', '?', ':', '<', '>', '&', '|', '^', '.', '='];
+const CONTINUATION_MULTI_CHAR_HINTS = ['<=', '>=', '==', '!=', ':=', '->', '=>', '+=', '-=', '*=', '/=', '%=', '&&', '||', '??'];
+const CONTINUATION_WORD_HINTS = ['and', 'or', 'xor', 'in', 'not'];
+
+function hasContinuationHint(text: string): boolean {
+  const trimmed = text.trimEnd();
+  if (trimmed.trim() === '') {
+    return false;
+  }
+
+  const lowerTrimmed = trimmed.toLowerCase();
+
+  for (const hint of CONTINUATION_MULTI_CHAR_HINTS) {
+    if (lowerTrimmed.endsWith(hint)) {
+      return true;
+    }
+  }
+
+  const wordMatch = lowerTrimmed.match(/([a-z_][a-z0-9_]*)$/i);
+  if (wordMatch) {
+    const token = wordMatch[1].toLowerCase();
+    if (CONTINUATION_WORD_HINTS.includes(token)) {
+      return true;
+    }
+  }
+
+  const lastChar = trimmed.charAt(trimmed.length - 1);
+  if (CONTINUATION_SYMBOL_HINTS.includes(lastChar)) {
+    return true;
+  }
+
+  return false;
+}
 
 interface IndentationContext {
   blockIndent: number;           // Current block indentation level (0, 4, 8, 12, ...)
@@ -415,15 +449,14 @@ export class ASTIndentationValidator {
         }
       }
     } else {
-      // Single-line statement OR block statement: header should be at expected block indent
-      const allowControlFlowSibling =
-        isBlockStatement &&
+      // Allow both block statements and regular statements at parent block indent + 4 in control flow contexts
+      const allowSiblingAtParentIndent =
         this.isControlFlowBlockContext() &&
         parentBlockIndent !== null &&
-        parentBlockIndent > 0 &&
-        stmtIndent === parentBlockIndent;
+        parentBlockIndent >= 0 &&
+        stmtIndent === parentBlockIndent + 4;
 
-      if (!allowControlFlowSibling && stmtIndent !== expectedIndent) {
+      if (!allowSiblingAtParentIndent && stmtIndent !== expectedIndent) {
         this.addError(
           stmt.loc.start.line,
           stmtIndent + 1,
@@ -889,6 +922,14 @@ export class ASTIndentationValidator {
 
     // Rule 2: Wrapped line must NOT use a multiple-of-4 relative offset (reserved for blocks)
     if (wrapIndent % 4 === 0) {
+      const allowMultipleOfFour =
+        wrapIndent >= 4 &&
+        this.hasContinuationHintBefore(lineNum);
+
+      if (allowMultipleOfFour) {
+        return;
+      }
+
       const spaceLabel = wrapIndent === 1 ? 'space' : 'spaces';
       this.addError(
         lineNum,
@@ -897,6 +938,45 @@ export class ASTIndentationValidator {
         'PSV6-INDENT-WRAP-MULTIPLE-OF-4'
       );
     }
+  }
+
+  private hasContinuationHintBefore(lineNum: number): boolean {
+    const previousLine = this.findPreviousCodeLine(lineNum - 2);
+    if (!previousLine) {
+      return false;
+    }
+
+    // Check if this is a switch case expression (starts with case value and =>)
+    const currentLine = this.sourceLines[lineNum - 1];
+    if (currentLine && this.isSwitchCaseExpression(currentLine)) {
+      return true; // Switch cases should be allowed at 4+ spaces
+    }
+
+    return hasContinuationHint(previousLine);
+  }
+
+  private isSwitchCaseExpression(line: string): boolean {
+    const trimmed = line.trim();
+    // Switch case pattern: "case_value => expression" or just "=> expression"
+    return /^\s*[^=]*\s*=>/.test(trimmed);
+  }
+
+  private findPreviousCodeLine(startIndex: number): string | null {
+    for (let i = startIndex; i >= 0; i--) {
+      const line = this.sourceLines[i];
+      if (!line) {
+        continue;
+      }
+
+      const withoutComment = line.split('//')[0];
+      if (withoutComment.trim() === '') {
+        continue;
+      }
+
+      return withoutComment;
+    }
+
+    return null;
   }
 
   /**
