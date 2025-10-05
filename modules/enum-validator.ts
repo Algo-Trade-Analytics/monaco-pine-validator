@@ -642,6 +642,13 @@ export class EnumValidator implements ValidationModule {
         return null;
       }
     }
+    
+    // Additional check: if the object name is in the typeMap as a variable, it's not an enum
+    const typeInfo = this.context.typeMap.get(object.name);
+    if (typeInfo && typeInfo.type !== 'enum' && !this.astEnumDeclarations.has(object.name)) {
+      // This is a variable (UDT, built-in type, etc.), not an enum type
+      return null;
+    }
 
     return { enumName: object.name, memberName: property.name, node: member };
   }

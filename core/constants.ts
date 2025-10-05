@@ -2435,10 +2435,12 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   // Drawing functions - Line
   'line.new': {
     parameters: [
-      { name: 'x1', type: 'int', qualifier: 'simple', required: true },
-      { name: 'y1', type: 'int', qualifier: 'simple', required: true },
-      { name: 'x2', type: 'int', qualifier: 'simple', required: true },
-      { name: 'y2', type: 'int', qualifier: 'simple', required: true },
+      { name: 'x1', type: 'int', qualifier: 'simple', required: false },
+      { name: 'y1', type: 'int', qualifier: 'simple', required: false },
+      { name: 'x2', type: 'int', qualifier: 'simple', required: false },
+      { name: 'y2', type: 'int', qualifier: 'simple', required: false },
+      { name: 'point1', type: 'chart.point', qualifier: 'simple', required: false },
+      { name: 'point2', type: 'chart.point', qualifier: 'simple', required: false },
       { name: 'color', type: 'color', qualifier: 'simple', required: false },
       { name: 'width', type: 'int', qualifier: 'simple', required: false },
       { name: 'style', type: 'int', qualifier: 'simple', required: false }

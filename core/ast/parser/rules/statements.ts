@@ -191,6 +191,49 @@ export function createStatementRule(parser: PineParser) {
           return createBlockStatementNode(assignments, startToken, endToken);
         },
       },
+      {
+        GATE: () =>
+          !parser.isAssignmentStart() &&
+          parser.backtrack(() => {
+            parser.invokeSubrule(parser.expression);
+            if (parser.lookAhead(1).tokenType !== Comma) {
+              return false;
+            }
+
+            parser.consumeToken(Comma);
+            while (parser.lookAhead(1).tokenType === Newline) {
+              parser.consumeToken(Newline);
+            }
+
+            parser.invokeSubrule(parser.expression, 2);
+            return true;
+          }).call(parser) === true,
+        ALT: () => {
+          const startToken = parser.lookAhead(1);
+          const firstExpression = parser.invokeSubrule(parser.expression);
+          const expressionStatements = [createExpressionStatementNode(firstExpression)];
+          let expressionOccurrence = 2;
+
+          while (parser.lookAhead(1).tokenType === Comma) {
+            parser.consumeToken(Comma);
+
+            while (parser.lookAhead(1).tokenType === Newline) {
+              parser.consumeToken(Newline);
+            }
+
+            const expression = parser.invokeSubrule(parser.expression, expressionOccurrence);
+            expressionStatements.push(createExpressionStatementNode(expression));
+            expressionOccurrence += 1;
+          }
+
+          if (expressionStatements.length === 1) {
+            return expressionStatements[0];
+          }
+
+          const endToken = parser.lookAhead(0);
+          return createBlockStatementNode(expressionStatements, startToken, endToken);
+        },
+      },
       { ALT: () => parser.invokeSubrule(parser.expressionStatement) },
     ]);
   });

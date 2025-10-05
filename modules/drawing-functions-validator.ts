@@ -344,8 +344,12 @@ export class DrawingFunctionsValidator implements ValidationModule {
 
   private validateLineNew(args: string[], lineNum: number, column: number): void {
     // Check if using chart.point overload: line.new(first_point, second_point, ...)
-    // Detect chart.point by checking if first arg contains chart.point call OR if there are only 2 args (likely chart.point variables)
-    const firstArgHasChartPoint = args.length >= 1 && /chart\.point/i.test(args[0]);
+    // Detect chart.point by checking if first arg contains chart.point call OR method calls that return chart.point
+    const firstArgHasChartPoint = args.length >= 1 && (
+      /chart\.point/i.test(args[0]) || 
+      /\.project\(/i.test(args[0]) ||  // Method calls like cam.project()
+      /\.from_index\(/i.test(args[0])  // chart.point.from_index()
+    );
     const likelyChartPointOverload = args.length === 2 || firstArgHasChartPoint;
     
     if (likelyChartPointOverload) {

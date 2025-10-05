@@ -1746,10 +1746,10 @@ describe('Chevrotain parser', () => {
         (node): node is BlockStatementNode => node.kind === 'BlockStatement',
       );
 
-      // Only the first line is parsed as a BlockStatement due to parser limitations
-      expect(statements).toHaveLength(1);
+      // Both lines are now parsed as BlockStatements (assignments and expressions)
+      expect(statements).toHaveLength(2);
 
-      // Test first comma sequence: bestIdx := -1, bestD := 1e9
+      // Test first comma sequence: bestIdx := -1, bestD := 1e9 (assignments)
       const firstSequence = statements[0];
       expect(firstSequence.body).toHaveLength(2);
       expect(firstSequence.body[0].kind).toBe('AssignmentStatement');
@@ -1762,8 +1762,11 @@ describe('Chevrotain parser', () => {
       expect(secondAssign.left.kind).toBe('Identifier');
       expect((secondAssign.left as IdentifierNode).name).toBe('bestD');
 
-      // Note: The second line (c3d.push(p3), c2d.push(p2)) is parsed as individual ExpressionStatements
-      // due to parser limitations with comma operators across multiple lines
+      // Test second comma sequence: c3d.push(p3), c2d.push(p2) (expressions)
+      const secondSequence = statements[1];
+      expect(secondSequence.body).toHaveLength(2);
+      expect(secondSequence.body[0].kind).toBe('ExpressionStatement');
+      expect(secondSequence.body[1].kind).toBe('ExpressionStatement');
     });
 
     it('parses comma sequences with newlines', () => {
