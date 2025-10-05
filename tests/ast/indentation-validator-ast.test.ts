@@ -287,7 +287,7 @@ plot(
 indicator("Test")
 plot(
     series = close,
-    color = color.red)`;
+     color = color.red)`;
 
       const ast = parseCode(code);
       const errors = validateIndentationWithAST(code, ast);
