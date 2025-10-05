@@ -536,10 +536,27 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
       } else {
         statement = parser.invokeSubrule(parser.statement);
       }
-      statements.push(statement);
+      
+      // Multi-variable declarations can return a BlockStatementNode containing multiple VariableDeclarationNodes
+      // We need to unwrap these and add them individually to the parent block to maintain flat structure
+      if (statement.kind === 'BlockStatement') {
+        const block = statement as BlockStatementNode;
+        for (let i = 0; i < block.body.length; i++) {
+          statements.push(block.body[i]);
+          // Attach annotations only to the first declaration
+          if (i === 0 && annotations.length > 0) {
+            attachCompilerAnnotations(block.body[i], annotations);
+          }
+        }
+      } else {
+        statements.push(statement);
+        if (annotations.length > 0) {
+          attachCompilerAnnotations(statement, annotations);
+        }
+      }
+      
       firstStatementToken = firstStatementToken ?? statementStartToken;
       lastToken = parser.lookAhead(0);
-      attachCompilerAnnotations(statement, annotations);
 
     }
 
