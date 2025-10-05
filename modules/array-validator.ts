@@ -579,6 +579,11 @@ export class ArrayValidator implements ValidationModule {
       );
     }
 
+    // array.from() takes individual values, not an array as the first argument
+    if (qualifiedName === 'array.from') {
+      return;
+    }
+
     const arrayArgument = args[0]?.value ?? null;
     const arrayName = arrayArgument ? this.validateArrayVariableAst(arrayArgument, line, column) : null;
 

@@ -308,7 +308,7 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'map': new Set([
-    'put', 'get', 'remove', 'clear', 'size', 'keys', 'values', 'contains', 'copy',
+    'new', 'put', 'get', 'remove', 'clear', 'size', 'keys', 'values', 'contains', 'copy',
     'put_all',
     // Missing members from gap analysis
     'new<keyType, valueType>', 'new<type,type>'

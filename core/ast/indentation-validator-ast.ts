@@ -334,6 +334,18 @@ export class ASTIndentationValidator {
     const stmtEndLine = stmt.loc.end.line - 1;
     const stmtIndent = this.getLineIndent(stmtStartLine);
 
+    // Skip validation for ExpressionStatements containing comma operator sequences (TupleExpression)
+    // These are synthesized by the parser for comma operators (e.g., "a := 1, b := 2")
+    // and may have incorrect location info that confuses the indentation validator
+    if (stmt.kind === 'ExpressionStatement') {
+      const exprStmt = stmt as any;
+      if (exprStmt.expression && exprStmt.expression.kind === 'TupleExpression') {
+        // Skip indentation validation for comma operator sequences
+        // The individual expressions have already been parsed and validated
+        return;
+      }
+    }
+
     // Check if this is a block-type statement (has its own body)
     const isBlockStatement = stmt.kind === 'IfStatement' || stmt.kind === 'ForStatement' || 
                            stmt.kind === 'WhileStatement' || stmt.kind === 'FunctionDeclaration' ||

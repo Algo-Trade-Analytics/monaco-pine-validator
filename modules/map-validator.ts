@@ -198,16 +198,21 @@ export class MapValidator implements ValidationModule {
             }
 
             const genericsCount = call.typeArguments.length;
-            if (genericsCount !== 1) {
-              const message = genericsCount === 0
-                ? 'map.new<valueType>() requires a value type parameter'
-                : 'map.new<valueType>() accepts exactly one type parameter';
+            if (genericsCount === 0) {
               this.addError(
                 call.loc.start.line,
                 call.loc.start.column,
-                message,
+                'map.new<keyType, valueType>() requires type parameters',
                 'PSV6-MAP-DECLARATION',
-                'Provide a single value type to map.new<valueType>()',
+                'Provide type parameters to map.new<keyType, valueType>()',
+              );
+            } else if (genericsCount > 2) {
+              this.addError(
+                call.loc.start.line,
+                call.loc.start.column,
+                'map.new<keyType, valueType>() accepts at most 2 type parameters',
+                'PSV6-MAP-DECLARATION',
+                'Provide 1 or 2 type parameters to map.new',
               );
             }
 

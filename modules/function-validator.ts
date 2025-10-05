@@ -1537,6 +1537,12 @@ export class FunctionValidator implements ValidationModule {
       }
     }
     
+    // String concatenation (e.g., "CRYPTOCAP:" + syms.get(i))
+    if (trimmed.includes('+') && (trimmed.includes('"') || trimmed.includes("'"))) {
+      // If any part is a string, the result is a string
+      return 'string';
+    }
+    
     // String literal
     if (trimmed.match(/^"[^"]*"$/) || trimmed.match(/^'[^']*'$/)) {
       return 'string';
