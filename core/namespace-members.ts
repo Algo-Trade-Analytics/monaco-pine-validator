@@ -243,7 +243,7 @@ export const NAMESPACE_MEMBERS = {
   
   'matrix': new Set([
     // Creation
-    'copy',
+    'new', 'copy',
     // Access
     'get', 'set', 'row', 'col', 'submatrix',
     // Modification

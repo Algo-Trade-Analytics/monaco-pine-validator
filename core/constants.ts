@@ -1684,7 +1684,7 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
       { name: 'red', type: 'int', qualifier: 'simple', required: true, min: 0, max: 255 },
       { name: 'green', type: 'int', qualifier: 'simple', required: true, min: 0, max: 255 },
       { name: 'blue', type: 'int', qualifier: 'simple', required: true, min: 0, max: 255 },
-      { name: 'transparency', type: 'int', qualifier: 'simple', required: true, min: 0, max: 100 }
+      { name: 'transparency', type: 'int', qualifier: 'simple', required: false, min: 0, max: 100 }
     ],
     returnType: 'color'
   },
@@ -1693,8 +1693,8 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
       { name: 'value', type: 'series', qualifier: 'series', required: true },
       { name: 'bottom_value', type: 'series', qualifier: 'series', required: true },
       { name: 'top_value', type: 'series', qualifier: 'series', required: true },
-      { name: 'bottom_color', type: 'color', qualifier: 'simple', required: true },
-      { name: 'top_color', type: 'color', qualifier: 'simple', required: true }
+      { name: 'bottom_color', type: 'color', qualifier: 'series', required: true },
+      { name: 'top_color', type: 'color', qualifier: 'series', required: true }
     ],
     returnType: 'color'
   },

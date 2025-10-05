@@ -234,12 +234,7 @@ export function createIfStatementRule(parser: PineParser): () => IfStatementNode
         alternate = parser.parseIndentedBlock(tokenIndent(elseToken));
       } else {
         const alternateStatement = parser.invokeSubrule(parser.statement, 2);
-        const pending = parser.consumePendingStatements();
-        if (pending.length > 0) {
-          alternate = createBlockStatementNode([alternateStatement, ...pending], undefined, undefined);
-        } else {
-          alternate = alternateStatement;
-        }
+        alternate = alternateStatement;
       }
     }
 

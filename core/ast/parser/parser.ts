@@ -1,6 +1,6 @@
 import { EmbeddedActionsParser, type IToken, type TokenType } from 'chevrotain';
 import { AllTokens, LBracket } from './tokens';
-import type { ExpressionNode, IfExpressionNode, IfStatementNode, StatementNode } from '../nodes';
+import type { ExpressionNode, IfExpressionNode, IfStatementNode } from '../nodes';
 
 import {
   createAssignmentStartGuard,
@@ -73,17 +73,16 @@ import {
   createWhileStatementRule,
 } from './rules/control-flow';
 
-type ConsumeMethod = (tokenType: unknown, options?: unknown) => IToken;
-type SubruleMethod = (...args: unknown[]) => unknown;
-type DslMethod = (...args: unknown[]) => unknown;
-type RuleMethod<T> = (...args: unknown[]) => T;
+type ConsumeMethod = (tokenType: any, options?: unknown) => IToken;
+type SubruleMethod = (...args: any[]) => any;
+type DslMethod = (...args: any[]) => any;
+type RuleMethod<T> = (...args: any[]) => T;
 type OrAlternative<T> = { ALT: () => T } & Record<string, unknown>;
-type ActionMethod = (callback: unknown) => void;
-type BacktrackMethod = <T>(production: unknown) => () => T;
+type ActionMethod = (callback: () => void) => void;
+type BacktrackMethod = <T>(production: () => T) => () => T;
 
 export class PineParser extends EmbeddedActionsParser {
   private lineIndentCache = new Map<number, number>();
-  private pendingStatements: StatementNode[] = [];
 
   public nextSignificantToken = createNextSignificantTokenHelper(this);
 
@@ -109,13 +108,13 @@ export class PineParser extends EmbeddedActionsParser {
       maxLookahead: 1,
       skipValidations: true,
     });
-    const baseTokenMatcher = this.tokenMatcher;
-    this.tokenMatcher = ((token, tokType) => {
+    const baseTokenMatcher = (this as any).tokenMatcher;
+    (this as any).tokenMatcher = ((token: any, tokType: any) => {
       if (!tokType) {
         return false;
       }
       return baseTokenMatcher.call(this, token, tokType);
-    }) as typeof this.tokenMatcher;
+    });
     this.performSelfAnalysis();
     this.removeInvalidRecoveryTokens();
   }
@@ -123,21 +122,6 @@ export class PineParser extends EmbeddedActionsParser {
   public override reset(): void {
     super.reset();
     this.lineIndentCache.clear();
-    this.pendingStatements = [];
-  }
-
-  public enqueuePendingStatement(statement: StatementNode): void {
-    this.pendingStatements.push(statement);
-  }
-
-  public consumePendingStatements(): StatementNode[] {
-    if (this.pendingStatements.length === 0) {
-      return [];
-    }
-
-    const statements = this.pendingStatements;
-    this.pendingStatements = [];
-    return statements;
   }
 
   public program = createProgramRule(this);
@@ -158,7 +142,7 @@ export class PineParser extends EmbeddedActionsParser {
 
   public assignmentStatement = createAssignmentStatementRule(this);
 
-  public ifStatement: () => IfStatementNode = createIfStatementRule(this);
+  public ifStatement: RuleMethod<IfStatementNode> = createIfStatementRule(this);
 
   public forStatement = createForStatementRule(this);
 
@@ -247,7 +231,7 @@ export class PineParser extends EmbeddedActionsParser {
 
   public identifierExpression = createIdentifierExpressionRule(this);
 
-  public ifExpression: () => IfExpressionNode = createIfExpressionRule(this);
+  public ifExpression: RuleMethod<IfExpressionNode> = createIfExpressionRule(this);
 
   public forExpression = createForExpressionRule(this);
 
@@ -255,7 +239,7 @@ export class PineParser extends EmbeddedActionsParser {
 
   public switchExpression = createSwitchExpressionRule(this);
 
-  private getDslMethod<T extends (...args: unknown[]) => unknown>(baseName: string, occurrence: number): T {
+  private getDslMethod<T extends (...args: any[]) => any>(baseName: string, occurrence: number): T {
     const methodName = occurrence <= 1 ? baseName : `${baseName}${occurrence}`;
     const bound = (this as Record<string, unknown>)[methodName];
     if (typeof bound !== 'function') {
@@ -272,7 +256,7 @@ export class PineParser extends EmbeddedActionsParser {
     return this.input;
   }
 
-  public consumeToken(tokenType: unknown, occurrence = 1, options?: unknown): IToken {
+  public consumeToken(tokenType: any, occurrence = 1, options?: unknown): IToken {
     if (!tokenType) {
       // Fallback for cases where helpers pass through a previously consumed token instance.
       // Chevrotain's lexer adapter exposes a consumeToken helper that advances the input.
@@ -284,7 +268,7 @@ export class PineParser extends EmbeddedActionsParser {
     return options === undefined ? method(tokenType) : method(tokenType, options);
   }
 
-  public invokeSubrule<R extends (...args: unknown[]) => unknown>(
+  public invokeSubrule<R extends (...args: any[]) => any>(
     rule: R,
     occurrence = 1,
     options?: unknown,
@@ -309,7 +293,7 @@ export class PineParser extends EmbeddedActionsParser {
     return method(alternatives) as T;
   }
 
-  public createRule<R extends (...args: unknown[]) => unknown>(name: string, implementation: R): R {
+  public createRule<R extends RuleMethod<any>>(name: string, implementation: R): R {
     return this.RULE(name, implementation) as R;
   }
 

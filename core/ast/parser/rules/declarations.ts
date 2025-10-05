@@ -520,8 +520,10 @@ export function createVariableDeclarationRule(parser: PineParser) {
       });
     }
 
-    for (let index = 1; index < declarations.length; index += 1) {
-      parser.enqueuePendingStatement(declarations[index]);
+    // If we have multiple declarations, return a BlockStatement containing all of them
+    if (declarations.length > 1) {
+      const endToken = parser.lookAhead(0);
+      return createBlockStatementNode(declarations, startToken, endToken);
     }
 
     return declarations[0];

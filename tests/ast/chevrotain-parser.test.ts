@@ -212,45 +212,54 @@ describe('Chevrotain parser', () => {
     expect(ast).not.toBeNull();
 
     const program = ast as ProgramNode;
-    expect(program.body).toHaveLength(6);
+    expect(program.body).toHaveLength(3); // Now we have 3 top-level statements: 2 BlockStatements + 1 IfStatement
 
-    const [first, second, third, fourth, fifth, sixth] = program.body;
+    const [first, second, third] = program.body;
 
-    expect(first.kind).toBe('VariableDeclaration');
-    expect((first as VariableDeclarationNode).identifier.name).toBe('a');
-    expect((first as VariableDeclarationNode).typeAnnotation?.name.name).toBe('float');
+    // First multi-variable declaration: float a = 1.0, b = 2.0, c = 3.0
+    expect(first.kind).toBe('BlockStatement');
+    const firstBlock = first as BlockStatementNode;
+    expect(firstBlock.body).toHaveLength(3);
+    const [a, b, c] = firstBlock.body as VariableDeclarationNode[];
+    expect(a.identifier.name).toBe('a');
+    expect(a.typeAnnotation?.name.name).toBe('float');
+    expect(b.identifier.name).toBe('b');
+    expect(b.typeAnnotation?.name.name).toBe('float');
+    expect(c.identifier.name).toBe('c');
+    expect(c.typeAnnotation?.name.name).toBe('float');
 
-    expect(second.kind).toBe('VariableDeclaration');
-    expect((second as VariableDeclarationNode).identifier.name).toBe('b');
-    expect((second as VariableDeclarationNode).typeAnnotation?.name.name).toBe('float');
+    // Second multi-variable declaration: var foo : int = 4, bar = 5
+    expect(second.kind).toBe('BlockStatement');
+    const secondBlock = second as BlockStatementNode;
+    expect(secondBlock.body).toHaveLength(2);
+    const [foo, bar] = secondBlock.body as VariableDeclarationNode[];
+    expect(foo.identifier.name).toBe('foo');
+    expect(foo.typeAnnotation?.name.name).toBe('int');
+    expect(bar.identifier.name).toBe('bar');
+    expect(bar.typeAnnotation?.name.name).toBe('int');
 
-    expect(third.kind).toBe('VariableDeclaration');
-    expect((third as VariableDeclarationNode).identifier.name).toBe('c');
-    expect((third as VariableDeclarationNode).typeAnnotation?.name.name).toBe('float');
-
-    expect(fourth.kind).toBe('VariableDeclaration');
-    expect((fourth as VariableDeclarationNode).identifier.name).toBe('foo');
-    expect((fourth as VariableDeclarationNode).typeAnnotation?.name.name).toBe('int');
-
-    expect(fifth.kind).toBe('VariableDeclaration');
-    expect((fifth as VariableDeclarationNode).identifier.name).toBe('bar');
-    expect((fifth as VariableDeclarationNode).typeAnnotation?.name.name).toBe('int');
-
-    expect(sixth.kind).toBe('IfStatement');
-    const ifStatement = sixth as IfStatementNode;
+    // If statement
+    expect(third.kind).toBe('IfStatement');
+    const ifStatement = third as IfStatementNode;
 
     expect(ifStatement.consequent.kind).toBe('BlockStatement');
     const consequentBlock = ifStatement.consequent as BlockStatementNode;
-    expect(consequentBlock.body).toHaveLength(2);
-    expect(consequentBlock.body.every((node) => node.kind === 'VariableDeclaration')).toBe(true);
-    const [nestedA, nestedB] = consequentBlock.body as VariableDeclarationNode[];
+    expect(consequentBlock.body).toHaveLength(1); // Now contains 1 BlockStatement with 2 VariableDeclarations
+    expect(consequentBlock.body[0].kind).toBe('BlockStatement');
+    const nestedBlock = consequentBlock.body[0] as BlockStatementNode;
+    expect(nestedBlock.body).toHaveLength(2);
+    expect(nestedBlock.body.every((node) => node.kind === 'VariableDeclaration')).toBe(true);
+    const [nestedA, nestedB] = nestedBlock.body as VariableDeclarationNode[];
     expect(nestedA.identifier.name).toBe('nestedA');
     expect(nestedB.identifier.name).toBe('nestedB');
 
     expect(ifStatement.alternate?.kind).toBe('BlockStatement');
     const alternateBlock = ifStatement.alternate as BlockStatementNode;
-    expect(alternateBlock.body).toHaveLength(2);
-    const [altA, altB] = alternateBlock.body as VariableDeclarationNode[];
+    expect(alternateBlock.body).toHaveLength(1); // Now contains 1 BlockStatement with 2 VariableDeclarations
+    expect(alternateBlock.body[0].kind).toBe('BlockStatement');
+    const elseBlock = alternateBlock.body[0] as BlockStatementNode;
+    expect(elseBlock.body).toHaveLength(2);
+    const [altA, altB] = elseBlock.body as VariableDeclarationNode[];
     expect(altA.identifier.name).toBe('altA');
     expect(altB.identifier.name).toBe('altB');
     expect(altA.typeAnnotation?.name.name).toBe('int');

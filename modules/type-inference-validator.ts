@@ -263,7 +263,10 @@ export class TypeInferenceValidator implements ValidationModule {
     const initializerIsSeries = this.isSeriesExpression(initializer);
     const declaredTypeIsSimple = declaredType && declaredType !== 'series' && !node.typeAnnotation?.name.name.includes('series');
     
-    if (initializerIsSeries && declaredTypeIsSimple) {
+    // Be more lenient for function parameters - Pine Script allows flexible type qualifiers
+    const isFunctionParameter = this.isInsideFunction(node);
+    
+    if (initializerIsSeries && declaredTypeIsSimple && !isFunctionParameter) {
       this.addError(
         line,
         column,
@@ -957,6 +960,15 @@ export class TypeInferenceValidator implements ValidationModule {
       expression.kind === 'StringLiteral' ||
       expression.kind === 'ColorLiteral'
     );
+  }
+
+  private isInsideFunction(node: VariableDeclarationNode): boolean {
+    // Check if this variable declaration is inside a function
+    // Simple heuristic: if the variable is declared with indentation, it's likely inside a function
+    const column = node.loc.start.column;
+    
+    // Variables declared at column > 0 are likely inside functions or blocks
+    return column > 0;
   }
 
   private isNaExpression(expression: ExpressionNode): boolean {

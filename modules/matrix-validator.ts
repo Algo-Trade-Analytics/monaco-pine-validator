@@ -269,7 +269,9 @@ export class MatrixValidator implements ValidationModule {
     const elementType = this.inferMatrixElementTypeFromCall(call);
     const hasGenericType = Array.isArray(call.typeArguments) && call.typeArguments.length > 0;
     const normalizedElementType = elementType && elementType.trim().length > 0 ? elementType.trim() : null;
-    const elementTypeIsKnown = normalizedElementType ? VALID_MATRIX_ELEMENT_TYPES.has(normalizedElementType) : false;
+    const elementTypeIsKnown = normalizedElementType ? 
+      (VALID_MATRIX_ELEMENT_TYPES.has(normalizedElementType) || 
+       this.context.typeMap.has(normalizedElementType)) : false;
 
     if (!normalizedElementType || normalizedElementType === 'unknown') {
       this.addError(
@@ -816,11 +818,11 @@ export class MatrixValidator implements ValidationModule {
   }
 
   private validateMatrixType(type: string, line: number, column: number): void {
-    if (!VALID_MATRIX_ELEMENT_TYPES.has(type)) {
+    if (!VALID_MATRIX_ELEMENT_TYPES.has(type) && !this.context.typeMap.has(type)) {
       this.addError(
         line,
         column,
-        `Invalid matrix type: ${type}. Valid types are: ${Array.from(VALID_MATRIX_ELEMENT_TYPES).join(', ')}`,
+        `Invalid matrix type: ${type}. Valid types are: ${Array.from(VALID_MATRIX_ELEMENT_TYPES).join(', ')}, or user-defined types`,
         'PSV6-MATRIX-INVALID-TYPE',
       );
     }

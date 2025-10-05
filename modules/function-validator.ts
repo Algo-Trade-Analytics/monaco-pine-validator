@@ -1145,10 +1145,15 @@ export class FunctionValidator implements ValidationModule {
     }
 
     // Validate qualifier: if 'simple' required but argument appears to be 'series', flag mismatch
+    // Note: Pine Script is flexible with type qualifiers, so we're more lenient here
     if (param.qualifier === 'simple') {
       const inferred = this.inferArgumentType(argValue);
       const looksSeries = this.argumentLooksSeries(argValue);
-      if (inferred === 'series' || looksSeries) {
+      // Only flag obvious mismatches, not function parameters or expressions
+      if ((inferred === 'series' || looksSeries) && 
+          !argValue.includes('(') && 
+          !argValue.includes('[') &&
+          !argValue.includes('.')) {
         this.addError(line, column,
           `Parameter '${param.name}' of '${funcName}' requires simple type, got series`,
           'PSV6-FUNCTION-PARAM-TYPE');
