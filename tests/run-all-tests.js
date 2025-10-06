@@ -44,6 +44,7 @@ console.log('='.repeat(60));
 
 const specPattern = path.join('tests', 'specs', 'all-validation-tests.spec.ts');
 const astPattern = path.join('tests', 'ast', '**', '*.test.ts');
+const lintPattern = path.join('tests', 'constants-registry-lint.test.ts');
 
 const suites = [
   {
@@ -59,6 +60,12 @@ const suites = [
     name: 'AST module harness',
     file: astPattern,
     command: 'npx vitest run --config vitest.config.ts',
+    env: {},
+  },
+  {
+    name: 'Constants registry lint',
+    file: lintPattern,
+    command: `npx vitest run ${lintPattern}`,
     env: {},
   },
 ];

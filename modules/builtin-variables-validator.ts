@@ -23,7 +23,12 @@ import {
 import {
   DISPLAY_CONSTANTS_EXTENDED as DISPLAY_CONSTANTS,
   TIMEFRAME_CONSTANTS,
-  CURRENCY_CONSTANTS
+  CURRENCY_CONSTANTS,
+  EXTEND_CONSTANTS,
+  FORMAT_CONSTANTS,
+  SCALE_CONSTANTS,
+  ADJUSTMENT_CONSTANTS,
+  BACKADJUSTMENT_CONSTANTS
 } from '../core/constants-registry';
 import { Codes } from '../core/codes';
 import { visitQualifiedMembers, updateUsage } from '../core/ast/member-utils';
@@ -31,26 +36,6 @@ import type { ProgramNode } from '../core/ast/nodes';
 
 // TIMEFRAME_CONSTANTS and CURRENCY_CONSTANTS now imported from shared registry
 // DISPLAY_CONSTANTS now imported from shared registry
-
-const EXTEND_CONSTANTS = new Set([
-  'extend.both', 'extend.none', 'extend.left', 'extend.right'
-]);
-
-const FORMAT_CONSTANTS = new Set([
-  'format.inherit', 'format.price', 'format.volume'
-]);
-
-const SCALE_CONSTANTS = new Set([
-  'scale.left', 'scale.right', 'scale.none'
-]);
-
-const ADJUSTMENT_CONSTANTS = new Set([
-  'adjustment.dividends', 'adjustment.splits', 'adjustment.none'
-]);
-
-const BACKADJUSTMENT_CONSTANTS = new Set([
-  'backadjustment.inherit', 'backadjustment.on', 'backadjustment.off'
-]);
 
 export class BuiltinVariablesValidator implements ValidationModule {
   name = 'BuiltinVariablesValidator';

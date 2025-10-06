@@ -27,7 +27,10 @@ import {
   SYMINFO_ADVANCED_VARS,
   DAYOFWEEK_CONSTANTS,
   BARMERGE_CONSTANTS,
-  XLOC_YLOC_CONSTANTS
+  XLOC_YLOC_CONSTANTS,
+  SETTLEMENT_AS_CLOSE_CONSTANTS,
+  FONT_CONSTANTS,
+  TEXT_WRAP_CONSTANTS
 } from '../core/constants-registry';
 
 const SYMINFO_COMPANY_VARS = new Set([
@@ -54,26 +57,10 @@ const SYMINFO_ADDITIONAL_VARS = new Set<string>([
 ]);
 
 
-const SETTLEMENT_CONSTANTS = new Set([
-  'settlement_as_close.inherit', 'settlement_as_close.on', 'settlement_as_close.off'
-]);
-
-// dayofweek, barmerge, and x/y location constants are imported from registry
-
-const FONT_CONSTANTS = new Set([
-  'font.family_default', 'font.family_monospace'
-]);
-
-// TEXT_FORMAT_CONSTANTS imported from registry
-
-const TEXT_WRAP_CONSTANTS = new Set([
-  'text.wrap_none', 'text.wrap_auto'
-]);
-
 const ADDITIONAL_CONSTANT_SETS = [
   DAYOFWEEK_CONSTANTS,
   BARMERGE_CONSTANTS,
-  SETTLEMENT_CONSTANTS,
+  SETTLEMENT_AS_CLOSE_CONSTANTS,
   XLOC_YLOC_CONSTANTS,
   FONT_CONSTANTS,
   TEXT_FORMAT_CONSTANTS,

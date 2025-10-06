@@ -35,6 +35,7 @@ import {
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 import { getNodeSource } from '../core/ast/source-utils';
+import { FORMAT_CONSTANTS } from '../core/constants-registry';
 
 interface StringFunctionCall {
   name: string;
@@ -711,16 +712,7 @@ export class StringFunctionsValidator implements ValidationModule {
     if (args.length === 2) {
       const formatArg = args[1].trim();
       const formatNode = argumentNodes[1];
-      const allowedFormats = new Set([
-        'format.inherit',
-        'format.mintick',
-        'format.percent',
-        'format.price',
-        'format.integer',
-        'format.volume'
-      ]);
-
-      if (!allowedFormats.has(formatArg) && !this.isStringLiteral(formatArg, formatNode)) {
+      if (!FORMAT_CONSTANTS.has(formatArg) && !this.isStringLiteral(formatArg, formatNode)) {
         this.addWarning(lineNum, column, 'Unrecognised format specifier for str.tostring()', 'PSV6-STR-CONVERSION-INVALID');
       }
     }
