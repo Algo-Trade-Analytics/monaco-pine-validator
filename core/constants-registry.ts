@@ -85,6 +85,23 @@ export const EXTEND_CONSTANTS = new Set<string>([
   'extend.none', 'extend.left', 'extend.right', 'extend.both'
 ]);
 
+export const FORMAT_CONSTANTS = new Set<string>([
+  'format.inherit', 'format.mintick', 'format.percent',
+  'format.price', 'format.volume', 'format.integer'
+]);
+
+export const SCALE_CONSTANTS = new Set<string>([
+  'scale.left', 'scale.right', 'scale.none'
+]);
+
+export const ADJUSTMENT_CONSTANTS = new Set<string>([
+  'adjustment.dividends', 'adjustment.splits', 'adjustment.none'
+]);
+
+export const BACKADJUSTMENT_CONSTANTS = new Set<string>([
+  'backadjustment.inherit', 'backadjustment.on', 'backadjustment.off'
+]);
+
 export const LOCATION_CONSTANTS = new Set<string>([
   'location.abovebar', 'location.belowbar', 'location.top', 'location.bottom', 'location.absolute'
 ]);
@@ -131,4 +148,16 @@ export const POSITION_CONSTANTS = new Set<string>([
   'position.top_left', 'position.top_center', 'position.top_right',
   'position.middle_left', 'position.middle_center', 'position.middle_right',
   'position.bottom_left', 'position.bottom_center', 'position.bottom_right'
+]);
+
+export const SETTLEMENT_AS_CLOSE_CONSTANTS = new Set<string>([
+  'settlement_as_close.inherit', 'settlement_as_close.on', 'settlement_as_close.off'
+]);
+
+export const FONT_CONSTANTS = new Set<string>([
+  'font.family_default', 'font.family_monospace'
+]);
+
+export const TEXT_WRAP_CONSTANTS = new Set<string>([
+  'text.wrap_none', 'text.wrap_auto'
 ]);
