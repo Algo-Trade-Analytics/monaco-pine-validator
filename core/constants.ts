@@ -123,6 +123,87 @@ export const NAMESPACES = new Set([
   'chart.point'
 ]);
 
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const NAMESPACE_IDENTIFIER_PATTERN = '[a-zA-Z_][a-zA-Z0-9_]*';
+
+const namespaceRoots = (() => {
+  const roots = new Set<string>();
+  for (const namespace of NAMESPACES) {
+    const [root] = namespace.split('.');
+    roots.add(root);
+  }
+  return Array.from(roots).sort();
+})();
+
+const namespacePatternAllowlist = new Set([
+  'color',
+  'ta',
+  'math',
+  'str',
+  'array',
+  'request',
+  'input',
+  'plot',
+  'line',
+  'label',
+  'box',
+  'table',
+  'strategy',
+  'syminfo',
+  'timeframe',
+  'barstate',
+  'matrix',
+  'ticker',
+  'text',
+  'polyline',
+  'linefill',
+  'size',
+  'display',
+  'chart',
+  'map',
+  'font',
+  'format',
+  'barmerge',
+  'currency',
+  'dividends',
+  'extend',
+  'yloc',
+  'location',
+  'shape',
+  'position',
+  'scale',
+]);
+
+const namespacePatternRoots = namespaceRoots.filter((namespace) => namespacePatternAllowlist.has(namespace));
+
+const namespacePatternSource = `(?<!<)(?<!\\.)(?<!:)\\b(${namespacePatternRoots
+  .map(escapeRegExp)
+  .join('|')})(?:\\.(${NAMESPACE_IDENTIFIER_PATTERN}))?(?:\\.(${NAMESPACE_IDENTIFIER_PATTERN}))?(?!>)`;
+
+const delegatedNamespaceRoots = (() => {
+  const preferred = new Set([
+    'ta',
+    'math',
+    'str',
+    'input',
+    'line',
+    'label',
+    'box',
+    'table',
+    'map',
+    'strategy',
+    'array',
+    'matrix',
+    'polyline',
+  ]);
+  return namespaceRoots.filter((namespace) => preferred.has(namespace));
+})();
+
+export const getNamespacePattern = (flags = 'g'): RegExp => new RegExp(namespacePatternSource, flags);
+
+export const getDelegatedNamespaces = (): Set<string> => new Set(delegatedNamespaceRoots);
+
 
 // Pseudo variables
 export const PSEUDO_VARS = new Set(['time','timenow','bar_index','last_bar_index','open','high','low','close','volume','time_close','time_tradingday']);

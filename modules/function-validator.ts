@@ -29,7 +29,13 @@ import {
   type IfExpressionNode,
 } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
-import { BUILTIN_FUNCTIONS_V6_RULES, KEYWORDS, NAMESPACES, NS_MEMBERS } from '../core/constants';
+import {
+  BUILTIN_FUNCTIONS_V6_RULES,
+  KEYWORDS,
+  NAMESPACES,
+  NS_MEMBERS,
+  getDelegatedNamespaces,
+} from '../core/constants';
 import { getNodeSource, getSourceLine, getSourceLines } from '../core/ast/source-utils';
 
 interface FunctionInfo {
@@ -747,7 +753,7 @@ export class FunctionValidator implements ValidationModule {
         }
       }
 
-      const delegatedNamespaces = new Set(['ta','math','str','input','line','label','box','table','map','strategy','array','matrix','polyline']);
+      const delegatedNamespaces = getDelegatedNamespaces();
       // In library scripts, restrict certain namespaces explicitly to match TDD expectations
       if (this.context.scriptType === 'library') {
         if (namespace === 'strategy') {

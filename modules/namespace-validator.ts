@@ -13,7 +13,7 @@ import type {
   ValidationResult,
 } from '../core/types';
 import { isValidNamespaceMember, getSimilarMembers } from '../core/namespace-members';
-import { NS_MEMBERS } from '../core/constants';
+import { NS_MEMBERS, getNamespacePattern } from '../core/constants';
 
 export class NamespaceValidator implements ValidationModule {
   name = 'NamespaceValidator';
@@ -54,7 +54,8 @@ export class NamespaceValidator implements ValidationModule {
 
     // Pattern: namespace.member or namespace.namespace.member (e.g., color.red, chart.point.from_index)
     // Match word.word or word.word.word patterns, but exclude method calls, quoted strings, and type annotations
-    const namespacePattern = /(?<!<)(?<!\.)(?<!:)\b(color|ta|math|str|array|request|input|plot|line|label|box|table|strategy|syminfo|timeframe|barstate|matrix|ticker|text|polyline|linefill|size|display|chart|map|font|format|barmerge|currency|dividends|extend|yloc|location|shape|position|scale)(?:\.([a-zA-Z_][a-zA-Z0-9_]*))?(?:\.([a-zA-Z_][a-zA-Z0-9_]*))?(?!>)/g;
+    const namespacePattern = getNamespacePattern();
+    namespacePattern.lastIndex = 0;
     
     let match;
     while ((match = namespacePattern.exec(line)) !== null) {
