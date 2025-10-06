@@ -1,5 +1,5 @@
 import { pineScriptDocumentation } from '../PineScriptContext/enhanced-structures';
-import { NAMESPACE_MEMBERS } from '../core/namespace-members';
+import { NAMESPACE_MEMBERS } from '../core/constants';
 
 console.log('🔍 VERIFYING COMPLETE ALIGNMENT WITH ENHANCED STRUCTURES\n');
 console.log('═'.repeat(80));

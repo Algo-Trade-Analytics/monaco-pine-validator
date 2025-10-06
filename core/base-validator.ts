@@ -12,7 +12,7 @@ import {
   TypeInfo,
   ScopeInfo,
 } from './types';
-import { KEYWORDS, NAMESPACES, NS_MEMBERS, PSEUDO_VARS, WILDCARD_IDENT } from './constants';
+import { KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT } from './constants';
 import {
   AstConfig,
   AstDiagnostics,

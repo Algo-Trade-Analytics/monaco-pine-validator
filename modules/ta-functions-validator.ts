@@ -7,7 +7,7 @@ import {
   type ValidationResult,
   type TypeInfo,
 } from '../core/types';
-import { NS_MEMBERS, BUILTIN_FUNCTIONS_V6_RULES } from '../core/constants';
+import { BUILTIN_FUNCTIONS_V6_RULES, NS_MEMBERS } from '../core/constants';
 import {
   type ArgumentNode,
   type AssignmentStatementNode,
@@ -36,6 +36,15 @@ interface TAFunctionInfo {
 export class TAFunctionsValidator implements ValidationModule {
   name = 'TAFunctionsValidator';
   priority = 84; // High priority - TA functions are core Pine Script functionality, must run before FunctionValidator
+
+  private static readonly VALID_PIVOT_POINT_TYPES = new Set([
+    'traditional',
+    'fibonacci',
+    'woodie',
+    'classic',
+    'dm',
+    'camarilla',
+  ]);
 
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
@@ -300,6 +309,12 @@ export class TAFunctionsValidator implements ValidationModule {
     column: number,
   ): void {
     const functionName = fullFunctionName.slice('ta.'.length);
+
+    if (functionName === 'pivot_point_levels') {
+      this.validatePivotPointLevels(parameters, lineNumber, column, fullFunctionName);
+      return;
+    }
+
     if (functionName !== 'pivothigh' && functionName !== 'pivotlow') {
       return;
     }
@@ -309,20 +324,91 @@ export class TAFunctionsValidator implements ValidationModule {
       return;
     }
 
-    const [source, left, right] = parameters;
-    if (/^\s*("[^"]*"|'[^']*')\s*$/.test(source)) {
+    const [sourceRaw, leftRaw, rightRaw] = parameters.map((param) => this.getArgumentValue(param));
+    if (/^\s*("[^"]*"|'[^']*')\s*$/.test(sourceRaw)) {
       this.addError(lineNumber, column, 'PSV6-TA-FUNCTION-PARAM', `Parameter 'source' of '${fullFunctionName}' should be series, got string`);
     }
 
-    const leftNum = parseFloat(left);
+    const leftNum = parseFloat(leftRaw);
     if (!(Number.isFinite(leftNum) && leftNum >= 1)) {
       this.addError(lineNumber, column, 'PSV6-TA-FUNCTION-PARAM', `Parameter 'left' of '${fullFunctionName}' must be a positive integer`);
     }
 
-    const rightNum = parseFloat(right);
+    const rightNum = parseFloat(rightRaw);
     if (!(Number.isFinite(rightNum) && rightNum >= 1)) {
       this.addError(lineNumber, column, 'PSV6-TA-FUNCTION-PARAM', `Parameter 'right' of '${fullFunctionName}' must be a positive integer`);
     }
+  }
+
+  private validatePivotPointLevels(
+    parameters: string[],
+    lineNumber: number,
+    column: number,
+    fullFunctionName: string,
+  ): void {
+    if (parameters.length < 4) {
+      this.addError(
+        lineNumber,
+        column,
+        'PSV6-TA-FUNCTION-PARAM',
+        `${fullFunctionName} requires 4 parameters (type, high, low, close)`,
+      );
+      return;
+    }
+
+    const typeParam = this.getArgumentValue(parameters[0] ?? '');
+    const highParam = this.getArgumentValue(parameters[1] ?? '');
+    const lowParam = this.getArgumentValue(parameters[2] ?? '');
+    const closeParam = this.getArgumentValue(parameters[3] ?? '');
+
+    const typeInferred = this.inferParameterType(typeParam);
+    if (typeInferred && !['string', 'series', 'unknown'].includes(typeInferred)) {
+      this.addError(
+        lineNumber,
+        column,
+        'PSV6-TA-FUNCTION-PARAM',
+        `Parameter 'type' of '${fullFunctionName}' should be string, got ${typeInferred}`,
+      );
+    } else {
+      const literalMatch = typeParam.trim().match(/^"([^"]+)"$|^'([^']+)'$/);
+      const literalValue = literalMatch ? (literalMatch[1] ?? literalMatch[2] ?? '').toLowerCase() : null;
+      if (literalValue && !TAFunctionsValidator.VALID_PIVOT_POINT_TYPES.has(literalValue)) {
+        this.addError(
+          lineNumber,
+          column,
+          'PSV6-TA-FUNCTION-PARAM',
+          `Invalid pivot point type '${literalValue}'. Expected one of: ${Array.from(TAFunctionsValidator.VALID_PIVOT_POINT_TYPES).join(', ')}`,
+        );
+      }
+    }
+
+    const pivotSeriesParams: Array<{ name: string; value: string }> = [
+      { name: 'high', value: highParam },
+      { name: 'low', value: lowParam },
+      { name: 'close', value: closeParam },
+    ];
+
+    for (const { name, value } of pivotSeriesParams) {
+      if (!this.isValidTAParameter(value, 'float')) {
+        const inferred = this.inferParameterType(value);
+        if (inferred && inferred !== 'unknown') {
+          this.addError(
+            lineNumber,
+            column,
+            'PSV6-TA-FUNCTION-PARAM',
+            `Parameter '${name}' of '${fullFunctionName}' should be series float, got ${inferred}`,
+          );
+        }
+      }
+    }
+  }
+
+  private getArgumentValue(param: string): string {
+    const separatorIndex = param.indexOf('=');
+    if (separatorIndex === -1) {
+      return param.trim();
+    }
+    return param.slice(separatorIndex + 1).trim();
   }
 
   private validateTAParameterTypes(functionName: string, parameters: string[], lineNumber: number, column: number): void {
