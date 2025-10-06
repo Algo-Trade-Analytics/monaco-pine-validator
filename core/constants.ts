@@ -1,3 +1,5 @@
+import { NAMESPACE_MEMBERS } from './namespace-members';
+
 export { NAMESPACE_MEMBERS } from './namespace-members';
 export { NAMESPACE_MEMBERS as NS_MEMBERS } from './namespace-members';
 
@@ -127,57 +129,59 @@ const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\
 
 const NAMESPACE_IDENTIFIER_PATTERN = '[a-zA-Z_][a-zA-Z0-9_]*';
 
-const namespaceRoots = (() => {
-  const roots = new Set<string>();
-  for (const namespace of NAMESPACES) {
-    const [root] = namespace.split('.');
-    roots.add(root);
-  }
-  return Array.from(roots).sort();
-})();
-
-const namespacePatternAllowlist = new Set([
-  'color',
-  'ta',
-  'math',
-  'str',
-  'array',
-  'request',
-  'input',
-  'plot',
-  'line',
-  'label',
-  'box',
-  'table',
-  'strategy',
-  'syminfo',
-  'timeframe',
-  'barstate',
-  'matrix',
-  'ticker',
-  'text',
-  'polyline',
-  'linefill',
-  'size',
-  'display',
-  'chart',
-  'map',
-  'font',
-  'format',
-  'barmerge',
-  'currency',
-  'dividends',
-  'extend',
-  'yloc',
-  'location',
-  'shape',
-  'position',
-  'scale',
+// Namespaces that should not be matched by the namespace validator pattern.
+// These entries either represent constant groups handled elsewhere or would
+// cause false positives if treated as namespace roots.
+const UNSUPPORTED_NAMESPACE_ROOTS = new Set([
+  'adjustment',
+  'alert',
+  'backadjustment',
+  'dayofweek',
+  'earnings',
+  'global',
+  'hline',
+  'log',
+  'order',
+  'runtime',
+  'session',
+  'settlement_as_close',
+  'splits',
+  'timezone',
+  'xloc',
 ]);
 
-const namespacePatternRoots = namespaceRoots.filter((namespace) => namespacePatternAllowlist.has(namespace));
+const namespaceRoots = (() => {
+  const roots = new Set<string>();
 
-const namespacePatternSource = `(?<!<)(?<!\\.)(?<!:)\\b(${namespacePatternRoots
+  const addRoot = (value: string): void => {
+    const [root] = value.split('.');
+    if (root) {
+      roots.add(root);
+    }
+  };
+
+  for (const namespace of NAMESPACES) {
+    addRoot(namespace);
+  }
+
+  for (const namespace of Object.keys(NAMESPACE_MEMBERS)) {
+    addRoot(namespace);
+  }
+
+  for (const unsupported of UNSUPPORTED_NAMESPACE_ROOTS) {
+    roots.delete(unsupported);
+  }
+
+  return Array.from(roots).sort((a, b) => {
+    if (a === b) return 0;
+    if (a.length !== b.length) {
+      return b.length - a.length;
+    }
+    return a.localeCompare(b);
+  });
+})();
+
+const namespacePatternSource = `(?<!<)(?<!\\.)(?<!:)\\b(${namespaceRoots
   .map(escapeRegExp)
   .join('|')})(?:\\.(${NAMESPACE_IDENTIFIER_PATTERN}))?(?:\\.(${NAMESPACE_IDENTIFIER_PATTERN}))?(?!>)`;
 
