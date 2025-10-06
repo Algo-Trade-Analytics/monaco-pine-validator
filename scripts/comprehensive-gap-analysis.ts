@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 
 import { readFileSync } from 'fs';
-import { NAMESPACE_MEMBERS } from '../core/namespace-members';
+import { NAMESPACE_MEMBERS } from '../core/constants';
 import { functions } from '../PineScriptContext/structures/functions';
 import { constants } from '../PineScriptContext/structures/constants';
 import { variables } from '../PineScriptContext/structures/variables';

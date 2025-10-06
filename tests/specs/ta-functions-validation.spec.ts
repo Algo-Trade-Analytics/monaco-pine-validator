@@ -535,7 +535,7 @@ pivotLow = ta.pivotlow(low, 5, 5)
 //@version=6
 indicator("Pivot Point Levels Test")
 
-[pivot, r1, r2, r3, s1, s2, s3] = ta.pivot_point_levels(high, low, close, 1)
+[pivot, r1, r2, r3, s1, s2, s3] = ta.pivot_point_levels("Traditional", high, low, close)
       `;
 
       const result = createValidator().validate(code);

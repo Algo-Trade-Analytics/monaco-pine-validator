@@ -3,7 +3,7 @@
  * Used to detect undefined namespace properties early
  */
 
-export const NAMESPACE_MEMBERS = {
+export const NAMESPACE_MEMBERS: Record<string, Set<string>> = {
   // Global functions and built-in variables
   'global': new Set([
     // Built-in variables
@@ -109,14 +109,14 @@ export const NAMESPACE_MEMBERS = {
     // Basic input types
     'bool', 'int', 'float', 'string', 'color',
     // Advanced input types
-    'source', 'symbol', 'timeframe', 'session', 'time',
-    'text_area', 'price',
+    'source', 'symbol', 'timeframe', 'session', 'time', 'resolution',
+    'text_area', 'price', 'hline',
     // Missing members from gap analysis
     'arguments', 'enum', 'signatures'
   ]),
   
   'plot': new Set([
-    'style_line', 'style_linebr', 'style_stepline', 'style_steplinebr',
+    'style_line', 'style_linebr', 'style_linebreak', 'style_stepline', 'style_steplinebr',
     'style_histogram', 'style_cross', 'style_area', 'style_areabr', 'style_columns',
     'style_circles', 'style_stepline_diamond',
     // Line styles
@@ -323,7 +323,7 @@ export const NAMESPACE_MEMBERS = {
   ]),
   
   'barmerge': new Set([
-    'gaps_off', 'gaps_on',
+    'gaps_off', 'gaps_on', 'gaps_middle',
     'lookahead_off', 'lookahead_on'
   ]),
   

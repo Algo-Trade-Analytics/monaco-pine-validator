@@ -16,7 +16,7 @@ import {
   type ScopeGraph,
   type SymbolRecord,
 } from '../core/types';
-import { KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT, NS_MEMBERS } from '../core/constants';
+import { KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT } from '../core/constants';
 import type { IdentifierNode, ProgramNode, TypeDeclarationNode, Node } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
 

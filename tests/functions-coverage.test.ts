@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { KEYWORDS, NAMESPACES, NS_MEMBERS, BUILTIN_FUNCTIONS_V6_RULES } from '../core/constants';
+import { KEYWORDS, NAMESPACES, BUILTIN_FUNCTIONS_V6_RULES, NAMESPACE_MEMBERS } from '../core/constants';
 
 // All Pine Script functions from the official documentation
 const PINE_SCRIPT_FUNCTIONS = [
@@ -155,7 +155,7 @@ describe('Pine Script Functions Coverage', () => {
       // Check if it's a namespace member function
       if (func.includes('.')) {
         const [namespace, member] = func.split('.');
-        if (NAMESPACES.has(namespace) && NS_MEMBERS[namespace] && NS_MEMBERS[namespace].has(member)) {
+        if (NAMESPACES.has(namespace) && NAMESPACE_MEMBERS[namespace] && NAMESPACE_MEMBERS[namespace].has(member)) {
           covered = true;
         }
       }
@@ -203,7 +203,7 @@ describe('Pine Script Functions Coverage', () => {
     
     for (const func of mathFunctions) {
       const [, member] = func.split('.');
-      const covered = NS_MEMBERS.math.has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
+      const covered = NAMESPACE_MEMBERS.math.has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
       expect(covered).toBe(true);
     }
   });
@@ -218,7 +218,7 @@ describe('Pine Script Functions Coverage', () => {
     
     for (const func of taFunctions) {
       const [, member] = func.split('.');
-      const covered = NS_MEMBERS.ta.has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
+      const covered = NAMESPACE_MEMBERS.ta.has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
       expect(covered).toBe(true);
     }
   });
@@ -233,7 +233,7 @@ describe('Pine Script Functions Coverage', () => {
     
     for (const func of strFunctions) {
       const [, member] = func.split('.');
-      const covered = NS_MEMBERS.str.has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
+      const covered = NAMESPACE_MEMBERS.str.has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
       expect(covered).toBe(true);
     }
   });
@@ -248,7 +248,7 @@ describe('Pine Script Functions Coverage', () => {
     
     for (const func of inputFunctions) {
       const [, member] = func.split('.');
-      const covered = NS_MEMBERS.input.has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
+      const covered = NAMESPACE_MEMBERS.input.has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
       expect(covered).toBe(true);
     }
   });
@@ -263,7 +263,7 @@ describe('Pine Script Functions Coverage', () => {
     
     for (const func of requestFunctions) {
       const [, member] = func.split('.');
-      const covered = NS_MEMBERS.request.has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
+      const covered = NAMESPACE_MEMBERS.request.has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
       expect(covered).toBe(true);
     }
   });
@@ -278,7 +278,7 @@ describe('Pine Script Functions Coverage', () => {
     
     for (const func of strategyFunctions) {
       const [, member] = func.split('.');
-      const covered = NS_MEMBERS.strategy.has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
+      const covered = NAMESPACE_MEMBERS.strategy.has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
       expect(covered).toBe(true);
     }
   });
@@ -293,7 +293,7 @@ describe('Pine Script Functions Coverage', () => {
     for (const func of drawingFunctions) {
       const [namespace, member] = func.split('.');
       expect(NAMESPACES.has(namespace)).toBe(true);
-      const covered = NS_MEMBERS[namespace].has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
+      const covered = NAMESPACE_MEMBERS[namespace].has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
       expect(covered).toBe(true);
     }
   });
@@ -335,8 +335,8 @@ describe('Functions Coverage Edge Cases', () => {
     for (const func of similarFunctions) {
       const [namespace, member] = func.split('.');
       expect(NAMESPACES.has(namespace)).toBe(true);
-      if (NS_MEMBERS[namespace]) {
-        expect(NS_MEMBERS[namespace].has(member)).toBe(true);
+      if (NAMESPACE_MEMBERS[namespace]) {
+        expect(NAMESPACE_MEMBERS[namespace].has(member)).toBe(true);
       }
     }
   });
@@ -349,7 +349,7 @@ describe('Functions Coverage Edge Cases', () => {
     
     for (const func of overloadedFunctions) {
       const [namespace, member] = func.split('.');
-      const covered = NS_MEMBERS[namespace].has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
+      const covered = NAMESPACE_MEMBERS[namespace].has(member) || BUILTIN_FUNCTIONS_V6_RULES.hasOwnProperty(func);
       expect(covered).toBe(true);
     }
   });

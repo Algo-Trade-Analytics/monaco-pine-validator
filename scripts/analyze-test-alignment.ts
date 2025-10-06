@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { pineScriptDocumentation } from '../PineScriptContext/enhanced-structures';
-import { NAMESPACE_MEMBERS } from '../core/namespace-members';
+import { NAMESPACE_MEMBERS } from '../core/constants';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

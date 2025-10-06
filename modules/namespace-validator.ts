@@ -12,7 +12,8 @@ import type {
   ValidationError,
   ValidationResult,
 } from '../core/types';
-import { isValidNamespaceMember, getSimilarMembers, NAMESPACE_MEMBERS } from '../core/namespace-members';
+import { isValidNamespaceMember, getSimilarMembers } from '../core/namespace-members';
+import { NS_MEMBERS } from '../core/constants';
 
 export class NamespaceValidator implements ValidationModule {
   name = 'NamespaceValidator';
@@ -74,7 +75,7 @@ export class NamespaceValidator implements ValidationModule {
       if (secondMember) {
         // This is a nested namespace call like chart.point.from_index
         const nestedNamespace = `${baseNamespace}.${firstMember}`;
-        const nestedMembers = NAMESPACE_MEMBERS[nestedNamespace as keyof typeof NAMESPACE_MEMBERS];
+        const nestedMembers = NS_MEMBERS[nestedNamespace as keyof typeof NS_MEMBERS];
         if (isValidNamespaceMember(baseNamespace, firstMember) || nestedMembers) {
           namespace = nestedNamespace;
           member = secondMember;
@@ -182,7 +183,7 @@ export class NamespaceValidator implements ValidationModule {
   private findCorrectNamespace(member: string): string | null {
     // Check if the member exists in multiple namespaces
     const namespacesWithMember: string[] = [];
-    for (const [namespace, members] of Object.entries(NAMESPACE_MEMBERS)) {
+    for (const [namespace, members] of Object.entries(NS_MEMBERS)) {
       if (members.has(member)) {
         namespacesWithMember.push(namespace);
       }

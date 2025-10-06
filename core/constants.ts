@@ -1,3 +1,6 @@
+export { NAMESPACE_MEMBERS } from './namespace-members';
+export { NAMESPACE_MEMBERS as NS_MEMBERS } from './namespace-members';
+
 /**
  * Core constants for the modular Pine Script v6 validator
  */
@@ -120,76 +123,6 @@ export const NAMESPACES = new Set([
   'chart.point'
 ]);
 
-// Namespace members
-export const NS_MEMBERS: Record<string, Set<string>> = {
-  color: new Set(['new','rgb','from_gradient','r','g','b','t']),
-  ta: new Set([
-    'sma','ema','rsi','macd','stoch','atr','bb','highest','lowest','crossover','crossunder','sar','roc',
-    'mom','change','correlation','dev','linreg','percentrank','pivothigh','pivotlow','range','stdev',
-    'variance','wma','alma','vwma','swma','rma','hma','tsi','cci','cmo','mfi','obv','pvt','nvi','pvi','covariance',
-    'wad','barssince','cog','cross','cum','highestbars','lowestbars','max','median','min','mode',
-    'percentile_linear_interpolation','percentile_nearest_rank','rci','valuewhen','bbw','kcw','falling',
-    'rising','tr','iii','wvad'
-  ]),
-  math: new Set([
-    'max','min','abs','round','floor','ceil','pow','sqrt','log','log10','exp','sin','cos','tan',
-    'asin','acos','atan','todegrees','toradians','sign','sum','avg','random','round_to_mintick'
-  ]),
-  str: new Set(['tostring','tonumber','length','contains','substring','replace','split','format','format_time','startswith','endswith','pos','match','trim','upper','lower','repeat','replace_all','join']),
-  request: new Set(['security','security_lower_tf','dividends','splits','earnings','economic','quandl','financial','currency_rate','seed']),
-  input: new Set(['int','float','bool','string','color','source','timeframe','session','symbol','resolution','enum','price','text_area','time','hline']),
-  line: new Set(['new','set_xy1','set_xy2','set_color','set_width','set_style','delete','set_x1','set_x2','set_y1','set_y2','get_x1','get_x2','get_y1','get_y2','copy','all','get_price','set_extend','set_first_point','set_second_point','set_xloc']),
-  label: new Set(['new','set_text','set_color','set_style','delete','set_x','set_y','set_xy','set_textcolor','set_size','set_textalign','get_x','get_y','get_text','copy','all','set_point','set_text_font_family','set_text_formatting','set_tooltip','set_xloc','set_yloc']),
-  box: new Set([
-    'new','delete','set_bgcolor','set_border_color','set_border_width','set_border_style','set_left','set_right',
-    'set_top','set_bottom','set_lefttop','set_rightbottom','get_left','get_right','get_top','get_bottom',
-    'set_text','set_text_color','set_text_size','set_text_halign','set_text_valign','set_text_wrap','copy','all',
-    'set_extend','set_xloc','set_top_left_point','set_bottom_right_point','set_text_font_family','set_text_formatting'
-  ]),
-  chart: new Set([
-    'new','from_time','bg_color','fg_color','is_heikinashi','is_renko','is_linebreak','is_kagi','is_pnf','is_range','is_standard',
-    'left_visible_bar_time','right_visible_bar_time'
-  ]),
-  table: new Set(['new','cell','cell_set_text','cell_set_bgcolor','cell_set_text_color','cell_set_text_size','delete','clear','set_position','set_bgcolor','set_border_color','set_border_width','set_frame_color','set_frame_width','all','cell_set_height','cell_set_text_font_family','cell_set_text_formatting','cell_set_text_halign','cell_set_text_valign','cell_set_tooltip','cell_set_width','merge_cells']),
-  text: new Set(['align_left','align_center','align_right','align_top','align_middle','align_bottom','wrap_auto','wrap_none','format_bold','format_italic','format_none']),
-  xloc: new Set(['bar_index','bar_time']),
-  order: new Set(['ascending','descending']),
-  array: new Set([
-    'new','new_bool','new_box','new_color','new_float','new_int','new_label','new_line','new_linefill','new_string','new_table',
-    'push','pop','get','set','size','clear','slice','copy','sort','sort_indices','reverse','join','concat','range','fill','from','from_example',
-    'indexof','lastindexof','includes','binary_search','binary_search_leftmost','binary_search_rightmost',
-    'remove','insert','unshift','shift','first','last','max','min','median','mode','abs','sum','avg','stdev','variance','standardize','covariance',
-    'percentile_linear_interpolation','percentile_nearest_rank','percentrank','some','every'
-  ]),
-  matrix: new Set([
-    'new','get','set','rows','columns','copy','fill','sort','reverse','transpose','det','inv','pow',
-    'add_col','add_row','abs','avg','col','concat','diff','eigenvalues','eigenvectors','elements_count',
-    'is_antidiagonal','is_antisymmetric','is_binary','is_diagonal','is_identity','is_square',
-    'is_stochastic','is_symmetric','is_triangular','is_zero','kron','max','median','min','mode',
-    'mult','pinv','rank','remove_col','remove_row','reshape','row','sqrt','stdev','submatrix','sum','swap_columns',
-    'swap_rows','trace','variance','covariance','percentile_linear_interpolation','percentile_nearest_rank'
-  ]),
-  map: new Set(['new','get','put','remove','size','clear','keys','values','contains','includes','copy','put_all']),
-  linefill: new Set(['new','set_color','delete','get_line1','get_line2','all']),
-  polyline: new Set(['new','delete','all']),
-  strategy: new Set([
-    'entry','close','close_all','cancel','cancel_all','order','position_size','equity','initial_capital',
-    'commission','risk','long','short','oca','fixed','cash','percent_of_equity','risk_allow_entry_in',
-    'risk.max_position_size','risk.max_drawdown','risk.max_intraday_filled_orders','closedtrades','opentrades',
-    'convert_to_account','convert_to_symbol','default_entry_qty','exit'
-  ]),
-  alert: new Set(['freq_all','freq_once_per_bar','freq_once_per_bar_close']),
-  session: new Set(['regular','extended','isfirstbar','islastbar','isfirstbar_regular','islastbar_regular','ismarket','ispostmarket','ispremarket']),
-  // Additional namespace members for functions
-  log: new Set(['error','info','warning']),
-  runtime: new Set(['error']),
-  ticker: new Set(['heikinashi','inherit','kagi','linebreak','modify','new','pointfigure','renko','standard']),
-  timeframe: new Set([
-    'change','from_seconds','in_seconds','isdaily','isweekly','ismonthly','isminutes','isseconds','isintraday',
-    'isdwm','isticks','main_period','multiplier','period'
-  ]),
-  syminfo: new Set(['prefix','ticker'])
-};
 
 // Pseudo variables
 export const PSEUDO_VARS = new Set(['time','timenow','bar_index','last_bar_index','open','high','low','close','volume','time_close','time_tradingday']);
@@ -1044,10 +977,10 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   },
   'ta.pivot_point_levels': {
     parameters: [
+      { name: 'type', type: 'string', qualifier: 'simple', required: true },
       { name: 'high', type: 'float', qualifier: 'series', required: true },
       { name: 'low', type: 'float', qualifier: 'series', required: true },
-      { name: 'close', type: 'float', qualifier: 'series', required: true },
-      { name: 'timeframe', type: 'string', qualifier: 'simple', required: true }
+      { name: 'close', type: 'float', qualifier: 'series', required: true }
     ],
     returnType: 'tuple'
   },

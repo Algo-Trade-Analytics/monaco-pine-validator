@@ -19,7 +19,7 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../../core/types';
-import { BUILTIN_FUNCTIONS_V6_RULES, NS_MEMBERS } from '../../core/constants';
+import { BUILTIN_FUNCTIONS_V6_RULES } from '../../core/constants';
 import {
   type CallExpressionNode,
   type ExpressionNode,
