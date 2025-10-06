@@ -4,6 +4,7 @@ export * from './lexer';
 export * from './parser';
 export * from './nodes';
 export * from './traversal';
+export * from './member-utils';
 export * from './scope';
 export * from './type-inference';
 export * from './diagnostics';

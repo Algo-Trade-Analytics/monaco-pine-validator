@@ -26,8 +26,8 @@ import {
   CURRENCY_CONSTANTS
 } from '../core/constants-registry';
 import { Codes } from '../core/codes';
-import { visit } from '../core/ast/traversal';
-import type { ExpressionNode, MemberExpressionNode, ProgramNode } from '../core/ast/nodes';
+import { visitQualifiedMembers, updateUsage } from '../core/ast/member-utils';
+import type { ProgramNode } from '../core/ast/nodes';
 
 // TIMEFRAME_CONSTANTS and CURRENCY_CONSTANTS now imported from shared registry
 // DISPLAY_CONSTANTS now imported from shared registry
@@ -128,55 +128,9 @@ export class BuiltinVariablesValidator implements ValidationModule {
   }
 
   private collectConstantsFromAst(program: ProgramNode): void {
-    visit(program, {
-      MemberExpression: {
-        enter: ({ node }) => {
-          const constant = this.getMemberQualifiedName(node);
-          if (!constant) {
-            return;
-          }
-
-          const position = node.loc.start ?? node.property.loc?.start;
-          const line = position?.line ?? 1;
-          const column = position?.column ?? 1;
-          this.recordConstantUsage(constant, line, column);
-        },
-      },
+    visitQualifiedMembers(program, ({ name, line, column }) => {
+      this.recordConstantUsage(name, line, column);
     });
-  }
-
-  private getMemberQualifiedName(member: MemberExpressionNode): string | null {
-    if (member.computed) {
-      return null;
-    }
-
-    const objectName = this.getExpressionQualifiedName(member.object);
-    if (!objectName) {
-      return null;
-    }
-
-    return `${objectName}.${member.property.name}`;
-  }
-
-  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
-    if (expression.kind === 'Identifier') {
-      return expression.name;
-    }
-    if (expression.kind === 'MemberExpression') {
-      if (expression.computed) {
-        return null;
-      }
-      const objectName = this.getExpressionQualifiedName(expression.object);
-      if (!objectName) {
-        return null;
-      }
-      return `${objectName}.${expression.property.name}`;
-    }
-    return null;
-  }
-
-  private incrementUsage(map: Map<string, number>, constant: string): void {
-    map.set(constant, (map.get(constant) || 0) + 1);
   }
 
   private addConstantInfo(code: string, message: string, line: number, column: number): void {
@@ -191,49 +145,49 @@ export class BuiltinVariablesValidator implements ValidationModule {
 
   private recordConstantUsage(constant: string, line: number, column: number): void {
     if (TIMEFRAME_CONSTANTS.has(constant)) {
-      this.incrementUsage(this.timeframeConstantUsage, constant);
+      updateUsage(this.timeframeConstantUsage, constant);
       this.addConstantInfo(Codes.TIMEFRAME_CONSTANT, `Timeframe constant '${constant}' detected`, line, column);
       return;
     }
 
     if (DISPLAY_CONSTANTS.has(constant)) {
-      this.incrementUsage(this.displayConstantUsage, constant);
+      updateUsage(this.displayConstantUsage, constant);
       this.addConstantInfo(Codes.DISPLAY_CONSTANT, `Display constant '${constant}' detected`, line, column);
       return;
     }
 
     if (EXTEND_CONSTANTS.has(constant)) {
-      this.incrementUsage(this.extendConstantUsage, constant);
+      updateUsage(this.extendConstantUsage, constant);
       this.addConstantInfo(Codes.EXTEND_CONSTANT, `Extend constant '${constant}' detected`, line, column);
       return;
     }
 
     if (FORMAT_CONSTANTS.has(constant)) {
-      this.incrementUsage(this.formatConstantUsage, constant);
+      updateUsage(this.formatConstantUsage, constant);
       this.addConstantInfo(Codes.FORMAT_CONSTANT, `Format constant '${constant}' detected`, line, column);
       return;
     }
 
     if (CURRENCY_CONSTANTS.has(constant)) {
-      this.incrementUsage(this.currencyConstantUsage, constant);
+      updateUsage(this.currencyConstantUsage, constant);
       this.addConstantInfo(Codes.CURRENCY_CONSTANT, `Currency constant '${constant}' detected`, line, column);
       return;
     }
 
     if (SCALE_CONSTANTS.has(constant)) {
-      this.incrementUsage(this.scaleConstantUsage, constant);
+      updateUsage(this.scaleConstantUsage, constant);
       this.addConstantInfo(Codes.SCALE_CONSTANT, `Scale constant '${constant}' detected`, line, column);
       return;
     }
 
     if (ADJUSTMENT_CONSTANTS.has(constant)) {
-      this.incrementUsage(this.adjustmentConstantUsage, constant);
+      updateUsage(this.adjustmentConstantUsage, constant);
       this.addConstantInfo(Codes.ADJUSTMENT_CONSTANT, `Adjustment constant '${constant}' detected`, line, column);
       return;
     }
 
     if (BACKADJUSTMENT_CONSTANTS.has(constant)) {
-      this.incrementUsage(this.backadjustmentConstantUsage, constant);
+      updateUsage(this.backadjustmentConstantUsage, constant);
       this.addConstantInfo(Codes.BACKADJUSTMENT_CONSTANT, `Backadjustment constant '${constant}' detected`, line, column);
     }
   }

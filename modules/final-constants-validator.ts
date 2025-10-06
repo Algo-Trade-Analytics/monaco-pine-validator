@@ -45,8 +45,8 @@ import {
 } from '../core/constants-registry';
 import { TEXT_ALIGNMENT_CONSTANTS, TEXT_SIZE_CONSTANTS } from '../core/constants';
 import { Codes } from '../core/codes';
-import { visit } from '../core/ast/traversal';
-import type { ExpressionNode, MemberExpressionNode, ProgramNode } from '../core/ast/nodes';
+import { visitQualifiedMembers, updateUsage } from '../core/ast/member-utils';
+import type { ProgramNode } from '../core/ast/nodes';
 
 const MATH_CONSTANTS = new Set([
   'math.e', 'math.pi', 'math.phi', 'math.rphi'
@@ -158,62 +158,16 @@ export class FinalConstantsValidator implements ValidationModule {
   }
 
   private collectConstantsFromAst(program: ProgramNode): void {
-    visit(program, {
-      MemberExpression: {
-        enter: ({ node }) => {
-          const constant = this.getMemberQualifiedName(node as MemberExpressionNode);
-          if (!constant) {
-            return;
-          }
+    visitQualifiedMembers(program, ({ name, line, column }) => {
+      if (!this.shouldInspectConstant(name)) {
+        return;
+      }
 
-          if (!this.shouldInspectConstant(constant)) {
-            return;
-          }
-
-          const position = node.property.loc?.start ?? node.loc.start;
-          const line = position.line ?? 1;
-          const column = position.column ?? 1;
-          const recognized = this.recordConstantUsage(constant, line, column);
-          if (!recognized) {
-            this.flagInvalidConstant(constant, line, column);
-          }
-        },
-      },
+      const recognized = this.recordConstantUsage(name, line, column);
+      if (!recognized) {
+        this.flagInvalidConstant(name, line, column);
+      }
     });
-  }
-
-  private getMemberQualifiedName(member: MemberExpressionNode): string | null {
-    if (member.computed) {
-      return null;
-    }
-
-    const objectName = this.getExpressionQualifiedName(member.object);
-    if (!objectName) {
-      return null;
-    }
-
-    return `${objectName}.${member.property.name}`;
-  }
-
-  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
-    if (expression.kind === 'Identifier') {
-      return expression.name;
-    }
-
-    if (expression.kind === 'MemberExpression') {
-      if (expression.computed) {
-        return null;
-      }
-
-      const objectName = this.getExpressionQualifiedName(expression.object);
-      if (!objectName) {
-        return null;
-      }
-
-      return `${objectName}.${expression.property.name}`;
-    }
-
-    return null;
   }
 
   private shouldInspectConstant(constant: string): boolean {
@@ -245,10 +199,6 @@ export class FinalConstantsValidator implements ValidationModule {
     return prefixes.some((prefix) => constant.startsWith(prefix));
   }
 
-  private incrementUsage(map: Map<string, number>, constant: string): void {
-    map.set(constant, (map.get(constant) || 0) + 1);
-  }
-
   private addConstantInfo(code: string, message: string, line: number, column: number, key?: string): void {
     const dedupeKey = key ?? code;
     if (this.infoKeys.has(dedupeKey)) {
@@ -277,7 +227,7 @@ export class FinalConstantsValidator implements ValidationModule {
 
   private recordConstantUsage(constant: string, line: number, column: number): boolean {
     if (MATH_CONSTANTS.has(constant)) {
-      this.incrementUsage(this.mathConstantUsage, constant);
+      updateUsage(this.mathConstantUsage, constant);
       this.addConstantInfo('PSV6-MATH-CONSTANT', `Mathematical constant '${constant}' detected`, line, column);
       return true;
     }
@@ -287,20 +237,20 @@ export class FinalConstantsValidator implements ValidationModule {
         if (process.env.DEBUG_FINAL_CONSTANTS === '1') {
           console.log('[FinalConstantsValidator] recognized style constant', constant);
         }
-        this.incrementUsage(this.styleConstantUsage, constant);
+        updateUsage(this.styleConstantUsage, constant);
         this.addConstantInfo(Codes.STYLE_CONSTANT, `Style constant '${constant}' detected`, line, column, `style:${constant}`);
         return true;
       }
     }
 
     if (ORDER_CONSTANTS.has(constant)) {
-      this.incrementUsage(this.orderConstantUsage, constant);
+      updateUsage(this.orderConstantUsage, constant);
       this.addConstantInfo(Codes.ORDER_CONSTANT, `Array sort order constant '${constant}' detected`, line, column);
       return true;
     }
 
     if (POSITION_CONSTANTS.has(constant)) {
-      this.incrementUsage(this.positionConstantUsage, constant);
+      updateUsage(this.positionConstantUsage, constant);
       this.addConstantInfo(Codes.POSITION_CONSTANT, `Table position constant '${constant}' detected`, line, column);
       return true;
     }
@@ -347,7 +297,7 @@ export class FinalConstantsValidator implements ValidationModule {
     }
 
     if (ALL_SPECIALIZED_CONSTANTS.has(constant)) {
-      this.incrementUsage(this.specializedConstantUsage, constant);
+      updateUsage(this.specializedConstantUsage, constant);
       this.addConstantInfo(Codes.SPECIALIZED_CONSTANT, `Specialized constant '${constant}' detected`, line, column, `special:${constant}:${line}:${column}`);
       return true;
     }

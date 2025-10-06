@@ -19,12 +19,8 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
-import {
-  type ExpressionNode,
-  type MemberExpressionNode,
-  type ProgramNode,
-} from '../core/ast/nodes';
-import { visit, type NodePath } from '../core/ast/traversal';
+import { type ProgramNode } from '../core/ast/nodes';
+import { visitQualifiedMembers, updateUsage } from '../core/ast/member-utils';
 import {
   TEXT_FORMAT_CONSTANTS_EXTENDED as TEXT_FORMAT_CONSTANTS,
   SESSION_ADVANCED_CONSTANTS,
@@ -178,34 +174,13 @@ export class SyminfoVariablesValidator implements ValidationModule {
   }
 
   private collectSyminfoDataAst(program: ProgramNode): void {
-    visit(program, {
-      MemberExpression: {
-        enter: (path) => {
-          this.processAstMemberExpression(path as NodePath<MemberExpressionNode>);
-        },
-      },
+    visitQualifiedMembers(program, ({ name, line, column }) => {
+      if (this.recordSyminfoQualifiedName(name, line, column)) {
+        return;
+      }
+
+      this.recordConstantQualifiedName(name, line, column);
     });
-  }
-
-  private processAstMemberExpression(path: NodePath<MemberExpressionNode>): void {
-    const member = path.node;
-    if (member.computed) {
-      return;
-    }
-
-    const qualifiedName = this.getExpressionQualifiedName(member);
-    if (!qualifiedName) {
-      return;
-    }
-
-    const line = member.loc.start.line;
-    const column = member.loc.start.column;
-
-    if (this.recordSyminfoQualifiedName(qualifiedName, line, column)) {
-      return;
-    }
-
-    this.recordConstantQualifiedName(qualifiedName, line, column);
   }
 
   private recordSyminfoQualifiedName(name: string, line: number, column: number): boolean {
@@ -257,7 +232,7 @@ export class SyminfoVariablesValidator implements ValidationModule {
   }
 
   private recordSyminfoUsage(name: string, line: number, column: number, code: string, message: string): void {
-    this.syminfoUsage.set(name, (this.syminfoUsage.get(name) || 0) + 1);
+    updateUsage(this.syminfoUsage, name);
     this.info.push({ code, message, line, column, severity: 'info' });
   }
 
@@ -266,7 +241,7 @@ export class SyminfoVariablesValidator implements ValidationModule {
       return;
     }
 
-    this.constantUsage.set(name, (this.constantUsage.get(name) || 0) + 1);
+    updateUsage(this.constantUsage, name);
     this.info.push({
       code: 'PSV6-ADDITIONAL-CONSTANT',
       message: `Additional constant '${name}' detected`,
@@ -274,27 +249,6 @@ export class SyminfoVariablesValidator implements ValidationModule {
       column,
       severity: 'info',
     });
-  }
-
-  private getExpressionQualifiedName(expression: ExpressionNode): string | null {
-    if (expression.kind === 'Identifier') {
-      return expression.name;
-    }
-
-    if (expression.kind === 'MemberExpression') {
-      if (expression.computed) {
-        return null;
-      }
-
-      const objectName = this.getExpressionQualifiedName(expression.object);
-      if (!objectName) {
-        return null;
-      }
-
-      return `${objectName}.${expression.property.name}`;
-    }
-
-    return null;
   }
 
   private getAstContext(context: ValidationContext, config: ValidatorConfig): AstValidationContext | null {
