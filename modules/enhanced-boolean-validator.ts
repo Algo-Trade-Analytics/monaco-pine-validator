@@ -17,6 +17,8 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import { EXPENSIVE_CALCULATION_FUNCTIONS } from '../core/constants';
 import {
   type ArgumentNode,
@@ -42,10 +44,8 @@ export class EnhancedBooleanValidator implements ValidationModule {
   name = 'EnhancedBooleanValidator';
   priority = 75; // Run after basic syntax validation
 
+  private helper = new ValidationHelper();
   private config!: ValidatorConfig;
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
   private astContext: AstValidationContext | null = null;
 
   getDependencies(): string[] {
@@ -53,32 +53,18 @@ export class EnhancedBooleanValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    this.reset();
     this.config = config;
+    this.reset();
 
     this.astContext = ensureAstContext(context, config);
 
     if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(this.astContext.ast);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -129,7 +115,7 @@ export class EnhancedBooleanValidator implements ValidationModule {
 
     const literalText = this.getExpressionText(test);
     const { line, column } = test.loc.start;
-    this.addError(
+    this.helper.addError(
       line,
       column,
       `Numeric literal '${literalText}' used in if condition. Use boolean expressions instead.`,
@@ -180,7 +166,7 @@ export class EnhancedBooleanValidator implements ValidationModule {
 
   private reportNonBooleanCondition(node: ExpressionNode): void {
     const { line, column } = node.loc.start;
-    this.addError(line, column, 'Non-boolean condition used in if', 'PSV6-FUNCTION-NAMESPACE');
+    this.helper.addError(line, column, 'Non-boolean condition used in if', 'PSV6-FUNCTION-NAMESPACE');
   }
 
   private validateAstBooleanShortCircuit(test: ExpressionNode): void {
@@ -306,7 +292,7 @@ export class EnhancedBooleanValidator implements ValidationModule {
     }
 
     if (orderIssue) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         'Expensive calculation appears before cheaper conditions in AND chain; reorder checks for better short-circuiting.',
@@ -315,7 +301,7 @@ export class EnhancedBooleanValidator implements ValidationModule {
     }
 
     if (expensiveCount > 1) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         'Boolean chain contains multiple expensive calculations. Consider caching results or restructuring checks.',
@@ -344,7 +330,7 @@ export class EnhancedBooleanValidator implements ValidationModule {
     }
 
     if (orderIssue) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         'Constant false clause precedes expensive calculation in OR chain; move cheap checks after the expensive call.',
@@ -353,7 +339,7 @@ export class EnhancedBooleanValidator implements ValidationModule {
     }
 
     if (expensiveCount > 1) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         'Boolean chain contains multiple expensive calculations. Consider caching results or restructuring checks.',
@@ -621,18 +607,9 @@ export class EnhancedBooleanValidator implements ValidationModule {
   // Shared helpers
   // ──────────────────────────────────────────────────────────────────────────
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
   }
 
-  private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.errors.push({ line, column, message, severity: 'error', code, suggestion });
-  }
-
-  private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
 
 }

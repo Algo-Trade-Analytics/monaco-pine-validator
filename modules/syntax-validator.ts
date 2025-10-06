@@ -11,6 +11,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import { VERSION_RE, KEYWORDS, NAMESPACES, PSEUDO_VARS } from '../core/constants';
 import { ensureAstContext } from '../core/ast/context-utils';
 import { getSourceLines as computeSourceLines } from '../core/ast/source-utils';
@@ -37,31 +39,26 @@ import type { ILexingError, IToken } from 'chevrotain';
 export class SyntaxValidator implements ValidationModule {
   name = 'SyntaxValidator';
 
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
   private astDiagnostics: AstDiagnostics | null = null;
-
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
 
   getDependencies(): string[] {
     return [];
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    this.reset();
     this.context = context;
     this.config = config;
+    this.reset();
     this.astContext = this.getAstContext(context, config);
     this.astDiagnostics = this.getAstDiagnostics(context);
 
     if (!this.astContext?.ast) {
       this.validateTextFallback();
-      if (this.errors.length === 0) {
-        this.reportParseDiagnostics();
-      }
+      this.reportParseDiagnostics();
       return this.buildResult();
     }
 
@@ -72,9 +69,7 @@ export class SyntaxValidator implements ValidationModule {
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.astDiagnostics = null;
   }
@@ -127,15 +122,15 @@ export class SyntaxValidator implements ValidationModule {
     }
 
     if (line !== 1 && !this.onlyCommentsAbove(line)) {
-      this.addWarning(line, column, 'Version directive should be on the first line.', 'PSW01');
+      this.helper.addWarning(line, column, 'Version directive should be on the first line.', 'PSW01');
     }
 
     if (primary.version < 5) {
-      this.addWarning(line, column, `Pine version ${primary.version} is deprecated. Prefer v5 or v6.`, 'PSW02');
+      this.helper.addWarning(line, column, `Pine version ${primary.version} is deprecated. Prefer v5 or v6.`, 'PSW02');
     }
 
     for (const duplicate of duplicates) {
-      this.addError(
+      this.helper.addError(
         duplicate.loc.start.line,
         duplicate.loc.start.column,
         'Multiple //@version directives. Only one allowed.',
@@ -158,7 +153,7 @@ export class SyntaxValidator implements ValidationModule {
 
     const firstStatement = this.getFirstStatementLine(program.body);
     if (firstStatement !== null && primary.loc.start.line !== firstStatement) {
-      this.addInfo(
+      this.helper.addInfo(
         firstStatement,
         1,
         'Consider placing the script declaration at the top for clarity.',
@@ -168,7 +163,7 @@ export class SyntaxValidator implements ValidationModule {
 
     for (const duplicate of duplicates) {
       if (duplicate.scriptType !== primary.scriptType) {
-        this.addError(
+        this.helper.addError(
           duplicate.loc.start.line,
           duplicate.loc.start.column,
           `Multiple script declarations not allowed (already '${primary.scriptType}').`,
@@ -193,7 +188,7 @@ export class SyntaxValidator implements ValidationModule {
 
     const isMethod = this.isMethodDeclaration(node);
     const label = isMethod ? 'Method' : 'Function';
-    this.addError(
+    this.helper.addError(
       node.loc.start.line,
       node.loc.start.column,
       `${label} name '${invalid}' conflicts with a Pine keyword.`,
@@ -204,7 +199,7 @@ export class SyntaxValidator implements ValidationModule {
   private validateVariableDeclarationAst(node: VariableDeclarationNode): void {
     const name = node.identifier.name;
     if (KEYWORDS.has(name) || PSEUDO_VARS.has(name)) {
-      this.addError(
+      this.helper.addError(
         node.loc.start.line,
         node.loc.start.column,
         `Identifier '${name}' conflicts with a Pine keyword/builtin.`,
@@ -242,7 +237,7 @@ export class SyntaxValidator implements ValidationModule {
           return;
         }
         const target = `${rootName}.${propertyName}`;
-        this.addError(
+        this.helper.addError(
           assignment.loc.start.line,
           assignment.loc.start.column,
           `Use ':=' to assign to '${target}'. '=' is reserved for the first assignment.`,
@@ -263,7 +258,7 @@ export class SyntaxValidator implements ValidationModule {
       }
 
       if (operator === ':=') {
-        this.addError(
+        this.helper.addError(
           assignment.loc.start.line,
           assignment.loc.start.column,
           `Variable '${baseName}' not declared before ':=' on element.`,
@@ -271,7 +266,7 @@ export class SyntaxValidator implements ValidationModule {
         );
       } else if (operator.length === 2 && operator.endsWith('=')) {
         const op = operator[0];
-        this.addError(
+        this.helper.addError(
           assignment.loc.start.line,
           assignment.loc.start.column,
           `Variable '${baseName}' not declared before '${op}=' on element.`,
@@ -298,7 +293,7 @@ export class SyntaxValidator implements ValidationModule {
   private validateTupleAssignmentAst(assignment: AssignmentStatementNode, operator: string): void {
     const tuple = assignment.left as TupleExpressionNode;
     if (operator.includes(':=')) {
-      this.addError(
+      this.helper.addError(
         assignment.loc.start.line,
         assignment.loc.start.column,
         'Tuple destructuring must use "=" (not ":=").',
@@ -308,7 +303,7 @@ export class SyntaxValidator implements ValidationModule {
 
     const hasEmptySlot = tuple.elements.some((element) => this.isEmptyTupleElement(element));
     if (hasEmptySlot) {
-      this.addWarning(
+      this.helper.addWarning(
         assignment.loc.start.line,
         tuple.loc.start.column,
         'Empty slot in destructuring tuple.',
@@ -348,14 +343,14 @@ export class SyntaxValidator implements ValidationModule {
 
     const message = invalidOps.get(node.operator);
     if (message) {
-      this.addWarning(node.loc.start.line, node.loc.start.column, message, 'PSO01');
+      this.helper.addWarning(node.loc.start.line, node.loc.start.column, message, 'PSO01');
     }
   }
 
   private validateUnaryOperatorAst(node: UnaryExpressionNode): void {
     const operator = node.operator;
     if (operator === '!') {
-      this.addWarning(
+      this.helper.addWarning(
         node.loc.start.line,
         node.loc.start.column,
         "Operator '!' is not valid in Pine. Use 'not'.",
@@ -365,7 +360,7 @@ export class SyntaxValidator implements ValidationModule {
     }
 
     if (operator === '++' || operator === '--' || operator === '~') {
-      this.addWarning(
+      this.helper.addWarning(
         node.loc.start.line,
         node.loc.start.column,
         `Operator '${operator}' is not valid in Pine Script.`,
@@ -378,7 +373,7 @@ export class SyntaxValidator implements ValidationModule {
     const source = this.getSourceLines();
     const hasContent = source.some((line) => line.trim() !== '');
     if (!hasContent) {
-      this.addError(1, 1, 'Script is empty.', 'PS-EMPTY');
+      this.helper.addError(1, 1, 'Script is empty.', 'PS-EMPTY');
     }
   }
 
@@ -432,17 +427,6 @@ export class SyntaxValidator implements ValidationModule {
     return false;
   }
 
-  private addError(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.errors.push({ line, column, message, severity: 'error', code, suggestion });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
 
   private addBySeverity(
     severity: 'error' | 'warning',
@@ -452,9 +436,9 @@ export class SyntaxValidator implements ValidationModule {
     code: string,
   ): void {
     if (severity === 'error') {
-      this.addError(line, column, message, code);
+      this.helper.addError(line, column, message, code);
     } else {
-      this.addWarning(line, column, message, code);
+      this.helper.addWarning(line, column, message, code);
     }
   }
 
@@ -487,7 +471,7 @@ export class SyntaxValidator implements ValidationModule {
       const line = details?.lineno ?? 1;
       const column = details?.offset ?? 1;
       const message = error.message || 'Syntax error detected.';
-      this.addWarning(line, column, message, 'PSV6-SYNTAX-ERROR');
+      this.helper.addWarning(line, column, message, 'PSV6-SYNTAX-ERROR');
     }
   }
 
@@ -517,7 +501,7 @@ export class SyntaxValidator implements ValidationModule {
       if (tokenType === RParen) {
         const last = stack.pop();
         if (!last || last.char !== '(') {
-          this.addError(
+          this.helper.addError(
             token.startLine ?? 1,
             token.startColumn ?? 1,
             "Unexpected ')'.",
@@ -529,7 +513,7 @@ export class SyntaxValidator implements ValidationModule {
       if (tokenType === RBracket) {
         const last = stack.pop();
         if (!last || last.char !== '[') {
-          this.addError(
+          this.helper.addError(
             token.startLine ?? 1,
             token.startColumn ?? 1,
             "Unexpected ']'.",
@@ -542,7 +526,7 @@ export class SyntaxValidator implements ValidationModule {
     while (stack.length > 0) {
       const unmatched = stack.pop()!;
       const closing = unmatched.char === '(' ? ')' : ']';
-      this.addError(
+      this.helper.addError(
         unmatched.token.startLine ?? 1,
         unmatched.token.startColumn ?? 1,
         `Missing closing '${closing}' for opening '${unmatched.char}'.`,
@@ -559,7 +543,7 @@ export class SyntaxValidator implements ValidationModule {
       const line = error.line ?? 1;
       const column = error.column ?? 1;
       const message = error.message || 'Lexing error detected.';
-      this.addError(line, column, message, 'PSV6-LEXER-ERROR');
+      this.helper.addError(line, column, message, 'PSV6-LEXER-ERROR');
     }
   }
 
@@ -572,14 +556,7 @@ export class SyntaxValidator implements ValidationModule {
   }
 
   private buildResult(): ValidationResult {
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: this.context.typeMap,
-      scriptType: this.context.scriptType,
-    };
+    return this.helper.buildResult(this.context);
   }
 }
 

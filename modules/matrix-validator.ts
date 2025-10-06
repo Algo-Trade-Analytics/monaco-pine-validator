@@ -10,6 +10,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import { ensureAstContext } from '../core/ast/context-utils';
 import {
   type ArgumentNode,
@@ -118,9 +120,7 @@ type MatrixUsageRecord = { sets: number[]; fills: number[] };
 export class MatrixValidator implements ValidationModule {
   name = 'MatrixValidator';
 
-  private errors: Array<{ line: number; column: number; message: string; code: string }> = [];
-  private warnings: Array<{ line: number; column: number; message: string; code: string }> = [];
-  private info: Array<{ line: number; column: number; message: string; code: string }> = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
 
@@ -137,44 +137,31 @@ export class MatrixValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    this.reset();
     this.context = context;
+    this.reset();
 
     this.astContext = this.getAstContext(context, config);
     const ast = this.astContext?.ast;
 
     if (!ast) {
-      return this.buildResult(context.scriptType);
+      return this.helper.buildResult(context);
     }
 
     this.collectMatrixDataAst(ast);
     this.validateMatrixPerformanceAst();
     this.validateMatrixBestPracticesAst();
 
-    return this.buildResult(context.scriptType);
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.matrixDeclarations.clear();
     this.matrixAllocations = 0;
     this.matrixUsage.clear();
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({ line, column, message, code });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({ line, column, message, code });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({ line, column, message, code });
-  }
 
   private collectMatrixDataAst(program: ProgramNode): void {
     const loopStack: NodePath[] = [];
@@ -274,7 +261,7 @@ export class MatrixValidator implements ValidationModule {
        this.context.typeMap.has(normalizedElementType)) : false;
 
     if (!normalizedElementType || normalizedElementType === 'unknown') {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         'Matrix declarations must specify a valid element type, e.g. matrix.new<float>(rows, cols).',
@@ -283,7 +270,7 @@ export class MatrixValidator implements ValidationModule {
     }
 
     if (normalizedElementType && !elementTypeIsKnown) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Unknown matrix element type '${normalizedElementType}'. Supported types: ${Array.from(VALID_MATRIX_ELEMENT_TYPES).join(', ')}.`,
@@ -300,7 +287,7 @@ export class MatrixValidator implements ValidationModule {
     const dimensionArgumentCount = args.length - (typeProvidedViaArgument ? 1 : 0);
 
     if (dimensionArgumentCount < 2) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         'Matrix declarations must provide both row and column dimensions.',
@@ -357,7 +344,7 @@ export class MatrixValidator implements ValidationModule {
     const assignmentTarget = this.extractMatrixAssignmentTarget(path);
 
     if (spec && args.length !== spec.params) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Invalid parameter count for ${qualifiedName}. Expected ${spec.params}, got ${args.length}. Usage: ${spec.description}`,
@@ -423,7 +410,7 @@ export class MatrixValidator implements ValidationModule {
 
     // Performance warning for expensive operations in loops
     if (inLoop && EXPENSIVE_MATRIX_METHODS.has(qualifiedName)) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Expensive matrix operation '${qualifiedName}' detected in loop. Consider moving outside loop if possible.`,
@@ -506,7 +493,7 @@ export class MatrixValidator implements ValidationModule {
     if (!info) return;
     
     if (info.rows !== null && info.cols !== null && info.rows !== info.cols) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `${operation} requires a square matrix, but '${matrixName}' is ${info.rows}x${info.cols}`,
@@ -532,7 +519,7 @@ export class MatrixValidator implements ValidationModule {
     if (!info1 || !info2) return;
     
     if (info1.cols !== null && info2.rows !== null && info1.cols !== info2.rows) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Matrix multiplication dimension mismatch: '${matrix1Name}' columns (${info1.cols}) must equal '${matrix2Name}' rows (${info2.rows})`,
@@ -561,7 +548,7 @@ export class MatrixValidator implements ValidationModule {
       const newElements = newRows * newCols;
       
       if (originalElements !== newElements) {
-        this.addError(
+        this.helper.addError(
           line,
           column,
           `Reshape dimension mismatch: original matrix has ${originalElements} elements but reshape requires ${newElements} elements`,
@@ -583,7 +570,7 @@ export class MatrixValidator implements ValidationModule {
     // Validate parameter type - row_num should be int
     const rowType = this.inferExpressionTypeAst(rowArg.value);
     if (rowType === 'string' || rowType === 'bool' || rowType === 'color') {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `${operation}: row parameter must be an integer, got ${rowType}`,
@@ -597,7 +584,7 @@ export class MatrixValidator implements ValidationModule {
     
     const rowNum = this.extractNumericLiteral(rowArg.value);
     if (rowNum !== null && (rowNum < 0 || rowNum > info.rows)) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `${operation}: row index ${rowNum} is out of bounds for matrix with ${info.rows} rows`,
@@ -620,7 +607,7 @@ export class MatrixValidator implements ValidationModule {
     
     const colNum = this.extractNumericLiteral(colArg.value);
     if (colNum !== null && (colNum < 0 || colNum > info.cols)) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `${operation}: column index ${colNum} is out of bounds for matrix with ${info.cols} columns`,
@@ -648,7 +635,7 @@ export class MatrixValidator implements ValidationModule {
       const size2 = info2.rows !== null && info2.cols !== null ? info2.rows * info2.cols : null;
       
       if (size1 !== null && size2 !== null && size1 !== size2) {
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           `Covariance calculation: matrices should have the same number of elements for meaningful results`,
@@ -746,7 +733,7 @@ export class MatrixValidator implements ValidationModule {
       return name;
     }
 
-    this.addError(line, column, `Variable '${name}' is not declared as a matrix`, 'PSV6-MATRIX-NOT-MATRIX');
+    this.helper.addError(line, column, `Variable '${name}' is not declared as a matrix`, 'PSV6-MATRIX-NOT-MATRIX');
     return name;
   }
 
@@ -758,7 +745,7 @@ export class MatrixValidator implements ValidationModule {
 
     const rowValue = this.extractNumericLiteral(rowArg.value);
     if (rowValue !== null && info.rows !== null && (rowValue < 0 || rowValue >= info.rows)) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Matrix row index ${rowValue} is out of bounds for matrix with ${info.rows} rows`,
@@ -768,7 +755,7 @@ export class MatrixValidator implements ValidationModule {
 
     const colValue = this.extractNumericLiteral(colArg.value);
     if (colValue !== null && info.cols !== null && (colValue < 0 || colValue >= info.cols)) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Matrix column index ${colValue} is out of bounds for matrix with ${info.cols} columns`,
@@ -798,7 +785,7 @@ export class MatrixValidator implements ValidationModule {
     
     if (!this.areTypesCompatible(info.elementType, valueType)) {
       const action = operation === 'set' ? 'set' : 'fill';
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Type mismatch: cannot ${action} ${valueType} ${operation === 'set' ? 'in' : 'into'} ${info.elementType} matrix '${name}'`,
@@ -819,7 +806,7 @@ export class MatrixValidator implements ValidationModule {
 
   private validateMatrixType(type: string, line: number, column: number): void {
     if (!VALID_MATRIX_ELEMENT_TYPES.has(type) && !this.context.typeMap.has(type)) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Invalid matrix type: ${type}. Valid types are: ${Array.from(VALID_MATRIX_ELEMENT_TYPES).join(', ')}, or user-defined types`,
@@ -830,12 +817,12 @@ export class MatrixValidator implements ValidationModule {
 
   private validateMatrixDimensions(rows: number, cols: number, line: number, column: number): void {
     if (rows <= 0 || cols <= 0) {
-      this.addError(line, column, `Matrix dimensions must be positive, got: ${rows}x${cols}`, 'PSV6-MATRIX-INVALID-DIMENSIONS');
+      this.helper.addError(line, column, `Matrix dimensions must be positive, got: ${rows}x${cols}`, 'PSV6-MATRIX-INVALID-DIMENSIONS');
       return;
     }
 
     if (rows > 1000 || cols > 1000) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Matrix dimensions (${rows}x${cols}) exceed the maximum limit of 1000 for a single dimension`,
@@ -846,7 +833,7 @@ export class MatrixValidator implements ValidationModule {
 
   private validateMatrixPerformanceAst(): void {
     if (this.matrixAllocations > 5) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `Too many matrix allocations (${this.matrixAllocations}). Consider reusing matrices or using fewer matrices.`,
@@ -858,7 +845,7 @@ export class MatrixValidator implements ValidationModule {
       if (info.rows !== null && info.cols !== null) {
         const totalElements = info.rows * info.cols;
         if (totalElements > 10000) {
-          this.addWarning(
+          this.helper.addWarning(
             info.line,
             info.column,
             `Large matrix '${name}' with ${totalElements} elements. Consider performance implications.`,
@@ -878,7 +865,7 @@ export class MatrixValidator implements ValidationModule {
   private validateMatrixNaming(): void {
     for (const [name, info] of this.matrixDeclarations) {
       if (name.length <= 2 || /^[a-z]$/.test(name) || /^mat\d*$/.test(name)) {
-        this.addInfo(
+        this.helper.addInfo(
           info.line,
           info.column,
           `Consider using more descriptive names for matrices. '${name}' could be improved.`,
@@ -892,7 +879,7 @@ export class MatrixValidator implements ValidationModule {
     for (const [name, info] of this.matrixDeclarations) {
       const usage = this.matrixUsage.get(name);
       if (!usage) {
-        this.addInfo(
+        this.helper.addInfo(
           info.line,
           info.column,
           `Matrix '${name}' is declared but never initialized. Consider adding initial values.`,
@@ -903,7 +890,7 @@ export class MatrixValidator implements ValidationModule {
 
       const hasInitialization = [...usage.sets, ...usage.fills].some((usageLine) => usageLine >= info.line);
       if (!hasInitialization) {
-        this.addInfo(
+        this.helper.addInfo(
           info.line,
           info.column,
           `Matrix '${name}' is declared but never initialized. Consider adding initial values.`,
@@ -928,7 +915,7 @@ export class MatrixValidator implements ValidationModule {
       const hasFill = usage.fills.length > 0;
 
       if (hasSet && !hasFill && info.rows * info.cols > 100) {
-        this.addInfo(
+        this.helper.addInfo(
           info.line,
           info.column,
           `Matrix '${name}' is modified but never reset. Consider using matrix.fill() or recreating the matrix to manage memory.`,
@@ -938,16 +925,6 @@ export class MatrixValidator implements ValidationModule {
     }
   }
 
-  private buildResult(scriptType: ValidationContext['scriptType']): ValidationResult {
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors.map((error) => ({ ...error, severity: 'error' as const })),
-      warnings: this.warnings.map((warning) => ({ ...warning, severity: 'warning' as const })),
-      info: this.info.map((entry) => ({ ...entry, severity: 'info' as const })),
-      typeMap: this.context.typeMap,
-      scriptType,
-    };
-  }
 
   private getAstContext(
     context: ValidationContext,

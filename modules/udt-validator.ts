@@ -7,6 +7,8 @@ import {
   type ValidatorConfig,
   type TypeInfo,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type AssignmentStatementNode,
   type CallExpressionNode,
@@ -57,17 +59,12 @@ export class UDTValidator implements ValidationModule {
   name = 'UDTValidator';
   priority = 95; // High priority - must run before TypeInferenceValidator
   
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astMethodMetadata: AstMethodMetadata[] = [];
   private astMethodMetadataMap: WeakMap<FunctionDeclarationNode, AstMethodMetadata> = new WeakMap();
   private udtTypes = new Map<string, UDTInfo>();
   private udtDeclarations: UDTDeclaration[] = [];
-  private errorKeys = new Set<string>();
-  private warningKeys = new Set<string>();
-  private infoKeys = new Set<string>();
   private readonly allowedInstanceMethods = new Set([
     'push','pop','get','set','size','clear','reverse','sort','sort_indices','copy','slice','concat','fill','from','from_example',
     'indexof','lastindexof','includes','binary_search','binary_search_leftmost','binary_search_rightmost','range','remove','insert',
@@ -80,79 +77,28 @@ export class UDTValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    this.reset();
     this.context = context;
+    this.reset();
 
     const astContext = this.getAstContext(config);
     const program = astContext?.ast ?? null;
     if (!program) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: context.typeMap ?? new Map(),
-        scriptType: context.scriptType ?? null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(program);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: context.typeMap ?? new Map(),
-      scriptType: context.scriptType ?? null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astMethodMetadata = [];
     this.astMethodMetadataMap = new WeakMap();
     this.udtTypes.clear();
     this.udtDeclarations = [];
-    this.errorKeys.clear();
-    this.warningKeys.clear();
-    this.infoKeys.clear();
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    const key = `${line}:${column}:${code}`;
-    if (this.errorKeys.has(key)) {
-      return;
-    }
-    this.errorKeys.add(key);
-    this.errors.push({ line, column, message, code, severity: 'error' });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    const key = `${line}:${column}:${code}`;
-    if (this.warningKeys.has(key)) {
-      return;
-    }
-    this.warningKeys.add(key);
-    this.warnings.push({ line, column, message, code, severity: 'warning' });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    const key = `${line}:${column}:${code}`;
-    if (this.infoKeys.has(key)) {
-      return;
-    }
-    this.infoKeys.add(key);
-    this.info.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'info'
-    });
-  }
 
   private validateWithAst(program: ProgramNode): void {
     this.collectUdtDataFromAst(program);
@@ -192,7 +138,7 @@ export class UDTValidator implements ValidationModule {
       
       // Check for duplicate field names
       if (seenFieldNames.has(fieldName)) {
-        this.addError(
+        this.helper.addError(
           field.loc.start.line,
           field.loc.start.column,
           `Duplicate field '${fieldName}' in UDT '${udtName}'`,
@@ -334,7 +280,7 @@ export class UDTValidator implements ValidationModule {
   private validateMethodDeclarationsAst(): void {
     for (const metadata of this.astMethodMetadata) {
       if (!metadata.hasThis) {
-        this.addError(
+        this.helper.addError(
           metadata.line,
           metadata.column,
           `Method '${metadata.methodName}' must have a first parameter with a type annotation (e.g., 'Arrays this' or 'Arrays arr')`,
@@ -344,7 +290,7 @@ export class UDTValidator implements ValidationModule {
       }
 
       if (!metadata.thisParam?.typeAnnotation) {
-        this.addInfo(
+        this.helper.addInfo(
           metadata.line,
           metadata.column,
           "Consider adding type annotation to the first parameter for clarity",
@@ -490,7 +436,7 @@ export class UDTValidator implements ValidationModule {
 
     const line = member.property.loc.start.line;
     const column = member.property.loc.start.column;
-    this.addWarning(
+    this.helper.addWarning(
       line,
       column,
       `Method '${methodName}' called on primitive type variable '${objectName}'`,
@@ -534,7 +480,7 @@ export class UDTValidator implements ValidationModule {
     const column = node.property.loc.start.column;
 
     if (!field) {
-      this.addError(line, column, `Field '${fieldName}' does not exist in UDT '${objectType.name}'`, 'PSV6-UDT-FIELD-NOT-FOUND');
+      this.helper.addError(line, column, `Field '${fieldName}' does not exist in UDT '${objectType.name}'`, 'PSV6-UDT-FIELD-NOT-FOUND');
       return;
     }
 
@@ -779,7 +725,7 @@ export class UDTValidator implements ValidationModule {
       if (lines.length > 1) {
         // Report error for all duplicate declarations except the first one
         for (let i = 1; i < lines.length; i++) {
-          this.addError(lines[i], 1, 
+          this.helper.addError(lines[i], 1, 
             `Duplicate UDT name '${udtName}' (first declared at line ${lines[0]})`, 
             'PSV6-UDT-DUPLICATE');
         }
@@ -789,7 +735,7 @@ export class UDTValidator implements ValidationModule {
     // Check for empty UDTs
     for (const [udtName, udtInfo] of this.udtTypes.entries()) {
       if (udtInfo.fields.length === 0 && udtInfo.methods.length === 0) {
-        this.addWarning(udtInfo.line, 1, 
+        this.helper.addWarning(udtInfo.line, 1, 
           `UDT '${udtName}' has no fields or methods`, 
           'PSV6-UDT-EMPTY');
       }

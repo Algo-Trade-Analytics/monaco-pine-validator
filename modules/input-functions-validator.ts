@@ -20,6 +20,8 @@ import {
   type ValidationResult,
   type TypeInfo,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type AssignmentStatementNode,
@@ -63,9 +65,7 @@ export class InputFunctionsValidator implements ValidationModule {
   name = 'InputFunctionsValidator';
   priority = 87; // High priority - input functions are essential for Pine Script
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
@@ -79,21 +79,14 @@ export class InputFunctionsValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    this.reset();
     this.context = context;
     this.config = config;
+    this.reset();
 
     this.astContext = this.getAstContext(config);
 
     if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.collectInputFunctionDataAst(this.astContext.ast);
@@ -101,73 +94,17 @@ export class InputFunctionsValidator implements ValidationModule {
     // Post-process validations
     this.validateInputPerformance();
     this.validateInputBestPractices();
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.inputFunctionCalls = [];
     this.inputCount = 0;
   }
 
-  private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    // Only generate errors for clearly invalid cases
-    if (this.isClearlyInvalid(message, code)) {
-      this.errors.push({ line, column, message, severity: 'error', code, suggestion });
-    } else {
-      // Generate warnings for ambiguous cases
-      this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-    }
-  }
 
-  private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
-
-  private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
-
-  private isClearlyInvalid(message: string, code?: string): boolean {
-    // Only generate errors for clearly invalid cases
-    
-    // Parameter type errors are clearly invalid
-    if (code === 'PSV6-FUNCTION-PARAM-TYPE') {
-      return true;
-    }
-    
-    // Parameter count errors are clearly invalid
-    if (code === 'PSV6-FUNCTION-PARAM-COUNT') {
-      return true;
-    }
-    
-    // Unknown input function errors are clearly invalid
-    if (code === 'PSV6-INPUT-UNKNOWN-FUNCTION') {
-      return true;
-    }
-    
-    // Invalid input function usage is clearly invalid
-    if (code === 'PSV6-INPUT-INVALID') {
-      return true;
-    }
-    // Defval type mismatch should be an error
-    if (code === 'PSV6-INPUT-DEFVAL-TYPE') {
-      return true;
-    }
-    
-    // For performance and best practice issues, generate warnings
-    return false;
-  }
 
   private collectInputFunctionDataAst(program: ProgramNode): void {
     visit(program, {
@@ -226,7 +163,7 @@ export class InputFunctionsValidator implements ValidationModule {
     const hasNamedDefval = parameters.has('defval');
     const hasPositionalDefval = args.length > 0;
     if (!hasNamedDefval && !hasPositionalDefval) {
-      this.addError(
+      this.helper.addError(
         lineNum,
         column,
         `input.${functionName}() requires a default value (defval)`,
@@ -240,7 +177,7 @@ export class InputFunctionsValidator implements ValidationModule {
     // const hasNamedTitle = parameters.has('title');
     // const hasPositionalTitle = args.length > positionalIndexForTitle;
     // if (!hasNamedTitle && !hasPositionalTitle) {
-    //   this.addError(
+    //   this.helper.addError(
     //     lineNum,
     //     column,
     //     `input.${functionName}() requires a title parameter`,
@@ -304,7 +241,7 @@ export class InputFunctionsValidator implements ValidationModule {
         this.validateInputEnum(args, parameters, lineNum, column);
         break;
       default:
-        this.addError(lineNum, column, `Unknown input function: input.${functionName}`, 'PSV6-INPUT-UNKNOWN-FUNCTION');
+        this.helper.addError(lineNum, column, `Unknown input function: input.${functionName}`, 'PSV6-INPUT-UNKNOWN-FUNCTION');
     }
 
     if (!hasRequiredParameters) {
@@ -363,11 +300,11 @@ export class InputFunctionsValidator implements ValidationModule {
     const defaultValue = this.extractNumericValue(defArgInt ?? '');
     if (!hasNamedDef && defaultValue === null && (defArgInt ?? '').trim() !== 'na') {
       // Only warn; tests expect valid scenarios to remain error-free
-      this.addWarning(lineNum, column, 'Default value should be an integer or na', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be an integer or na', 'PSV6-INPUT-DEFAULT-TYPE');
       // Clearly invalid: string or bool passed as default
       const def = (defArgInt ?? '').trim().toLowerCase();
       if (/^".*"$/.test(def) || def === 'true' || def === 'false') {
-        this.addError(lineNum, column, 'Invalid parameter type for input.int default', 'PSV6-FUNCTION-PARAM-TYPE');
+        this.helper.addError(lineNum, column, 'Invalid parameter type for input.int default', 'PSV6-FUNCTION-PARAM-TYPE');
       }
     }
 
@@ -381,10 +318,10 @@ export class InputFunctionsValidator implements ValidationModule {
     const defArgFloat = parameters.get('defval') ?? args[0];
     const defaultValue = this.extractNumericValue(defArgFloat ?? '');
     if (!hasNamedDefF && defaultValue === null && (defArgFloat ?? '').trim() !== 'na') {
-      this.addWarning(lineNum, column, 'Default value should be a float or na', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be a float or na', 'PSV6-INPUT-DEFAULT-TYPE');
       const def = (defArgFloat ?? '').trim().toLowerCase();
       if (/^".*"$/.test(def) || def === 'true' || def === 'false') {
-        this.addError(lineNum, column, 'Invalid parameter type for input.float default', 'PSV6-FUNCTION-PARAM-TYPE');
+        this.helper.addError(lineNum, column, 'Invalid parameter type for input.float default', 'PSV6-FUNCTION-PARAM-TYPE');
       }
     }
 
@@ -398,10 +335,10 @@ export class InputFunctionsValidator implements ValidationModule {
     const defArgBool = (parameters.get('defval') ?? args[0] ?? '').trim().toLowerCase();
     const defaultValue = defArgBool;
     if (!hasNamedDefB && !['true', 'false', 'na'].includes(defaultValue)) {
-      this.addWarning(lineNum, column, 'Default value should be true, false, or na', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be true, false, or na', 'PSV6-INPUT-DEFAULT-TYPE');
       // Clearly invalid default type for bool
       if (/^".*"$/.test(defaultValue) || /^[+\-]?\d+(?:\.\d+)?$/.test(defaultValue)) {
-        this.addError(lineNum, column, 'Invalid parameter type for input.bool default', 'PSV6-FUNCTION-PARAM-TYPE');
+        this.helper.addError(lineNum, column, 'Invalid parameter type for input.bool default', 'PSV6-FUNCTION-PARAM-TYPE');
       }
     }
 
@@ -414,7 +351,7 @@ export class InputFunctionsValidator implements ValidationModule {
     const hasNamedDefS = parameters.has('defval');
     const defArgStr = parameters.get('defval') ?? args[0];
     if (!hasNamedDefS && !this.isStringLike(defArgStr ?? '')) {
-      this.addWarning(lineNum, column, 'Default value should be a string literal', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be a string literal', 'PSV6-INPUT-DEFAULT-TYPE');
     }
 
     // Validate parameters
@@ -429,7 +366,7 @@ export class InputFunctionsValidator implements ValidationModule {
     const hasNamedDefC = parameters.has('defval');
     const defArgColor = (parameters.get('defval') ?? args[0] ?? '').trim();
     if (!hasNamedDefC && !this.isColorExpression(defArgColor)) {
-      this.addWarning(lineNum, column, 'Default value should be a color expression', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be a color expression', 'PSV6-INPUT-DEFAULT-TYPE');
     }
 
     // Validate parameters
@@ -441,7 +378,7 @@ export class InputFunctionsValidator implements ValidationModule {
     const hasNamedDefSrc = parameters.has('defval');
     const defArgSource = (parameters.get('defval') ?? args[0] ?? '').trim();
     if (!hasNamedDefSrc && !this.isSeriesExpression(defArgSource)) {
-      this.addWarning(lineNum, column, 'Default value should be a series expression', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be a series expression', 'PSV6-INPUT-DEFAULT-TYPE');
     }
 
     // Validate parameters
@@ -452,7 +389,7 @@ export class InputFunctionsValidator implements ValidationModule {
     // Validate default value (should be timeframe string)
     const defaultValue = args[0];
     if (this.isStringLiteral(defaultValue) && !this.isValidTimeframe(defaultValue)) {
-      this.addWarning(lineNum, column, 'Default value should be a valid timeframe string', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be a valid timeframe string', 'PSV6-INPUT-DEFAULT-TYPE');
     }
 
     // Validate parameters
@@ -463,7 +400,7 @@ export class InputFunctionsValidator implements ValidationModule {
     // Validate default value (should be session string)
     const defaultValue = args[0];
     if (this.isStringLiteral(defaultValue) && !this.isValidSession(defaultValue)) {
-      this.addWarning(lineNum, column, 'Default value should be a valid session string', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be a valid session string', 'PSV6-INPUT-DEFAULT-TYPE');
     }
 
     // Validate parameters
@@ -473,7 +410,7 @@ export class InputFunctionsValidator implements ValidationModule {
   private validateInputSymbol(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
     // Validate default value (should be string literal)
     if (!this.isStringLiteral(args[0])) {
-      this.addWarning(lineNum, column, 'Default value should be a string literal', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be a string literal', 'PSV6-INPUT-DEFAULT-TYPE');
     }
 
     // Validate parameters
@@ -483,7 +420,7 @@ export class InputFunctionsValidator implements ValidationModule {
   private validateInputResolution(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
     // Validate default value (should be string literal)
     if (!this.isStringLiteral(args[0])) {
-      this.addWarning(lineNum, column, 'Default value should be a string literal', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be a string literal', 'PSV6-INPUT-DEFAULT-TYPE');
     }
 
     // Validate parameters
@@ -494,7 +431,7 @@ export class InputFunctionsValidator implements ValidationModule {
     // Default value should be an int (timestamp) or timestamp() call
     const defaultValue = parameters.get('defval') ?? args[0];
     if (defaultValue && !this.isNumericOrTimestamp(defaultValue)) {
-      this.addWarning(lineNum, column, 'Default value should be a timestamp or timestamp() call', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be a timestamp or timestamp() call', 'PSV6-INPUT-DEFAULT-TYPE');
     }
 
     // Validate parameters
@@ -505,7 +442,7 @@ export class InputFunctionsValidator implements ValidationModule {
     // Validate default value (should be string literal)
     const defaultValue = parameters.get('defval') ?? args[0];
     if (defaultValue && !this.isStringLiteral(defaultValue)) {
-      this.addWarning(lineNum, column, 'Default value should be a string literal', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be a string literal', 'PSV6-INPUT-DEFAULT-TYPE');
     }
 
     // Validate parameters
@@ -516,7 +453,7 @@ export class InputFunctionsValidator implements ValidationModule {
     // Validate default value (should be numeric)
     const defaultValue = parameters.get('defval') ?? args[0];
     if (defaultValue && !this.isNumericLike(defaultValue)) {
-      this.addWarning(lineNum, column, 'Default value should be a numeric expression', 'PSV6-INPUT-DEFAULT-TYPE');
+      this.helper.addWarning(lineNum, column, 'Default value should be a numeric expression', 'PSV6-INPUT-DEFAULT-TYPE');
     }
 
     // Validate parameters
@@ -575,7 +512,7 @@ export class InputFunctionsValidator implements ValidationModule {
           this.validateMultilineParameter(paramValue, lineNum, column);
           break;
         default:
-          this.addWarning(lineNum, column, `Unknown input parameter: ${paramName}`, 'PSV6-INPUT-UNKNOWN-PARAMETER');
+          this.helper.addWarning(lineNum, column, `Unknown input parameter: ${paramName}`, 'PSV6-INPUT-UNKNOWN-PARAMETER');
       }
     }
   }
@@ -586,39 +523,39 @@ export class InputFunctionsValidator implements ValidationModule {
       case 'int': {
         const n = this.extractNumericValue(v);
         if (n === null || !/^[-+]?\d+$/.test(v.replace(/^['"]|['"]$/g, ''))) {
-          this.addError(lineNum, column, 'defval must be an integer for input.int', 'PSV6-INPUT-DEFVAL-TYPE');
+          this.helper.addError(lineNum, column, 'defval must be an integer for input.int', 'PSV6-INPUT-DEFVAL-TYPE');
         }
         break;
       }
       case 'float': {
         const n = this.extractNumericValue(v);
         if (n === null) {
-          this.addError(lineNum, column, 'defval must be a number for input.float', 'PSV6-INPUT-DEFVAL-TYPE');
+          this.helper.addError(lineNum, column, 'defval must be a number for input.float', 'PSV6-INPUT-DEFVAL-TYPE');
         }
         break;
       }
       case 'bool': {
         const b = v.toLowerCase();
         if (!(b === 'true' || b === 'false')) {
-          this.addError(lineNum, column, 'defval must be true/false for input.bool', 'PSV6-INPUT-DEFVAL-TYPE');
+          this.helper.addError(lineNum, column, 'defval must be true/false for input.bool', 'PSV6-INPUT-DEFVAL-TYPE');
         }
         break;
       }
       case 'string': {
         if (!this.isStringLike(v)) {
-          this.addError(lineNum, column, 'defval must be a string literal for input.string', 'PSV6-INPUT-DEFVAL-TYPE');
+          this.helper.addError(lineNum, column, 'defval must be a string literal for input.string', 'PSV6-INPUT-DEFVAL-TYPE');
         }
         break;
       }
       case 'color': {
         if (!this.isColorExpression(v)) {
-          this.addError(lineNum, column, 'defval must be a color expression for input.color', 'PSV6-INPUT-DEFVAL-TYPE');
+          this.helper.addError(lineNum, column, 'defval must be a color expression for input.color', 'PSV6-INPUT-DEFVAL-TYPE');
         }
         break;
       }
       case 'source': {
         if (!this.isSeriesExpression(v)) {
-          this.addError(lineNum, column, 'defval must be a series (e.g., close) for input.source', 'PSV6-INPUT-DEFVAL-TYPE');
+          this.helper.addError(lineNum, column, 'defval must be a series (e.g., close) for input.source', 'PSV6-INPUT-DEFVAL-TYPE');
         }
         break;
       }
@@ -627,7 +564,7 @@ export class InputFunctionsValidator implements ValidationModule {
       case 'symbol':
       case 'resolution': {
         if (!this.isStringLike(v)) {
-          this.addError(lineNum, column, `defval must be a string literal for input.${inputType}`, 'PSV6-INPUT-DEFVAL-TYPE');
+          this.helper.addError(lineNum, column, `defval must be a string literal for input.${inputType}`, 'PSV6-INPUT-DEFVAL-TYPE');
         }
         break;
       }
@@ -636,32 +573,32 @@ export class InputFunctionsValidator implements ValidationModule {
 
   private validateTitleParameter(value: string, lineNum: number, column: number): void {
     if (!this.isStringLike(value)) {
-      this.addWarning(lineNum, column, 'title parameter should be a string literal', 'PSV6-INPUT-TITLE-WARNING');
+      this.helper.addWarning(lineNum, column, 'title parameter should be a string literal', 'PSV6-INPUT-TITLE-WARNING');
       return;
     }
     const clean = this.extractStringLiteralValue(value);
     if (clean && clean.length > 80) {
-      this.addInfo(lineNum, column, 'Input title is long; consider shortening', 'PSV6-INPUT-TITLE-LENGTH');
+      this.helper.addInfo(lineNum, column, 'Input title is long; consider shortening', 'PSV6-INPUT-TITLE-LENGTH');
     }
   }
 
   private validateMinvalParameter(value: string, inputType: string, lineNum: number, column: number, defaultArg?: string): void {
     const numValue = this.extractNumericValue(value);
     if (numValue === null) {
-      this.addError(lineNum, column, 'minval parameter should be a numeric value', 'PSV6-INPUT-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'minval parameter should be a numeric value', 'PSV6-INPUT-PARAM-TYPE');
       return;
     }
 
     // Check for reasonable minval values
     if (numValue < -1000000 || numValue > 1000000) {
-      this.addWarning(lineNum, column, 'minval parameter has an extreme value', 'PSV6-INPUT-MINVAL-WARNING');
+      this.helper.addWarning(lineNum, column, 'minval parameter has an extreme value', 'PSV6-INPUT-MINVAL-WARNING');
     }
 
     // Suggest when minval > default value
     if (defaultArg) {
       const def = this.extractNumericValue(defaultArg);
       if (def !== null && numValue > def) {
-        this.addWarning(lineNum, column, 'minval is greater than the default value', 'PSV6-INPUT-MINVAL-WARNING');
+        this.helper.addWarning(lineNum, column, 'minval is greater than the default value', 'PSV6-INPUT-MINVAL-WARNING');
       }
     }
   }
@@ -669,20 +606,20 @@ export class InputFunctionsValidator implements ValidationModule {
   private validateMaxvalParameter(value: string, inputType: string, lineNum: number, column: number, defaultArg?: string): void {
     const numValue = this.extractNumericValue(value);
     if (numValue === null) {
-      this.addError(lineNum, column, 'maxval parameter should be a numeric value', 'PSV6-INPUT-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'maxval parameter should be a numeric value', 'PSV6-INPUT-PARAM-TYPE');
       return;
     }
 
     // Check for reasonable maxval values
     if (numValue < -1000000 || numValue > 1000000) {
-      this.addWarning(lineNum, column, 'maxval parameter has an extreme value', 'PSV6-INPUT-MAXVAL-WARNING');
+      this.helper.addWarning(lineNum, column, 'maxval parameter has an extreme value', 'PSV6-INPUT-MAXVAL-WARNING');
     }
 
     // Suggest when maxval < default value
     if (defaultArg) {
       const def = this.extractNumericValue(defaultArg);
       if (def !== null && numValue < def) {
-        this.addWarning(lineNum, column, 'maxval is less than the default value', 'PSV6-INPUT-MAXVAL-WARNING');
+        this.helper.addWarning(lineNum, column, 'maxval is less than the default value', 'PSV6-INPUT-MAXVAL-WARNING');
       }
     }
   }
@@ -690,16 +627,16 @@ export class InputFunctionsValidator implements ValidationModule {
   private validateStepParameter(value: string, inputType: string, lineNum: number, column: number): void {
     const numValue = this.extractNumericValue(value);
     if (numValue === null) {
-      this.addError(lineNum, column, 'step parameter should be a numeric value', 'PSV6-INPUT-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'step parameter should be a numeric value', 'PSV6-INPUT-PARAM-TYPE');
       return;
     }
 
     if (numValue <= 0) {
-      this.addWarning(lineNum, column, 'step parameter should be positive', 'PSV6-INPUT-STEP-WARNING');
+      this.helper.addWarning(lineNum, column, 'step parameter should be positive', 'PSV6-INPUT-STEP-WARNING');
     }
 
     if (numValue < 0.0001) {
-      this.addWarning(lineNum, column, 'step parameter is very small', 'PSV6-INPUT-STEP-WARNING');
+      this.helper.addWarning(lineNum, column, 'step parameter is very small', 'PSV6-INPUT-STEP-WARNING');
     }
   }
 
@@ -710,7 +647,7 @@ export class InputFunctionsValidator implements ValidationModule {
       const elements = this.splitTopLevelList(inner);
       const invalid = elements.filter(element => element && !this.isStringLike(element));
       if (invalid.length > 0) {
-        this.addWarning(lineNum, column, 'options array should contain string literals or string constants', 'PSV6-INPUT-OPTIONS-WARNING');
+        this.helper.addWarning(lineNum, column, 'options array should contain string literals or string constants', 'PSV6-INPUT-OPTIONS-WARNING');
       }
       return;
     }
@@ -722,29 +659,29 @@ export class InputFunctionsValidator implements ValidationModule {
       }
     }
 
-    this.addWarning(lineNum, column, 'options parameter should be an array', 'PSV6-INPUT-OPTIONS-WARNING');
+    this.helper.addWarning(lineNum, column, 'options parameter should be an array', 'PSV6-INPUT-OPTIONS-WARNING');
   }
 
   private validateGroupParameter(value: string, lineNum: number, column: number): void {
     // Group parameter should be a string literal
     if (!this.isStringLike(value)) {
-      this.addWarning(lineNum, column, 'group parameter should be a string literal', 'PSV6-INPUT-GROUP-WARNING');
+      this.helper.addWarning(lineNum, column, 'group parameter should be a string literal', 'PSV6-INPUT-GROUP-WARNING');
     }
   }
 
   private validateTooltipParameter(value: string, lineNum: number, column: number): void {
     // Tooltip parameter should be a string literal
     if (!this.isStringLike(value)) {
-      this.addWarning(lineNum, column, 'tooltip parameter should be a string literal', 'PSV6-INPUT-TOOLTIP-WARNING');
+      this.helper.addWarning(lineNum, column, 'tooltip parameter should be a string literal', 'PSV6-INPUT-TOOLTIP-WARNING');
       return;
     }
     const clean = this.extractStringLiteralValue(value);
     if (clean) {
       if (clean.length > 120) {
-        this.addInfo(lineNum, column, 'Tooltip seems long; keep it concise for IDE UI', 'PSV6-INPUT-TOOLTIP-LENGTH');
+        this.helper.addInfo(lineNum, column, 'Tooltip seems long; keep it concise for IDE UI', 'PSV6-INPUT-TOOLTIP-LENGTH');
       }
       if (/\n{2,}/.test(clean)) {
-        this.addWarning(lineNum, column, 'Tooltip contains multiple newlines; simplify formatting', 'PSV6-INPUT-TOOLTIP-FORMAT');
+        this.helper.addWarning(lineNum, column, 'Tooltip contains multiple newlines; simplify formatting', 'PSV6-INPUT-TOOLTIP-FORMAT');
       }
     }
   }
@@ -752,21 +689,21 @@ export class InputFunctionsValidator implements ValidationModule {
   private validateInlineParameter(value: string, lineNum: number, column: number): void {
     // Inline parameter should be a string literal
     if (!this.isStringLike(value)) {
-      this.addWarning(lineNum, column, 'inline parameter should be a string literal', 'PSV6-INPUT-INLINE-WARNING');
+      this.helper.addWarning(lineNum, column, 'inline parameter should be a string literal', 'PSV6-INPUT-INLINE-WARNING');
     }
   }
 
   private validateConfirmParameter(value: string, lineNum: number, column: number): void {
     const boolValue = value.trim().toLowerCase();
     if (!['true', 'false'].includes(boolValue)) {
-      this.addWarning(lineNum, column, 'confirm parameter should be true or false', 'PSV6-INPUT-CONFIRM-WARNING');
+      this.helper.addWarning(lineNum, column, 'confirm parameter should be true or false', 'PSV6-INPUT-CONFIRM-WARNING');
     }
   }
 
   private validateMultilineParameter(value: string, lineNum: number, column: number): void {
     const boolValue = value.trim().toLowerCase();
     if (!['true', 'false'].includes(boolValue)) {
-      this.addWarning(lineNum, column, 'multiline parameter should be true or false', 'PSV6-INPUT-MULTILINE-WARNING');
+      this.helper.addWarning(lineNum, column, 'multiline parameter should be true or false', 'PSV6-INPUT-MULTILINE-WARNING');
     }
   }
 
@@ -776,7 +713,7 @@ export class InputFunctionsValidator implements ValidationModule {
       const optionsValue = parameters.get('options')!;
       // This is a basic check - in a real implementation, you'd parse the array
       if (optionsValue.includes('[]') || optionsValue === '[]') {
-        this.addWarning(lineNum, column, 'Empty options array for string input', 'PSV6-INPUT-OPTIONS-WARNING');
+        this.helper.addWarning(lineNum, column, 'Empty options array for string input', 'PSV6-INPUT-OPTIONS-WARNING');
       }
     }
   }
@@ -784,7 +721,7 @@ export class InputFunctionsValidator implements ValidationModule {
   private validateInputPerformance(): void {
     // Check for too many input functions
     if (this.inputCount > 25) {
-      this.addWarning(1, 1,
+      this.helper.addWarning(1, 1,
         `Too many input functions detected (${this.inputCount}). Consider grouping related inputs.`,
         'PSV6-INPUT-TOO-MANY');
     }
@@ -793,7 +730,7 @@ export class InputFunctionsValidator implements ValidationModule {
     for (const call of this.inputFunctionCalls) {
       const defaultArg = call.parameters.get('defval') ?? call.arguments[0];
       if (this.hasComplexExpression(defaultArg ?? '')) {
-        this.addWarning(call.line, call.column,
+        this.helper.addWarning(call.line, call.column,
           'Complex expression used as input default value. Consider using simpler expressions.',
           'PSV6-INPUT-COMPLEX-EXPRESSION');
       }
@@ -807,7 +744,7 @@ export class InputFunctionsValidator implements ValidationModule {
     for (const call of this.inputFunctionCalls) {
       const variableName = call.assignedName;
       if (variableName && poorNames.has(variableName)) {
-        this.addInfo(call.line, call.column,
+        this.helper.addInfo(call.line, call.column,
           `Consider using a more descriptive name instead of '${variableName}'`,
           'PSV6-INPUT-NAMING-SUGGESTION');
       }
@@ -822,7 +759,7 @@ export class InputFunctionsValidator implements ValidationModule {
     }
 
     if (inputsWithoutTooltips > this.inputCount * 0.5) {
-      this.addInfo(1, 1,
+      this.helper.addInfo(1, 1,
         'Consider adding tooltips to input functions to improve user experience',
         'PSV6-INPUT-TOOLTIP-SUGGESTION');
     }
@@ -836,7 +773,7 @@ export class InputFunctionsValidator implements ValidationModule {
     }
 
     if (this.inputCount >= 4 && groups.size === 0) {
-      this.addInfo(1, 1,
+      this.helper.addInfo(1, 1,
         'Consider grouping related input functions using the group parameter',
         'PSV6-INPUT-GROUP-SUGGESTION');
     }
@@ -845,7 +782,7 @@ export class InputFunctionsValidator implements ValidationModule {
     for (const call of this.inputFunctionCalls) {
       const defaultValue = call.parameters.get('defval') ?? call.arguments[0];
       if (this.isUnreasonableDefault(defaultValue)) {
-        this.addInfo(call.line, call.column,
+        this.helper.addInfo(call.line, call.column,
           'Consider using a more reasonable default value',
           'PSV6-INPUT-DEFAULT-SUGGESTION');
       }
@@ -1047,14 +984,14 @@ export class InputFunctionsValidator implements ValidationModule {
   private validateInputEnum(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
     // Validate required parameters for input.enum()
     if (args.length < 2) {
-      this.addError(lineNum, column, 'input.enum() requires at least 2 arguments: default value and title', 'PSV6-INPUT-ENUM-ARGS');
+      this.helper.addError(lineNum, column, 'input.enum() requires at least 2 arguments: default value and title', 'PSV6-INPUT-ENUM-ARGS');
       return;
     }
 
     // Validate default value is an enum member reference
     const defaultValue = args[0];
     if (!defaultValue.includes('.')) {
-      this.addError(lineNum, column, 'input.enum() default value must be an enum member (e.g., MyEnum.VALUE)', 'PSV6-INPUT-ENUM-DEFAULT');
+      this.helper.addError(lineNum, column, 'input.enum() default value must be an enum member (e.g., MyEnum.VALUE)', 'PSV6-INPUT-ENUM-DEFAULT');
     }
 
     // Validate optional parameters

@@ -13,6 +13,8 @@ import {
   ValidationResult,
   AstValidationContext,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import { visit, type NodePath } from '../core/ast/traversal';
 import type {
   VariableDeclarationNode,
@@ -39,11 +41,7 @@ export class TypeValidator implements ValidationModule {
   name = 'TypeValidator';
   priority = 85; // High priority, runs after CoreValidator
 
-  // Error tracking
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
-
+  private helper = new ValidationHelper();
   private astDiagnosticSites = new Map<string, Set<string>>();
 
   getDependencies(): string[] {
@@ -53,32 +51,16 @@ export class TypeValidator implements ValidationModule {
   validate(context: ValidationContext, _config: ValidatorConfig): ValidationResult {
     this.reset();
     if (!this.isAstContext(context) || !context.ast) {
-      return {
-        isValid: true,
-        errors: this.errors,
-        warnings: this.warnings,
-        info: this.info,
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(context);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astDiagnosticSites.clear();
   }
 
@@ -135,7 +117,7 @@ export class TypeValidator implements ValidationModule {
           const column = declaration.identifier.loc.start.column;
           const key = `${line}:${declaration.identifier.name}`;
           this.registerAstDiagnostic('PSV6-TYPE-MISMATCH', key);
-          this.addError(line, column, `Type mismatch: declared '${declaredType}' but assigned '${inferredType}'.`, 'PSV6-TYPE-MISMATCH');
+          this.helper.addError(line, column, `Type mismatch: declared '${declaredType}' but assigned '${inferredType}'.`, 'PSV6-TYPE-MISMATCH');
         },
       },
     });
@@ -172,7 +154,7 @@ export class TypeValidator implements ValidationModule {
           const column = expression.loc.start.column;
           const key = `${line}`;
           this.registerAstDiagnostic('PSV6-TERNARY-TYPE', key);
-          this.addError(
+          this.helper.addError(
             line,
             column,
             `Ternary operator type mismatch: '${consequentType}' vs '${alternateType}'.`,
@@ -226,7 +208,7 @@ export class TypeValidator implements ValidationModule {
           const column = fnNode.loc.start.column;
           const key = `${line}:${fnName}`;
           this.registerAstDiagnostic('PSV6-FUNCTION-RETURN-TYPE', key);
-          this.addError(
+          this.helper.addError(
             line,
             column,
             `Function '${fnName}' has inconsistent return types: ${Array.from(collected).join(', ')}.`,
@@ -273,7 +255,7 @@ export class TypeValidator implements ValidationModule {
       const column = identifier.loc.start.column;
       const key = `${line}:${identifier.name}`;
       this.registerAstDiagnostic('PSV6-TYPE-INCONSISTENT', key);
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Type mismatch: variable '${identifier.name}' previously typed as '${previousType}' but assigned '${normalised}'.`,
@@ -580,15 +562,4 @@ export class TypeValidator implements ValidationModule {
     ['color', 'color'],
   ]);
 
-  private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.errors.push({ line, column, message, severity: 'error', code, suggestion });
-  }
-
-  private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
-
-  private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
 }

@@ -12,6 +12,8 @@ import type {
   ValidationError,
   ValidationResult,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import { isValidNamespaceMember, getSimilarMembers } from '../core/namespace-members';
 import { NS_MEMBERS, getNamespacePattern } from '../core/constants';
 
@@ -19,14 +21,14 @@ export class NamespaceValidator implements ValidationModule {
   name = 'NamespaceValidator';
   priority = 950; // High priority - run early to prevent cascades
 
-  private errors: ValidationError[] = [];
+  private helper = new ValidationHelper();
 
   getDependencies(): string[] {
     return [];
   }
 
   validate(context: ValidationContext, _config: ValidatorConfig): ValidationResult {
-    this.errors = [];
+    this.helper.reset();
     
     // Check each line for namespace property access
     const lines = context.rawLines || context.lines || [];
@@ -36,14 +38,7 @@ export class NamespaceValidator implements ValidationModule {
       this.checkNamespaceAccess(line, lineNum);
     });
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: [],
-      info: [],
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private checkNamespaceAccess(line: string, lineNum: number): void {
@@ -92,14 +87,13 @@ export class NamespaceValidator implements ValidationModule {
         
         if (correctNamespace) {
           // Function exists but in wrong namespace
-          this.errors.push({
-            line: lineNum,
+          this.helper.addError(
+            lineNum,
             column,
-            message: `Function '${member}' should be in '${correctNamespace}' namespace, not '${namespace}'`,
-            severity: 'error',
-            code: 'PSV6-FUNCTION-NAMESPACE',
-            suggestion: `Use ${correctNamespace}.${member} instead of ${namespace}.${member}`
-          });
+            `Function '${member}' should be in '${correctNamespace}' namespace, not '${namespace}'`,
+            'PSV6-FUNCTION-NAMESPACE',
+            `Use ${correctNamespace}.${member} instead of ${namespace}.${member}`
+          );
         } else {
           // Function doesn't exist at all
           const suggestions = getSimilarMembers(namespace, member);
@@ -107,14 +101,13 @@ export class NamespaceValidator implements ValidationModule {
             ? `Did you mean: ${suggestions.join(', ')}?`
             : `Check Pine Script documentation for valid ${namespace}.* members.`;
           
-          this.errors.push({
-            line: lineNum,
+          this.helper.addError(
+            lineNum,
             column,
-            message: `Undefined property '${member}' on '${namespace}' namespace`,
-            severity: 'error',
-            code: 'PSV6-UNDEFINED-NAMESPACE-MEMBER',
-            suggestion: suggestionText
-          });
+            `Undefined property '${member}' on '${namespace}' namespace`,
+            'PSV6-UNDEFINED-NAMESPACE-MEMBER',
+            suggestionText
+          );
         }
       }
     }

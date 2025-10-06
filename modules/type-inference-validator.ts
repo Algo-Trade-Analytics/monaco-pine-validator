@@ -12,6 +12,8 @@ import {
   type TypeInfo,
   type AstValidationContext,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ProgramNode,
   type VariableDeclarationNode,
@@ -56,9 +58,7 @@ export class TypeInferenceValidator implements ValidationModule {
   name = 'TypeInferenceValidator';
   priority = 90; // Run before FunctionValidator to ensure type inference is complete
   
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
@@ -69,9 +69,9 @@ export class TypeInferenceValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    this.reset();
     this.context = context;
     this.config = config;
+    this.reset();
 
     this.astContext = this.getAstContext(config);
     this.astTypeEnvironment = this.astContext?.typeEnvironment ?? null;
@@ -79,32 +79,16 @@ export class TypeInferenceValidator implements ValidationModule {
     const ast = this.astContext?.ast ?? null;
     const program = ast ?? null;
     if (!program) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(program);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.astTypeEnvironment = null;
   }
@@ -157,7 +141,7 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     if (this.isNaExpression(initializer)) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         "Assigning 'na' directly can lead to ambiguous comparisons. Prefer using na() helpers for checks.",
@@ -167,7 +151,7 @@ export class TypeInferenceValidator implements ValidationModule {
 
     // Check if initializer is a request function call that can return na
     if (this.isRequestFunctionCall(initializer)) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         "Request functions can return 'na' values. Ensure proper null-checking or use nz() for safety.",
@@ -186,7 +170,7 @@ export class TypeInferenceValidator implements ValidationModule {
       const isFunctionCall = initializer.kind === 'CallExpression';
       if (!initializerType || initializerType === 'unknown') {
         if (!isFunctionCall) {
-          this.addWarning(
+          this.helper.addWarning(
             line,
             column,
             `Unable to infer type for '${node.identifier.name}'. Consider adding an explicit annotation.`,
@@ -196,7 +180,7 @@ export class TypeInferenceValidator implements ValidationModule {
       }
 
       if (this.isLiteralExpression(initializer)) {
-        this.addInfo(
+        this.helper.addInfo(
           line,
           column,
           `Consider annotating '${node.identifier.name}' with its literal type for readability.`,
@@ -239,7 +223,7 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     if (!initializerType || initializerType === 'unknown') {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Unable to infer type for '${node.identifier.name}' initializer.`,
@@ -249,7 +233,7 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     if (declaredType === 'int' && initializerType === 'float') {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Implicit float-to-int conversion for '${node.identifier.name}'. Cast explicitly to avoid truncation.`,
@@ -267,7 +251,7 @@ export class TypeInferenceValidator implements ValidationModule {
     const isFunctionParameter = this.isInsideFunction(node);
     
     if (initializerIsSeries && declaredTypeIsSimple && !isFunctionParameter) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Cannot assign series expression to simple ${declaredType} variable '${node.identifier.name}'. Series values change on every bar and cannot be stored in simple variables.`,
@@ -277,13 +261,13 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     if (!this.areTypesCompatible(declaredType, initializerType)) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Type mismatch: cannot assign ${initializerType} to ${declaredType} variable '${node.identifier.name}'.`,
         'PSV6-TYPE-ASSIGNMENT-MISMATCH',
       );
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Type annotation '${declaredType}' does not match assigned value type '${initializerType}'.`,
@@ -293,7 +277,7 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     if (this.isLiteralExpression(initializer)) {
-      this.addInfo(
+      this.helper.addInfo(
         line,
         column,
         `Type annotation '${declaredType}' for '${node.identifier.name}' is redundant for literal assignment.`,
@@ -322,7 +306,7 @@ export class TypeInferenceValidator implements ValidationModule {
     const { line, column } = right.loc.start;
 
     if (this.isNaExpression(right)) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         "Assigning 'na' directly can lead to ambiguous comparisons. Prefer using na() helpers for checks.",
@@ -332,7 +316,7 @@ export class TypeInferenceValidator implements ValidationModule {
 
     // Check if right side is a request function call that can return na
     if (this.isRequestFunctionCall(right)) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         "Request functions can return 'na' values. Ensure proper null-checking or use nz() for safety.",
@@ -348,7 +332,7 @@ export class TypeInferenceValidator implements ValidationModule {
     }
     
     if (!valueType || valueType === 'unknown') {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         'Unable to determine assignment type. The resulting value will be treated as series.',
@@ -361,7 +345,7 @@ export class TypeInferenceValidator implements ValidationModule {
       const existingInfo = this.context.typeMap.get(identifier.name);
 
       if (!existingInfo && this.isLiteralExpression(right)) {
-        this.addInfo(
+        this.helper.addInfo(
           identifier.loc.start.line,
           identifier.loc.start.column,
           `Consider annotating '${identifier.name}' with its literal type for readability.`,
@@ -412,8 +396,8 @@ export class TypeInferenceValidator implements ValidationModule {
     // In Pine Script, series expressions are commonly used in conditionals
     // Only warn for literal values that are clearly not intended as conditions
     if (isNumericLiteral || isStringLiteral) {
-      this.addWarning(line, column, 'Non-boolean expression used as condition.', 'PSV6-TYPE-CONDITIONAL-TYPE');
-      this.addWarning(
+      this.helper.addWarning(line, column, 'Non-boolean expression used as condition.', 'PSV6-TYPE-CONDITIONAL-TYPE');
+      this.helper.addWarning(
         line,
         column,
         `Implicit boolean conversion of '${testType ?? 'unknown'}' expression.`,
@@ -424,7 +408,7 @@ export class TypeInferenceValidator implements ValidationModule {
     
     // For series expressions, just add an info message about implicit conversion
     if (isSeriesIdentifier || testType === 'series') {
-      this.addInfo(
+      this.helper.addInfo(
         line,
         column,
         `Series expression used as condition (implicit boolean conversion).`,
@@ -433,7 +417,7 @@ export class TypeInferenceValidator implements ValidationModule {
       return;
     }
 
-    this.addWarning(
+    this.helper.addWarning(
       line,
       column,
       `Implicit boolean conversion of '${testType ?? 'unknown'}' expression.`,
@@ -451,7 +435,7 @@ export class TypeInferenceValidator implements ValidationModule {
       const argumentType = this.getExpressionType(node.args[0].value);
       if (argumentType === 'string') {
         const { line, column } = node.args[0].value.loc.start;
-        this.addInfo(
+        this.helper.addInfo(
           line,
           column,
           'Calling str.tostring on an existing string is redundant.',
@@ -479,14 +463,14 @@ export class TypeInferenceValidator implements ValidationModule {
     if (this.isNaExpression(node.left) || this.isNaExpression(node.right)) {
       const { line, column } = node.loc.start;
       if (ARITHMETIC_OPERATORS.has(node.operator)) {
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           "Arithmetic with 'na' literal always yields 'na'; guard against na before performing operations.",
           'PSV6-TYPE-SAFETY-NA-ARITHMETIC',
         );
       } else if (COMPARISON_OPERATORS.has(node.operator)) {
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           "Comparisons with 'na' literal are unsafe. Use na() helpers like na(value) instead.",
@@ -507,7 +491,7 @@ export class TypeInferenceValidator implements ValidationModule {
     }
 
     const { line, column } = node.loc.start;
-    this.addWarning(
+    this.helper.addWarning(
       line,
       column,
       'Implicit numeric conversion detected. Cast explicitly to clarify intent.',
@@ -537,7 +521,7 @@ export class TypeInferenceValidator implements ValidationModule {
 
     if (sourceType && (sourceType === 'string' || sourceType === 'bool')) {
       const { line, column } = sourceArg.value.loc.start;
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `ta.sma source expects numeric series but received ${sourceType}.`,
@@ -556,7 +540,7 @@ export class TypeInferenceValidator implements ValidationModule {
         }
 
         const { line, column } = lengthArg.value.loc.start;
-        this.addError(
+        this.helper.addError(
           line,
           column,
           `ta.sma length expects int but received ${lengthType}.`,
@@ -577,7 +561,7 @@ export class TypeInferenceValidator implements ValidationModule {
 
     if (firstType && !this.isNumericType(firstType)) {
       const { line, column } = firstArg.value.loc.start;
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `math.max expects numeric arguments but received ${firstType}.`,
@@ -587,7 +571,7 @@ export class TypeInferenceValidator implements ValidationModule {
 
     if (secondType && !this.isNumericType(secondType)) {
       const { line, column } = secondArg.value.loc.start;
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `math.max expects numeric arguments but received ${secondType}.`,
@@ -606,7 +590,7 @@ export class TypeInferenceValidator implements ValidationModule {
 
     if (firstType && (firstType === 'string' || firstType === 'bool')) {
       const { line, column } = node.args[0].value.loc.start;
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `ta.crossover arguments must be numeric series but received ${firstType}.`,
@@ -616,7 +600,7 @@ export class TypeInferenceValidator implements ValidationModule {
 
     if (secondType && (secondType === 'string' || secondType === 'bool')) {
       const { line, column } = node.args[1].value.loc.start;
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `ta.crossover arguments must be numeric series but received ${secondType}.`,
@@ -1390,35 +1374,6 @@ export class TypeInferenceValidator implements ValidationModule {
     }
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'error'
-    });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'warning'
-    });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'info'
-    });
-  }
 
   private getVariableType(varName: string): string | null {
     const typeInfo = this.context.typeMap.get(varName);

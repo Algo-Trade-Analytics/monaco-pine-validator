@@ -12,6 +12,8 @@ import {
   type ValidationResult,
   type TypeInfo,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import type {
   AssignmentStatementNode,
   IdentifierNode,
@@ -40,9 +42,7 @@ export class SwitchValidator implements ValidationModule {
   name = 'SwitchValidator';
   priority = 95; // Runs before TypeInferenceValidator to provide switch type information
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
 
@@ -51,8 +51,8 @@ export class SwitchValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    this.reset();
     this.context = context;
+    this.reset();
 
     this.astContext = ensureAstContext(context, config);
     const ast = this.astContext?.ast;
@@ -62,46 +62,19 @@ export class SwitchValidator implements ValidationModule {
       // This handles edge cases where AST parsing fails
       this.detectDeepNestingFallback();
       
-      return {
-        isValid: this.errors.length === 0,
-        errors: this.errors,
-        warnings: this.warnings,
-        info: this.info,
-        typeMap: new Map(),
-        scriptType: context.scriptType,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateSwitchStatementsAst(ast);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: context.scriptType,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
   }
 
-  private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.errors.push({ line, column, message, severity: 'error', code, suggestion });
-  }
-
-  private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
-
-  private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
 
   private validateSwitchStatementsAst(program: ProgramNode): void {
     visit(program, {
@@ -137,7 +110,7 @@ export class SwitchValidator implements ValidationModule {
 
     if (!hasDefault) {
       const { line, column } = statement.loc.start;
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         'Switch statement should include a default clause.',
@@ -147,7 +120,7 @@ export class SwitchValidator implements ValidationModule {
 
     if (statement.cases.length > 20) {
       const { line, column } = statement.loc.start;
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Switch statement has ${statement.cases.length} cases, consider refactoring.`,
@@ -157,7 +130,7 @@ export class SwitchValidator implements ValidationModule {
 
     if (returnTypes.size > 1) {
       const { line, column } = statement.loc.start;
-      this.addError(
+      this.helper.addError(
         line,
         column,
         'Switch statement cases must have consistent return types.',
@@ -168,7 +141,7 @@ export class SwitchValidator implements ValidationModule {
     const nestingDepth = this.computeSwitchNestingDepth(statement);
     if (nestingDepth > 2) {
       const { line, column } = statement.loc.start;
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Switch statement has deep nesting (${nestingDepth} levels), consider refactoring.`,
@@ -185,14 +158,14 @@ export class SwitchValidator implements ValidationModule {
     const expression = statement.discriminant;
     if (!expression) {
       const { line, column } = statement.loc.start;
-      this.addError(line, column, 'Switch statement requires an expression.', 'PSV6-SWITCH-SYNTAX');
+      this.helper.addError(line, column, 'Switch statement requires an expression.', 'PSV6-SWITCH-SYNTAX');
       return;
     }
     
     // Check for invalid/empty discriminant (parser error recovery artifacts)
     if (expression.kind === 'Identifier' && (expression as IdentifierNode).name === '') {
       const { line, column } = statement.loc.start;
-      this.addError(line, column, 'Switch statement requires an expression.', 'PSV6-SWITCH-SYNTAX');
+      this.helper.addError(line, column, 'Switch statement requires an expression.', 'PSV6-SWITCH-SYNTAX');
       return;
     }
 
@@ -204,7 +177,7 @@ export class SwitchValidator implements ValidationModule {
         return;
       case 'NumberLiteral': {
         const { line, column } = expression.loc.start;
-        this.addError(
+        this.helper.addError(
           line,
           column,
           'Switch expression should be a string, not a number. Use string conversion or string literal.',
@@ -214,7 +187,7 @@ export class SwitchValidator implements ValidationModule {
       }
       case 'BooleanLiteral': {
         const { line, column } = expression.loc.start;
-        this.addError(
+        this.helper.addError(
           line,
           column,
           'Switch expression should be a string, not a boolean. Use string conversion or string literal.',
@@ -235,14 +208,14 @@ export class SwitchValidator implements ValidationModule {
 
     const { line, column } = test.loc.start;
     if (test.kind === 'NumberLiteral') {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         'Case value should be a string, not a number. Use string literal.',
         'PSV6-SWITCH-CASE-TYPE',
       );
     } else if (test.kind === 'BooleanLiteral') {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         'Case value should be a string, not a boolean. Use string literal.',
@@ -267,7 +240,7 @@ export class SwitchValidator implements ValidationModule {
 
     const { line, column } = test.loc.start;
     if (seen.has(key)) {
-      this.addError(line, column, `Duplicate case value: ${key}`, 'PSV6-SWITCH-DUPLICATE-CASE');
+      this.helper.addError(line, column, `Duplicate case value: ${key}`, 'PSV6-SWITCH-DUPLICATE-CASE');
       return;
     }
 
@@ -560,7 +533,7 @@ export class SwitchValidator implements ValidationModule {
 
     const caseNode = cases[mismatchIndex + 1];
     const { line } = caseNode.loc.start;
-    this.addInfo(line, 1, 'Switch cases should have consistent indentation', 'PSV6-SWITCH-STYLE-INDENTATION');
+    this.helper.addInfo(line, 1, 'Switch cases should have consistent indentation', 'PSV6-SWITCH-STYLE-INDENTATION');
   }
 
   private validateDefaultClausePlacementAst(cases: SwitchCaseNode[]): void {
@@ -571,7 +544,7 @@ export class SwitchValidator implements ValidationModule {
 
     const defaultCase = cases[defaultIndex];
     const { line, column } = defaultCase.loc.start;
-    this.addInfo(
+    this.helper.addInfo(
       line,
       column,
       'Default clause should be placed at the end of switch statement',
@@ -610,7 +583,7 @@ export class SwitchValidator implements ValidationModule {
       // Simple heuristic: if we see multiple switch keywords in close proximity,
       // it's likely deeply nested
       if (switchCount > 2 && maxNestingDepth > 2) {
-        this.addWarning(
+        this.helper.addWarning(
           lineNum,
           1,
           `Switch statement has deep nesting (${maxNestingDepth} levels), consider refactoring.`,

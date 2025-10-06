@@ -13,6 +13,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type AssignmentStatementNode,
@@ -111,9 +113,7 @@ export class EnhancedMigrationValidator implements ValidationModule {
   name = 'EnhancedMigrationValidator';
   priority = 75; // Run after basic syntax validation
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private astContext: AstValidationContext | null = null;
 
   getDependencies(): string[] {
@@ -125,32 +125,16 @@ export class EnhancedMigrationValidator implements ValidationModule {
     this.astContext = ensureAstContext(context, config);
 
     if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(this.astContext.ast);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
   }
 
@@ -217,7 +201,7 @@ export class EnhancedMigrationValidator implements ValidationModule {
     for (const argument of args) {
       if (argument.name?.name === 'transp') {
         const { line, column } = argument.name.loc.start;
-        this.addWarning(line, column, `'transp' parameter is deprecated in Pine Script v6. Use 'color.new()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace transp=50 with color.new(color.red, 50)');
+        this.helper.addWarning(line, column, `'transp' parameter is deprecated in Pine Script v6. Use 'color.new()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace transp=50 with color.new(color.red, 50)');
       }
     }
   }
@@ -233,7 +217,7 @@ export class EnhancedMigrationValidator implements ValidationModule {
     }
 
     const { line, column } = identifier.loc.start;
-    this.addWarning(line, column, `'transp' parameter is deprecated in Pine Script v6. Use 'color.new()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace transp=50 with color.new(color.red, 50)');
+    this.helper.addWarning(line, column, `'transp' parameter is deprecated in Pine Script v6. Use 'color.new()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace transp=50 with color.new(color.red, 50)');
   }
 
   private validateAstTranspDeclaration(node: VariableDeclarationNode): void {
@@ -242,22 +226,22 @@ export class EnhancedMigrationValidator implements ValidationModule {
     }
 
     const { line, column } = node.identifier.loc.start;
-    this.addWarning(line, column, `'transp' parameter is deprecated in Pine Script v6. Use 'color.new()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace transp=50 with color.new(color.red, 50)');
+    this.helper.addWarning(line, column, `'transp' parameter is deprecated in Pine Script v6. Use 'color.new()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace transp=50 with color.new(color.red, 50)');
   }
 
   private reportStudyDeprecation(callee: ExpressionNode): void {
     const { line, column } = this.getCallLocation(callee);
-    this.addWarning(line, column, `'study()' is deprecated in Pine Script v6. Use 'indicator()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace study() with indicator()');
+    this.helper.addWarning(line, column, `'study()' is deprecated in Pine Script v6. Use 'indicator()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace study() with indicator()');
   }
 
   private reportSecurityDeprecation(callee: ExpressionNode): void {
     const { line, column } = this.getCallLocation(callee);
-    this.addWarning(line, column, `'security()' is deprecated in Pine Script v6. Use 'request.security()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace security() with request.security()');
+    this.helper.addWarning(line, column, `'security()' is deprecated in Pine Script v6. Use 'request.security()' instead.`, 'PSV6-MIG-SYNTAX', 'Replace security() with request.security()');
   }
 
   private reportTaNamespaceWarning(callee: ExpressionNode, functionName: string): void {
     const { line, column } = this.getCallLocation(callee);
-    this.addWarning(line, column, `'${functionName}()' should be namespaced in Pine Script v6. Use 'ta.${functionName}()' instead.`, 'PSV6-MIG-SYNTAX', `Replace ${functionName}() with ta.${functionName}()`);
+    this.helper.addWarning(line, column, `'${functionName}()' should be namespaced in Pine Script v6. Use 'ta.${functionName}()' instead.`, 'PSV6-MIG-SYNTAX', `Replace ${functionName}() with ta.${functionName}()`);
   }
 
   private getCallExpressionName(callee: ExpressionNode): string | null {
@@ -309,14 +293,4 @@ export class EnhancedMigrationValidator implements ValidationModule {
     return callee.loc.start;
   }
 
-  private addWarning(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.warnings.push({
-      line,
-      column,
-      message,
-      code,
-      suggestion,
-      severity: 'warning',
-    });
-  }
 }

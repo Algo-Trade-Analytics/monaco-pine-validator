@@ -13,6 +13,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type AssignmentStatementNode,
   type CallExpressionNode,
@@ -30,6 +32,8 @@ import { visit, type NodePath } from '../core/ast/traversal';
 export class EnhancedMethodValidator implements ValidationModule {
   name = 'EnhancedMethodValidator';
   priority = 85; // Run after type validation
+
+  private helper = new ValidationHelper();
 
   private readonly allowedInstanceMethods = new Set([
     'push', 'pop', 'get', 'set', 'size', 'clear', 'reverse', 'sort', 'sort_indices', 'copy', 'slice', 'concat', 'fill', 'from',
@@ -49,9 +53,6 @@ export class EnhancedMethodValidator implements ValidationModule {
     table: ['new', 'cell', 'cell_set_text', 'delete', 'clear'],
   };
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
 
@@ -67,26 +68,12 @@ export class EnhancedMethodValidator implements ValidationModule {
     this.astContext = isAstValidationContext(context) && context.ast ? context : null;
 
     if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateUsingAst(this.astContext.ast);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private validateUsingAst(program: ProgramNode): void {
@@ -178,7 +165,7 @@ export class EnhancedMethodValidator implements ValidationModule {
     const line = member.property.loc.start.line;
     const column = member.property.loc.start.column;
     const message = `Method '${methodName}' called on non-UDT variable '${objectName}' of type '${resolvedType}'`;
-    this.addWarning(line, column, message, 'PSV6-METHOD-INVALID');
+    this.helper.addWarning(line, column, message, Codes.METHOD_INVALID);
   }
 
   private recordVariableDeclaration(
@@ -334,21 +321,9 @@ export class EnhancedMethodValidator implements ValidationModule {
     return this.builtInNamespaces[varName]?.includes(methodName) ?? false;
   }
 
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({
-      line,
-      column,
-      message,
-      severity: 'warning',
-      code,
-      suggestion: "Methods can only be called on User-Defined Type instances. Consider using a function instead.",
-    });
-  }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
   }
 

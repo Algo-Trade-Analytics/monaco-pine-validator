@@ -11,6 +11,8 @@ import {
   ValidationResult,
   ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import type {
   ArgumentNode,
   AssignmentStatementNode,
@@ -48,9 +50,7 @@ const BUILTIN_HISTORY_TYPES: Record<string, string> = {
 export class HistoryReferencingValidator implements ValidationModule {
   name = 'HistoryReferencingValidator';
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
 
@@ -63,66 +63,21 @@ export class HistoryReferencingValidator implements ValidationModule {
     this.config = config;
 
     if (!isAstValidationContext(context) || !context.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.astContext = context;
     this.validateHistoryWithAst(context.ast);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
   }
 
-  private addError(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.errors.push({
-      line,
-      column,
-      message,
-      code,
-      suggestion,
-      severity: 'error'
-    });
-  }
 
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'warning'
-    });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'info'
-    });
-  }
 
   private validateHistoryWithAst(program: ProgramNode): void {
     if (!this.astContext) {
@@ -143,7 +98,7 @@ export class HistoryReferencingValidator implements ValidationModule {
 
             if (node.initializer && this.expressionHasHistoryReference(node.initializer)) {
               const { line, column } = node.loc.start;
-              this.addError(
+              this.helper.addError(
                 line,
                 column,
                 'History references are not allowed in varip assignments.',
@@ -174,7 +129,7 @@ export class HistoryReferencingValidator implements ValidationModule {
           }
 
           const { line, column } = node.loc.start;
-          this.addError(
+          this.helper.addError(
             line,
             column,
             'History references are not allowed in varip assignments.',
@@ -191,7 +146,7 @@ export class HistoryReferencingValidator implements ValidationModule {
             }
 
             const { line, column } = argument.value.loc.start;
-            this.addWarning(
+            this.helper.addWarning(
               line,
               column,
               'History reference used in function parameter. Consider caching the value before calling the function.',
@@ -229,7 +184,7 @@ export class HistoryReferencingValidator implements ValidationModule {
     const targetVersion = this.config.targetVersion ?? 6;
 
     if (targetVersion < 6) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         'Invalid history reference: negative indexes are not allowed.',
@@ -245,7 +200,7 @@ export class HistoryReferencingValidator implements ValidationModule {
       return;
     }
 
-    this.addError(
+    this.helper.addError(
       line,
       column,
       'Invalid history reference: negative indexes are not allowed for series data.',
@@ -253,7 +208,7 @@ export class HistoryReferencingValidator implements ValidationModule {
       'Use positive indices like close[1] for historical data, or array.get(myArray, -1) for arrays.',
     );
 
-    this.addError(
+    this.helper.addError(
       line,
       column,
       'History references cannot look into the future. Negative offsets access future bars.',
@@ -269,7 +224,7 @@ export class HistoryReferencingValidator implements ValidationModule {
     }
 
     const { line, column } = node.index.loc.start;
-    this.addWarning(
+    this.helper.addWarning(
       line,
       column,
       `Large history index: ${numericIndex}. Consider using request.security() for historical data beyond 1000 bars`,
@@ -292,7 +247,7 @@ export class HistoryReferencingValidator implements ValidationModule {
     }
 
     const { line, column } = path.node.loc.start;
-    this.addWarning(
+    this.helper.addWarning(
       line,
       column,
       'Nested history reference detected. This can impact performance.',
@@ -319,7 +274,7 @@ export class HistoryReferencingValidator implements ValidationModule {
 
     const { line, column } = path.node.loc.start;
     const loopLine = loopNode.loc.start.line;
-    this.addWarning(
+    this.helper.addWarning(
       line,
       column,
       `History reference in loop (line ${loopLine}). Consider caching historical values outside the loop for better performance`,
@@ -352,7 +307,7 @@ export class HistoryReferencingValidator implements ValidationModule {
     }
 
     const { line, column } = declaration.loc.start;
-    this.addWarning(
+    this.helper.addWarning(
       line,
       column,
       `Type mismatch: declared as '${declaredType}' but '${historyReference.identifier}[...]' yields a different type`,

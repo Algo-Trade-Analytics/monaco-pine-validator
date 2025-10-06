@@ -10,6 +10,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import type {
   AssignmentStatementNode,
   BinaryExpressionNode,
@@ -27,9 +29,7 @@ export class DynamicLoopValidator implements ValidationModule {
   name = 'DynamicLoopValidator';
   priority = 76; // run near other control-flow validators
 
-  private errors: Array<{ line: number; column: number; message: string; code: string }> = [];
-  private warnings: Array<{ line: number; column: number; message: string; code: string }> = [];
-  private info: Array<{ line: number; column: number; message: string; code: string }> = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
 
@@ -44,46 +44,19 @@ export class DynamicLoopValidator implements ValidationModule {
     const ast = this.astContext?.ast;
 
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: context.typeMap ?? new Map(),
-        scriptType: context.scriptType ?? null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateDynamicLoopsAst(ast);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors.map((error) => ({ ...error, severity: 'error' as const })),
-      warnings: this.warnings.map((warning) => ({ ...warning, severity: 'warning' as const })),
-      info: this.info.map((entry) => ({ ...entry, severity: 'info' as const })),
-      typeMap: context.typeMap ?? new Map(),
-      scriptType: context.scriptType ?? null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({ line, column, message, code });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({ line, column, message, code });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({ line, column, message, code });
-  }
 
   private validateDynamicLoopsAst(program: ProgramNode): void {
     visit(program, {
@@ -112,7 +85,7 @@ export class DynamicLoopValidator implements ValidationModule {
 
     if (startExpression && this.isDynamicNumericExpression(startExpression)) {
       const { line, column } = startExpression.loc.start;
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         'For-loop start bound is dynamic; verify correctness and performance.',
@@ -122,7 +95,7 @@ export class DynamicLoopValidator implements ValidationModule {
 
     if (endExpression && this.isDynamicNumericExpression(endExpression, indexName)) {
       const { line, column } = endExpression.loc.start;
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         'For-loop end bound is dynamic; verify correctness and performance.',
@@ -132,7 +105,7 @@ export class DynamicLoopValidator implements ValidationModule {
 
     if (stepExpression && this.isDynamicStepExpression(stepExpression, indexName)) {
       const { line, column } = stepExpression.loc.start;
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         'For-loop step is dynamic; verify correctness and performance.',
@@ -158,7 +131,7 @@ export class DynamicLoopValidator implements ValidationModule {
           const target = this.getIdentifierName(assignment.left);
           if (!warnedIndex && target === indexName) {
             const { line, column } = assignment.loc.start;
-            this.addWarning(
+            this.helper.addWarning(
               line,
               column,
               `Loop index '${indexName}' modified inside for-loop.`,
@@ -169,7 +142,7 @@ export class DynamicLoopValidator implements ValidationModule {
 
           if (!warnedBounds && target && boundIdentifiers.has(target)) {
             const { line, column } = assignment.loc.start;
-            this.addWarning(
+            this.helper.addWarning(
               line,
               column,
               `Variable '${target}' used in for-loop bounds modified inside loop.`,
@@ -191,7 +164,7 @@ export class DynamicLoopValidator implements ValidationModule {
           }
 
           const { line, column } = declaration.loc.start;
-          this.addWarning(
+          this.helper.addWarning(
             line,
             column,
             `Variable '${name}' used in for-loop bounds modified inside loop.`,

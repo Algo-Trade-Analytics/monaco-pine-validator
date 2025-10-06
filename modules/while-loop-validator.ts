@@ -11,6 +11,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import type {
   AssignmentStatementNode,
   BinaryExpressionNode,
@@ -33,9 +35,7 @@ import { ensureAstContext } from '../core/ast/context-utils';
 export class WhileLoopValidator implements ValidationModule {
   name = 'WhileLoopValidator';
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
 
   getDependencies(): string[] {
     return ['SyntaxValidator', 'PerformanceValidator'];
@@ -47,63 +47,18 @@ export class WhileLoopValidator implements ValidationModule {
     const astContext = this.getAstContext(context, config);
     const ast = astContext?.ast;
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: context.scriptType,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWhileLoopsAst(ast);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: context.scriptType,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'error',
-    });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'warning',
-    });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'info',
-    });
-  }
 
   private validateWhileLoopsAst(program: ProgramNode): void {
     type NestingRecord = {
@@ -130,7 +85,7 @@ export class WhileLoopValidator implements ValidationModule {
           const complexity = this.analyseWhileBody(statement.body);
           if (complexity > 2) {
             const { line, column } = statement.loc.start;
-            this.addWarning(
+            this.helper.addWarning(
               line,
               column,
               'Complex operation inside while loop may impact performance',
@@ -147,7 +102,7 @@ export class WhileLoopValidator implements ValidationModule {
     if (maxDepth) {
       const { depth, line, column } = maxDepth;
       if (depth > 3) {
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           `While loop nesting depth is ${depth}. Consider refactoring.`,
@@ -163,7 +118,7 @@ export class WhileLoopValidator implements ValidationModule {
 
     // Check for missing/empty condition
     if (!test) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         'While loop requires a condition expression',
@@ -174,7 +129,7 @@ export class WhileLoopValidator implements ValidationModule {
 
     // Check for invalid/empty condition (parser error recovery artifacts)
     if (test.kind === 'Identifier' && (test as IdentifierNode).name === '') {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         'While loop requires a condition expression',
@@ -186,14 +141,14 @@ export class WhileLoopValidator implements ValidationModule {
     switch (test.kind) {
       case 'BooleanLiteral':
         if (test.value) {
-          this.addError(
+          this.helper.addError(
             line,
             column,
             'While loop with condition "true" will run indefinitely',
             'PSV6-WHILE-INFINITE-LOOP',
           );
         } else {
-          this.addWarning(
+          this.helper.addWarning(
             line,
             column,
             'While loop with condition "false" will never execute',
@@ -202,7 +157,7 @@ export class WhileLoopValidator implements ValidationModule {
         }
         break;
       case 'NumberLiteral':
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           'While loop with numeric condition may not behave as expected',
@@ -210,7 +165,7 @@ export class WhileLoopValidator implements ValidationModule {
         );
         break;
       case 'StringLiteral':
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           'While loop with string condition may not behave as expected',
@@ -224,7 +179,7 @@ export class WhileLoopValidator implements ValidationModule {
     const analysis = this.analyseConditionExpression(test);
 
     if (analysis.logicalOperators >= 3) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         'While loop condition is complex. Consider simplifying.',
@@ -233,7 +188,7 @@ export class WhileLoopValidator implements ValidationModule {
     }
 
     if (analysis.comparisonOperators > 2) {
-      this.addInfo(
+      this.helper.addInfo(
         line,
         column,
         'Consider breaking complex condition into multiple variables',
@@ -242,7 +197,7 @@ export class WhileLoopValidator implements ValidationModule {
     }
 
     if (analysis.hasEquality && !analysis.hasInequality) {
-      this.addInfo(
+      this.helper.addInfo(
         line,
         column,
         'Consider using != instead of == for while loop conditions',
@@ -251,7 +206,7 @@ export class WhileLoopValidator implements ValidationModule {
     }
 
     if (analysis.firstComparisonIdentifier) {
-      this.addInfo(
+      this.helper.addInfo(
         line,
         column,
         'Ensure loop variable is updated inside the loop to prevent infinite loops',
@@ -260,7 +215,7 @@ export class WhileLoopValidator implements ValidationModule {
 
       const identifier = analysis.firstComparisonIdentifier;
       if (identifier.name.length < 3) {
-        this.addInfo(
+        this.helper.addInfo(
           line,
           column,
           'Consider using more descriptive variable names in while loop conditions',
@@ -390,7 +345,7 @@ export class WhileLoopValidator implements ValidationModule {
 
           if (this.containsBreakOrReturn(node) && !conditionalBreakLines.has(node.loc.start.line)) {
             conditionalBreakLines.add(node.loc.start.line);
-            this.addInfo(
+            this.helper.addInfo(
               node.loc.start.line,
               node.loc.start.column,
               'Conditional break/return in while loop. Ensure all code paths lead to termination.',
@@ -420,7 +375,7 @@ export class WhileLoopValidator implements ValidationModule {
           const qualified = this.getQualifiedName(node.callee as ExpressionNode);
 
           if (qualified && this.isExpensiveOperation(qualified)) {
-            this.addWarning(
+            this.helper.addWarning(
               node.loc.start.line,
               node.loc.start.column,
               `Expensive operation "${qualified}" inside while loop may impact performance`,
@@ -439,7 +394,7 @@ export class WhileLoopValidator implements ValidationModule {
           const target = this.getAssignmentTarget(node.left);
           if (target && this.isLoopCounterName(target) && !updateLines.has(node.loc.start.line)) {
             updateLines.add(node.loc.start.line);
-            this.addInfo(
+            this.helper.addInfo(
               node.loc.start.line,
               node.loc.start.column,
               `Loop variable "${target}" updated. Good practice for preventing infinite loops.`,
@@ -453,7 +408,7 @@ export class WhileLoopValidator implements ValidationModule {
           const node = (path as NodePath<BreakStatementNode>).node;
           if (!breakLines.has(node.loc.start.line)) {
             breakLines.add(node.loc.start.line);
-            this.addInfo(
+            this.helper.addInfo(
               node.loc.start.line,
               node.loc.start.column,
               'Break/return statement found in while loop. Ensure proper loop termination.',
@@ -467,7 +422,7 @@ export class WhileLoopValidator implements ValidationModule {
           const node = (path as NodePath<ReturnStatementNode>).node;
           if (!breakLines.has(node.loc.start.line)) {
             breakLines.add(node.loc.start.line);
-            this.addInfo(
+            this.helper.addInfo(
               node.loc.start.line,
               node.loc.start.column,
               'Break/return statement found in while loop. Ensure proper loop termination.',

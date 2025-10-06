@@ -11,6 +11,8 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type CallExpressionNode,
   type ExpressionNode,
@@ -32,7 +34,7 @@ interface LoopInfo {
 export class PerformanceValidator implements ValidationModule {
   name = 'PerformanceValidator';
 
-  private errors: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private astContext: AstValidationContext | null = null;
 
   private loopStack: LoopInfo[] = [];
@@ -58,40 +60,19 @@ export class PerformanceValidator implements ValidationModule {
     this.reset();
 
     if (!config.enablePerformanceAnalysis) {
-      return {
-        isValid: this.errors.length === 0,
-        errors: this.errors,
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.astContext = this.getAstContext(context, config);
 
     if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.collectPerformanceDataAst(this.astContext.ast);
     this.finalizeAstDiagnostics();
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: [],
-      info: [],
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private collectPerformanceDataAst(program: ProgramNode): void {
@@ -143,7 +124,7 @@ export class PerformanceValidator implements ValidationModule {
 
   private finalizeAstDiagnostics(): void {
     if (this.maxNestingDepth > 6) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `High nesting depth (${this.maxNestingDepth} levels) may impact readability and performance.`,
@@ -153,7 +134,7 @@ export class PerformanceValidator implements ValidationModule {
     }
 
     if (this.arrayAllocationCount > 10) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `High number of array allocations (${this.arrayAllocationCount}). Consider consolidating or reusing arrays.`,
@@ -163,7 +144,7 @@ export class PerformanceValidator implements ValidationModule {
     }
 
     if (this.matrixAllocationCount > 5) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `High number of matrix allocations (${this.matrixAllocationCount}). Consider consolidating matrices.`,
@@ -173,7 +154,7 @@ export class PerformanceValidator implements ValidationModule {
     }
 
     if (this.mapAllocationCount > 5) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `High number of map allocations (${this.mapAllocationCount}). Consider consolidating maps.`,
@@ -183,7 +164,7 @@ export class PerformanceValidator implements ValidationModule {
     }
 
     if (this.requestCallCount > 5) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `High number of request calls (${this.requestCallCount}) may impact performance.`,
@@ -193,7 +174,7 @@ export class PerformanceValidator implements ValidationModule {
     }
 
     if (this.plotCallCount > 10) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `High number of plot calls (${this.plotCallCount}) may impact rendering performance.`,
@@ -203,7 +184,7 @@ export class PerformanceValidator implements ValidationModule {
     }
 
     if (this.alertCallCount > 20) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `High number of alert calls (${this.alertCallCount}) may impact performance.`,
@@ -213,7 +194,7 @@ export class PerformanceValidator implements ValidationModule {
     }
 
     if (this.alertCallCount >= 2) {
-      this.addError(
+      this.helper.addError(
         1,
         1,
         `Multiple alert conditions detected (${this.alertCallCount}). Consider consolidating or documenting alert logic.`,
@@ -244,7 +225,7 @@ export class PerformanceValidator implements ValidationModule {
     }
 
     if (this.isExpensiveNamespace(qualifiedName) && this.controlDepth > 4) {
-      this.addInfo(
+      this.helper.addInfo(
         node.loc.start.line,
         node.loc.start.column,
         `Expensive operation in deeply nested context (depth: ${this.controlDepth}).`,
@@ -269,7 +250,7 @@ export class PerformanceValidator implements ValidationModule {
   private handleArrayAllocation(node: CallExpressionNode): void {
     const size = this.getNumericLiteralValue(node.args[0]?.value ?? null);
     if (size !== null && size > 10000) {
-      this.addWarning(
+      this.helper.addWarning(
         node.loc.start.line,
         node.loc.start.column,
         `Large array allocation (${size} elements) may impact memory usage.`,
@@ -285,7 +266,7 @@ export class PerformanceValidator implements ValidationModule {
     if (rows !== null && cols !== null) {
       const total = rows * cols;
       if (total > 1000) {
-        this.addWarning(
+        this.helper.addWarning(
           node.loc.start.line,
           node.loc.start.column,
           `Large matrix allocation (${rows}x${cols} = ${total} elements) may impact memory usage.`,
@@ -299,8 +280,7 @@ export class PerformanceValidator implements ValidationModule {
   private handleExpensiveFunction(node: CallExpressionNode, qualifiedName: string, inLoop: boolean): void {
     if (inLoop) {
       const severity = this.isVeryExpensiveFunction(qualifiedName) ? 'error' : 'warning';
-      this.addDiagnostic(
-        severity,
+      this.helper.addError(
         node.loc.start.line,
         node.loc.start.column,
         `Expensive function '${qualifiedName}' detected in loop may impact performance.`,
@@ -314,7 +294,7 @@ export class PerformanceValidator implements ValidationModule {
     this.expensiveFunctionCounts.set(key, count);
     if (count > 1 && !this.duplicateExpensiveWarnings.has(key)) {
       this.duplicateExpensiveWarnings.add(key);
-      this.addWarning(
+      this.helper.addWarning(
         node.loc.start.line,
         node.loc.start.column,
         `Multiple calls to expensive function '${qualifiedName}' on the same line.`,
@@ -339,7 +319,7 @@ export class PerformanceValidator implements ValidationModule {
     }
 
     if (loopInfo.maxDepth > 1) {
-      this.addWarning(
+      this.helper.addWarning(
         loopInfo.node.loc.start.line,
         loopInfo.node.loc.start.column,
         `Nested loops detected (${loopInfo.maxDepth} levels) may impact performance.`,
@@ -429,31 +409,11 @@ export class PerformanceValidator implements ValidationModule {
     return null;
   }
 
-  private addDiagnostic(
-    severity: ValidationError['severity'],
-    line: number,
-    column: number,
-    message: string,
-    code?: string,
-    suggestion?: string,
-  ): void {
-    this.errors.push({ line, column, message, severity, code, suggestion });
-  }
 
-  private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.addDiagnostic('warning', line, column, message, code, suggestion);
-  }
 
-  private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.addDiagnostic('error', line, column, message, code, suggestion);
-  }
-
-  private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.addDiagnostic('info', line, column, message, code, suggestion);
-  }
 
   private reset(): void {
-    this.errors = [];
+    this.helper.reset();
     this.astContext = null;
     this.loopStack = [];
     this.controlDepth = 1;

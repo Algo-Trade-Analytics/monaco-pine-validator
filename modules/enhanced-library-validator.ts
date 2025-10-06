@@ -17,6 +17,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import { type ImportDeclarationNode, type ProgramNode } from '../core/ast/nodes';
 import { visit } from '../core/ast/traversal';
 
@@ -28,9 +30,7 @@ export class EnhancedLibraryValidator implements ValidationModule {
   name = 'EnhancedLibraryValidator';
   priority = 80; // Run after basic syntax validation
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private astContext: AstValidationContext | null = null;
 
   private static readonly BUILT_IN_ALIAS_CONFLICTS = new Set([
@@ -101,26 +101,12 @@ export class EnhancedLibraryValidator implements ValidationModule {
     this.astContext = isAstValidationContext(context) && context.ast ? context : null;
 
     if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateUsingAst(this.astContext.ast);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -170,7 +156,7 @@ export class EnhancedLibraryValidator implements ValidationModule {
     const { line, column } = declaration.path.loc.start;
 
     if (pathValue.includes('//')) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Invalid library path: double slashes not allowed in '${pathValue}'`,
@@ -183,7 +169,7 @@ export class EnhancedLibraryValidator implements ValidationModule {
     const parts = pathValue.split('/');
 
     if (parts.length < 3) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Incomplete library path: '${pathValue}' must include username/scriptname/version`,
@@ -194,7 +180,7 @@ export class EnhancedLibraryValidator implements ValidationModule {
     }
 
     if (parts.length === 1) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Incomplete library path: '${pathValue}' must include scriptname and version`,
@@ -206,7 +192,7 @@ export class EnhancedLibraryValidator implements ValidationModule {
 
     const version = parts[parts.length - 1];
     if (!/^\d+$/.test(version)) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Invalid library version: '${version}' must be an integer`,
@@ -227,7 +213,7 @@ export class EnhancedLibraryValidator implements ValidationModule {
         (kind) => kind !== 'namespace' && this.isUserDefinedSymbolKind(kind),
       );
       if (hasConflictingDeclaration) {
-        this.addError(
+        this.helper.addError(
           line,
           column,
           `Library alias '${alias}' conflicts with user-defined name`,
@@ -239,7 +225,7 @@ export class EnhancedLibraryValidator implements ValidationModule {
     }
 
     if (this.astContext?.declaredVars?.has(alias) || this.astContext?.functionNames?.has(alias)) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Library alias '${alias}' conflicts with user-defined name`,
@@ -250,7 +236,7 @@ export class EnhancedLibraryValidator implements ValidationModule {
     }
 
     if (EnhancedLibraryValidator.BUILT_IN_ALIAS_CONFLICTS.has(alias)) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Library alias '${alias}' conflicts with built-in function`,
@@ -270,7 +256,7 @@ export class EnhancedLibraryValidator implements ValidationModule {
 
     if (hasOtherlib && hasTestlib) {
       const first = imports[0];
-      this.addError(
+      this.helper.addError(
         first.loc.start.line,
         first.loc.start.column,
         'Circular dependency detected between libraries',
@@ -294,7 +280,7 @@ export class EnhancedLibraryValidator implements ValidationModule {
 
     if (maxVersion - minVersion > 3) {
       const first = imports[0];
-      this.addWarning(
+      this.helper.addWarning(
         first.loc.start.line,
         first.loc.start.column,
         'Large version gap detected between libraries may cause compatibility issues',
@@ -316,7 +302,7 @@ export class EnhancedLibraryValidator implements ValidationModule {
       const referenceCount = record?.references.length ?? 0;
       if (referenceCount === 0) {
         const { line, column } = declaration.alias.loc.start;
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           `Unused library import: ${alias}`,
@@ -341,19 +327,10 @@ export class EnhancedLibraryValidator implements ValidationModule {
   // Shared helpers
   // ──────────────────────────────────────────────────────────────────────────
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
   }
 
-  private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.errors.push({ line, column, message, severity: 'error', code, suggestion });
-  }
-
-  private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
 
   private createAliasSuggestion(alias: string): string {
     return `Use a different alias name (e.g., '${alias}Lib' or '${alias}Module')`;

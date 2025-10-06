@@ -18,6 +18,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type CallExpressionNode,
@@ -49,12 +51,8 @@ export class EnhancedPerformanceValidator implements ValidationModule {
   name = 'EnhancedPerformanceValidator';
   priority = 70;
 
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
-
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
-
   private astContext: AstValidationContext | null = null;
 
   getDependencies(): string[] {
@@ -62,32 +60,18 @@ export class EnhancedPerformanceValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    this.reset();
     this.context = context;
+    this.reset();
     this.astContext = this.getAstContext(config);
 
     const ast = this.astContext?.ast;
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(ast);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -127,7 +111,7 @@ export class EnhancedPerformanceValidator implements ValidationModule {
             const { line, column } = node.loc.start;
             // Performance issues in nested loops are warnings, not errors
             // The code will still execute, but may be slow
-            this.addWarning(
+            this.helper.addWarning(
               line,
               column,
               `Expensive function '${calleeName}' called in nested loop may impact performance`,
@@ -170,7 +154,7 @@ export class EnhancedPerformanceValidator implements ValidationModule {
 
     if (hasRequestSecurity && !hasBarstateConfirmed) {
       const position = firstRequestPosition ?? { line: 1, column: 1 };
-      this.addWarning(
+      this.helper.addWarning(
         position.line,
         position.column,
         'request.security used without barstate.isconfirmed may cause repainting',
@@ -181,7 +165,7 @@ export class EnhancedPerformanceValidator implements ValidationModule {
 
     if (hasHtfData && !hasBarstateConfirmed) {
       const position = firstRequestPosition ?? { line: 1, column: 1 };
-      this.addWarning(
+      this.helper.addWarning(
         position.line,
         position.column,
         'Higher timeframe data used without confirmation may cause repainting',
@@ -192,7 +176,7 @@ export class EnhancedPerformanceValidator implements ValidationModule {
 
     if (alertCalls.length >= 2) {
       const location = alertCalls[1]?.loc.start ?? { line: 1, column: 1 };
-      this.addWarning(
+      this.helper.addWarning(
         location.line,
         location.column,
         `Multiple alert conditions detected (${alertCalls.length}). Consider consolidating or documenting alert logic.`,
@@ -208,7 +192,7 @@ export class EnhancedPerformanceValidator implements ValidationModule {
     for (const argument of call.args) {
       if (argument.name?.name === 'lookahead' && this.argumentEnablesLookahead(argument)) {
         const { line, column } = argument.loc.start;
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           'request.security with lookahead enabled may cause repainting',
@@ -245,7 +229,7 @@ export class EnhancedPerformanceValidator implements ValidationModule {
     }
 
     const { line, column } = index.loc.start;
-    this.addError(
+    this.helper.addError(
       line,
       column,
       'Negative history reference may cause future data leakage',
@@ -350,19 +334,10 @@ export class EnhancedPerformanceValidator implements ValidationModule {
   // Utilities
   // ──────────────────────────────────────────────────────────────────────────
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
   }
 
-  private addError(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.errors.push({ line, column, message, code, suggestion, severity: 'error' });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, code, suggestion, severity: 'warning' });
-  }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
     if (!config.ast || config.ast.mode === 'disabled') {
