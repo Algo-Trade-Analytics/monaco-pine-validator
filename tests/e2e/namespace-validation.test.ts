@@ -10,6 +10,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { EnhancedModularValidator } from '../../EnhancedModularValidator';
+import { getNamespacePattern } from '../../core/constants';
 
 describe('Namespace Validation', () => {
   const validator = new EnhancedModularValidator();
@@ -404,6 +405,44 @@ invalid5 = scale.wrong_scale`;
       // Should have namespace validation errors for invalid members
       const namespaceErrors = result.errors.filter(e => e.code === 'PSV6-UNDEFINED-NAMESPACE-MEMBER');
       expect(namespaceErrors.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Namespace pattern helper', () => {
+    it('matches nested chart namespace access', () => {
+      const pattern = getNamespacePattern();
+      const line = 'chart.point.from_index(0, 0)';
+
+      pattern.lastIndex = 0;
+      const match = pattern.exec(line);
+
+      expect(match).not.toBeNull();
+      expect(match?.[1]).toBe('chart');
+      expect(match?.[2]).toBe('point');
+      expect(match?.[3]).toBe('from_index');
+    });
+
+    it('matches nested strategy namespaces', () => {
+      const pattern = getNamespacePattern();
+      const line = 'strategy.closedtrades.exit(0)';
+
+      pattern.lastIndex = 0;
+      const match = pattern.exec(line);
+
+      expect(match).not.toBeNull();
+      expect(match?.[1]).toBe('strategy');
+      expect(match?.[2]).toBe('closedtrades');
+      expect(match?.[3]).toBe('exit');
+    });
+
+    it('ignores unsupported namespace roots', () => {
+      const pattern = getNamespacePattern();
+      const line = 'session.isfirstbar';
+
+      pattern.lastIndex = 0;
+      const match = pattern.exec(line);
+
+      expect(match).toBeNull();
     });
   });
 });

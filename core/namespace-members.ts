@@ -205,6 +205,8 @@ export const NAMESPACE_MEMBERS: Record<string, Set<string>> = {
     'account_currency', 'avg_losing_trade', 'avg_losing_trade_percent', 'avg_trade',
     'avg_trade_percent', 'avg_winning_trade', 'avg_winning_trade_percent',
     'max_drawdown', 'max_drawdown_percent', 'max_runup', 'max_runup_percent',
+    // Nested namespaces exposed as strategy.* members
+    'closedtrades', 'opentrades', 'commission', 'direction', 'risk', 'oca',
     // Missing strategy members from gap analysis
     'grossloss_percent', 'grossprofit_percent', 'margin_liquidation_price',
     'max_contracts_held_all', 'max_contracts_held_long', 'max_contracts_held_short',
@@ -342,7 +344,8 @@ export const NAMESPACE_MEMBERS: Record<string, Set<string>> = {
   
   // Nested strategy constants
   'strategy.commission': new Set([
-    'percent', 'cash_per_contract', 'cash_per_order'
+    'percent', 'cash_per_contract', 'cash_per_order',
+    'basis_points', 'per_share_tiered'
   ]),
   
   'strategy.oca': new Set([
@@ -354,8 +357,9 @@ export const NAMESPACE_MEMBERS: Record<string, Set<string>> = {
   ]),
   
   'strategy.risk': new Set([
-    'allow_entry_in', 'max_cons_loss_days', 'max_drawdown', 
-    'max_intraday_filled_orders', 'max_intraday_loss', 'max_position_size'
+    'allow_entry_in', 'max_cons_loss_days', 'max_drawdown',
+    'max_intraday_filled_orders', 'max_intraday_loss', 'max_position_size',
+    'max_consecutive_losses', 'max_daily_loss', 'position_size_limit'
   ]),
   
   // Strategy closedtrades namespace (v6)
@@ -364,15 +368,15 @@ export const NAMESPACE_MEMBERS: Record<string, Set<string>> = {
     'commission', 'entry_bar_index', 'entry_comment', 'entry_id', 'entry_price', 'entry_time',
     'exit_bar_index', 'exit_comment', 'exit_id', 'exit_price', 'exit_time',
     'max_drawdown', 'max_drawdown_percent', 'max_runup', 'max_runup_percent',
-    'profit', 'profit_percent', 'size'
+    'profit', 'profit_percent', 'size', 'direction'
   ]),
-  
+
   // Strategy opentrades namespace (v6)
   'strategy.opentrades': new Set([
     'capital_held',  // variable
     'commission', 'entry_bar_index', 'entry_comment', 'entry_id', 'entry_price', 'entry_time',
     'max_drawdown', 'max_drawdown_percent', 'max_runup', 'max_runup_percent',
-    'profit', 'profit_percent', 'size'
+    'profit', 'profit_percent', 'size', 'direction'
   ]),
   
   'dividends': new Set([
