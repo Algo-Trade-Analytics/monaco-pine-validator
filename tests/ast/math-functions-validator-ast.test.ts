@@ -49,7 +49,7 @@ describe('MathFunctionsValidator (AST)', () => {
     const result = harness.validate('math.unknown()');
     const warningCodes = result.warnings.map((warning) => warning.code);
 
-    expect(warningCodes).toContain('PSV6-MATH-FUNCTION-UNKNOWN: Unknown Math function: math.unknown');
+    expect(warningCodes).toContain('PSV6-MATH-FUNCTION-UNKNOWN');
   });
 
   it('reports parameter type mismatches', () => {

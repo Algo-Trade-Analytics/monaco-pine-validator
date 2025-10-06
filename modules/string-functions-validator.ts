@@ -21,6 +21,7 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type BinaryExpressionNode,
@@ -51,9 +52,7 @@ export class StringFunctionsValidator implements ValidationModule {
   name = 'StringFunctionsValidator';
   priority = 85; // High priority - string functions are essential for Pine Script
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
 
@@ -67,6 +66,7 @@ export class StringFunctionsValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
+    this.helper.reset();
     this.reset();
     this.context = context;
 
@@ -88,42 +88,16 @@ export class StringFunctionsValidator implements ValidationModule {
     this.validateStringBestPractices();
 
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
     this.astContext = null;
     this.stringFunctionCalls = [];
     this.stringOperations.clear();
     this.astConcatenationCounts = new Map();
   }
 
-  private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    // Only generate errors for clearly invalid cases; others as warnings
-    if (this.isClearlyInvalid(message, code)) {
-      this.errors.push({ line, column, message, severity: 'error', code, suggestion });
-    } else {
-      this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-    }
-  }
-
-  private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
-
-  private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
 
   private collectStringDataAst(program: ProgramNode): void {
     const loopStack: Array<'for' | 'while'> = [];
@@ -383,6 +357,9 @@ export class StringFunctionsValidator implements ValidationModule {
       case 'replace':
         this.validateStrReplace(args, lineNum, column, argumentNodes);
         break;
+      case 'replace_all':
+        this.validateStrReplace(args, lineNum, column, argumentNodes);
+        break;
       case 'split':
         this.validateStrSplit(args, lineNum, column, argumentNodes);
         break;
@@ -414,7 +391,7 @@ export class StringFunctionsValidator implements ValidationModule {
         this.validateStrMatch(args, lineNum, column, argumentNodes);
         break;
       default:
-        this.addError(lineNum, column, `Unknown string function: str.${functionName}`, 'PSV6-STR-UNKNOWN-FUNCTION');
+        this.helper.addError(lineNum, column, `Unknown string function: str.${functionName}`, 'PSV6-STR-UNKNOWN-FUNCTION');
     }
   }
 
@@ -425,7 +402,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 1) {
-      this.addError(lineNum, column, 'str.length() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.length() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -433,7 +410,7 @@ export class StringFunctionsValidator implements ValidationModule {
     const arg = args[0].trim();
     const argNode = argumentNodes[0];
     if (!this.isStringLiteral(arg, argNode) && !this.isStringVariable(arg, argNode)) {
-      this.addError(lineNum, column, `str.length() requires a string parameter, got: ${arg}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.length() requires a string parameter, got: ${arg}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
   }
 
@@ -444,7 +421,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'str.contains() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.contains() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -455,11 +432,11 @@ export class StringFunctionsValidator implements ValidationModule {
     const argNode2 = argumentNodes[1];
 
     if (!this.isStringLiteral(arg1, argNode1) && !this.isStringVariable(arg1, argNode1)) {
-      this.addError(lineNum, column, `str.contains() first parameter must be a string, got: ${arg1}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.contains() first parameter must be a string, got: ${arg1}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
 
     if (!this.isStringLiteral(arg2, argNode2) && !this.isStringVariable(arg2, argNode2)) {
-      this.addError(lineNum, column, `str.contains() second parameter must be a string, got: ${arg2}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.contains() second parameter must be a string, got: ${arg2}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
   }
 
@@ -470,7 +447,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'str.startswith() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.startswith() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
     const a = args[0].trim();
@@ -478,10 +455,10 @@ export class StringFunctionsValidator implements ValidationModule {
     const nodeA = argumentNodes[0];
     const nodeB = argumentNodes[1];
     if (!this.isStringLiteral(a, nodeA) && !this.isStringVariable(a, nodeA)) {
-      this.addError(lineNum, column, `str.startswith() first parameter must be a string, got: ${a}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.startswith() first parameter must be a string, got: ${a}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
     if (!this.isStringLiteral(b, nodeB) && !this.isStringVariable(b, nodeB)) {
-      this.addError(lineNum, column, `str.startswith() second parameter must be a string, got: ${b}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.startswith() second parameter must be a string, got: ${b}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
   }
 
@@ -492,7 +469,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'str.endswith() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.endswith() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
     const a = args[0].trim();
@@ -500,10 +477,10 @@ export class StringFunctionsValidator implements ValidationModule {
     const nodeA = argumentNodes[0];
     const nodeB = argumentNodes[1];
     if (!this.isStringLiteral(a, nodeA) && !this.isStringVariable(a, nodeA)) {
-      this.addError(lineNum, column, `str.endswith() first parameter must be a string, got: ${a}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.endswith() first parameter must be a string, got: ${a}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
     if (!this.isStringLiteral(b, nodeB) && !this.isStringVariable(b, nodeB)) {
-      this.addError(lineNum, column, `str.endswith() second parameter must be a string, got: ${b}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.endswith() second parameter must be a string, got: ${b}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
   }
 
@@ -514,7 +491,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'str.pos() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.pos() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -525,11 +502,11 @@ export class StringFunctionsValidator implements ValidationModule {
     const nodeB = argumentNodes[1];
 
     if (!this.isStringLiteral(arg1, nodeA) && !this.isStringVariable(arg1, nodeA)) {
-      this.addError(lineNum, column, `str.pos() first parameter must be a string, got: ${arg1}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.pos() first parameter must be a string, got: ${arg1}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
 
     if (!this.isStringLiteral(arg2, nodeB) && !this.isStringVariable(arg2, nodeB)) {
-      this.addError(lineNum, column, `str.pos() second parameter must be a string, got: ${arg2}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.pos() second parameter must be a string, got: ${arg2}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
   }
 
@@ -540,7 +517,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length < 2 || args.length > 3) {
-      this.addError(lineNum, column, 'str.substring() accepts 2 or 3 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.substring() accepts 2 or 3 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -550,18 +527,18 @@ export class StringFunctionsValidator implements ValidationModule {
     const startIndex = this.extractNumericValue(args[1], startNode);
     const endIndex = args.length === 3 ? this.extractNumericValue(args[2], endNode) : null;
     if (startIndex === null) {
-      this.addError(lineNum, column, 'substring start index must be numeric', 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'substring start index must be numeric', 'PSV6-FUNCTION-PARAM-TYPE');
     }
     if (args.length === 3 && endIndex === null) {
-      this.addError(lineNum, column, 'substring end index must be numeric', 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'substring end index must be numeric', 'PSV6-FUNCTION-PARAM-TYPE');
     }
     
     if (startIndex !== null && startIndex < 0) {
-      this.addWarning(lineNum, column, 'Start index should not be negative', 'PSV6-STR-SUBSTRING-NEGATIVE-INDEX');
+      this.helper.addWarning(lineNum, column, 'Start index should not be negative', 'PSV6-STR-SUBSTRING-NEGATIVE-INDEX');
     }
     
     if (endIndex !== null && startIndex !== null && endIndex < startIndex) {
-      this.addWarning(lineNum, column, 'End index should not be less than start index', 'PSV6-STR-SUBSTRING-INVALID-RANGE');
+      this.helper.addWarning(lineNum, column, 'End index should not be less than start index', 'PSV6-STR-SUBSTRING-INVALID-RANGE');
     }
   }
 
@@ -572,7 +549,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 3) {
-      this.addError(lineNum, column, 'str.replace() requires exactly 3 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.replace() requires exactly 3 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
     const s = args[0].trim();
@@ -582,13 +559,13 @@ export class StringFunctionsValidator implements ValidationModule {
     const nodeFind = argumentNodes[1];
     const nodeRep = argumentNodes[2];
     if (!this.isStringLiteral(s, nodeS) && !this.isStringVariable(s, nodeS)) {
-      this.addError(lineNum, column, `str.replace() first parameter must be a string, got: ${s}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.replace() first parameter must be a string, got: ${s}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
     if (!this.isStringLiteral(find, nodeFind) && !this.isStringVariable(find, nodeFind)) {
-      this.addError(lineNum, column, `str.replace() second parameter must be a string, got: ${find}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.replace() second parameter must be a string, got: ${find}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
     if (!this.isStringLiteral(rep, nodeRep) && !this.isStringVariable(rep, nodeRep)) {
-      this.addError(lineNum, column, `str.replace() third parameter must be a string, got: ${rep}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.replace() third parameter must be a string, got: ${rep}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
   }
 
@@ -599,7 +576,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'str.split() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.split() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
     const s = args[0].trim();
@@ -607,10 +584,10 @@ export class StringFunctionsValidator implements ValidationModule {
     const nodeS = argumentNodes[0];
     const nodeDelim = argumentNodes[1];
     if (!this.isStringLiteral(s, nodeS) && !this.isStringVariable(s, nodeS)) {
-      this.addError(lineNum, column, `str.split() first parameter must be a string, got: ${s}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.split() first parameter must be a string, got: ${s}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
     if (!this.isStringLiteral(delim, nodeDelim) && !this.isStringVariable(delim, nodeDelim)) {
-      this.addError(lineNum, column, `str.split() second parameter must be a string, got: ${delim}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.split() second parameter must be a string, got: ${delim}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
   }
 
@@ -621,13 +598,13 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 1) {
-      this.addError(lineNum, column, 'str.upper() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.upper() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
     const s = args[0].trim();
     const nodeS = argumentNodes[0];
     if (!this.isStringLiteral(s, nodeS) && !this.isStringVariable(s, nodeS)) {
-      this.addError(lineNum, column, `str.upper() parameter must be a string, got: ${s}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.upper() parameter must be a string, got: ${s}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
   }
 
@@ -638,13 +615,13 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 1) {
-      this.addError(lineNum, column, 'str.lower() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.lower() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
     const s = args[0].trim();
     const nodeS = argumentNodes[0];
     if (!this.isStringLiteral(s, nodeS) && !this.isStringVariable(s, nodeS)) {
-      this.addError(lineNum, column, `str.lower() parameter must be a string, got: ${s}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.lower() parameter must be a string, got: ${s}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
   }
 
@@ -655,13 +632,13 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 1) {
-      this.addError(lineNum, column, 'str.trim() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.trim() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
     const s = args[0].trim();
     const nodeS = argumentNodes[0];
     if (!this.isStringLiteral(s, nodeS) && !this.isStringVariable(s, nodeS)) {
-      this.addError(lineNum, column, `str.trim() parameter must be a string, got: ${s}`, 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, `str.trim() parameter must be a string, got: ${s}`, 'PSV6-FUNCTION-PARAM-TYPE');
     }
   }
 
@@ -672,21 +649,21 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'str.repeat() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.repeat() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
     // Validate count is a positive integer
     const count = this.extractNumericValue(args[1], argumentNodes[1]);
     if (count === null) {
-      this.addError(lineNum, column, 'Repeat count must be an integer', 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'Repeat count must be an integer', 'PSV6-FUNCTION-PARAM-TYPE');
       return;
     }
     if (count !== null && count < 0) {
-      this.addWarning(lineNum, column, 'Repeat count should not be negative', 'PSV6-STR-REPEAT-NEGATIVE-COUNT');
+      this.helper.addWarning(lineNum, column, 'Repeat count should not be negative', 'PSV6-STR-REPEAT-NEGATIVE-COUNT');
     }
     if (count !== null && count > 1000) {
-      this.addWarning(lineNum, column, 'Large repeat count may impact performance', 'PSV6-STR-REPEAT-LARGE-COUNT');
+      this.helper.addWarning(lineNum, column, 'Large repeat count may impact performance', 'PSV6-STR-REPEAT-LARGE-COUNT');
     }
   }
 
@@ -697,7 +674,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length === 0 || args.length > 2) {
-      this.addError(lineNum, column, 'str.tostring() accepts 1 or 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.tostring() accepts 1 or 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -705,7 +682,7 @@ export class StringFunctionsValidator implements ValidationModule {
     const valueArg = args[0].trim();
     const valueNode = argumentNodes[0];
     if (this.isStringLiteral(valueArg, valueNode)) {
-      this.addInfo(lineNum, column, 'Avoid str.tostring() on a string literal', 'PSV6-STR-LITERAL-SUGGESTION');
+      this.helper.addInfo(lineNum, column, 'Avoid str.tostring() on a string literal', 'PSV6-STR-LITERAL-SUGGESTION');
     }
 
     // Validate optional format argument when present
@@ -713,7 +690,7 @@ export class StringFunctionsValidator implements ValidationModule {
       const formatArg = args[1].trim();
       const formatNode = argumentNodes[1];
       if (!FORMAT_CONSTANTS.has(formatArg) && !this.isStringLiteral(formatArg, formatNode)) {
-        this.addWarning(lineNum, column, 'Unrecognised format specifier for str.tostring()', 'PSV6-STR-CONVERSION-INVALID');
+        this.helper.addWarning(lineNum, column, 'Unrecognised format specifier for str.tostring()', 'PSV6-STR-CONVERSION-INVALID');
       }
     }
   }
@@ -725,7 +702,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 1) {
-      this.addError(lineNum, column, 'str.tonumber() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.tonumber() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -733,22 +710,22 @@ export class StringFunctionsValidator implements ValidationModule {
     const node = argumentNodes[0];
     let issuedNaWarning = false;
     if (node?.kind === 'StringLiteral' && /^(?:\d+(?:\.\d+)?)$/.test((node as StringLiteralNode).value)) {
-      this.addInfo(lineNum, column, 'Consider using numeric literal instead of str.tonumber() with string literal', 'PSV6-STR-LITERAL-SUGGESTION');
+      this.helper.addInfo(lineNum, column, 'Consider using numeric literal instead of str.tonumber() with string literal', 'PSV6-STR-LITERAL-SUGGESTION');
     }
     if (/^[+\-]?\d+(?:\.[0-9]+)?$/.test(arg) || /^(true|false|na)$/.test(arg)) {
-      this.addError(lineNum, column, 'Invalid parameter type for str.tonumber(), expected string', 'PSV6-STR-CONVERSION-INVALID');
+      this.helper.addError(lineNum, column, 'Invalid parameter type for str.tonumber(), expected string', 'PSV6-STR-CONVERSION-INVALID');
     }
 
     if (node?.kind === 'StringLiteral') {
       const literalValue = (node as StringLiteralNode).value.trim();
       if (!/^[+\-]?\d+(?:\.\d+)?$/.test(literalValue)) {
-        this.addWarning(lineNum, column, 'str.tonumber() may return na for non-numeric strings', 'PSV6-STR-TONUMBER-NA');
+        this.helper.addWarning(lineNum, column, 'str.tonumber() may return na for non-numeric strings', 'PSV6-STR-TONUMBER-NA');
         issuedNaWarning = true;
       }
     }
 
     if (!issuedNaWarning) {
-      this.addWarning(lineNum, column, 'str.tonumber() may return na when conversion fails', 'PSV6-STR-TONUMBER-NA');
+      this.helper.addWarning(lineNum, column, 'str.tonumber() may return na when conversion fails', 'PSV6-STR-TONUMBER-NA');
     }
   }
 
@@ -759,7 +736,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length < 1) {
-      this.addError(lineNum, column, 'str.format() requires at least 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.format() requires at least 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -775,7 +752,7 @@ export class StringFunctionsValidator implements ValidationModule {
     }
 
     if (!this.isStringLiteral(formatString, formatNode)) {
-      this.addError(lineNum, column, 'Invalid format string (should be a string literal)', 'PSV6-STR-FORMAT-INVALID');
+      this.helper.addError(lineNum, column, 'Invalid format string (should be a string literal)', 'PSV6-STR-FORMAT-INVALID');
       return;
     }
 
@@ -784,7 +761,7 @@ export class StringFunctionsValidator implements ValidationModule {
 
     if (args.length !== expectedArgs) {
       // Mismatched placeholder count is an error, not just a warning
-      this.addError(
+      this.helper.addError(
         lineNum,
         column,
         `str.format() provided ${args.length - 1} argument(s) but format string references ${placeholders} placeholder(s)`,
@@ -793,7 +770,7 @@ export class StringFunctionsValidator implements ValidationModule {
     }
 
     if (this.hasInvalidFormatPlaceholders(formatString)) {
-      this.addError(lineNum, column, 'Invalid format string: incomplete or malformed placeholders', 'PSV6-STR-FORMAT-INVALID');
+      this.helper.addError(lineNum, column, 'Invalid format string: incomplete or malformed placeholders', 'PSV6-STR-FORMAT-INVALID');
     }
   }
 
@@ -804,7 +781,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'str.format_time() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.format_time() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -812,7 +789,7 @@ export class StringFunctionsValidator implements ValidationModule {
     const formatString = args[1];
     const formatNode = argumentNodes[1];
     if (this.isStringLiteral(formatString, formatNode) && !this.isValidTimeFormat(formatString)) {
-      this.addWarning(lineNum, column, 'Invalid or unusual time format string', 'PSV6-STR-FORMAT-TIME-INVALID');
+      this.helper.addWarning(lineNum, column, 'Invalid or unusual time format string', 'PSV6-STR-FORMAT-TIME-INVALID');
     }
   }
 
@@ -823,7 +800,7 @@ export class StringFunctionsValidator implements ValidationModule {
     argumentNodes: ExpressionNode[] = [],
   ): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'str.match() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'str.match() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
@@ -834,7 +811,7 @@ export class StringFunctionsValidator implements ValidationModule {
       try {
         new RegExp(pattern.replace(/^"|"$/g, ''));
       } catch (e) {
-        this.addError(lineNum, column, 'Invalid regex pattern in str.match()', 'PSV6-STR-MATCH-INVALID-REGEX');
+        this.helper.addError(lineNum, column, 'Invalid regex pattern in str.match()', 'PSV6-STR-MATCH-INVALID-REGEX');
       }
     }
   }
@@ -846,25 +823,25 @@ export class StringFunctionsValidator implements ValidationModule {
     for (const call of this.stringFunctionCalls) {
       countsByLine.set(call.line, (countsByLine.get(call.line) || 0) + 1);
       if (call.inLoop) {
-        this.addWarning(call.line, call.column, 'String operation in loop', 'PSV6-STR-PERF-LOOP');
+        this.helper.addWarning(call.line, call.column, 'String operation in loop', 'PSV6-STR-PERF-LOOP');
       }
       if (expensiveFunctions.has(call.name)) {
-        this.addWarning(call.line, call.column, `Expensive str.${call.name}() call`, 'PSV6-STR-PERF-COMPLEX');
+        this.helper.addWarning(call.line, call.column, `Expensive str.${call.name}() call`, 'PSV6-STR-PERF-COMPLEX');
       }
     }
 
     for (const [line, count] of countsByLine) {
       if (count > 1) {
-        this.addWarning(line, 1, 'Complex string operations on one line', 'PSV6-STR-PERF-COMPLEX');
+        this.helper.addWarning(line, 1, 'Complex string operations on one line', 'PSV6-STR-PERF-COMPLEX');
       }
     }
 
     for (const [line, count] of this.astConcatenationCounts) {
       if (count >= 1) {
-        this.addInfo(line, 1, 'Consider using str.format() instead of multiple string concatenations', 'PSV6-STR-FORMAT-SUGGESTION');
+        this.helper.addInfo(line, 1, 'Consider using str.format() instead of multiple string concatenations', 'PSV6-STR-FORMAT-SUGGESTION');
       }
       if (count >= 2) {
-        this.addWarning(line, 1, 'Excessive string concatenation', 'PSV6-STR-PERF-CONCAT');
+        this.helper.addWarning(line, 1, 'Excessive string concatenation', 'PSV6-STR-PERF-CONCAT');
       }
     }
   }
@@ -879,7 +856,7 @@ export class StringFunctionsValidator implements ValidationModule {
     for (const [key, cnt] of counts) {
       if (cnt >= 3) {
         const funcName = key.split('(')[0];
-        this.addInfo(1, 1, `Multiple similar str.${funcName}() operations detected. Consider caching results.`, 'PSV6-STR-CACHE-SUGGESTION');
+        this.helper.addInfo(1, 1, `Multiple similar str.${funcName}() operations detected. Consider caching results.`, 'PSV6-STR-CACHE-SUGGESTION');
       }
     }
   }

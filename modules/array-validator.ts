@@ -10,6 +10,7 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type AssignmentStatementNode,
@@ -106,10 +107,9 @@ const EXPENSIVE_ARRAY_METHODS = new Set(['array.reverse', 'array.sort', 'array.c
 export class ArrayValidator implements ValidationModule {
   name = 'ArrayValidator';
 
-  private errors: Array<{ line: number; column: number; message: string; code: string }> = [];
-  private warnings: Array<{ line: number; column: number; message: string; code: string }> = [];
-  private info: Array<{ line: number; column: number; message: string; code: string }> = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
+  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
 
   // Array tracking
@@ -132,14 +132,7 @@ export class ArrayValidator implements ValidationModule {
     this.astContext = this.getAstContext(config);
 
     if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: context.typeMap,
-        scriptType: context.scriptType,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.knownUdtTypes = this.collectKnownUdtTypes();
@@ -147,20 +140,11 @@ export class ArrayValidator implements ValidationModule {
     this.validateArrayPerformanceAst();
     this.validateArrayBestPracticesAst();
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors.map(e => ({ ...e, severity: 'error' as const })),
-      warnings: this.warnings.map(w => ({ ...w, severity: 'warning' as const })),
-      info: this.info.map(i => ({ ...i, severity: 'info' as const })),
-      typeMap: context.typeMap,
-      scriptType: context.scriptType
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.arrayDeclarations.clear();
     this.arrayAllocations = 0;
@@ -168,17 +152,7 @@ export class ArrayValidator implements ValidationModule {
     this.knownUdtTypes.clear();
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({ line, column, message, code });
-  }
 
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({ line, column, message, code });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({ line, column, message, code });
-  }
 
   private collectArrayDataAst(program: ProgramNode): void {
     const loopStack: NodePath[] = [];
@@ -549,7 +523,7 @@ export class ArrayValidator implements ValidationModule {
 
     if (hasSyntaxError) {
       const name = target?.name ?? this.getExpressionText(call.callee);
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Invalid array declaration syntax for '${name}'.`,
@@ -571,7 +545,7 @@ export class ArrayValidator implements ValidationModule {
     const args = call.args;
 
     if (spec?.params !== undefined && args.length !== spec.params) {
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Invalid parameter count for ${qualifiedName}. Expected ${spec.params}, got ${args.length}. Usage: ${spec.description}`,
@@ -617,7 +591,7 @@ export class ArrayValidator implements ValidationModule {
     }
 
     if (inLoop && EXPENSIVE_ARRAY_METHODS.has(qualifiedName)) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Expensive array operation '${qualifiedName}' detected in loop`,
@@ -718,7 +692,7 @@ export class ArrayValidator implements ValidationModule {
       return name;
     }
 
-    this.addError(line, column, `Variable '${name}' is not declared as an array`, 'PSV6-ARRAY-NOT-ARRAY');
+    this.helper.addError(line, column, `Variable '${name}' is not declared as an array`, 'PSV6-ARRAY-NOT-ARRAY');
     return name;
   }
 
@@ -735,7 +709,7 @@ export class ArrayValidator implements ValidationModule {
 
     const size = arrayInfo.size;
     if (value >= size && size > 0) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Array index ${value} is out of bounds for array of size ${size}`,
@@ -744,7 +718,7 @@ export class ArrayValidator implements ValidationModule {
     }
 
     if (value < 0 && Math.abs(value) > size) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Negative array index ${value} is out of bounds for array of size ${size}`,
@@ -772,7 +746,7 @@ export class ArrayValidator implements ValidationModule {
 
     if (!this.areTypesCompatible(arrayInfo.elementType, valueType)) {
       const action = operation === 'push' ? 'push' : 'set';
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Type mismatch: cannot ${action} ${valueType} ${operation === 'push' ? 'to' : 'in'} ${arrayInfo.elementType} array '${arrayName}'`,
@@ -1088,7 +1062,7 @@ export class ArrayValidator implements ValidationModule {
 
   private validateArrayPerformanceAst(): void {
     if (this.arrayAllocations > 5) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `Too many array allocations (${this.arrayAllocations}). Consider reusing arrays or using fewer arrays.`,
@@ -1098,7 +1072,7 @@ export class ArrayValidator implements ValidationModule {
 
     for (const [name, info] of this.arrayDeclarations) {
       if (info.size > 10000) {
-        this.addWarning(
+        this.helper.addWarning(
           info.line,
           info.column,
           `Large array '${name}' with size ${info.size}. Consider performance implications.`,
@@ -1118,7 +1092,7 @@ export class ArrayValidator implements ValidationModule {
     for (const [name, info] of this.arrayDeclarations) {
       const usage = this.arrayUsage.get(name);
       if (!usage) {
-        this.addInfo(
+        this.helper.addInfo(
           info.line,
           info.column,
           `Array '${name}' is declared but never initialized. Consider adding initial values.`,
@@ -1129,7 +1103,7 @@ export class ArrayValidator implements ValidationModule {
 
       const hasInitialization = [...usage.pushes, ...usage.sets].some((line) => line >= info.line);
       if (!hasInitialization) {
-        this.addInfo(
+        this.helper.addInfo(
           info.line,
           info.column,
           `Array '${name}' is declared but never initialized. Consider adding initial values.`,
@@ -1149,7 +1123,7 @@ export class ArrayValidator implements ValidationModule {
       const hasPush = usage.pushes.length > 0;
       const hasClear = usage.clears.length > 0;
       if (hasPush && !hasClear && info.size > 100) {
-        this.addInfo(
+        this.helper.addInfo(
           info.line,
           info.column,
           `Array '${name}' grows but is never cleared. Consider using array.clear() for memory management.`,
@@ -1172,7 +1146,7 @@ export class ArrayValidator implements ValidationModule {
     const isValid = validTypes.includes(type) || isUDT || isDeclaredType;
 
     if (!isValid) {
-      this.addError(
+      this.helper.addError(
         lineNum,
         column,
         `Invalid array type: ${type}. Valid types are: ${validTypes.join(', ')}`,
@@ -1186,9 +1160,9 @@ export class ArrayValidator implements ValidationModule {
   private validateArraySize(size: number, lineNum: number, column = 1): void {
     // Allow zero-size arrays (common initialization pattern)
     if (size < 0) {
-      this.addError(lineNum, column, `Array size must be non-negative, got: ${size}`, 'PSV6-ARRAY-INVALID-SIZE');
+      this.helper.addError(lineNum, column, `Array size must be non-negative, got: ${size}`, 'PSV6-ARRAY-INVALID-SIZE');
     } else if (size > 100000) {
-      this.addError(lineNum, column, `Array size (${size}) exceeds the maximum limit of 100,000`, 'PSV6-ARRAY-SIZE-LIMIT');
+      this.helper.addError(lineNum, column, `Array size (${size}) exceeds the maximum limit of 100,000`, 'PSV6-ARRAY-SIZE-LIMIT');
     }
   }
 
@@ -1196,7 +1170,7 @@ export class ArrayValidator implements ValidationModule {
     for (const [varName, arrayInfo] of this.arrayDeclarations) {
       // Check for poor naming conventions
       if (varName.length <= 2 || /^[a-z]$/.test(varName) || /^arr\d*$/.test(varName)) {
-        this.addInfo(arrayInfo.line, 1, `Consider using more descriptive names for arrays. '${varName}' could be improved.`, 'PSV6-ARRAY-NAMING-SUGGESTION');
+        this.helper.addInfo(arrayInfo.line, 1, `Consider using more descriptive names for arrays. '${varName}' could be improved.`, 'PSV6-ARRAY-NAMING-SUGGESTION');
       }
     }
   }

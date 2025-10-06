@@ -48,7 +48,7 @@ describe('StrategyFunctionsValidator (AST)', () => {
     const harness = new StrategyValidatorHarness(service);
 
     const result = harness.validate('strategy.unknown()');
-    const codes = result.errors.map((error) => error.code);
+    const codes = result.warnings.map((warning) => warning.code);
 
     expect(codes).toContain('PSV6-STRATEGY-FUNCTION-UNKNOWN');
   });

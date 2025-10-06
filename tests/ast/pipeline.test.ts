@@ -3,6 +3,7 @@ import { BaseValidator } from '../../core/base-validator';
 import type { AstValidationContext, AstService } from '../../core/types';
 import { createAstDiagnostics } from '../../core/ast/types';
 import { type ProgramNode, createLocation, createPosition, createRange } from '../../core/ast/nodes';
+import { Codes } from '../../core/codes';
 
 class TestValidator extends BaseValidator {
   protected runCoreValidation(): void {}
@@ -79,7 +80,7 @@ describe('BaseValidator AST pipeline integration', () => {
     const result = validator.validate('//@version=6\nindicator("broken")');
 
     expect(parse).toHaveBeenCalled();
-    expect(result.warnings.some((warning) => warning.code === 'AST-PARSE')).toBe(true);
+    expect(result.warnings.some((warning) => warning.code === Codes.SYNTAX_ERROR)).toBe(true);
 
     const context = validator.exposeContext();
     expect(context.ast).toBeNull();

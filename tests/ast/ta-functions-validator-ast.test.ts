@@ -51,7 +51,7 @@ describe('TAFunctionsValidator (AST)', () => {
     const result = harness.validate('ta.unknown()');
     const warningCodes = result.warnings.map((warning) => warning.code);
 
-    expect(warningCodes).toContain('PSV6-TA-FUNCTION-UNKNOWN: Unknown TA function: ta.unknown');
+    expect(warningCodes).toContain('PSV6-TA-FUNCTION-UNKNOWN');
   });
 
   it('validates parameter types', () => {

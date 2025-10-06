@@ -5,6 +5,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type AssignmentStatementNode,
   type ExpressionNode,
@@ -20,13 +22,6 @@ import { getNodeSource, getSourceLine } from '../core/ast/source-utils';
 
 type AssignmentOperator = '=' | ':=' | '+=' | '-=' | '*=' | '/=' | '%=';
 
-interface DiagnosticEntry {
-  line: number;
-  column: number;
-  message: string;
-  code: string;
-}
-
 interface VaripDeclarationInfo {
   name: string;
   node: VariableDeclarationNode;
@@ -40,9 +35,7 @@ interface VaripDeclarationInfo {
 export class VaripValidator implements ValidationModule {
   name = 'VaripValidator';
 
-  private errors: DiagnosticEntry[] = [];
-  private warnings: DiagnosticEntry[] = [];
-  private info: DiagnosticEntry[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
 
@@ -56,54 +49,26 @@ export class VaripValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
+    this.helper.reset();
     this.reset();
     this.context = context;
     this.astContext = this.getAstContext(config);
     const ast = this.astContext?.ast;
 
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: context.typeMap,
-        scriptType: context.scriptType,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(ast);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors.map((error) => ({ ...error, severity: 'error' as const })),
-      warnings: this.warnings.map((warning) => ({ ...warning, severity: 'warning' as const })),
-      info: this.info.map((info) => ({ ...info, severity: 'info' as const })),
-      typeMap: context.typeMap,
-      scriptType: context.scriptType,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
     this.astVaripDeclarations = [];
     this.astVaripNames.clear();
     this.astAssignmentErrorSites.clear();
     this.astBarstateWarningSites.clear();
-  }
-
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({ line, column, message, code });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({ line, column, message, code });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({ line, column, message, code });
   }
 
   private validateWithAst(program: ProgramNode): void {
@@ -150,45 +115,45 @@ export class VaripValidator implements ValidationModule {
       const { initializer, line, column, name } = declaration;
 
       if (!initializer) {
-        this.addError(
+        this.helper.addError(
           line,
           column,
           'Invalid varip declaration syntax. Expected: varip <type> <name> = <value>',
-          'PSV6-VARIP-SYNTAX',
+          Codes.VARIP_SYNTAX,
         );
-        this.addError(line, column, 'varip declaration must include an initial value', 'PSV6-VARIP-INITIAL-VALUE');
+        this.helper.addError(line, column, 'varip declaration must include an initial value', Codes.VARIP_INITIAL_VALUE);
         continue;
       }
 
       if (!this.isLiteralInitializer(initializer)) {
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           `varip '${name}' should be initialized with a literal value for better performance`,
-          'PSV6-VARIP-LITERAL-INIT',
+          Codes.VARIP_LITERAL_INIT,
         );
       }
 
       const metadata = this.astContext?.typeEnvironment.nodeTypes.get(initializer) ?? null;
       if (!metadata || metadata.kind === 'unknown') {
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           `Could not infer type for varip '${name}'. Consider explicit type declaration`,
-          'PSV6-VARIP-TYPE-INFERENCE',
+          Codes.VARIP_TYPE_INFERENCE,
         );
       }
 
       if (name.length < 3) {
-        this.addWarning(line, column, `varip '${name}' should have a more descriptive name`, 'PSV6-VARIP-NAMING');
+        this.helper.addWarning(line, column, `varip '${name}' should have a more descriptive name`, Codes.VARIP_NAMING);
       }
 
       if (!/^(intrabar|bar|count|state|flag|persist)/i.test(name)) {
-        this.addInfo(
+        this.helper.addInfo(
           line,
           column,
           `Consider using descriptive prefixes like 'intrabar_' or 'bar_' for varip variables`,
-          'PSV6-VARIP-NAMING-SUGGESTION',
+          Codes.VARIP_NAMING_SUGGESTION,
         );
       }
     }
@@ -197,20 +162,20 @@ export class VaripValidator implements ValidationModule {
   private validateVaripScopeAst(): void {
     for (const declaration of this.astVaripDeclarations) {
       if (declaration.inFunction) {
-        this.addError(
+        this.helper.addError(
           declaration.line,
           declaration.column,
           'varip declarations are not allowed inside functions',
-          'PSV6-VARIP-SCOPE-FUNCTION',
+          Codes.VARIP_SCOPE_FUNCTION,
         );
       }
 
       if (declaration.inLoop) {
-        this.addError(
+        this.helper.addError(
           declaration.line,
           declaration.column,
           'varip declarations are not allowed inside loops',
-          'PSV6-VARIP-SCOPE-LOOP',
+          Codes.VARIP_SCOPE_LOOP,
         );
       }
     }
@@ -241,7 +206,7 @@ export class VaripValidator implements ValidationModule {
             const siteKey = `${line}:${name}`;
             if (!this.astAssignmentErrorSites.has(siteKey)) {
               this.astAssignmentErrorSites.add(siteKey);
-              this.addError(line, column, `varip '${name}' should use ':=' for assignment, not '${operator}'`, 'PSV6-VARIP-ASSIGNMENT');
+              this.helper.addError(line, column, `varip '${name}' should use ':=' for assignment, not '${operator}'`, Codes.VARIP_ASSIGNMENT);
             }
             return;
           }
@@ -256,11 +221,11 @@ export class VaripValidator implements ValidationModule {
           }
 
           this.astBarstateWarningSites.add(warningKey);
-          this.addWarning(
+          this.helper.addWarning(
             line,
             column,
             `varip '${name}' modification should consider barstate conditions for proper intrabar behavior`,
-            'PSV6-VARIP-BARSTATE',
+            Codes.VARIP_BARSTATE,
           );
         },
       },
@@ -351,22 +316,22 @@ export class VaripValidator implements ValidationModule {
     const varipCount = this.astVaripDeclarations.length;
 
     if (varipCount > 10) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `High number of varip variables (${varipCount}). Consider if all are necessary for performance`,
-        'PSV6-VARIP-PERFORMANCE',
+        Codes.VARIP_PERFORMANCE,
       );
     }
 
     const scriptType = this.context.scriptType ?? null;
 
     if (scriptType === 'strategy' && varipCount > 5) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         'Strategy scripts should minimize varip usage for better backtesting accuracy',
-        'PSV6-VARIP-STRATEGY',
+        Codes.VARIP_STRATEGY,
       );
     }
   }

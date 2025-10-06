@@ -11,6 +11,8 @@ import {
   type ValidationResult,
   type ValidationError,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type AssignmentStatementNode,
   type BinaryExpressionNode,
@@ -37,9 +39,7 @@ type MagicNumberRecord = { raw: string; line: number; column: number };
 export class StyleValidator implements ValidationModule {
   name = 'StyleValidator';
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
 
   getDependencies(): string[] {
@@ -47,38 +47,18 @@ export class StyleValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    this.reset();
+    this.helper.reset();
     this.context = context;
     const astContext = this.getAstContext(config);
 
     const program = astContext?.ast ?? null;
     if (!program) {
-      return {
-        isValid: true,
-        errors: this.errors,
-        warnings: this.warnings,
-        info: this.info,
-        typeMap: context.typeMap,
-        scriptType: context.scriptType,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.runAstAnalysis(program);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: context.typeMap,
-      scriptType: context.scriptType,
-    };
-  }
-
-  private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    return this.helper.buildResult(context);
   }
 
   private runAstAnalysis(program: ProgramNode): void {
@@ -114,11 +94,11 @@ export class StyleValidator implements ValidationModule {
       const suffix = names.length > 5 ? '...' : '';
       const firstLocation = poorNames.get(names[0])!;
 
-      this.addInfo(
+      this.helper.addInfo(
         firstLocation.line,
         firstLocation.column,
         `Poor variable naming detected: ${preview}${suffix}`,
-        'PSV6-STYLE-NAMING',
+        Codes.STYLE_NAMING,
         'Use descriptive variable names that clearly indicate their purpose (e.g., sma_20 instead of x).',
       );
     }
@@ -168,11 +148,11 @@ export class StyleValidator implements ValidationModule {
       const suffix = uniqueValues.length > 3 ? '...' : '';
       const location = numbers[0];
 
-      this.addInfo(
+      this.helper.addInfo(
         location.line,
         location.column,
         `Magic numbers detected: ${preview}${suffix}`,
-        'PSV6-STYLE-MAGIC',
+        Codes.STYLE_MAGIC,
         'Consider defining named constants for magic numbers to improve readability and maintainability.',
       );
     }
@@ -209,22 +189,22 @@ export class StyleValidator implements ValidationModule {
           const location = fn.identifier ?? fn;
 
           if (complexity > 5) {
-            this.addWarning(
+            this.helper.addWarning(
               location.loc.start.line,
               location.loc.start.column,
               `Function '${name}' has high complexity (${complexity} conditions).`,
-              'PSV6-STYLE-COMPLEXITY',
+              Codes.STYLE_COMPLEXITY,
               'Consider breaking down complex functions into smaller, more focused functions.',
             );
           }
 
           const length = fn.body.loc.end.line - fn.body.loc.start.line + 1;
           if (length > 20) {
-            this.addInfo(
+            this.helper.addInfo(
               location.loc.start.line,
               location.loc.start.column,
               `Function '${name}' is quite long (${length} lines).`,
-              'PSV6-STYLE-FUNCTION-LENGTH',
+              Codes.STYLE_FUNCTION_LENGTH,
               'Consider breaking long functions into smaller, more manageable pieces.',
             );
           }
@@ -324,11 +304,11 @@ export class StyleValidator implements ValidationModule {
       const line = anchor?.line ?? 1;
       const column = anchor?.column ?? 1;
 
-      this.addInfo(
+      this.helper.addInfo(
         line,
         column,
         'Consider organizing code into logical sections: inputs, calculations, and plots.',
-        'PSV6-STYLE-ORGANIZATION',
+        Codes.STYLE_ORGANIZATION,
         'Group related operations together: inputs at the top, calculations in the middle, plots at the bottom.',
       );
     }
@@ -338,21 +318,21 @@ export class StyleValidator implements ValidationModule {
       const line = anchor?.line ?? 1;
       const column = anchor?.column ?? 1;
 
-      this.addInfo(
+      this.helper.addInfo(
         line,
         column,
         'Code sections appear mixed. Consider grouping related operations.',
-        'PSV6-STYLE-MIXED-SECTIONS',
+        Codes.STYLE_MIXED_SECTIONS,
         'Organize code into clear sections: inputs, variables, calculations, conditions, and outputs.',
       );
     }
 
     if (firstInputLine !== null && firstCalculationLine !== null && firstInputLine > firstCalculationLine) {
-      this.addWarning(
+      this.helper.addWarning(
         firstInputLine,
         1,
         'Inputs should be declared before calculations.',
-        'PSV6-STYLE-INPUT-PLACEMENT',
+        Codes.STYLE_INPUT_PLACEMENT,
         'Move input declarations to the top of the script, before any calculations.',
       );
     }
@@ -548,18 +528,6 @@ export class StyleValidator implements ValidationModule {
       return false;
     }
     return magnitude >= 20;
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
-
-  private addError(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.errors.push({ line, column, message, severity: 'error', code, suggestion });
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {

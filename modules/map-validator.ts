@@ -20,6 +20,7 @@ import {
   type ValidatorConfig,
   type TypeInfo,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type AssignmentStatementNode,
@@ -74,10 +75,9 @@ export class MapValidator implements ValidationModule {
   name = 'MapValidator';
   priority = 92; // Run before TypeInferenceValidator so map value types are available for inference
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
+  private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
 
   // Map tracking
@@ -86,9 +86,6 @@ export class MapValidator implements ValidationModule {
   private mapAllocations = 0;
   private mapUsage = new Map<string, MapUsageInfo>();
   private reportedLoopWarnings = new Set<object>();
-  private errorKeys = new Set<string>();
-  private warningKeys = new Set<string>();
-  private infoKeys = new Set<string>();
 
   getDependencies(): string[] {
     return ['TypeValidator', 'ScopeValidator'];
@@ -97,11 +94,12 @@ export class MapValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.reset();
     this.context = context;
+    this.config = config;
     this.astContext = this.getAstContext(context, config);
 
     const ast = this.astContext?.ast;
     if (!ast) {
-      return this.buildModuleResult(context.scriptType);
+      return this.helper.buildResult(context);
     }
 
     this.collectMapDataAst(ast);
@@ -116,29 +114,24 @@ export class MapValidator implements ValidationModule {
       console.log('[MapValidator] debug snapshot', {
         declarations: declarationSnapshot,
         operations: Array.from(this.mapOperations.entries()),
-        errors: this.errors,
-        warnings: this.warnings,
+        errorCount: this.helper.errorList.length,
+        warningCount: this.helper.warningList.length,
       });
     }
 
     this.validateMapPerformanceAst();
     this.validateMapBestPracticesAst();
 
-    return this.buildModuleResult(context.scriptType);
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.mapDeclarations.clear();
     this.mapOperations.clear();
     this.mapAllocations = 0;
     this.mapUsage.clear();
     this.reportedLoopWarnings.clear();
-    this.errorKeys.clear();
-    this.warningKeys.clear();
-    this.infoKeys.clear();
     this.astContext = null;
   }
 
@@ -199,7 +192,7 @@ export class MapValidator implements ValidationModule {
 
             const genericsCount = call.typeArguments.length;
             if (genericsCount === 0) {
-              this.addError(
+              this.helper.addError(
                 call.loc.start.line,
                 call.loc.start.column,
                 'map.new<keyType, valueType>() requires type parameters',
@@ -207,7 +200,7 @@ export class MapValidator implements ValidationModule {
                 'Provide type parameters to map.new<keyType, valueType>()',
               );
             } else if (genericsCount > 2) {
-              this.addError(
+              this.helper.addError(
                 call.loc.start.line,
                 call.loc.start.column,
                 'map.new<keyType, valueType>() accepts at most 2 type parameters',
@@ -234,7 +227,7 @@ export class MapValidator implements ValidationModule {
               normalizedCallValue !== 'unknown' &&
               normalizedAnnotationValue !== normalizedCallValue
             ) {
-              this.addError(
+              this.helper.addError(
                 target.line,
                 target.column,
                 `Map '${target.name}' declares values of type ${normalizedAnnotationValue} but map.new<${callTypes.valueType}>() was provided`,
@@ -289,7 +282,7 @@ export class MapValidator implements ValidationModule {
             const loopNode = loopStack[loopStack.length - 1]?.node;
             if (loopNode && !this.reportedLoopWarnings.has(loopNode)) {
               this.reportedLoopWarnings.add(loopNode);
-              this.addWarning(
+              this.helper.addWarning(
                 call.loc.start.line,
                 call.loc.start.column,
                 'Map operations detected inside loop. Consider optimization.',
@@ -306,7 +299,7 @@ export class MapValidator implements ValidationModule {
   private handleMapPutAst(path: NodePath<CallExpressionNode>, loopMultiplier: number): void {
     const call = path.node;
     if (call.args.length < 1) {
-      this.addError(
+      this.helper.addError(
         call.loc.start.line,
         call.loc.start.column,
         'map.put() requires map, key, and value parameters',
@@ -325,7 +318,7 @@ export class MapValidator implements ValidationModule {
     const mapInfo = this.mapDeclarations.get(mapName);
     if (!mapInfo) {
       if (this.isKnownNonMapVariable(mapName)) {
-        this.addError(
+        this.helper.addError(
           call.loc.start.line,
           call.loc.start.column,
           `map.put() called on non-map variable '${mapName}'`,
@@ -337,7 +330,7 @@ export class MapValidator implements ValidationModule {
     }
 
     if (call.args.length < 3) {
-      this.addError(
+      this.helper.addError(
         call.loc.start.line,
         call.loc.start.column,
         'map.put() requires map, key, and value parameters',
@@ -349,7 +342,7 @@ export class MapValidator implements ValidationModule {
 
     const valueType = this.inferExpressionValueType(call.args[2].value);
     if (!this.areValueTypesCompatible(mapInfo.valueType, valueType)) {
-      this.addError(
+      this.helper.addError(
         call.loc.start.line,
         call.loc.start.column,
         `Type mismatch: trying to put '${valueType}' value into 'map<${mapInfo.valueType}>'`,
@@ -391,7 +384,7 @@ export class MapValidator implements ValidationModule {
   ): void {
     const call = path.node;
     if (call.args.length < 1) {
-      this.addError(
+      this.helper.addError(
         call.loc.start.line,
         call.loc.start.column,
         `${qualifiedName}() requires a map parameter`,
@@ -408,7 +401,7 @@ export class MapValidator implements ValidationModule {
     this.trackMapOperation(mapName, call.loc.start.line, qualifiedName === 'map.clear', loopMultiplier);
 
     if (!this.mapDeclarations.has(mapName) && this.isKnownNonMapVariable(mapName)) {
-      this.addError(
+      this.helper.addError(
         call.loc.start.line,
         call.loc.start.column,
         `${qualifiedName}() called on non-map variable '${mapName}'`,
@@ -445,7 +438,7 @@ export class MapValidator implements ValidationModule {
     this.trackMapOperation(mapName, call.loc.start.line, qualifiedName === 'map.clear', loopMultiplier);
 
     if (!this.mapDeclarations.has(mapName) && this.isKnownNonMapVariable(mapName)) {
-      this.addError(
+      this.helper.addError(
         call.loc.start.line,
         call.loc.start.column,
         `${qualifiedName}() called on non-map variable '${mapName}'`,
@@ -517,7 +510,7 @@ export class MapValidator implements ValidationModule {
       qualifiedName === 'map.copy'
     ) {
       if (call.args.length === 0) {
-        this.addError(
+        this.helper.addError(
           call.loc.start.line,
           call.loc.start.column,
           `${qualifiedName}() requires a map parameter`,
@@ -528,7 +521,7 @@ export class MapValidator implements ValidationModule {
       }
 
       if (call.args.length > 1) {
-        this.addError(
+        this.helper.addError(
           call.loc.start.line,
           call.loc.start.column,
           `${qualifiedName}() takes only one parameter`,
@@ -543,7 +536,7 @@ export class MapValidator implements ValidationModule {
 
   private validateMapPerformanceAst(): void {
     if (this.mapAllocations > 10) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `Too many map allocations (${this.mapAllocations}). Consider reusing maps or using arrays.`,
@@ -555,7 +548,7 @@ export class MapValidator implements ValidationModule {
     for (const [mapName, operationCount] of this.mapOperations) {
       if (operationCount > 100) {
         const mapInfo = this.mapDeclarations.get(mapName);
-        this.addWarning(
+        this.helper.addWarning(
           mapInfo?.line ?? 1,
           mapInfo?.column ?? 1,
           `Map '${mapName}' has many operations (${operationCount}). Consider optimization.`,
@@ -569,7 +562,7 @@ export class MapValidator implements ValidationModule {
   private validateMapBestPracticesAst(): void {
     for (const [mapName, mapInfo] of this.mapDeclarations) {
       if (mapName.length <= 2 || /^m\d*$/.test(mapName)) {
-        this.addInfo(
+        this.helper.addInfo(
           mapInfo.line,
           mapInfo.column,
           `Consider using a more descriptive name for map '${mapName}'`,
@@ -579,7 +572,7 @@ export class MapValidator implements ValidationModule {
       }
 
       if (!mapInfo.isInitialized) {
-        this.addInfo(
+        this.helper.addInfo(
           mapInfo.line,
           mapInfo.column,
           `Map '${mapName}' is declared but never initialized with values`,
@@ -591,7 +584,7 @@ export class MapValidator implements ValidationModule {
 
     const hasClearOperations = Array.from(this.mapUsage.values()).some((usage) => usage.clears.length > 0);
     if (this.mapAllocations > 0 && !hasClearOperations) {
-      this.addInfo(
+      this.helper.addInfo(
         1,
         1,
         'Consider using map.clear() to free memory when maps are no longer needed',
@@ -637,54 +630,15 @@ export class MapValidator implements ValidationModule {
     }
 
     return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
+      isValid: true,
+      errors: [],
+      warnings: [],
+      info: [],
       typeMap,
       scriptType,
     };
   }
 
-  private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    const key = `${line}:${column}:${code ?? 'error'}:${message}`;
-    if (this.errorKeys.has(key)) {
-      return;
-    }
-    this.errorKeys.add(key);
-    if (this.isClearlyInvalid(message, code)) {
-      this.errors.push({ line, column, message, severity: 'error', code, suggestion });
-    } else {
-      this.warningKeys.add(key);
-      this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-    }
-  }
-
-  private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    const key = `${line}:${column}:${code ?? 'warning'}:${message}`;
-    if (this.warningKeys.has(key)) {
-      return;
-    }
-    this.warningKeys.add(key);
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
-
-  private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    const key = `${line}:${column}:${code ?? 'info'}:${message}`;
-    if (this.infoKeys.has(key)) {
-      return;
-    }
-    this.infoKeys.add(key);
-    this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
-
-  private isClearlyInvalid(_message: string, code?: string): boolean {
-    if (code === 'PSV6-MAP-DECLARATION') return true;
-    if (code === 'PSV6-MAP-OPERATION-NON-MAP') return true;
-    if (code === 'PSV6-MAP-METHOD-PARAMS') return true;
-    if (code === 'PSV6-MAP-TYPE-MISMATCH' || code === 'PSV6-MAP-VALUE-TYPE-MISMATCH') return true;
-    return false;
-  }
 
   private extractIdentifierName(argument: ArgumentNode | undefined): string | null {
     if (!argument) {

@@ -11,6 +11,8 @@ import {
   type ValidatorConfig,
   type TypeInfo,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type BinaryExpressionNode,
@@ -107,9 +109,7 @@ export class EnumValidator implements ValidationModule {
   name = 'EnumValidator';
   priority = 85; // Run before ScopeValidator to register enum types
   
-  private errors: Array<{ line: number; column: number; message: string; code: string }> = [];
-  private warnings: Array<{ line: number; column: number; message: string; code: string }> = [];
-  private info: Array<{ line: number; column: number; message: string; code: string }> = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
@@ -123,19 +123,13 @@ export class EnumValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
+    this.helper.reset();
     this.reset();
     this.context = context;
     this.config = config;
 
     if (config.ast?.mode === 'disabled') {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: context.typeMap,
-        scriptType: context.scriptType,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.astContext = isAstValidationContext(context) && context.ast ? context : null;
@@ -143,32 +137,15 @@ export class EnumValidator implements ValidationModule {
     const program = this.astContext?.ast ?? null;
     if (!program) {
       this.validateWithoutAstFallback();
-      return {
-        isValid: this.errors.length === 0,
-        errors: this.errors.map((e) => ({ ...e, severity: 'error' as const })),
-        warnings: this.warnings.map((w) => ({ ...w, severity: 'warning' as const })),
-        info: this.info.map((i) => ({ ...i, severity: 'info' as const })),
-        typeMap: context.typeMap,
-        scriptType: context.scriptType,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(program);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors.map((e) => ({ ...e, severity: 'error' as const })),
-      warnings: this.warnings.map((w) => ({ ...w, severity: 'warning' as const })),
-      info: this.info.map((i) => ({ ...i, severity: 'info' as const })),
-      typeMap: context.typeMap,
-      scriptType: context.scriptType,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
     this.astContext = null;
     this.astEnumDeclarations.clear();
     this.astEnumVariables.clear();
@@ -176,17 +153,6 @@ export class EnumValidator implements ValidationModule {
     this.functionParamEnumHints.clear();
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({ line, column, message, code });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({ line, column, message, code });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({ line, column, message, code });
-  }
 
   private validateWithAst(program: ProgramNode): void {
     visit(program, {
@@ -240,11 +206,11 @@ export class EnumValidator implements ValidationModule {
     this.recordTypeUsage(enumName, node.identifier);
 
     if (!ENUM_NAME_PATTERN.test(enumName)) {
-      this.addInfo(line, column, `Consider using PascalCase for enum names: ${enumName}`, 'PSV6-ENUM-NAMING-SUGGESTION');
+      this.helper.addInfo(line, column, `Consider using PascalCase for enum names: ${enumName}`, Codes.ENUM_NAMING_SUGGESTION);
     }
 
     if (node.members.length === 0) {
-      this.addError(line, column, 'Enum declaration must have at least one value', 'PSV6-ENUM-EMPTY');
+      this.helper.addError(line, column, 'Enum declaration must have at least one value', Codes.ENUM_EMPTY);
     }
 
     const seen = new Set<string>();
@@ -259,24 +225,24 @@ export class EnumValidator implements ValidationModule {
       const trimmedValue = lineWithoutComment.trim();
 
       if (trimmedValue && !/^[A-Za-z_]/.test(trimmedValue)) {
-        this.addError(memberLoc.line, memberLoc.column, `Invalid enum value name: ${trimmedValue}`, 'PSV6-ENUM-INVALID-VALUE-NAME');
+        this.helper.addError(memberLoc.line, memberLoc.column, `Invalid enum value name: ${trimmedValue}`, Codes.ENUM_INVALID_VALUE_NAME);
         continue;
       }
 
       if (!IDENTIFIER_PATTERN.test(memberName)) {
-        this.addError(memberLoc.line, memberLoc.column, `Invalid enum value name: ${memberName}`, 'PSV6-ENUM-INVALID-VALUE-NAME');
+        this.helper.addError(memberLoc.line, memberLoc.column, `Invalid enum value name: ${memberName}`, Codes.ENUM_INVALID_VALUE_NAME);
         continue;
       }
 
       if (seen.has(memberName)) {
-        this.addError(memberLoc.line, memberLoc.column, `Duplicate enum value: ${memberName}`, 'PSV6-ENUM-DUPLICATE-VALUE');
+        this.helper.addError(memberLoc.line, memberLoc.column, `Duplicate enum value: ${memberName}`, Codes.ENUM_DUPLICATE_VALUE);
       } else {
         seen.add(memberName);
         info.members.set(memberName, member);
       }
 
       if (!ENUM_VALUE_PATTERN.test(memberName)) {
-        this.addInfo(memberLoc.line, memberLoc.column, `Consider using UPPER_CASE for enum values: ${memberName}`, 'PSV6-ENUM-VALUE-NAMING-SUGGESTION');
+        this.helper.addInfo(memberLoc.line, memberLoc.column, `Consider using UPPER_CASE for enum values: ${memberName}`, Codes.ENUM_VALUE_NAMING_SUGGESTION);
       }
 
       this.setTypeMapEntry(`${enumName}.${memberName}`, member.identifier, { type: 'enum', isConst: true, isSeries: false });
@@ -355,26 +321,26 @@ export class EnumValidator implements ValidationModule {
     const enumInfo = this.astEnumDeclarations.get(enumReference.enumName);
     if (!enumInfo) {
       const { line, column } = enumReference.node.object.loc.start;
-      this.addError(line, column, `Undefined enum type: ${enumReference.enumName}`, 'PSV6-ENUM-UNDEFINED-TYPE');
+      this.helper.addError(line, column, `Undefined enum type: ${enumReference.enumName}`, Codes.ENUM_UNDEFINED_TYPE);
       return;
     }
 
     if (!enumInfo.members.has(enumReference.memberName)) {
       const { line, column } = enumReference.node.property.loc.start;
-      this.addError(line, column, `Undefined enum value: ${enumReference.enumName}.${enumReference.memberName}`, 'PSV6-ENUM-UNDEFINED-VALUE');
+      this.helper.addError(line, column, `Undefined enum value: ${enumReference.enumName}.${enumReference.memberName}`, Codes.ENUM_UNDEFINED_VALUE);
     } else {
       this.recordTypeUsage(`${enumReference.enumName}.${enumReference.memberName}`, enumReference.node.property);
     }
 
     if (declaredEnum && declaredEnum !== enumReference.enumName) {
       const { line, column } = node.identifier.loc.start;
-      this.addError(line, column, `Type mismatch: expected ${declaredEnum}, got ${enumReference.enumName}`, 'PSV6-ENUM-TYPE-MISMATCH');
+      this.helper.addError(line, column, `Type mismatch: expected ${declaredEnum}, got ${enumReference.enumName}`, Codes.ENUM_TYPE_MISMATCH);
       return;
     }
 
     if (typeName && !declaredEnum && !this.astEnumDeclarations.has(typeName)) {
       const { line, column } = node.identifier.loc.start;
-      this.addError(line, column, `Type mismatch: expected ${typeName}, got ${enumReference.enumName}`, 'PSV6-ENUM-TYPE-MISMATCH');
+      this.helper.addError(line, column, `Type mismatch: expected ${typeName}, got ${enumReference.enumName}`, Codes.ENUM_TYPE_MISMATCH);
       return;
     }
 
@@ -413,13 +379,13 @@ export class EnumValidator implements ValidationModule {
       }
 
       const { line, column } = reference.node.object.loc.start;
-      this.addError(line, column, `Undefined enum type: ${reference.enumName}`, 'PSV6-ENUM-UNDEFINED-TYPE');
+      this.helper.addError(line, column, `Undefined enum type: ${reference.enumName}`, Codes.ENUM_UNDEFINED_TYPE);
       return;
     }
 
     if (!enumInfo.members.has(reference.memberName)) {
       const { line, column } = reference.node.property.loc.start;
-      this.addError(line, column, `Undefined enum value: ${reference.enumName}.${reference.memberName}`, 'PSV6-ENUM-UNDEFINED-VALUE');
+      this.helper.addError(line, column, `Undefined enum value: ${reference.enumName}.${reference.memberName}`, Codes.ENUM_UNDEFINED_VALUE);
       return;
     }
 
@@ -437,7 +403,7 @@ export class EnumValidator implements ValidationModule {
     if (leftReference && rightReference) {
       if (leftReference.enumName !== rightReference.enumName) {
         const { line, column } = node.loc.start;
-        this.addWarning(line, column, 'Comparing enum values from different types', 'PSV6-ENUM-COMPARISON-TYPE-MISMATCH');
+        this.helper.addWarning(line, column, 'Comparing enum values from different types', Codes.ENUM_COMPARISON_TYPE_MISMATCH);
       }
       return;
     }
@@ -455,14 +421,14 @@ export class EnumValidator implements ValidationModule {
 
     const { line, column } = node.loc.start;
     if (identifier) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Comparing enum variable of type ${variableType} with ${enumType} enum value`,
-        'PSV6-ENUM-COMPARISON-TYPE-MISMATCH',
+        Codes.ENUM_COMPARISON_TYPE_MISMATCH,
       );
     } else {
-      this.addWarning(line, column, 'Comparing enum values from different types', 'PSV6-ENUM-COMPARISON-TYPE-MISMATCH');
+      this.helper.addWarning(line, column, 'Comparing enum values from different types', Codes.ENUM_COMPARISON_TYPE_MISMATCH);
     }
   }
 
@@ -493,11 +459,11 @@ export class EnumValidator implements ValidationModule {
       }
 
       const { line, column } = arg.value.loc.start;
-      this.addError(
+      this.helper.addError(
         line,
         column,
         `Function parameter type mismatch: expected ${expected}, got ${reference.enumName}`,
-        'PSV6-ENUM-FUNCTION-TYPE-MISMATCH',
+        Codes.ENUM_FUNCTION_TYPE_MISMATCH,
       );
     });
   }
@@ -518,17 +484,17 @@ export class EnumValidator implements ValidationModule {
       const enumInfo = this.astEnumDeclarations.get(reference.enumName);
       if (!enumInfo) {
         const { line, column } = reference.node.object.loc.start;
-        this.addError(line, column, `Undefined enum type: ${reference.enumName}`, 'PSV6-ENUM-UNDEFINED-TYPE');
+        this.helper.addError(line, column, `Undefined enum type: ${reference.enumName}`, Codes.ENUM_UNDEFINED_TYPE);
         return;
       }
 
       if (!enumInfo.members.has(reference.memberName)) {
         const { line, column } = reference.node.property.loc.start;
-        this.addError(
+        this.helper.addError(
           line,
           column,
           `Undefined enum value in switch case: ${reference.enumName}.${reference.memberName}`,
-          'PSV6-ENUM-SWITCH-CASE-TYPE-MISMATCH',
+          Codes.ENUM_SWITCH_CASE_TYPE_MISMATCH,
         );
         return;
       }
@@ -537,11 +503,11 @@ export class EnumValidator implements ValidationModule {
 
       if (discriminantType && discriminantType !== reference.enumName) {
         const { line, column } = caseNode.loc.start;
-        this.addError(
+        this.helper.addError(
           line,
           column,
           `Switch case enum type mismatch: expected ${discriminantType}, got ${reference.enumName}`,
-          'PSV6-ENUM-SWITCH-CASE-TYPE-MISMATCH',
+          Codes.ENUM_SWITCH_CASE_TYPE_MISMATCH,
         );
       }
     });
@@ -633,7 +599,7 @@ export class EnumValidator implements ValidationModule {
     // Check if this is a variable (loop iterator, parameter, local variable)
     // These should not be treated as enum references
     // But enum type names ARE in the symbol table, so we need to check if it's actually an enum
-    const symbolInfo = this.context.symbolTable.get(object.name);
+    const symbolInfo = (this.context as any).symbolTable?.get(object.name);
     if (symbolInfo && symbolInfo.declarations.length > 0) {
       // Check if this is an enum type (not a variable)
       const isEnumType = this.astEnumDeclarations.has(object.name) || objectInfo?.type === 'enum';
@@ -828,11 +794,11 @@ export class EnumValidator implements ValidationModule {
           }
 
           const { line, column } = this.indexToPosition(lineOffsets, arg.startIndex);
-          this.addError(
+          this.helper.addError(
             line,
             column,
             `Function parameter type mismatch: expected ${expectedEnum}, got ${reference.enumName}`,
-            'PSV6-ENUM-FUNCTION-TYPE-MISMATCH',
+            Codes.ENUM_FUNCTION_TYPE_MISMATCH,
           );
         });
       }

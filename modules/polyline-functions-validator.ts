@@ -7,6 +7,7 @@ import {
   type ValidationResult,
   type TypeInfo,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type AssignmentStatementNode,
@@ -31,9 +32,7 @@ export class PolylineFunctionsValidator implements ValidationModule {
   name = 'PolylineFunctionsValidator';
   priority = 86;
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
 
@@ -46,20 +45,14 @@ export class PolylineFunctionsValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
+    this.helper.reset();
     this.reset();
     this.context = context;
 
     this.astContext = this.getAstContext(config);
     const ast = this.astContext?.ast;
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.collectPolylineDataFromAst(ast);
@@ -68,20 +61,15 @@ export class PolylineFunctionsValidator implements ValidationModule {
     this.checkBestPractices();
     this.checkTooManyOperations();
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: this.typeMapUpdates,
-      scriptType: null
-    };
+    // Update context typeMap
+    for (const [name, info] of this.typeMapUpdates) {
+      context.typeMap.set(name, info);
+    }
+
+    return this.helper.buildResult(context);
   }
 
   private reset() {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
     this.astContext = null;
     this.calls = [];
     this.idVars.clear();
@@ -218,39 +206,39 @@ export class PolylineFunctionsValidator implements ValidationModule {
     switch (fn) {
       case 'new':
         if (args.length < 1) {
-          this.addError(line, column, 'polyline.new requires points array parameter', 'PSV6-POLYLINE-NEW-PARAMS');
+          this.helper.addError(line, column, 'polyline.new requires points array parameter', 'PSV6-POLYLINE-NEW-PARAMS');
           return;
         }
         if (!this.isArrayArg(args[0])) {
-          this.addWarning(line, column, 'polyline.new points should be an array', 'PSV6-POLYLINE-NEW-POINTS-TYPE');
+          this.helper.addWarning(line, column, 'polyline.new points should be an array', 'PSV6-POLYLINE-NEW-POINTS-TYPE');
         } else {
           // Heuristic: points should be an array of line references
           const pointsCheck = this.isPointsArrayOfLines(args[0]);
           if (!pointsCheck.ok) {
-            this.addWarning(line, column, pointsCheck.message, pointsCheck.code);
+            this.helper.addWarning(line, column, pointsCheck.message, pointsCheck.code);
           }
         }
         // optional style,color,width
-        this.addInfo(line, column, 'Polyline created', 'PSV6-POLYLINE-NEW-INFO');
+        this.helper.addInfo(line, column, 'Polyline created', 'PSV6-POLYLINE-NEW-INFO');
         break;
       case 'delete':
         if (args.length < 1) {
-          this.addError(line, column, 'polyline.delete requires (id)', 'PSV6-POLYLINE-DELETE-PARAMS');
+          this.helper.addError(line, column, 'polyline.delete requires (id)', 'PSV6-POLYLINE-DELETE-PARAMS');
           return;
         }
         this.validateIdArg(args[0], line, column);
         if (args[0].trim() === 'na') {
-          this.addError(line, column, 'polyline id cannot be na', 'PSV6-POLYLINE-ID-NA');
+          this.helper.addError(line, column, 'polyline id cannot be na', 'PSV6-POLYLINE-ID-NA');
         } else if (this.isEmptyString(args[0])) {
-          this.addWarning(line, column, 'Empty string id is suspicious', 'PSV6-POLYLINE-ID-STRING');
+          this.helper.addWarning(line, column, 'Empty string id is suspicious', 'PSV6-POLYLINE-ID-STRING');
         } else {
-          this.addInfo(line, column, 'Polyline deleted', 'PSV6-POLYLINE-DELETE-INFO');
+          this.helper.addInfo(line, column, 'Polyline deleted', 'PSV6-POLYLINE-DELETE-INFO');
         }
         break;
     }
     // Complexity hint for nested expressions in arguments
     if (args.some(a => this.isComplex(a))) {
-      this.addWarning(line, column, 'Complex polyline expression', 'PSV6-POLYLINE-COMPLEXITY');
+      this.helper.addWarning(line, column, 'Complex polyline expression', 'PSV6-POLYLINE-COMPLEXITY');
     }
   }
 
@@ -258,20 +246,20 @@ export class PolylineFunctionsValidator implements ValidationModule {
     const hasNew = this.calls.some(c => c.fn === 'new');
     const hasDelete = this.calls.some(c => c.fn === 'delete');
     if (hasNew && hasDelete) {
-      this.addInfo(1, 1, 'Good polyline lifecycle management (create/delete)', 'PSV6-POLYLINE-BEST-PRACTICE');
+      this.helper.addInfo(1, 1, 'Good polyline lifecycle management (create/delete)', 'PSV6-POLYLINE-BEST-PRACTICE');
     } else if (hasNew && !hasDelete) {
-      this.addInfo(1, 1, 'Consider deleting polylines to free resources', 'PSV6-POLYLINE-MEMORY-SUGGESTION');
+      this.helper.addInfo(1, 1, 'Consider deleting polylines to free resources', 'PSV6-POLYLINE-MEMORY-SUGGESTION');
     }
   }
 
   private checkTooManyOperations() {
     const count = this.calls.length;
     if (count > 12) {
-      this.addWarning(1, 1, 'Many polyline operations detected', 'PSV6-POLYLINE-PERF-MANY-CALLS');
+      this.helper.addWarning(1, 1, 'Many polyline operations detected', 'PSV6-POLYLINE-PERF-MANY-CALLS');
     }
     const newCount = this.calls.filter(c => c.fn === 'new').length;
     if (newCount > 50) {
-      this.addError(1, 1, 'Polyline object limit exceeded', 'PSV6-POLYLINE-LIMIT-EXCEEDED');
+      this.helper.addError(1, 1, 'Polyline object limit exceeded', 'PSV6-POLYLINE-LIMIT-EXCEEDED');
     }
   }
 
@@ -303,21 +291,12 @@ export class PolylineFunctionsValidator implements ValidationModule {
     // If simple identifier but not seen before, warn (soft check)
     const m = t.match(/^[A-Za-z_][A-Za-z0-9_]*$/);
     if (m && !this.idVars.has(m[0])) {
-      this.addWarning(line, column, 'Unknown polyline id reference', 'PSV6-POLYLINE-ID-UNKNOWN');
+      this.helper.addWarning(line, column, 'Unknown polyline id reference', 'PSV6-POLYLINE-ID-UNKNOWN');
     }
   }
   private isEmptyString(s: string): boolean { const t = s.trim(); return t === '""' || t === "''"; }
   private isComplex(s: string): boolean { const t = s.trim(); return /\bta\./.test(t) || /\(/.test(t) || /\+|\-|\*|\//.test(t); }
 
-  private addError(line: number, column: number, message: string, code: string) {
-    this.errors.push({ line, column, message, code, severity: 'error' });
-  }
-  private addWarning(line: number, column: number, message: string, code: string) {
-    this.warnings.push({ line, column, message, code, severity: 'warning' });
-  }
-  private addInfo(line: number, column: number, message: string, code: string) {
-    this.info.push({ line, column, message, code, severity: 'info' });
-  }
 
   private getArgumentText(argument: ArgumentNode): string {
     const valueText = this.getExpressionText(argument.value).trim();

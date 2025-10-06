@@ -22,6 +22,8 @@ import {
   type ValidationResult,
   type TypeInfo,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type AssignmentStatementNode,
@@ -49,9 +51,7 @@ export class LinefillValidator implements ValidationModule {
   name = 'LinefillValidator';
   priority = 85; // High priority - linefills are important v6 drawing features
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
 
@@ -73,19 +73,13 @@ export class LinefillValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
+    this.helper.reset();
     this.reset();
     this.context = context;
     this.astContext = this.getAstContext(config);
 
     if (config.ast?.mode === 'disabled') {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: context.scriptType,
-      };
+      return this.helper.buildResult(context);
     }
 
     const ast = this.astContext?.ast;
@@ -94,14 +88,7 @@ export class LinefillValidator implements ValidationModule {
       // This handles edge cases where AST parsing fails
       this.detectMalformedSyntax();
       
-      return {
-        isValid: this.errors.length === 0,
-        errors: this.errors,
-        warnings: this.warnings,
-        info: this.info,
-        typeMap: new Map(),
-        scriptType: context.scriptType,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.collectLinefillDataFromAst(ast);
@@ -123,14 +110,12 @@ export class LinefillValidator implements ValidationModule {
       usages: [],
     });
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap,
-      scriptType: null
-    };
+    // Update context typeMap with linefill types
+    for (const [name, info] of typeMap) {
+      context.typeMap.set(name, info);
+    }
+
+    return this.helper.buildResult(context);
   }
 
   /**
@@ -157,42 +142,40 @@ export class LinefillValidator implements ValidationModule {
       // Pattern 1: Trailing comma before closing parenthesis
       // Example: linefill.new(line1, line2,)
       if (/linefill\.\w+\([^)]*,\s*\)/.test(trimmed)) {
-        this.addError(
+        this.helper.addError(
           lineNum,
           1,
           'Malformed syntax: trailing comma before closing parenthesis',
-          'PSV6-SYNTAX-ERROR',
+          Codes.SYNTAX_ERROR,
         );
       }
       
       // Pattern 2: Named parameter with missing value
       // Example: linefill.set_color(fill, color=)
       if (/\w+\s*=\s*[,)]/.test(trimmed)) {
-        this.addError(
+        this.helper.addError(
           lineNum,
           1,
           'Malformed syntax: named parameter missing value',
-          'PSV6-SYNTAX-ERROR',
+          Codes.SYNTAX_ERROR,
         );
       }
       
       // Pattern 3: Empty function call
       // Example: linefill.new()
       if (/linefill\.new\(\s*\)/.test(trimmed)) {
-        this.addError(
+        this.helper.addError(
           lineNum,
           1,
           'linefill.new() requires at least 2 parameters',
-          'PSV6-FUNCTION-PARAM-COUNT',
+          Codes.FUNCTION_PARAM_COUNT,
         );
       }
     });
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.linefillFunctionCalls = [];
     this.linefillOperations.clear();
     this.linefillCount = 0;
@@ -346,13 +329,13 @@ export class LinefillValidator implements ValidationModule {
     }
 
     if (inLoop) {
-      this.addWarning(lineNum, column, 'Linefill operation in loop', 'PSV6-LINEFILL-PERF-LOOP');
+      this.helper.addWarning(lineNum, column, 'Linefill operation in loop', Codes.LINEFILL_PERF_LOOP);
     }
 
     if (!this.hasComplexOperationWarning) {
       const callsOnLine = this.linefillFunctionCalls.filter((call) => call.line === lineNum);
       if (callsOnLine.length > 1) {
-        this.addWarning(lineNum, column, 'Multiple linefill operations on one line', 'PSV6-LINEFILL-PERF-COMPLEX');
+        this.helper.addWarning(lineNum, column, 'Multiple linefill operations on one line', Codes.LINEFILL_PERF_COMPLEX);
         this.hasComplexOperationWarning = true;
       }
     }
@@ -361,7 +344,7 @@ export class LinefillValidator implements ValidationModule {
   private validateLinefillFunction(functionName: string, args: string[], lineNum: number, column: number): void {
     // Check if it's a known linefill function
     if (!NS_MEMBERS.linefill || !NS_MEMBERS.linefill.has(functionName)) {
-      this.addError(lineNum, column, `Unknown linefill function: linefill.${functionName}`, 'PSV6-LINEFILL-UNKNOWN-FUNCTION');
+      this.helper.addError(lineNum, column, `Unknown linefill function: linefill.${functionName}`, 'PSV6-LINEFILL-UNKNOWN-FUNCTION');
       return;
     }
 
@@ -382,13 +365,13 @@ export class LinefillValidator implements ValidationModule {
         this.validateLinefillGetLine2(args, lineNum, column);
         break;
       default:
-        this.addError(lineNum, column, `Unknown linefill function: linefill.${functionName}`, 'PSV6-LINEFILL-UNKNOWN-FUNCTION');
+        this.helper.addError(lineNum, column, `Unknown linefill function: linefill.${functionName}`, Codes.LINEFILL_UNKNOWN_FUNCTION);
     }
   }
 
   private validateLinefillNew(args: string[], lineNum: number, column: number): void {
     if (args.length < 2) {
-      this.addError(lineNum, column, 'linefill.new() requires at least 2 parameters (line1, line2)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'linefill.new() requires at least 2 parameters (line1, line2)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
 
@@ -397,18 +380,18 @@ export class LinefillValidator implements ValidationModule {
     const line2 = args[1].trim();
 
     if (!this.isLineObject(line1)) {
-      this.addError(lineNum, column, 'Parameter 1 must be a line object', 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'Parameter 1 must be a line object', Codes.FUNCTION_PARAM_TYPE);
     }
 
     if (!this.isLineObject(line2)) {
-      this.addError(lineNum, column, 'Parameter 2 must be a line object', 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'Parameter 2 must be a line object', Codes.FUNCTION_PARAM_TYPE);
     }
 
     // Validate optional color parameter
     if (args.length > 2) {
       const color = args[2].trim();
       if (!this.isColorExpression(color)) {
-        this.addError(lineNum, column, 'color parameter must be a valid color', 'PSV6-FUNCTION-PARAM-TYPE');
+        this.helper.addError(lineNum, column, 'color parameter must be a valid color', Codes.FUNCTION_PARAM_TYPE);
       }
     }
 
@@ -418,12 +401,12 @@ export class LinefillValidator implements ValidationModule {
         const color = args[2].trim();
         // Suggest transparency if using a solid color (not already using color.new)
         if (color.startsWith('color=color.') && !color.includes('color.new')) {
-          this.addInfo(lineNum, column, 'Consider using color.new() for transparency', 'PSV6-LINEFILL-TRANSPARENCY-SUGGESTION');
+          this.helper.addInfo(lineNum, column, 'Consider using color.new() for transparency', Codes.LINEFILL_TRANSPARENCY_SUGGESTION);
           this.hasTransparencySuggestion = true;
         }
       } else {
         // Suggest adding color with transparency
-        this.addInfo(lineNum, column, 'Consider using color.new() for transparency', 'PSV6-LINEFILL-TRANSPARENCY-SUGGESTION');
+        this.helper.addInfo(lineNum, column, 'Consider using color.new() for transparency', Codes.LINEFILL_TRANSPARENCY_SUGGESTION);
         this.hasTransparencySuggestion = true;
       }
     }
@@ -431,7 +414,7 @@ export class LinefillValidator implements ValidationModule {
 
   private validateLinefillSetColor(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'linefill.set_color() requires exactly 2 parameters', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'linefill.set_color() requires exactly 2 parameters', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
 
@@ -439,58 +422,58 @@ export class LinefillValidator implements ValidationModule {
     const color = args[1].trim();
 
     if (!this.isLinefillObject(linefillId)) {
-      this.addError(lineNum, column, 'Parameter 1 must be a linefill object', 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'Parameter 1 must be a linefill object', Codes.FUNCTION_PARAM_TYPE);
     }
 
     if (!this.isColorExpression(color)) {
-      this.addError(lineNum, column, 'color parameter must be a valid color', 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'color parameter must be a valid color', Codes.FUNCTION_PARAM_TYPE);
     }
   }
 
   private validateLinefillDelete(args: string[], lineNum: number, column: number): void {
     if (args.length !== 1) {
-      this.addError(lineNum, column, 'linefill.delete() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'linefill.delete() requires exactly 1 parameter', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
 
     const linefillId = args[0].trim();
     if (!this.isLinefillObject(linefillId)) {
-      this.addError(lineNum, column, 'Parameter must be a linefill object', 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'Parameter must be a linefill object', Codes.FUNCTION_PARAM_TYPE);
     }
   }
 
   private validateLinefillGetLine1(args: string[], lineNum: number, column: number): void {
     if (args.length !== 1) {
-      this.addError(lineNum, column, 'linefill.get_line1() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'linefill.get_line1() requires exactly 1 parameter', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
 
     const linefillId = args[0].trim();
     if (!this.isLinefillObject(linefillId)) {
-      this.addError(lineNum, column, 'Parameter must be a linefill object', 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'Parameter must be a linefill object', Codes.FUNCTION_PARAM_TYPE);
     }
   }
 
   private validateLinefillGetLine2(args: string[], lineNum: number, column: number): void {
     if (args.length !== 1) {
-      this.addError(lineNum, column, 'linefill.get_line2() requires exactly 1 parameter', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'linefill.get_line2() requires exactly 1 parameter', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
 
     const linefillId = args[0].trim();
     if (!this.isLinefillObject(linefillId)) {
-      this.addError(lineNum, column, 'Parameter must be a linefill object', 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'Parameter must be a linefill object', Codes.FUNCTION_PARAM_TYPE);
     }
   }
 
   private validateLinefillPerformance(): void {
     // Check for too many linefill objects
     if (this.linefillCount > 10) {
-      this.addWarning(
+      this.helper.addWarning(
         0,
         0,
         `Too many linefill objects (${this.linefillCount}). Consider optimizing for better performance.`,
-        'PSV6-LINEFILL-PERF-MANY'
+        Codes.LINEFILL_PERF_MANY
       );
     }
   }
@@ -506,11 +489,11 @@ export class LinefillValidator implements ValidationModule {
     for (const [key, count] of callCounts) {
       if (count >= 3 && !this.hasCacheSuggestion) {
         const funcName = key.split('(')[0];
-        this.addInfo(
+        this.helper.addInfo(
           1,
           1,
           `Multiple similar linefill operations detected. Consider caching results.`,
-          'PSV6-LINEFILL-CACHE-SUGGESTION'
+          Codes.LINEFILL_CACHE_SUGGESTION
         );
         this.hasCacheSuggestion = true;
         break; // Only suggest once
@@ -519,11 +502,11 @@ export class LinefillValidator implements ValidationModule {
 
     // Suggest cleanup for many linefills
     if (this.linefillCount >= 5 && !this.hasCleanupSuggestion) {
-      this.addInfo(
+      this.helper.addInfo(
         1,
         1,
         'Consider using linefill.delete() to clean up unused linefills and improve performance.',
-        'PSV6-LINEFILL-CLEANUP-SUGGESTION'
+        Codes.LINEFILL_CLEANUP_SUGGESTION
       );
       this.hasCleanupSuggestion = true;
     }
@@ -622,35 +605,6 @@ export class LinefillValidator implements ValidationModule {
     return false;
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({
-      line,
-      column,
-      message,
-      severity: 'error',
-      code
-    });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({
-      line,
-      column,
-      message,
-      severity: 'warning',
-      code
-    });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({
-      line,
-      column,
-      message,
-      severity: 'info',
-      code
-    });
-  }
 
   // Getter methods for other modules
   getLinefillFunctionCalls(): LinefillFunctionCall[] {

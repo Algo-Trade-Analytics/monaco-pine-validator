@@ -7,6 +7,7 @@ import {
   type ValidationResult,
   type TypeInfo,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import { BUILTIN_FUNCTIONS_V6_RULES, NS_MEMBERS } from '../core/constants';
 import {
   type ArgumentNode,
@@ -46,9 +47,7 @@ export class TAFunctionsValidator implements ValidationModule {
     'camarilla',
   ]);
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
   private astTaCallLines: Set<number> = new Set();
@@ -68,17 +67,18 @@ export class TAFunctionsValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
+    this.helper.reset();
     this.reset();
     this.context = context;
 
     if (config.ast?.mode === 'disabled') {
-      return this.buildResult();
+      return this.helper.buildResult(context);
     }
 
     this.astContext = this.getAstContext(config);
     const program = this.astContext?.ast ?? null;
     if (!program) {
-      return this.buildResult();
+      return this.helper.buildResult(context);
     }
 
     this.collectTAFunctionDataAst(program);
@@ -99,13 +99,14 @@ export class TAFunctionsValidator implements ValidationModule {
       });
     }
 
-    return this.buildResult(typeMap);
+    // Merge typeMap into context
+    for (const [key, value] of typeMap) {
+      context.typeMap.set(key, value);
+    }
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
     this.astContext = null;
     this.astTaCallLines.clear();
     this.astLineCallCounts.clear();
@@ -162,11 +163,12 @@ export class TAFunctionsValidator implements ValidationModule {
     this.astLineCallCounts.set(line, (this.astLineCallCounts.get(line) ?? 0) + 1);
 
     if (!this.isKnownTAFunction(functionName)) {
-      this.addError(
+      this.helper.addWarning(
         line,
         column,
-        `PSV6-TA-FUNCTION-UNKNOWN: Unknown TA function: ${qualifiedName}`,
-        `TA function '${qualifiedName}' is not recognized. Check spelling and ensure it's a valid Pine Script v6 TA function.`,
+        `Unknown TA function: ${qualifiedName}`,
+        'PSV6-TA-FUNCTION-UNKNOWN',
+        `TA function '${qualifiedName}' is not recognized. Check spelling and ensure it's a valid Pine Script v6 TA function.`
       );
       return;
     }
@@ -243,7 +245,7 @@ export class TAFunctionsValidator implements ValidationModule {
   private emitAstLineWarnings(): void {
     for (const [line, count] of this.astLineCallCounts) {
       if (count > 1) {
-        this.addWarning(line, 1, 'PSV6-TA-PERF-NESTED', 'Multiple TA operations on one line');
+        this.helper.addWarning(line, 1, 'Multiple TA operations on one line', 'PSV6-TA-PERF-NESTED');
       }
     }
   }
@@ -252,7 +254,7 @@ export class TAFunctionsValidator implements ValidationModule {
     for (const [line, signatures] of this.taCallSignaturesByLine) {
       for (const count of signatures.values()) {
         if (count > 1) {
-          this.addInfo(
+          this.helper.addInfo(
             line,
             1,
             'PSV6-TA-CACHE-SUGGESTION',
@@ -287,11 +289,11 @@ export class TAFunctionsValidator implements ValidationModule {
                 return false;
               }
               this.reportedBooleanUsages.add(key);
-              this.addError(
+              this.helper.addWarning(
                 node.loc.start.line,
                 node.loc.start.column,
-                'PSV6-FUNCTION-RETURN-TYPE',
                 `Variable '${identifier}' contains boolean result from '${info.callName}' and cannot be used in arithmetic operations`,
+                'PSV6-FUNCTION-RETURN-TYPE'
               );
               return false;
             }
@@ -320,23 +322,23 @@ export class TAFunctionsValidator implements ValidationModule {
     }
 
     if (parameters.length < 3) {
-      this.addError(lineNumber, column, 'PSV6-TA-FUNCTION-PARAM', `${fullFunctionName} requires 3 parameters (source, left, right)`);
+      this.helper.addError(lineNumber, column, `${fullFunctionName} requires 3 parameters (source, left, right)`, 'PSV6-TA-FUNCTION-PARAM');
       return;
     }
 
     const [sourceRaw, leftRaw, rightRaw] = parameters.map((param) => this.getArgumentValue(param));
     if (/^\s*("[^"]*"|'[^']*')\s*$/.test(sourceRaw)) {
-      this.addError(lineNumber, column, 'PSV6-TA-FUNCTION-PARAM', `Parameter 'source' of '${fullFunctionName}' should be series, got string`);
+      this.helper.addError(lineNumber, column, `Parameter 'source' of '${fullFunctionName}' should be series, got string`, 'PSV6-TA-FUNCTION-PARAM');
     }
 
     const leftNum = parseFloat(leftRaw);
     if (!(Number.isFinite(leftNum) && leftNum >= 1)) {
-      this.addError(lineNumber, column, 'PSV6-TA-FUNCTION-PARAM', `Parameter 'left' of '${fullFunctionName}' must be a positive integer`);
+      this.helper.addError(lineNumber, column, `Parameter 'left' of '${fullFunctionName}' must be a positive integer`, 'PSV6-TA-FUNCTION-PARAM');
     }
 
     const rightNum = parseFloat(rightRaw);
     if (!(Number.isFinite(rightNum) && rightNum >= 1)) {
-      this.addError(lineNumber, column, 'PSV6-TA-FUNCTION-PARAM', `Parameter 'right' of '${fullFunctionName}' must be a positive integer`);
+      this.helper.addError(lineNumber, column, `Parameter 'right' of '${fullFunctionName}' must be a positive integer`, 'PSV6-TA-FUNCTION-PARAM');
     }
   }
 
@@ -347,7 +349,7 @@ export class TAFunctionsValidator implements ValidationModule {
     fullFunctionName: string,
   ): void {
     if (parameters.length < 4) {
-      this.addError(
+      this.helper.addError(
         lineNumber,
         column,
         'PSV6-TA-FUNCTION-PARAM',
@@ -363,7 +365,7 @@ export class TAFunctionsValidator implements ValidationModule {
 
     const typeInferred = this.inferParameterType(typeParam);
     if (typeInferred && !['string', 'series', 'unknown'].includes(typeInferred)) {
-      this.addError(
+      this.helper.addError(
         lineNumber,
         column,
         'PSV6-TA-FUNCTION-PARAM',
@@ -373,7 +375,7 @@ export class TAFunctionsValidator implements ValidationModule {
       const literalMatch = typeParam.trim().match(/^"([^"]+)"$|^'([^']+)'$/);
       const literalValue = literalMatch ? (literalMatch[1] ?? literalMatch[2] ?? '').toLowerCase() : null;
       if (literalValue && !TAFunctionsValidator.VALID_PIVOT_POINT_TYPES.has(literalValue)) {
-        this.addError(
+        this.helper.addError(
           lineNumber,
           column,
           'PSV6-TA-FUNCTION-PARAM',
@@ -392,7 +394,7 @@ export class TAFunctionsValidator implements ValidationModule {
       if (!this.isValidTAParameter(value, 'float')) {
         const inferred = this.inferParameterType(value);
         if (inferred && inferred !== 'unknown') {
-          this.addError(
+          this.helper.addError(
             lineNumber,
             column,
             'PSV6-TA-FUNCTION-PARAM',
@@ -428,17 +430,17 @@ export class TAFunctionsValidator implements ValidationModule {
     const requiredParams = expectedParams.filter((p: { required?: boolean }) => p.required).length;
     if (parameters.length < requiredParams) {
       // Emit both TA-specific and generic codes so different test suites can assert either
-      this.addError(
+      this.helper.addError(
         lineNumber,
         column,
-        'PSV6-TA-FUNCTION-PARAM',
-        `TA function '${functionName}' requires at least ${requiredParams} parameters, got ${parameters.length}`
+        `TA function '${functionName}' requires at least ${requiredParams} parameters, got ${parameters.length}`,
+        'PSV6-TA-FUNCTION-PARAM'
       );
-      this.addError(
+      this.helper.addError(
         lineNumber,
         column,
-        'PSV6-FUNCTION-PARAM-COUNT',
-        `Function ${functionName} expects at least ${requiredParams} parameters, got ${parameters.length}`
+        `Function ${functionName} expects at least ${requiredParams} parameters, got ${parameters.length}`,
+        'PSV6-FUNCTION-PARAM-COUNT'
       );
     }
 
@@ -451,18 +453,18 @@ export class TAFunctionsValidator implements ValidationModule {
           const inferred = this.inferParameterType(param);
           if (expectedParam.type === 'float' && inferred === 'string') {
             // TA-specific
-            this.addError(
+            this.helper.addError(
               lineNumber,
               column,
-              'PSV6-TA-FUNCTION-PARAM',
-              `Parameter ${index + 1} of '${functionName}' should be ${expectedParam.type}, got ${inferred}`
+              `Parameter ${index + 1} of '${functionName}' should be ${expectedParam.type}, got ${inferred}`,
+              'PSV6-TA-FUNCTION-PARAM'
             );
             // Generic code expected by Function Validation tests
-            this.addError(
+            this.helper.addError(
               lineNumber,
               column,
-              'PSV6-FUNCTION-PARAM-TYPE',
-              `Parameter '${expectedParam.name}' of '${functionName}' should be ${expectedParam.type}, got ${inferred}`
+              `Parameter '${expectedParam.name}' of '${functionName}' should be ${expectedParam.type}, got ${inferred}`,
+              'PSV6-FUNCTION-PARAM-TYPE'
             );
           }
         }
@@ -471,11 +473,11 @@ export class TAFunctionsValidator implements ValidationModule {
         if (expectedParam && expectedParam.qualifier === 'simple') {
           const inferredType = this.inferParameterType(param);
           if (inferredType === 'series') {
-            this.addError(
+            this.helper.addError(
               lineNumber,
               column,
-              'PSV6-FUNCTION-PARAM-TYPE',
-              `Parameter '${expectedParam.name}' of '${functionName}' requires simple type, got series`
+              `Parameter '${expectedParam.name}' of '${functionName}' requires simple type, got series`,
+              'PSV6-FUNCTION-PARAM-TYPE'
             );
           }
         }
@@ -487,11 +489,11 @@ export class TAFunctionsValidator implements ValidationModule {
           const isLength = /length/.test(name);
           // Allow zero for length; only flag negatives
           if (!Number.isNaN(num) && num < 0 && isLength) {
-            this.addError(
+            this.helper.addError(
               lineNumber,
               column,
-              'PSV6-TA-FUNCTION-PARAM',
-              `Parameter '${expectedParam.name}' of '${functionName}' must be a positive integer`
+              `Parameter '${expectedParam.name}' of '${functionName}' must be a positive integer`,
+              'PSV6-TA-FUNCTION-PARAM'
             );
           }
         }
@@ -503,27 +505,27 @@ export class TAFunctionsValidator implements ValidationModule {
   private validateTAPerformance(): void {
     // Check for too many TA function calls (lower threshold for tests)
     if (this.taFunctionCount > 3) {
-      this.addWarning(
+      this.helper.addWarning(
         0,
         0,
-        'PSV6-TA-PERF-MANY',
-        `Too many TA function calls (${this.taFunctionCount}). Consider optimizing for better performance.`
+        `Too many TA function calls (${this.taFunctionCount}). Consider optimizing for better performance.`,
+        'PSV6-TA-PERF-MANY'
       );
     }
 
     // Check for complex TA expressions
     if (this.complexTAExpressions > 1) {
-      this.addWarning(
+      this.helper.addWarning(
         0,
         0,
-        'PSV6-TA-PERF-NESTED',
-        `Too many complex TA expressions (${this.complexTAExpressions}). Consider simplifying for better performance.`
+        `Too many complex TA expressions (${this.complexTAExpressions}). Consider simplifying for better performance.`,
+        'PSV6-TA-PERF-NESTED'
       );
     }
 
     for (const info of this.taFunctionCalls.values()) {
       if (info.inLoop) {
-        this.addWarning(info.line, info.column, 'PSV6-TA-PERF-LOOP', 'TA operation in loop');
+        this.helper.addWarning(info.line, info.column, 'TA operation in loop', 'PSV6-TA-PERF-LOOP');
       }
     }
   }
@@ -553,11 +555,11 @@ export class TAFunctionsValidator implements ValidationModule {
     for (const infos of signatureCounts.values()) {
       if (infos.length > 1) {
         for (const info of infos) {
-          this.addInfo(
+          this.helper.addInfo(
             info.line,
             info.column,
-            'PSV6-TA-CACHE-SUGGESTION',
             `Function '${info.name}' is called repeatedly with the same parameters. Cache the result for performance.`,
+            'PSV6-TA-CACHE-SUGGESTION',
           );
         }
       }
@@ -572,11 +574,11 @@ export class TAFunctionsValidator implements ValidationModule {
         // Check for extreme length parameters
         if (funcName.includes('sma') || funcName.includes('ema') || funcName.includes('rsi') || funcName.includes('atr')) {
           if (numValue > 500) {
-            this.addInfo(
+            this.helper.addInfo(
               funcInfo.line,
               funcInfo.column,
-              'PSV6-TA-PARAM-SUGGESTION',
-              `Large period parameter (${numValue}) for '${funcName}'. Consider if this is necessary for your use case.`
+              `Large period parameter (${numValue}) for '${funcName}'. Consider if this is necessary for your use case.`,
+              'PSV6-TA-PARAM-SUGGESTION'
             );
           }
         }
@@ -592,11 +594,11 @@ export class TAFunctionsValidator implements ValidationModule {
     const hasMomentum = functionNames.some(f => ['ta.rsi', 'ta.stoch', 'ta.mfi'].includes(f));
     
     if (hasTrend && hasMomentum) {
-      this.addInfo(
+      this.helper.addInfo(
         0,
         0,
-        'PSV6-TA-COMBINATION-SUGGESTION',
-        'Good combination of trend and momentum indicators detected. Consider using crossover/crossunder for signals.'
+        'Good combination of trend and momentum indicators detected. Consider using crossover/crossunder for signals.',
+        'PSV6-TA-COMBINATION-SUGGESTION'
       );
     }
   }
@@ -785,59 +787,6 @@ export class TAFunctionsValidator implements ValidationModule {
     return !!NS_MEMBERS.ta?.has(functionName);
   }
 
-  private buildResult(typeMap: Map<string, TypeInfo> = new Map()): ValidationResult {
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap,
-      scriptType: null,
-    };
-  }
-
-
-  private addError(line: number, column: number, code: string, message: string): void {
-    // Only generate errors for clearly invalid cases
-    if (this.isClearlyInvalid(message, code)) {
-      this.errors.push({
-        line,
-        column,
-        code,
-        message,
-        severity: 'error'
-      });
-    } else {
-      // Generate warnings for ambiguous cases
-      this.warnings.push({
-        line,
-        column,
-        code,
-        message,
-        severity: 'warning'
-      });
-    }
-  }
-
-  private addWarning(line: number, column: number, code: string, message: string): void {
-    this.warnings.push({
-      line,
-      column,
-      code,
-      message,
-      severity: 'warning'
-    });
-  }
-
-  private addInfo(line: number, column: number, code: string, message: string): void {
-    this.info.push({
-      line,
-      column,
-      code,
-      message,
-      severity: 'info'
-    });
-  }
 
   private isClearlyInvalid(message: string, code: string): boolean {
     // Only generate errors for clearly invalid cases

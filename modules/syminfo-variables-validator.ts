@@ -19,6 +19,7 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import { type ProgramNode } from '../core/ast/nodes';
 import { visitQualifiedMembers, updateUsage } from '../core/ast/member-utils';
 import {
@@ -72,9 +73,7 @@ export class SyminfoVariablesValidator implements ValidationModule {
   name = 'SyminfoVariablesValidator';
   priority = 68; // Lower priority - these are specialized variables
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
 
   // Usage tracking
   private syminfoUsage: Map<string, number> = new Map();
@@ -89,33 +88,17 @@ export class SyminfoVariablesValidator implements ValidationModule {
 
     const astContext = this.getAstContext(context, config);
     if (!astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: context.scriptType
-      };
+      return this.helper.buildResult(context);
     }
 
     this.collectSyminfoDataAst(astContext.ast);
     this.analyzeUsagePatterns();
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: context.scriptType
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.syminfoUsage.clear();
     this.constantUsage.clear();
   }
@@ -125,23 +108,21 @@ export class SyminfoVariablesValidator implements ValidationModule {
     const totalConstants = this.constantUsage.size;
 
     if (totalSyminfoVars > 0) {
-      this.info.push({
-        code: 'PSV6-SYMINFO-USAGE',
-        message: `Advanced syminfo variables detected: ${totalSyminfoVars} different variables used`,
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(
+        1,
+        1,
+        `Advanced syminfo variables detected: ${totalSyminfoVars} different variables used`,
+        'PSV6-SYMINFO-USAGE'
+      );
     }
 
     if (totalConstants > 0) {
-      this.info.push({
-        code: 'PSV6-CONSTANTS-USAGE',
-        message: `Additional constants detected: ${totalConstants} different constants used`,
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(
+        1,
+        1,
+        `Additional constants detected: ${totalConstants} different constants used`,
+        'PSV6-CONSTANTS-USAGE'
+      );
     }
 
     // Provide recommendations for financial data usage
@@ -150,13 +131,12 @@ export class SyminfoVariablesValidator implements ValidationModule {
     );
 
     if (hasFinancialVars) {
-      this.info.push({
-        code: 'PSV6-FINANCIAL-DATA-USAGE',
-        message: 'Financial analysis variables used. Ensure symbol supports fundamental data',
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(
+        1,
+        1,
+        'Financial analysis variables used. Ensure symbol supports fundamental data',
+        'PSV6-FINANCIAL-DATA-USAGE'
+      );
     }
   }
 
@@ -220,7 +200,7 @@ export class SyminfoVariablesValidator implements ValidationModule {
 
   private recordSyminfoUsage(name: string, line: number, column: number, code: string, message: string): void {
     updateUsage(this.syminfoUsage, name);
-    this.info.push({ code, message, line, column, severity: 'info' });
+    this.helper.addInfo(line, column, message, code);
   }
 
   private recordConstantQualifiedName(name: string, line: number, column: number): void {
@@ -229,13 +209,12 @@ export class SyminfoVariablesValidator implements ValidationModule {
     }
 
     updateUsage(this.constantUsage, name);
-    this.info.push({
-      code: 'PSV6-ADDITIONAL-CONSTANT',
-      message: `Additional constant '${name}' detected`,
+    this.helper.addInfo(
       line,
       column,
-      severity: 'info',
-    });
+      `Additional constant '${name}' detected`,
+      'PSV6-ADDITIONAL-CONSTANT'
+    );
   }
 
   private getAstContext(context: ValidationContext, config: ValidatorConfig): AstValidationContext | null {

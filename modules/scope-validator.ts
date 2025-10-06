@@ -16,6 +16,7 @@ import {
   type ScopeGraph,
   type SymbolRecord,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import { KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT } from '../core/constants';
 import type { IdentifierNode, ProgramNode, TypeDeclarationNode, Node } from '../core/ast/nodes';
 import { visit, type NodePath } from '../core/ast/traversal';
@@ -24,9 +25,7 @@ export class ScopeValidator implements ValidationModule {
   name = 'ScopeValidator';
   priority = 80; // High priority, runs after CoreValidator
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
 
   private astDuplicateWarningSites = new Set<string>();
   private astShadowWarningSites = new Set<string>();
@@ -44,32 +43,16 @@ export class ScopeValidator implements ValidationModule {
 
     const astContext = this.isAstContext(context) && context.ast ? context : null;
     if (!astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: context.typeMap ?? new Map(),
-        scriptType: context.scriptType ?? null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(astContext);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: context.typeMap ?? new Map(),
-      scriptType: context.scriptType ?? null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
 
     this.astDuplicateWarningSites.clear();
     this.astShadowWarningSites.clear();
@@ -79,17 +62,7 @@ export class ScopeValidator implements ValidationModule {
     this.astUdtFieldLocations.clear();
   }
 
-  private addError(line: number, column: number, message: string, code?: string): void {
-    this.errors.push({ line, column, message, severity: 'error', code });
-  }
 
-  private addWarning(line: number, column: number, message: string, code?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code });
-  }
-
-  private addInfo(line: number, column: number, message: string, code?: string): void {
-    this.info.push({ line, column, message, severity: 'info', code });
-  }
 
   private isAstContext(context: ValidationContext): context is AstValidationContext {
     return 'ast' in context;
@@ -174,7 +147,7 @@ export class ScopeValidator implements ValidationModule {
             continue;
           }
           this.astDuplicateWarningSites.add(siteKey);
-          this.addWarning(
+          this.helper.addWarning(
             duplicate.location.line,
             duplicate.location.column,
             `Identifier '${record.name}' already declared in this block; use ':=' to reassign.`,
@@ -227,7 +200,7 @@ export class ScopeValidator implements ValidationModule {
           const ancestor = entries.find((candidate) => candidate.scopeId === parentId);
           if (ancestor) {
             this.astShadowWarningSites.add(shadowKey);
-            this.addWarning(
+            this.helper.addWarning(
               entry.location.line,
               entry.location.column,
               `Identifier '${record.name}' shadows an outer declaration.`,
@@ -354,7 +327,7 @@ export class ScopeValidator implements ValidationModule {
         }
         this.astUndefinedWarningSites.add(siteKey);
 
-        this.addError(
+        this.helper.addError(
           reference.line,
           reference.column,
           `Undefined variable '${record.name}'.`,
@@ -411,7 +384,7 @@ export class ScopeValidator implements ValidationModule {
             continue;
           }
           this.astInvalidIdentifierErrorSites.add(siteKey);
-          this.addError(
+          this.helper.addError(
             entry.location.line,
             entry.location.column,
             `Invalid identifier '${record.name}'.`,
@@ -425,7 +398,7 @@ export class ScopeValidator implements ValidationModule {
             continue;
           }
           this.astKeywordErrorSites.add(siteKey);
-          this.addError(
+          this.helper.addError(
             entry.location.line,
             entry.location.column,
             `Identifier '${record.name}' conflicts with a Pine keyword/builtin.`,

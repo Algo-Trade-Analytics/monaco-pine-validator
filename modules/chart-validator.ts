@@ -15,6 +15,7 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type CallExpressionNode,
   type ExpressionNode,
@@ -45,9 +46,7 @@ export class ChartValidator implements ValidationModule {
   name = 'ChartValidator';
   priority = 70;
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private astContext: AstValidationContext | null = null;
   private context: ValidationContext | null = null;
 
@@ -71,12 +70,12 @@ export class ChartValidator implements ValidationModule {
 
     const program = this.astContext?.ast ?? null;
     if (!program) {
-      return this.buildResult();
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(program);
 
-    return this.buildResult();
+    return this.helper.buildResult(context);
   }
 
   private validateWithAst(program: ProgramNode): void {
@@ -122,7 +121,7 @@ export class ChartValidator implements ValidationModule {
 
       // Validate parameter count
       if (call.paramCount < spec.minParams) {
-        this.addError(
+        this.helper.addError(
           call.node.loc.start.line,
           call.node.loc.start.column,
           `${call.functionName}() requires at least ${spec.minParams} parameter(s), got ${call.paramCount}`,
@@ -130,7 +129,7 @@ export class ChartValidator implements ValidationModule {
           spec.description,
         );
       } else if (call.paramCount > spec.maxParams) {
-        this.addError(
+        this.helper.addError(
           call.node.loc.start.line,
           call.node.loc.start.column,
           `${call.functionName}() accepts at most ${spec.maxParams} parameter(s), got ${call.paramCount}`,
@@ -146,7 +145,7 @@ export class ChartValidator implements ValidationModule {
           : call.node.args[1]?.value;
         
         if (priceParam && this.isStringLiteral(priceParam)) {
-          this.addError(
+          this.helper.addError(
             priceParam.loc.start.line,
             priceParam.loc.start.column,
             `Price parameter for ${call.functionName}() must be numeric, not string`,
@@ -162,7 +161,7 @@ export class ChartValidator implements ValidationModule {
     if (this.chartPointCreationsPerBar > 0) {
       const firstCall = this.chartPointCalls[0];
       if (firstCall) {
-        this.addWarning(
+        this.helper.addWarning(
           firstCall.node.loc.start.line,
           firstCall.node.loc.start.column,
           'Creating chart points on every bar may hit drawing limits (500 per script)',
@@ -195,36 +194,11 @@ export class ChartValidator implements ValidationModule {
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.context = null;
     this.chartPointCalls = [];
     this.chartPointCreationsPerBar = 0;
-  }
-
-  private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.errors.push({ line, column, message, severity: 'error', code, suggestion });
-  }
-
-  private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
-
-  private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
-
-  private buildResult(): ValidationResult {
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
   }
 }
 

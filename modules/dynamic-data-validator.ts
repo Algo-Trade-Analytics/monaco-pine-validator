@@ -11,6 +11,7 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import { REQUEST_LIMITS } from '../core/constants';
 import {
   type ArgumentNode,
@@ -79,9 +80,7 @@ interface RequestCallInfo {
 export class DynamicDataValidator implements ValidationModule {
   name = 'DynamicDataValidator';
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
   private requestCalls: RequestCallInfo[] = [];
@@ -114,59 +113,20 @@ export class DynamicDataValidator implements ValidationModule {
     this.validateRequestPerformance();
     this.validateDynamicContexts();
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.requestCalls = [];
     this.advancedPerformanceWarned = false;
     this.enumMismatchKeys.clear();
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'error'
-    });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'warning'
-    });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'info'
-    });
-  }
-
   private reportRequestParamError(line: number, column: number, message: string, specificCode: string): void {
-    this.addError(line, column, message, specificCode);
-    this.addError(line, column, message, 'PSV6-REQUEST-PARAMS');
+    this.helper.addError(line, column, message, specificCode);
+    this.helper.addError(line, column, message, 'PSV6-REQUEST-PARAMS');
   }
 
   private addEnumMismatchWarning(line: number, column: number, message: string): void {
@@ -175,13 +135,7 @@ export class DynamicDataValidator implements ValidationModule {
       return;
     }
     this.enumMismatchKeys.add(key);
-    this.warnings.push({
-      line,
-      column,
-      message,
-      code: 'PSV6-ENUM-COMPARISON-TYPE-MISMATCH',
-      severity: 'warning',
-    });
+    this.helper.addWarning(line, column, message, 'PSV6-ENUM-COMPARISON-TYPE-MISMATCH');
   }
 
   private collectRequestCallsAst(program: ProgramNode): void {
@@ -249,7 +203,7 @@ export class DynamicDataValidator implements ValidationModule {
   private validateRequestCalls(): void {
     for (const call of this.requestCalls) {
       if (!VALID_REQUEST_FUNCTIONS.has(call.functionName)) {
-        this.addError(
+        this.helper.addError(
           call.line,
           call.column,
           `Unknown request function: ${call.name}`,
@@ -314,13 +268,13 @@ export class DynamicDataValidator implements ValidationModule {
     const symbolArg = this.getNamedArgument(call, 'symbol') ?? this.getPositionalArgument(call, 0);
     if (symbolArg && !this.argumentIsStringLiteral(symbolArg)) {
       const position = this.getArgumentPosition(call, symbolArg);
-      this.addWarning(
+      this.helper.addWarning(
         position.line,
         position.column,
         'Dynamic symbol parameter detected in request.security',
         'PSV6-REQUEST-DYNAMIC-SYMBOL'
       );
-      this.addInfo(
+      this.helper.addInfo(
         position.line,
         position.column,
         'Series symbol parameters are valid in Pine v6',
@@ -335,25 +289,25 @@ export class DynamicDataValidator implements ValidationModule {
       (this.countPositionalArguments(call) >= 3 || this.getNamedArgument(call, 'timeframe'))
     ) {
       const position = this.getArgumentPosition(call, timeframeArg);
-      this.addWarning(
+      this.helper.addWarning(
         position.line,
         position.column,
         'Dynamic timeframe parameter detected in request.security',
         'PSV6-REQUEST-DYNAMIC-TIMEFRAME'
       );
-      this.addInfo(
+      this.helper.addInfo(
         position.line,
         position.column,
         'Series timeframe parameters are valid in Pine v6',
         'PSV6-REQUEST-DYNAMIC-V6'
       );
-      this.addError(
+      this.helper.addError(
         position.line,
         position.column,
         'Timeframe parameter must be a string literal when calling request.security.',
         'PSV6-FUNCTION-PARAM-TYPE'
       );
-      this.addError(
+      this.helper.addError(
         position.line,
         position.column,
         'Enum mismatch: request.security timeframe should use a literal timeframe string.',
@@ -400,7 +354,7 @@ export class DynamicDataValidator implements ValidationModule {
       if (this.argumentIsStringLiteral(fromArg)) {
         const value = this.stripQuotes(fromArg.value);
         if (!/^[A-Za-z]{3}$/.test(value)) {
-          this.addWarning(
+          this.helper.addWarning(
             position.line,
             position.column,
             `Unexpected currency code "${value}". Use ISO 4217 codes (e.g., "USD").`,
@@ -408,13 +362,13 @@ export class DynamicDataValidator implements ValidationModule {
           );
         }
       } else {
-        this.addError(
+        this.helper.addError(
           position.line,
           position.column,
           'Currency source must be a string literal (e.g., "USD").',
           'PSV6-FUNCTION-PARAM-TYPE'
         );
-        this.addError(
+        this.helper.addError(
           position.line,
           position.column,
           'Undefined currency enum type for request.currency_rate source parameter.',
@@ -429,7 +383,7 @@ export class DynamicDataValidator implements ValidationModule {
       if (this.argumentIsStringLiteral(toArg)) {
         const value = this.stripQuotes(toArg.value);
         if (!/^[A-Za-z]{3}$/.test(value)) {
-          this.addWarning(
+          this.helper.addWarning(
             position.line,
             position.column,
             `Unexpected currency code "${value}". Use ISO 4217 codes (e.g., "USD").`,
@@ -437,13 +391,13 @@ export class DynamicDataValidator implements ValidationModule {
           );
         }
       } else {
-        this.addError(
+        this.helper.addError(
           position.line,
           position.column,
           'Currency target must be a string literal (e.g., "JPY").',
           'PSV6-FUNCTION-PARAM-TYPE'
         );
-        this.addError(
+        this.helper.addError(
           position.line,
           position.column,
           'Undefined currency enum type for request.currency_rate target parameter.',
@@ -457,7 +411,7 @@ export class DynamicDataValidator implements ValidationModule {
       const literal = this.stripQuotes(ignoreArg.value).toLowerCase();
       if (literal !== 'true' && literal !== 'false') {
         const position = this.getArgumentPosition(call, ignoreArg);
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           `ignore_invalid_currency should be boolean. Received "${literal}"`,
@@ -481,7 +435,7 @@ export class DynamicDataValidator implements ValidationModule {
     const sourceArg = this.getNamedArgument(call, 'source') ?? this.getPositionalArgument(call, 0);
     if (sourceArg && !this.argumentIsStringLiteral(sourceArg)) {
       const position = this.getArgumentPosition(call, sourceArg);
-      this.addWarning(
+      this.helper.addWarning(
         position.line,
         position.column,
         'Seed source should be a string literal referencing the repository name.',
@@ -493,13 +447,13 @@ export class DynamicDataValidator implements ValidationModule {
     if (symbolArg) {
       const position = this.getArgumentPosition(call, symbolArg);
       if (!this.argumentIsStringLiteral(symbolArg)) {
-        this.addError(
+        this.helper.addError(
           position.line,
           position.column,
           'Seed symbol must be a string literal reference to the CSV file.',
           'PSV6-REQUEST-SEED-PARAMS'
         );
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           'Seed file name should be a string literal without the .csv extension.',
@@ -513,7 +467,7 @@ export class DynamicDataValidator implements ValidationModule {
       } else {
         const text = symbolArg.value.trim();
         if (/\.csv['"]?$/.test(text)) {
-          this.addWarning(
+          this.helper.addWarning(
             position.line,
             position.column,
             'Seed symbol should omit the .csv suffix; provide the base file name only.',
@@ -531,7 +485,7 @@ export class DynamicDataValidator implements ValidationModule {
     const expressionArg = this.getNamedArgument(call, 'expression') ?? this.getPositionalArgument(call, 2);
     if (this.isMissingSeedExpression(expressionArg)) {
       const position = this.getArgumentPosition(call, expressionArg ?? call.arguments[0]);
-      this.addError(
+      this.helper.addError(
         position.line,
         position.column,
         'Seed requests require an expression or tuple to evaluate.',
@@ -543,14 +497,14 @@ export class DynamicDataValidator implements ValidationModule {
     if (calcBarsArg) {
       const position = this.getArgumentPosition(call, calcBarsArg);
       if (this.argumentIsStringLiteral(calcBarsArg)) {
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           'calc_bars_count should be an integer, not a string literal.',
           'PSV6-REQUEST-SEED-CALC-BARS'
         );
       } else if (calcBarsArg.value.trim() && !this.argumentIsIntegerLiteral(calcBarsArg)) {
-        this.addInfo(
+        this.helper.addInfo(
           position.line,
           position.column,
           'Dynamic calc_bars_count detected. Ensure the value stays within plan limits.',
@@ -577,7 +531,7 @@ export class DynamicDataValidator implements ValidationModule {
       const value = this.stripQuotes(databaseArg.value);
       if (!value.includes('/')) {
         const position = this.getArgumentPosition(call, databaseArg);
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           `Quandl database should be in format "DATABASE/CODE": ${value}`,
@@ -604,7 +558,7 @@ export class DynamicDataValidator implements ValidationModule {
       const valid = ['dividends.gross', 'dividends.net'];
       if (!valid.includes(value)) {
         const position = this.getArgumentPosition(call, fieldArg);
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           `Unknown dividend field: ${value}. Valid fields: ${valid.join(', ')}`,
@@ -641,7 +595,7 @@ export class DynamicDataValidator implements ValidationModule {
       const valid = ['splits.denominator', 'splits.numerator'];
       if (!valid.includes(value)) {
         const position = this.getArgumentPosition(call, fieldArg);
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           `Unknown split field: ${value}. Valid fields: ${valid.join(', ')}`,
@@ -683,7 +637,7 @@ export class DynamicDataValidator implements ValidationModule {
       }
       if (fieldName && !valid.includes(fieldName)) {
         const position = this.getArgumentPosition(call, fieldArg);
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           `Unknown earnings field: ${fieldName}. Valid fields: ${valid.join(', ')}`,
@@ -722,7 +676,7 @@ export class DynamicDataValidator implements ValidationModule {
           'US', 'EU', 'GB', 'JP', 'CN', 'CA', 'AU', 'DE', 'FR', 'IT', 'ES', 'BR', 'IN'
         ];
         if (!validCountryCodes.includes(country.toUpperCase())) {
-          this.addWarning(
+          this.helper.addWarning(
             position.line,
             position.column,
             `Unknown country code: ${country}. Common codes: ${validCountryCodes.join(', ')}`,
@@ -735,13 +689,13 @@ export class DynamicDataValidator implements ValidationModule {
           );
         }
       } else {
-        this.addError(
+        this.helper.addError(
           position.line,
           position.column,
           'Country code must be provided as a string literal (e.g., "US").',
           'PSV6-FUNCTION-PARAM-TYPE'
         );
-        this.addError(
+        this.helper.addError(
           position.line,
           position.column,
           'Undefined enum type for request.economic country_code parameter.',
@@ -768,7 +722,7 @@ export class DynamicDataValidator implements ValidationModule {
       ];
       if (!validEconomicFields.includes(fieldValue)) {
         const position = this.getArgumentPosition(call, fieldArg);
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           `Unknown economic field: ${fieldValue}. Valid fields: ${validEconomicFields.join(', ')}`,
@@ -793,7 +747,7 @@ export class DynamicDataValidator implements ValidationModule {
       const fieldArg = this.getNamedArgument(call, 'financial_id') ?? this.getPositionalArgument(call, 1);
       if (fieldArg && !this.argumentIsStringLiteral(fieldArg)) {
         const position = this.getArgumentPosition(call, fieldArg);
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           'Second parameter should be a financial field string (e.g., "TOTAL_REVENUE")',
@@ -812,19 +766,19 @@ export class DynamicDataValidator implements ValidationModule {
     const symbolArg = this.getNamedArgument(call, 'symbol') ?? this.getPositionalArgument(call, 0);
     if (symbolArg && !this.argumentIsStringLiteral(symbolArg)) {
       const position = this.getArgumentPosition(call, symbolArg);
-      this.addWarning(
+      this.helper.addWarning(
         position.line,
         position.column,
         'First parameter should be a symbol string literal',
         'PSV6-REQUEST-SYMBOL-FORMAT'
       );
-      this.addError(
+      this.helper.addError(
         position.line,
         position.column,
         'Financial symbol must be a string literal when calling request.financial.',
         'PSV6-FUNCTION-PARAM-TYPE'
       );
-      this.addError(
+      this.helper.addError(
         position.line,
         position.column,
         'Undefined enum type for request.financial symbol parameter.',
@@ -842,7 +796,7 @@ export class DynamicDataValidator implements ValidationModule {
       ];
       if (!validIds.includes(value)) {
         const position = this.getArgumentPosition(call, financialIdArg);
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           `Unknown financial ID: ${value}. Valid IDs include: ${validIds.slice(0, 5).join(', ')}, etc.`,
@@ -856,7 +810,7 @@ export class DynamicDataValidator implements ValidationModule {
       }
     } else if (financialIdArg) {
       const position = this.getArgumentPosition(call, financialIdArg);
-      this.addWarning(
+      this.helper.addWarning(
         position.line,
         position.column,
         'Second parameter should be a financial field string (e.g., "TOTAL_REVENUE")',
@@ -875,7 +829,7 @@ export class DynamicDataValidator implements ValidationModule {
       const validPeriods = ['FY', 'FQ', 'TTM', 'FH'];
       if (!validPeriods.includes(period)) {
         const position = this.getArgumentPosition(call, periodArg);
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           `Unknown financial period: ${period}. Valid periods: ${validPeriods.join(', ')}`,
@@ -910,7 +864,7 @@ export class DynamicDataValidator implements ValidationModule {
     if (this.argumentIsStringLiteral(arg)) {
       const value = this.stripQuotes(trimmed);
       if (!validValues.includes(value)) {
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           `Invalid gaps parameter for request.${functionType}: ${value}. Valid values: ${validValues.join(', ')}`,
@@ -927,7 +881,7 @@ export class DynamicDataValidator implements ValidationModule {
 
     if (trimmed.startsWith('barmerge.gaps_')) {
       if (!validValues.includes(trimmed)) {
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           `Invalid barmerge gaps constant: ${trimmed}. Use barmerge.gaps_on or barmerge.gaps_off`,
@@ -943,7 +897,7 @@ export class DynamicDataValidator implements ValidationModule {
     }
 
     if (!this.argumentIsBooleanLiteral(arg)) {
-      this.addInfo(
+      this.helper.addInfo(
         position.line,
         position.column,
         `Dynamic gaps parameter detected in request.${functionType}. Ensure it resolves to a valid gaps value.`,
@@ -981,7 +935,7 @@ export class DynamicDataValidator implements ValidationModule {
     if (this.argumentIsStringLiteral(arg)) {
       const value = this.stripQuotes(trimmed).toLowerCase();
       if (!validValues.includes(value)) {
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           `Invalid lookahead parameter for request.${functionType}: ${value}. Valid values: ${validValues.join(', ')}`,
@@ -998,7 +952,7 @@ export class DynamicDataValidator implements ValidationModule {
 
     if (trimmed.startsWith('barmerge.lookahead_')) {
       if (!validValues.includes(trimmed)) {
-        this.addWarning(
+        this.helper.addWarning(
           position.line,
           position.column,
           `Unknown lookahead constant: ${trimmed}. Use barmerge.lookahead_on or barmerge.lookahead_off.`,
@@ -1014,7 +968,7 @@ export class DynamicDataValidator implements ValidationModule {
     }
 
     if (!this.argumentIsBooleanLiteral(arg)) {
-      this.addInfo(
+      this.helper.addInfo(
         position.line,
         position.column,
         `Dynamic lookahead parameter detected in request.${functionType}. Ensure it evaluates to barmerge.lookahead_* or a boolean.`,
@@ -1025,7 +979,7 @@ export class DynamicDataValidator implements ValidationModule {
 
   private checkAdvancedRequestPerformance(call: RequestCallInfo, functionType: string): void {
     if (EXPENSIVE_REQUEST_FUNCTIONS.has(functionType)) {
-      this.addInfo(
+      this.helper.addInfo(
         call.line,
         call.column,
         `request.${functionType} may have slower response times. Consider caching results.`,
@@ -1036,7 +990,7 @@ export class DynamicDataValidator implements ValidationModule {
     if (!this.advancedPerformanceWarned) {
       const advancedCount = this.requestCalls.filter((c) => ADVANCED_REQUEST_FUNCTIONS.has(c.functionName)).length;
       if (advancedCount > 5) {
-        this.addWarning(
+        this.helper.addWarning(
           call.line,
           call.column,
           `Multiple advanced request functions detected (${advancedCount}). Consider performance impact.`,
@@ -1095,12 +1049,12 @@ export class DynamicDataValidator implements ValidationModule {
 
     for (const call of this.requestCalls) {
       if (call.inLoop) {
-        this.addWarning(call.line, call.column, 'Request function inside loop may cause performance issues', 'PSV6-REQUEST-PERF-LOOP');
-        this.addInfo(call.line, call.column, 'Dynamic requests are valid in v6; consider caching for performance', 'PSV6-REQUEST-DYNAMIC-V6');
+        this.helper.addWarning(call.line, call.column, 'Request function inside loop may cause performance issues', 'PSV6-REQUEST-PERF-LOOP');
+        this.helper.addInfo(call.line, call.column, 'Dynamic requests are valid in v6; consider caching for performance', 'PSV6-REQUEST-DYNAMIC-V6');
       }
 
       if (EXPENSIVE_REQUEST_FUNCTIONS.has(call.functionName)) {
-        this.addInfo(
+        this.helper.addInfo(
           call.line,
           call.column,
           'Advanced request function may be expensive; consider minimizing calls',
@@ -1114,19 +1068,19 @@ export class DynamicDataValidator implements ValidationModule {
     }
 
     if (requestCount > 10) {
-      this.addWarning(1, 1, `Too many request functions (${requestCount}). Consider caching results.`, 'PSV6-REQUEST-PERF-COUNT');
+      this.helper.addWarning(1, 1, `Too many request functions (${requestCount}). Consider caching results.`, 'PSV6-REQUEST-PERF-COUNT');
     }
 
     if (advancedCount >= 7 && !this.advancedPerformanceWarned) {
-      this.addWarning(1, 1, `Multiple advanced request functions detected (${advancedCount}). Consider consolidating.`, 'PSV6-REQUEST-PERFORMANCE-MULTIPLE');
+      this.helper.addWarning(1, 1, `Multiple advanced request functions detected (${advancedCount}). Consider consolidating.`, 'PSV6-REQUEST-PERFORMANCE-MULTIPLE');
       this.advancedPerformanceWarned = true;
     }
 
     if (requestCount >= REQUEST_LIMITS.SOFT) {
-      this.addWarning(1, 1, `High number of request.* calls (${requestCount}) approaches platform limits`, 'PSV6-REQUEST-LIMIT-NEAR');
+      this.helper.addWarning(1, 1, `High number of request.* calls (${requestCount}) approaches platform limits`, 'PSV6-REQUEST-LIMIT-NEAR');
     }
     if (requestCount >= REQUEST_LIMITS.HARD) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `Approaching request.* call limit (${requestCount} ≥ ${REQUEST_LIMITS.HARD}). Trim or cache requests.`,
@@ -1141,22 +1095,22 @@ export class DynamicDataValidator implements ValidationModule {
         continue;
       }
       if (call.inLoop) {
-        this.addWarning(
+        this.helper.addWarning(
           call.line,
           call.column,
           'Dynamic request inside loop may cause heavy performance usage',
           'PSV6-REQUEST-DYNAMIC-LOOP'
         );
-        this.addInfo(call.line, call.column, 'Dynamic requests in loops are valid in Pine v6', 'PSV6-REQUEST-DYNAMIC-V6');
+        this.helper.addInfo(call.line, call.column, 'Dynamic requests in loops are valid in Pine v6', 'PSV6-REQUEST-DYNAMIC-V6');
       }
       if (call.inConditional) {
-        this.addWarning(
+        this.helper.addWarning(
           call.line,
           call.column,
           'Dynamic request inside conditional block may cause inconsistent performance',
           'PSV6-REQUEST-DYNAMIC-CONDITIONAL'
         );
-        this.addInfo(call.line, call.column, 'Dynamic requests in conditionals are valid in Pine v6', 'PSV6-REQUEST-DYNAMIC-V6');
+        this.helper.addInfo(call.line, call.column, 'Dynamic requests in conditionals are valid in Pine v6', 'PSV6-REQUEST-DYNAMIC-V6');
       }
     }
   }
@@ -1406,14 +1360,14 @@ export class DynamicDataValidator implements ValidationModule {
 
   private validateTickerSymbolFormat(symbol: string, line: number, column: number): void {
     if (!symbol || symbol.trim().length === 0) {
-      this.addError(line, column, 'Empty symbol is not allowed', 'PSV6-REQUEST-SYMBOL-EMPTY');
+      this.helper.addError(line, column, 'Empty symbol is not allowed', 'PSV6-REQUEST-SYMBOL-EMPTY');
       return;
     }
 
     const trimmedSymbol = symbol.trim();
 
     if (trimmedSymbol.includes(' ')) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Symbol "${trimmedSymbol}" contains spaces. Use underscores or proper format.`,
@@ -1434,16 +1388,16 @@ export class DynamicDataValidator implements ValidationModule {
 
     if (!isValidFormat) {
       if (trimmedSymbol.length > 20) {
-        this.addWarning(line, column, `Symbol "${trimmedSymbol}" is unusually long. Verify format.`, 'PSV6-REQUEST-SYMBOL-LENGTH');
+        this.helper.addWarning(line, column, `Symbol "${trimmedSymbol}" is unusually long. Verify format.`, 'PSV6-REQUEST-SYMBOL-LENGTH');
       } else if (!/^[A-Z0-9:._-]+$/i.test(trimmedSymbol)) {
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           `Symbol "${trimmedSymbol}" contains invalid characters. Use alphanumeric, colon, dot, underscore, or dash only.`,
           'PSV6-REQUEST-SYMBOL-CHARS'
         );
       } else {
-        this.addInfo(
+        this.helper.addInfo(
           line,
           column,
           `Symbol "${trimmedSymbol}" format not recognized. Verify it's a valid ticker symbol.`,
@@ -1459,7 +1413,7 @@ export class DynamicDataValidator implements ValidationModule {
         'BINANCE', 'COINBASE', 'KRAKEN', 'BITFINEX', 'FTX'
       ];
       if (!validExchanges.includes(exchange.toUpperCase())) {
-        this.addInfo(line, column, `Exchange "${exchange}" not in common list. Verify it's supported.`, 'PSV6-REQUEST-EXCHANGE-UNKNOWN');
+        this.helper.addInfo(line, column, `Exchange "${exchange}" not in common list. Verify it's supported.`, 'PSV6-REQUEST-EXCHANGE-UNKNOWN');
       }
     }
   }

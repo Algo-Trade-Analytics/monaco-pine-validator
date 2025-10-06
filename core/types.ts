@@ -12,6 +12,8 @@ import type {
 } from './ast/types';
 import type { ProgramNode } from './ast/nodes';
 
+export type Code = string;
+
 export interface ValidationError {
   line: number;
   column: number;

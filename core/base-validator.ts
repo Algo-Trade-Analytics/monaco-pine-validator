@@ -13,6 +13,7 @@ import {
   ScopeInfo,
 } from './types';
 import { KEYWORDS, NAMESPACES, PSEUDO_VARS, WILDCARD_IDENT } from './constants';
+import { Codes } from './codes';
 import {
   AstConfig,
   AstDiagnostics,
@@ -34,7 +35,6 @@ import { validateIndentationWithAST } from './ast/indentation-validator-ast';
 type ConfigLayer = Partial<ValidatorConfig> | undefined;
 
 const DEFAULT_AST_FILENAME = 'input.pine';
-const AST_PARSE_ERROR_CODE = 'AST-PARSE';
 
 const DEFAULT_AST_CONFIG: AstConfig = {
   mode: 'primary',
@@ -316,7 +316,7 @@ export abstract class BaseValidator {
       this.context.typeEnvironment = createEmptyTypeEnvironment();
       this.context.controlFlowGraph = createEmptyControlFlowGraph();
       // Parser errors should be WARNINGS to allow validation to continue
-      this.addWarning(1, 1, `Syntax error: ${message}`, AST_PARSE_ERROR_CODE);
+      this.addWarning(1, 1, `Syntax error: ${message}`, Codes.SYNTAX_ERROR);
     }
   }
 
@@ -413,7 +413,7 @@ export abstract class BaseValidator {
         this.addWarnings(moduleResult.warnings);
         this.addInfoMessages(moduleResult.info);
       } catch (error) {
-        this.addError(1, 1, `Error in ${module.name} module: ${error}`, 'MODULE-ERROR');
+        this.addError(1, 1, `Error in ${module.name} module: ${error}`, Codes.MODULE_ERROR);
       }
     }
 

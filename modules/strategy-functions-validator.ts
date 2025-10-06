@@ -3,12 +3,12 @@ import {
   type ValidationModule,
   type ValidationContext,
   type ValidatorConfig,
-  type ValidationError,
   type ValidationResult,
   type TypeInfo,
 } from '../core/types';
 import { Codes } from '../core/codes';
-import { IDENT, BUILTIN_FUNCTIONS_V6_RULES, NS_MEMBERS } from '../core/constants';
+import { ValidationHelper } from '../core/validation-helper';
+import { BUILTIN_FUNCTIONS_V6_RULES, NS_MEMBERS } from '../core/constants';
 import {
   type ArgumentNode,
   type CallExpressionNode,
@@ -35,9 +35,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
   name = 'StrategyFunctionsValidator';
   priority = 82; // High priority - Strategy functions are core Pine Script functionality, must run before FunctionValidator
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
@@ -59,7 +57,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.config = config;
 
     if (!config.ast || config.ast.mode === 'disabled') {
-      return this.buildResult();
+      return this.helper.buildResult(context);
     }
 
     const contextWithAst = 'ast' in context ? (context as AstValidationContext) : null;
@@ -67,7 +65,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
 
     const program = this.astContext?.ast;
     if (!program) {
-      return this.buildResult();
+      return this.helper.buildResult(context);
     }
 
     this.collectStrategyDataAst(program);
@@ -85,24 +83,11 @@ export class StrategyFunctionsValidator implements ValidationModule {
       // Silently handle best practices validation errors to prevent breaking validation
     }
 
-    // Post-filter: if script uses both sizing helpers and risk management, suppress constant-as-function errors
-    const typeMap = new Map();
-    for (const [funcName, funcInfo] of this.strategyFunctionCalls) {
-      typeMap.set(funcName, {
-        type: funcInfo.returnType,
-        isConst: false,
-        isSeries: funcInfo.returnType === 'series',
-        parameters: funcInfo.parameters
-      });
-    }
-
-    return this.buildResult(typeMap);
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.strategyFunctionCalls.clear();
     this.strategyFunctionCount = 0;
@@ -110,17 +95,6 @@ export class StrategyFunctionsValidator implements ValidationModule {
     this.hasStrategyRiskCall = false;
     this.strategyCallSignaturesByLine.clear();
     this.nestedStrategyCallsByLine.clear();
-  }
-
-  private buildResult(typeMap: Map<string, TypeInfo> = new Map()): ValidationResult {
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap,
-      scriptType: this.context.scriptType,
-    };
   }
 
   private collectStrategyDataAst(program: ProgramNode): void {
@@ -176,11 +150,11 @@ export class StrategyFunctionsValidator implements ValidationModule {
     const column = node.loc.start.column;
 
     if (!this.isKnownStrategyFunction(functionName)) {
-      this.addError(
+      this.helper.addWarning(
         line,
         column,
-        Codes.STRATEGY_FUNCTION_UNKNOWN,
         `Strategy function '${qualifiedName}' is not recognized. Check spelling and ensure it's a valid Pine Script v6 Strategy function.`,
+        Codes.STRATEGY_FUNCTION_UNKNOWN
       );
       return;
     }
@@ -231,7 +205,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
     }
 
     if (node.args.some((argument) => this.argumentContainsStrategyReference(argument.value))) {
-      this.addWarning(line, column, 'PSV6-STRATEGY-PERF-NESTED', 'Nested strategy operations detected');
+      this.helper.addWarning(line, column, 'Nested strategy operations detected', 'PSV6-STRATEGY-PERF-NESTED');
     }
   }
 
@@ -371,13 +345,13 @@ export class StrategyFunctionsValidator implements ValidationModule {
       }
       
       if (qtyValue && /^\d+(\.\d+)?$/.test(qtyValue)) {
-        this.addInfo(lineNumber, column, 'PSV6-STRATEGY-POSITION-SIZE-SUGGESTION', 'Consider using strategy.position_size instead of manual qty');
-        this.addInfo(lineNumber, column, 'PSV6-STRATEGY-EQUITY-SUGGESTION', 'Consider using strategy.equity for sizing');
+        this.helper.addInfo(lineNumber, column, 'Consider using strategy.position_size instead of manual qty', 'PSV6-STRATEGY-POSITION-SIZE-SUGGESTION');
+        this.helper.addInfo(lineNumber, column, 'Consider using strategy.equity for sizing', 'PSV6-STRATEGY-EQUITY-SUGGESTION');
       }
       // risk suggestion when stop provided
       const hasStop = parameters.some(p => /\bstop\s*=/.test(p));
       if (hasStop) {
-        this.addInfo(lineNumber, column, 'PSV6-STRATEGY-RISK-SUGGESTION', 'Consider using strategy.risk for risk management');
+        this.helper.addInfo(lineNumber, column, 'Consider using strategy.risk for risk management', 'PSV6-STRATEGY-RISK-SUGGESTION');
       }
     }
   }
@@ -394,11 +368,11 @@ export class StrategyFunctionsValidator implements ValidationModule {
     const requiredParams = expectedParams.filter((p: { required?: boolean }) => p.required).length;
     const positionalArgs = parameters.filter(p => !p.includes('='));
     if (positionalArgs.length < requiredParams) {
-      this.addError(
+      this.helper.addError(
         lineNumber,
         column,
-        'PSV6-STRATEGY-FUNCTION-PARAM',
-        `Strategy function '${functionName}' requires at least ${requiredParams} parameters, got ${positionalArgs.length}`
+        `Strategy function '${functionName}' requires at least ${requiredParams} parameters, got ${positionalArgs.length}`,
+        'PSV6-STRATEGY-FUNCTION-PARAM'
       );
     }
 
@@ -409,11 +383,11 @@ export class StrategyFunctionsValidator implements ValidationModule {
         if (expectedParam.required && !this.isValidStrategyParameter(param, expectedParam.type)) {
           // Only error if it's clearly wrong (like passing a string to a numeric parameter)
           if (expectedParam.type === 'float' && this.inferParameterType(param) === 'string') {
-            this.addError(
+            this.helper.addError(
               lineNumber,
               column,
-              'PSV6-STRATEGY-FUNCTION-PARAM',
-              `Parameter ${index + 1} of '${functionName}' should be ${expectedParam.type}, got ${this.inferParameterType(param)}`
+              `Parameter ${index + 1} of '${functionName}' should be ${expectedParam.type}, got ${this.inferParameterType(param)}`,
+              'PSV6-STRATEGY-FUNCTION-PARAM'
             );
           }
         }
@@ -426,8 +400,9 @@ export class StrategyFunctionsValidator implements ValidationModule {
     if (functionName === 'strategy.percent_of_equity') {
       // Allowed when script uses any strategy.risk.* controls; otherwise error as using constant as function
       if (!this.hasStrategyRiskCall) {
-        this.addError(lineNumber, column, 'PSV6-STRATEGY-CONSTANT-AS-FUNCTION',
-          `${functionName} should not be used as a callable in this context. Use default_qty_type=${functionName} in strategy()`);
+        this.helper.addError(lineNumber, column, 
+          `${functionName} should not be used as a callable in this context. Use default_qty_type=${functionName} in strategy()`,
+          'PSV6-STRATEGY-CONSTANT-AS-FUNCTION');
       }
       return;
     }
@@ -462,8 +437,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
 
   private validateAllowEntryIn(parameters: string[], lineNumber: number, column: number): void {
     if (parameters.length < 1) {
-      this.addError(lineNumber, column, 'PSV6-STRATEGY-ALLOW-ENTRY-PARAMS', 
-        'strategy.risk.allow_entry_in requires 1 parameter: direction');
+      this.helper.addError(lineNumber, column, 'strategy.risk.allow_entry_in requires 1 parameter: direction', 'PSV6-STRATEGY-ALLOW-ENTRY-PARAMS');
       return;
     }
 
@@ -471,18 +445,16 @@ export class StrategyFunctionsValidator implements ValidationModule {
     const validDirections = ['strategy.long', 'strategy.short', 'strategy.all'];
     
     if (!validDirections.some(valid => direction.includes(valid)) && !this.isVariableOrExpression(direction)) {
-      this.addWarning(lineNumber, column, 'PSV6-STRATEGY-ALLOW-ENTRY-DIRECTION', 
+      this.helper.addWarning(lineNumber, column, 'PSV6-STRATEGY-ALLOW-ENTRY-DIRECTION', 
         `Expected direction to be strategy.long, strategy.short, or strategy.all, got: ${direction}`);
     }
 
-    this.addInfo(lineNumber, column, 'PSV6-STRATEGY-RISK-MANAGEMENT', 
-      'Risk management function - controls allowed entry directions');
+    this.helper.addInfo(lineNumber, column, 'Risk management function - controls allowed entry directions', 'PSV6-STRATEGY-RISK-MANAGEMENT');
   }
 
   private validateMaxPositionSize(parameters: string[], lineNumber: number, column: number): void {
     if (parameters.length < 1) {
-      this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-POSITION-PARAMS', 
-        'strategy.risk.max_position_size requires 1 parameter: size');
+      this.helper.addError(lineNumber, column, 'strategy.risk.max_position_size requires 1 parameter: size', 'PSV6-STRATEGY-MAX-POSITION-PARAMS');
       return;
     }
 
@@ -491,22 +463,19 @@ export class StrategyFunctionsValidator implements ValidationModule {
     
     if (!isNaN(numValue)) {
       if (numValue <= 0) {
-        this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-POSITION-SIZE', 
-          'Maximum position size must be greater than 0');
+        this.helper.addError(lineNumber, column, 'Maximum position size must be greater than 0', 'PSV6-STRATEGY-MAX-POSITION-SIZE');
       } else if (numValue > 10000) {
-        this.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-POSITION-LARGE', 
+        this.helper.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-POSITION-LARGE', 
           `Large maximum position size (${numValue}) - ensure this is intentional`);
       }
     }
 
-    this.addInfo(lineNumber, column, 'PSV6-STRATEGY-POSITION-CONTROL', 
-      'Position size limit helps control maximum exposure');
+    this.helper.addInfo(lineNumber, column, 'Position size limit helps control maximum exposure', 'PSV6-STRATEGY-POSITION-CONTROL');
   }
 
   private validateMaxDrawdown(parameters: string[], lineNumber: number, column: number): void {
     if (parameters.length < 2) {
-      this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-DRAWDOWN-PARAMS', 
-        'strategy.risk.max_drawdown requires 2 parameters: value and type');
+      this.helper.addError(lineNumber, column, 'strategy.risk.max_drawdown requires 2 parameters: value and type', 'PSV6-STRATEGY-MAX-DRAWDOWN-PARAMS');
       return;
     }
 
@@ -516,25 +485,22 @@ export class StrategyFunctionsValidator implements ValidationModule {
     
     if (!isNaN(numValue)) {
       if (numValue <= 0) {
-        this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-DRAWDOWN-VALUE', 
-          'Maximum drawdown value must be greater than 0');
+        this.helper.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-DRAWDOWN-VALUE', 'Maximum drawdown value must be greater than 0');
       }
     }
 
     const validTypes = ['strategy.percent_of_equity', 'strategy.cash'];
     if (!validTypes.includes(type) && !this.isVariableOrExpression(type)) {
-      this.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-DRAWDOWN-TYPE', 
+      this.helper.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-DRAWDOWN-TYPE', 
         `Expected type to be strategy.percent_of_equity or strategy.cash, got: ${type}`);
     }
 
-    this.addInfo(lineNumber, column, 'PSV6-STRATEGY-DRAWDOWN-PROTECTION', 
-      'Drawdown limit provides important capital protection');
+    this.helper.addInfo(lineNumber, column, 'Drawdown limit provides important capital protection', 'PSV6-STRATEGY-DRAWDOWN-PROTECTION');
   }
 
   private validateMaxIntradayFilledOrders(parameters: string[], lineNumber: number, column: number): void {
     if (parameters.length < 1) {
-      this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-ORDERS-PARAMS', 
-        'strategy.risk.max_intraday_filled_orders requires 1 parameter: count');
+      this.helper.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-ORDERS-PARAMS', 'strategy.risk.max_intraday_filled_orders requires 1 parameter: count');
       return;
     }
 
@@ -543,25 +509,21 @@ export class StrategyFunctionsValidator implements ValidationModule {
     
     if (!isNaN(numValue)) {
       if (numValue <= 0) {
-        this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-ORDERS-VALUE', 
-          'Maximum intraday orders must be greater than 0');
+        this.helper.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-ORDERS-VALUE', 'Maximum intraday orders must be greater than 0');
       } else if (numValue > 100) {
-        this.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-ORDERS-HIGH', 
+        this.helper.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-ORDERS-HIGH', 
           `High maximum orders (${numValue}) may result in excessive trading frequency`);
       } else if (numValue <= 5) {
-        this.addInfo(lineNumber, column, 'PSV6-STRATEGY-MAX-ORDERS-CONSERVATIVE', 
-          'Conservative order limit helps prevent overtrading');
+        this.helper.addInfo(lineNumber, column, 'PSV6-STRATEGY-MAX-ORDERS-CONSERVATIVE', 'Conservative order limit helps prevent overtrading');
       }
     }
 
-    this.addInfo(lineNumber, column, 'PSV6-STRATEGY-ORDER-CONTROL', 
-      'Order frequency limit helps control trading costs and slippage');
+    this.helper.addInfo(lineNumber, column, 'PSV6-STRATEGY-ORDER-CONTROL', 'Order frequency limit helps control trading costs and slippage');
   }
 
   private validateMaxIntradayLoss(parameters: string[], lineNumber: number, column: number): void {
     if (parameters.length < 2) {
-      this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-INTRADAY-LOSS-PARAMS', 
-        'strategy.risk.max_intraday_loss requires 2 parameters: value and type');
+      this.helper.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-INTRADAY-LOSS-PARAMS', 'strategy.risk.max_intraday_loss requires 2 parameters: value and type');
       return;
     }
 
@@ -571,25 +533,22 @@ export class StrategyFunctionsValidator implements ValidationModule {
     
     if (!isNaN(numValue)) {
       if (numValue <= 0) {
-        this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-INTRADAY-LOSS-VALUE', 
-          'Maximum intraday loss value must be greater than 0');
+        this.helper.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-INTRADAY-LOSS-VALUE', 'Maximum intraday loss value must be greater than 0');
       }
     }
 
     const validTypes = ['strategy.percent_of_equity', 'strategy.cash'];
     if (!validTypes.includes(type) && !this.isVariableOrExpression(type)) {
-      this.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-INTRADAY-LOSS-TYPE', 
+      this.helper.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-INTRADAY-LOSS-TYPE', 
         `Expected type to be strategy.percent_of_equity or strategy.cash, got: ${type}`);
     }
 
-    this.addInfo(lineNumber, column, 'PSV6-STRATEGY-INTRADAY-LOSS-PROTECTION', 
-      'Intraday loss limit provides important daily risk control');
+    this.helper.addInfo(lineNumber, column, 'PSV6-STRATEGY-INTRADAY-LOSS-PROTECTION', 'Intraday loss limit provides important daily risk control');
   }
 
   private validateMaxConsLossDays(parameters: string[], lineNumber: number, column: number): void {
     if (parameters.length < 1) {
-      this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-CONS-LOSS-PARAMS', 
-        'strategy.risk.max_cons_loss_days requires 1 parameter: count');
+      this.helper.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-CONS-LOSS-PARAMS', 'strategy.risk.max_cons_loss_days requires 1 parameter: count');
       return;
     }
 
@@ -598,16 +557,14 @@ export class StrategyFunctionsValidator implements ValidationModule {
     
     if (!isNaN(numValue)) {
       if (numValue <= 0) {
-        this.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-CONS-LOSS-VALUE', 
-          'Maximum consecutive loss days must be greater than 0');
+        this.helper.addError(lineNumber, column, 'PSV6-STRATEGY-MAX-CONS-LOSS-VALUE', 'Maximum consecutive loss days must be greater than 0');
       } else if (numValue > 30) {
-        this.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-CONS-LOSS-HIGH', 
+        this.helper.addWarning(lineNumber, column, 'PSV6-STRATEGY-MAX-CONS-LOSS-HIGH', 
           `High consecutive loss days (${numValue}) may indicate strategy issues`);
       }
     }
 
-    this.addInfo(lineNumber, column, 'PSV6-STRATEGY-CONS-LOSS-PROTECTION', 
-      'Consecutive loss protection helps prevent extended drawdown periods');
+    this.helper.addInfo(lineNumber, column, 'PSV6-STRATEGY-CONS-LOSS-PROTECTION', 'Consecutive loss protection helps prevent extended drawdown periods');
   }
 
   private isVariableOrExpression(value: string): boolean {
@@ -618,7 +575,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
   private validateStrategyComplexity(): void {
     for (const [line, info] of this.nestedStrategyCallsByLine.entries()) {
       if (info.count > 1) {
-        this.addWarning(
+        this.helper.addWarning(
           line,
           info.column,
           'PSV6-STRATEGY-COMPLEXITY',
@@ -637,11 +594,11 @@ export class StrategyFunctionsValidator implements ValidationModule {
         }
       }
       if (hasDuplicate) {
-        this.addInfo(
+        this.helper.addInfo(
           line,
           column === Number.MAX_SAFE_INTEGER ? 1 : column,
-          'PSV6-STRATEGY-CACHE-SUGGESTION',
           'Consider caching repeated Strategy calculations to improve performance.',
+          'PSV6-STRATEGY-CACHE-SUGGESTION',
         );
       }
     }
@@ -650,17 +607,17 @@ export class StrategyFunctionsValidator implements ValidationModule {
   private validateStrategyPerformance(): void {
     // Check for too many Strategy function calls (lower threshold for tests)
     if (this.strategyFunctionCount > 3) {
-      this.addWarning(
+      this.helper.addWarning(
         0,
         0,
-        'PSV6-STRATEGY-PERF-MANY-CALLS',
-        `Too many Strategy function calls (${this.strategyFunctionCount}). Consider optimizing for better performance.`
+        `Too many Strategy function calls (${this.strategyFunctionCount}). Consider optimizing for better performance.`,
+        'PSV6-STRATEGY-PERF-MANY-CALLS'
       );
     }
 
     // Check for complex Strategy expressions
     if (this.complexStrategyExpressions > 1) {
-      this.addWarning(
+      this.helper.addWarning(
         0,
         0,
         'PSV6-STRATEGY-PERF-NESTED',
@@ -671,7 +628,7 @@ export class StrategyFunctionsValidator implements ValidationModule {
     // Strategy calls inside loops
     for (const info of this.strategyFunctionCalls.values()) {
       if (info.inLoop) {
-        this.addWarning(info.line, info.column, 'PSV6-STRATEGY-PERF-LOOP', 'Strategy operation in loop');
+        this.helper.addWarning(info.line, info.column, 'Strategy operation in loop', 'PSV6-STRATEGY-PERF-LOOP');
       }
     }
   }
@@ -697,11 +654,11 @@ export class StrategyFunctionsValidator implements ValidationModule {
         // Check for extreme qty parameters
         if (funcName.includes('entry') || funcName.includes('order')) {
           if (index === 2 && numValue > 1000) {
-            this.addInfo(
+            this.helper.addInfo(
               funcInfo.line,
               funcInfo.column,
-              'PSV6-STRATEGY-PARAM-SUGGESTION',
-              `Large quantity parameter (${numValue}) for '${funcName}'. Consider if this is necessary for your use case.`
+              `Large quantity parameter (${numValue}) for '${funcName}'. Consider if this is necessary for your use case.`,
+              'PSV6-STRATEGY-PARAM-SUGGESTION'
             );
           }
         }
@@ -709,11 +666,11 @@ export class StrategyFunctionsValidator implements ValidationModule {
         // Check for extreme limit/stop parameters
         if (funcName.includes('entry') || funcName.includes('order')) {
           if ((index === 3 || index === 4) && (numValue > 10000 || numValue < 0.01)) {
-            this.addInfo(
+            this.helper.addInfo(
               funcInfo.line,
               funcInfo.column,
-              'PSV6-STRATEGY-PARAM-SUGGESTION',
-              `Extreme limit/stop parameter (${numValue}) for '${funcName}'. Consider if this is necessary for your use case.`
+              `Extreme limit/stop parameter (${numValue}) for '${funcName}'. Consider if this is necessary for your use case.`,
+              'PSV6-STRATEGY-PARAM-SUGGESTION'
             );
           }
         }
@@ -730,21 +687,17 @@ export class StrategyFunctionsValidator implements ValidationModule {
     const hasOrder = functionNames.some(f => f.includes('order'));
     
     if (hasEntry && hasExit) {
-      this.addInfo(
+      this.helper.addInfo(
         0,
         0,
-        'PSV6-STRATEGY-COMBINATION-SUGGESTION',
-        'Good combination of entry and exit functions detected. Consider using strategy.position_size for position management.'
-      );
+        'Good combination of entry and exit functions detected. Consider using strategy.position_size for position management.', 'PSV6-STRATEGY-COMBINATION-SUGGESTION');
     }
     
     if (hasOrder && hasEntry) {
-      this.addInfo(
+      this.helper.addInfo(
         0,
         0,
-        'PSV6-STRATEGY-COMBINATION-SUGGESTION',
-        'Good combination of order and entry functions detected. Consider using strategy.equity for equity management.'
-      );
+        'Good combination of order and entry functions detected. Consider using strategy.equity for equity management.', 'PSV6-STRATEGY-COMBINATION-SUGGESTION');
     }
   }
 
@@ -759,12 +712,10 @@ export class StrategyFunctionsValidator implements ValidationModule {
           // Check for hardcoded qty values
           const qtyParam = this.findQtyParameter(funcInfo.parameters);
           if (qtyParam && /^\d+$/.test(qtyParam.trim()) && parseInt(qtyParam.trim()) > 100) {
-            this.addInfo(
+            this.helper.addInfo(
               funcInfo.line,
               funcInfo.column,
-              'PSV6-STRATEGY-CAPITAL-SUGGESTION',
-              'Consider using strategy.initial_capital for position sizing instead of hardcoded values'
-            );
+              'Consider using strategy.initial_capital for position sizing instead of hardcoded values', 'PSV6-STRATEGY-CAPITAL-SUGGESTION');
           }
         }
       }
@@ -772,12 +723,10 @@ export class StrategyFunctionsValidator implements ValidationModule {
       // Suggest using strategy.commission for any strategy with entry functions
       const hasEntryFunctions = Array.from(this.strategyFunctionCalls.keys()).some(f => f.includes('entry'));
       if (hasEntryFunctions) {
-        this.addInfo(
+        this.helper.addInfo(
           0,
           0,
-          'PSV6-STRATEGY-COMMISSION-SUGGESTION',
-          'Consider configuring strategy.commission in strategy() declaration for accurate backtesting'
-        );
+          'Consider configuring strategy.commission in strategy() declaration for accurate backtesting', 'PSV6-STRATEGY-COMMISSION-SUGGESTION');
       }
     }
   }
@@ -915,79 +864,6 @@ export class StrategyFunctionsValidator implements ValidationModule {
     return 'series';
   }
 
-  private addError(line: number, column: number, code: string, message: string): void {
-    // Only generate errors for clearly invalid cases
-    if (this.isClearlyInvalid(message, code)) {
-      this.errors.push({
-        line,
-        column,
-        code,
-        message,
-        severity: 'error'
-      });
-    } else {
-      // Generate warnings for ambiguous cases
-      this.warnings.push({
-        line,
-        column,
-        code,
-        message,
-        severity: 'warning'
-      });
-    }
-  }
-
-  private addWarning(line: number, column: number, code: string, message: string): void {
-    this.warnings.push({
-      line,
-      column,
-      code,
-      message,
-      severity: 'warning'
-    });
-  }
-
-  private addInfo(line: number, column: number, code: string, message: string): void {
-    this.info.push({
-      line,
-      column,
-      code,
-      message,
-      severity: 'info'
-    });
-  }
-
-  private isClearlyInvalid(message: string, code: string): boolean {
-    // Only generate errors for clearly invalid cases
-    
-    // Parameter type errors are clearly invalid
-    if (code === Codes.STRATEGY_FUNCTION_PARAM) {
-      return true;
-    }
-    
-    // Unknown function errors are clearly invalid
-    if (code === Codes.STRATEGY_FUNCTION_UNKNOWN) {
-      return true;
-    }
-    
-    // Invalid strategy function usage is clearly invalid
-    if (code === Codes.STRATEGY_INVALID) {
-      return true;
-    }
-
-    // Advanced strategy hard errors expected by TDD
-    const hardErrorCodes = [
-      Codes.STRATEGY_CONSTANT_AS_FUNCTION,
-      Codes.STRATEGY_ALLOW_ENTRY_PARAMS,
-      Codes.STRATEGY_MAX_POSITION_SIZE,
-      Codes.STRATEGY_MAX_DRAWDOWN_VALUE,
-      Codes.STRATEGY_MAX_ORDERS_VALUE
-    ];
-    if (hardErrorCodes.includes(code as typeof hardErrorCodes[number])) return true;
-    
-    // For performance and best practice issues, generate warnings
-    return false;
-  }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
     return ensureAstContext(this.context, config);

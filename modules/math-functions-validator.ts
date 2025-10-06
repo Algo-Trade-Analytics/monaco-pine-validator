@@ -6,6 +6,7 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import { BUILTIN_FUNCTIONS_V6_RULES, NS_MEMBERS } from '../core/constants';
 import {
   type ArgumentNode,
@@ -44,9 +45,7 @@ export class MathFunctionsValidator implements ValidationModule {
   name = 'MathFunctionsValidator';
   priority = 83; // High priority - Math functions are core Pine Script functionality, must run before FunctionValidator
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
 
@@ -61,19 +60,13 @@ export class MathFunctionsValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
+    this.helper.reset();
     this.reset();
     this.context = context;
     this.astContext = this.getAstContext(config);
     const ast = this.astContext?.ast;
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.collectMathDataAst(ast);
@@ -90,20 +83,10 @@ export class MathFunctionsValidator implements ValidationModule {
       });
     }
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap,
-      scriptType: null
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
     this.astContext = null;
     this.mathFunctionCalls.clear();
     this.mathFunctionCount = 0;
@@ -150,11 +133,12 @@ export class MathFunctionsValidator implements ValidationModule {
 
     const memberName = qualifiedName.slice('math.'.length);
     if (!NS_MEMBERS.math || !NS_MEMBERS.math.has(memberName)) {
-      this.addError(
+      this.helper.addWarning(
         node.loc.start.line,
         node.loc.start.column,
-        `PSV6-MATH-FUNCTION-UNKNOWN: Unknown Math function: ${qualifiedName}`,
-        `Math function '${qualifiedName}' is not recognized. Check spelling and ensure it's a valid Pine Script v6 Math function.`,
+        `Unknown Math function: ${qualifiedName}`,
+        'PSV6-MATH-FUNCTION-UNKNOWN',
+        `Math function '${qualifiedName}' is not recognized. Check spelling and ensure it's a valid Pine Script v6 Math function.`
       );
       return;
     }
@@ -189,20 +173,20 @@ export class MathFunctionsValidator implements ValidationModule {
     const lineCount = (this.astLineCallCounts.get(node.loc.start.line) || 0) + 1;
     this.astLineCallCounts.set(node.loc.start.line, lineCount);
     if (lineCount > 1) {
-      this.addWarning(node.loc.start.line, 1, 'PSV6-MATH-PERF-NESTED', 'Multiple Math operations on one line');
+      this.helper.addWarning(node.loc.start.line, 1, 'Multiple Math operations on one line', 'PSV6-MATH-PERF-NESTED');
     }
 
     if (inLoop) {
-      this.addWarning(node.loc.start.line, node.loc.start.column, 'PSV6-MATH-PERF-LOOP', 'Math operation in loop');
+      this.helper.addWarning(node.loc.start.line, node.loc.start.column, 'Math operation in loop', 'PSV6-MATH-PERF-LOOP');
     }
 
     const nestedCalls = this.countNestedMathCalls(argumentNodes);
     if (nestedCalls > 2) {
-      this.addWarning(
+      this.helper.addWarning(
         node.loc.start.line,
         1,
-        'PSV6-MATH-COMPLEXITY',
         'Complex nested Math function calls detected. Consider breaking into separate variables for better performance.',
+        'PSV6-MATH-COMPLEXITY'
       );
     }
 
@@ -218,26 +202,26 @@ export class MathFunctionsValidator implements ValidationModule {
     const count = (this.repeatedCallCounts.get(signature) || 0) + 1;
     this.repeatedCallCounts.set(signature, count);
     if (count > 1) {
-      this.addInfo(line, column, 'PSV6-MATH-CACHE-SUGGESTION', 'Consider caching repeated Math calculations to improve performance.');
+      this.helper.addInfo(line, column, 'Consider caching repeated Math calculations to improve performance.', 'PSV6-MATH-CACHE-SUGGESTION');
     }
   }
 
   private validateMathPerformanceAst(): void {
     if (this.mathFunctionCount > 3) {
-      this.addWarning(
+      this.helper.addWarning(
         0,
         0,
-        'PSV6-MATH-PERF-MANY',
         `Too many Math function calls (${this.mathFunctionCount}). Consider optimizing for better performance.`,
+        'PSV6-MATH-PERF-MANY'
       );
     }
 
     if (this.complexMathExpressions > 1) {
-      this.addWarning(
+      this.helper.addWarning(
         0,
         0,
-        'PSV6-MATH-PERF-NESTED',
         `Too many complex Math expressions (${this.complexMathExpressions}). Consider simplifying for better performance.`,
+        'PSV6-MATH-PERF-NESTED'
       );
     }
   }
@@ -259,11 +243,11 @@ export class MathFunctionsValidator implements ValidationModule {
     // Check parameter count - be more lenient
     const requiredParams = expectedParams.filter((p: { required?: boolean }) => p.required).length;
     if (parameters.length < requiredParams) {
-      this.addError(
+      this.helper.addError(
         lineNumber,
         column,
-        'PSV6-MATH-FUNCTION-PARAM',
-        `Math function '${functionName}' requires at least ${requiredParams} parameters, got ${parameters.length}`
+        `Math function '${functionName}' requires at least ${requiredParams} parameters, got ${parameters.length}`,
+        'PSV6-MATH-FUNCTION-PARAM'
       );
     }
 
@@ -275,11 +259,11 @@ export class MathFunctionsValidator implements ValidationModule {
         if (expectedParam.required && !this.isValidMathParameter(param, expectedParam.type, node)) {
           // Only error if it's clearly wrong (like passing a string to a numeric parameter)
           if (expectedParam.type === 'float' && this.inferParameterType(param, node) === 'string') {
-            this.addError(
+            this.helper.addError(
               lineNumber,
               column,
-              'PSV6-MATH-FUNCTION-PARAM',
-              `Parameter ${index + 1} of '${functionName}' should be ${expectedParam.type}, got ${this.inferParameterType(param)}`
+              `Parameter ${index + 1} of '${functionName}' should be ${expectedParam.type}, got ${this.inferParameterType(param)}`,
+              'PSV6-MATH-FUNCTION-PARAM'
             );
           }
         }
@@ -306,11 +290,11 @@ export class MathFunctionsValidator implements ValidationModule {
         // Check for extreme power parameters
         if (funcName.includes('pow') && index === 1) {
           if (numValue > 10) {
-            this.addInfo(
+            this.helper.addInfo(
               funcInfo.line,
               funcInfo.column,
-              'PSV6-MATH-PARAM-SUGGESTION',
-              `Large power parameter (${numValue}) for '${funcName}'. Consider if this is necessary for your use case.`
+              `Large power parameter (${numValue}) for '${funcName}'. Consider if this is necessary for your use case.`,
+              'PSV6-MATH-PARAM-SUGGESTION'
             );
           }
         }
@@ -318,11 +302,11 @@ export class MathFunctionsValidator implements ValidationModule {
         // Check for extreme period parameters
         if (funcName.includes('sum') || funcName.includes('avg') || funcName.includes('median') || funcName.includes('mode')) {
           if (numValue > 500) {
-            this.addInfo(
+            this.helper.addInfo(
               funcInfo.line,
               funcInfo.column,
-              'PSV6-MATH-PARAM-SUGGESTION',
-              `Large period parameter (${numValue}) for '${funcName}'. Consider if this is necessary for your use case.`
+              `Large period parameter (${numValue}) for '${funcName}'. Consider if this is necessary for your use case.`,
+              'PSV6-MATH-PARAM-SUGGESTION'
             );
           }
         }
@@ -339,20 +323,20 @@ export class MathFunctionsValidator implements ValidationModule {
     const hasStatistical = functionNames.some(f => ['math.sum', 'math.avg'].includes(f));
     
     if (hasTrigonometric && hasExponential) {
-      this.addInfo(
+      this.helper.addInfo(
         0,
         0,
-        'PSV6-MATH-COMBINATION-SUGGESTION',
-        'Good combination of trigonometric and exponential functions detected. Consider using math.pow instead of manual multiplication.'
+        'Good combination of trigonometric and exponential functions detected. Consider using math.pow instead of manual multiplication.',
+        'PSV6-MATH-COMBINATION-SUGGESTION'
       );
     }
     
     if (hasStatistical && hasExponential) {
-      this.addInfo(
+      this.helper.addInfo(
         0,
         0,
-        'PSV6-MATH-COMBINATION-SUGGESTION',
-        'Good combination of statistical and exponential functions detected. Consider using math.sqrt for standard deviation calculations.'
+        'Good combination of statistical and exponential functions detected. Consider using math.sqrt for standard deviation calculations.',
+        'PSV6-MATH-COMBINATION-SUGGESTION'
       );
     }
   }
@@ -589,48 +573,6 @@ export class MathFunctionsValidator implements ValidationModule {
     
     // Default to series for variables
     return 'series';
-  }
-
-  private addError(line: number, column: number, code: string, message: string): void {
-    // Only generate errors for clearly invalid cases
-    if (this.isClearlyInvalid(message, code)) {
-      this.errors.push({
-        line,
-        column,
-        code,
-        message,
-        severity: 'error'
-      });
-    } else {
-      // Generate warnings for ambiguous cases
-      this.warnings.push({
-        line,
-        column,
-        code,
-        message,
-        severity: 'warning'
-      });
-    }
-  }
-
-  private addWarning(line: number, column: number, code: string, message: string): void {
-    this.warnings.push({
-      line,
-      column,
-      code,
-      message,
-      severity: 'warning'
-    });
-  }
-
-  private addInfo(line: number, column: number, code: string, message: string): void {
-    this.info.push({
-      line,
-      column,
-      code,
-      message,
-      severity: 'info'
-    });
   }
 
   private isClearlyInvalid(message: string, code: string): boolean {

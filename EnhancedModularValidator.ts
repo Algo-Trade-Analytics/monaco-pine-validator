@@ -13,6 +13,7 @@
 
 import { BaseValidator } from './core/base-validator';
 import { ValidationResult, ValidatorConfig, ValidationContext } from './core/types';
+import { Codes } from './core/codes';
 import { CoreValidator } from './modules/core-validator';
 import { TypeValidator } from './modules/type-validator';
 import { ScopeValidator } from './modules/scope-validator';
@@ -247,7 +248,7 @@ export class EnhancedModularValidator extends BaseValidator {
           }
         }
       } catch (error) {
-        this.addError(1, 1, `Error in ${module.name} module: ${error}`, 'MODULE-ERROR');
+        this.addError(1, 1, `Error in ${module.name} module: ${error}`, Codes.MODULE_ERROR);
       }
     }
 

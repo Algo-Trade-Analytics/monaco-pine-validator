@@ -16,6 +16,7 @@ import {
   ScopeInfo,
   TypeInfo,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   KEYWORDS, PSEUDO_VARS, WILDCARD_IDENT, IDENT
 } from '../core/constants';
@@ -100,32 +101,14 @@ export class CoreValidator implements ValidationModule {
   name = 'CoreValidator';
   priority = 100; // High priority - runs first
 
-  // Error tracking
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
 
   getDependencies(): string[] {
     return []; // Core validator has no dependencies
   }
 
-  // Helper methods for error reporting
-  private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.errors.push({ line, column, message, severity: 'error', code, suggestion });
-  }
-
-  private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
-
-  private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
-
   private addBySeverity(sev: 'error' | 'warning' | 'info', line: number, col: number, msg: string, code?: string, sugg?: string): void {
-    if (sev === 'error') this.addError(line, col, msg, code, sugg);
-    else if (sev === 'warning') this.addWarning(line, col, msg, code, sugg);
-    else this.addInfo(line, col, msg, code, sugg);
+    this.helper.addBySeverity(sev, line, col, msg, code, sugg);
   }
 
   private stripStrings(line: string): string {
@@ -199,49 +182,26 @@ export class CoreValidator implements ValidationModule {
     this.config = config;
 
     if (config.ast?.mode === 'disabled') {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.astContext = this.getAstContext(config);
 
     const ast = this.astContext?.ast ?? null;
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.processAstProgram(ast);
     this.analyzeSourceStructureForAst();
     this.performPostValidationChecks();
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
     // Clear error/warning/info arrays
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     
     this.astContext = null;
     this.astVersionDirectiveLines.clear();
@@ -344,7 +304,7 @@ export class CoreValidator implements ValidationModule {
           if (process.env.DEBUG_PS016 === '1') {
             console.log('[PS016 debug] textual detection', { line: lineNumber, field });
           }
-          this.addError(
+          this.helper.addError(
             lineNumber,
             column,
             `Use ':=' to assign to 'this.${field}'. '=' is reserved for the first assignment.`,
@@ -372,7 +332,7 @@ export class CoreValidator implements ValidationModule {
         }
 
         if (indent !== indentLevels[indentLevels.length - 1]) {
-          this.addWarning(lineNumber, 1, 'Indentation does not match previous block level.', 'PS018');
+          this.helper.addWarning(lineNumber, 1, 'Indentation does not match previous block level.', 'PS018');
         }
       }
     }
@@ -583,7 +543,7 @@ export class CoreValidator implements ValidationModule {
       loweredType &&
       ((declarationKind === 'var' || declarationKind === 'varip') && loweredType === 'const')
     ) {
-      this.addError(line, declaration.loc.start.column, 'Invalid declaration: use either var/varip or const, not both.', 'PSD01');
+      this.helper.addError(line, declaration.loc.start.column, 'Invalid declaration: use either var/varip or const, not both.', 'PSD01');
     }
 
     if (
@@ -591,7 +551,7 @@ export class CoreValidator implements ValidationModule {
       declarationKind === 'const' &&
       (loweredType === 'var' || loweredType === 'varip')
     ) {
-      this.addError(line, declaration.loc.start.column, 'Invalid declaration: use either var/varip or const, not both.', 'PSD01');
+      this.helper.addError(line, declaration.loc.start.column, 'Invalid declaration: use either var/varip or const, not both.', 'PSD01');
     }
 
     const identifier = declaration.identifier;
@@ -602,7 +562,7 @@ export class CoreValidator implements ValidationModule {
     const initializerOperator = declaration.initializerOperator;
 
     if (initializer && initializerOperator === ':=') {
-      this.addError(line, declaration.loc.start.column, 'Use "=" (not ":=") in declarations.', 'PSD02');
+      this.helper.addError(line, declaration.loc.start.column, 'Use "=" (not ":=") in declarations.', 'PSD02');
     }
 
     const isConst = declaration.declarationKind === 'const';
@@ -642,7 +602,7 @@ export class CoreValidator implements ValidationModule {
     const tupleColumn = tuple.loc.start.column;
 
     if (operator !== '=') {
-      this.addError(
+      this.helper.addError(
         tupleLine,
         tupleColumn,
         `Tuple destructuring must use "=" (not '${operator}').`,
@@ -669,7 +629,7 @@ export class CoreValidator implements ValidationModule {
 
       if (element && element.kind === 'MemberExpression') {
         const member = element as MemberExpressionNode;
-        this.addWarning(
+        this.helper.addWarning(
           member.loc.start.line,
           member.loc.start.column,
           'Dotted names in tuple destructuring are unusual and may indicate an error.',
@@ -681,7 +641,7 @@ export class CoreValidator implements ValidationModule {
     });
 
     if (hasEmptySlot) {
-      this.addWarning(tupleLine, tupleColumn, 'Empty slot in destructuring tuple.', 'PST02');
+      this.helper.addWarning(tupleLine, tupleColumn, 'Empty slot in destructuring tuple.', 'PST02');
     }
   }
 
@@ -735,7 +695,7 @@ export class CoreValidator implements ValidationModule {
 
     if (this.scriptType === 'library') {
       if (PLOTTING_OR_DRAWING_CALLEES.has(fullName)) {
-        this.addError(
+        this.helper.addError(
           call.loc.start.line,
           call.loc.start.column,
           "Plotting functions are not allowed in libraries.",
@@ -744,7 +704,7 @@ export class CoreValidator implements ValidationModule {
       }
 
       if (root === 'input') {
-        this.addError(
+        this.helper.addError(
           call.loc.start.line,
           call.loc.start.column,
           "Inputs aren't allowed in libraries.",
@@ -766,7 +726,7 @@ export class CoreValidator implements ValidationModule {
         }
 
         const { line, column } = argument.value.loc.start;
-        this.addError(
+        this.helper.addError(
           line,
           column,
           "The value for 'linewidth' must be >= 1, but it was 0.",
@@ -786,7 +746,7 @@ export class CoreValidator implements ValidationModule {
 
       if (isMultiLineValue && isReservedKeyword(argName)) {
         const { line, column } = argument.name.loc.start;
-        this.addError(line, column, `Identifier '${argName}' conflicts with a Pine keyword/builtin.`, 'PS007');
+        this.helper.addError(line, column, `Identifier '${argName}' conflicts with a Pine keyword/builtin.`, 'PS007');
       }
     }
   }
@@ -842,7 +802,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     const { line, column } = path.node.loc.start;
-    this.addWarning(line, column, 'Inputs should be declared at top level (global scope).', 'PS027');
+    this.helper.addWarning(line, column, 'Inputs should be declared at top level (global scope).', 'PS027');
   }
 
   private isAstTopLevel(path: NodePath): boolean {
@@ -977,7 +937,7 @@ export class CoreValidator implements ValidationModule {
     const targetVersion = this.config.targetVersion ?? 6;
 
     if (targetVersion < 6) {
-      this.addError(
+      this.helper.addError(
         location.line,
         location.column,
         'Invalid history reference: negative indexes are not allowed.',
@@ -993,7 +953,7 @@ export class CoreValidator implements ValidationModule {
       return;
     }
 
-    this.addError(
+    this.helper.addError(
       location.line,
       location.column,
       'Invalid history reference: negative indexes are not allowed for series data.',
@@ -1024,7 +984,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     this.astHistoryReferenceWarnedLines.add(line);
-    this.addWarning(
+    this.helper.addWarning(
       line,
       1,
       'Many history references on one line may impact performance.',
@@ -1037,7 +997,7 @@ export class CoreValidator implements ValidationModule {
     if (parent?.node.kind === 'BinaryExpression' && parent.key === 'left') {
       const binary = parent.node as BinaryExpressionNode;
       if (this.isThisMemberExpression(path.node) && binary.operator === '=') {
-        this.addError(
+        this.helper.addError(
           path.node.loc.start.line,
           path.node.loc.start.column,
           `Use ':=' to assign to 'this.${path.node.property.kind === 'Identifier' ? path.node.property.name : '?'}'. '=' is reserved for the first assignment.`,
@@ -1073,7 +1033,7 @@ export class CoreValidator implements ValidationModule {
     const literalValue = this.extractNumericLiteral(test);
     if (literalValue !== null) {
       const { line, column } = test.loc.start;
-      this.addError(
+      this.helper.addError(
         line,
         column,
         'Numeric literals are not implicitly converted to booleans in v6.',
@@ -1098,7 +1058,7 @@ export class CoreValidator implements ValidationModule {
 
     if (metadata.kind === 'float' || metadata.kind === 'int' || metadata.kind === 'series') {
       const { line, column } = test.loc.start;
-      this.addError(
+      this.helper.addError(
         line,
         column,
         'Numeric variables are not implicitly converted to booleans in v6.',
@@ -1134,7 +1094,7 @@ export class CoreValidator implements ValidationModule {
     const invalidOperatorMessage = this.getAstInvalidBinaryOperatorMessage(expression.operator);
     if (invalidOperatorMessage) {
       const { line, column } = expression.loc.start;
-      this.addWarning(line, column, invalidOperatorMessage, 'PSO01');
+      this.helper.addWarning(line, column, invalidOperatorMessage, 'PSO01');
     }
 
     if (expression.operator !== '==' && expression.operator !== '!=') {
@@ -1151,7 +1111,7 @@ export class CoreValidator implements ValidationModule {
 
     const { line, column } = expression.loc.start;
     this.astNaComparisonWarningLines.add(line);
-    this.addWarning(
+    this.helper.addWarning(
       line,
       column,
       "Direct comparison with 'na' is unreliable. Use na(x), e.g., na(myValue).",
@@ -1167,7 +1127,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     const { line, column } = expression.loc.start;
-    this.addWarning(line, column, invalidOperatorMessage, 'PSO01');
+    this.helper.addWarning(line, column, invalidOperatorMessage, 'PSO01');
   }
 
   private processAstAssignmentInConditionalTest(test: ExpressionNode): void {
@@ -1176,7 +1136,7 @@ export class CoreValidator implements ValidationModule {
       return;
     }
 
-    this.addWarning(
+    this.helper.addWarning(
       location.line,
       location.column,
       'Assignment "=" inside condition; did you mean "=="?',
@@ -1257,7 +1217,7 @@ export class CoreValidator implements ValidationModule {
         });
       }
       if (this.isThisMemberExpression(member) && operator === '=') {
-        this.addError(
+        this.helper.addError(
           line,
           member.loc.start.column,
           `Use ':=' to assign to 'this.${member.property.kind === 'Identifier' ? member.property.name : '?'}'. '=' is reserved for the first assignment.`,
@@ -1276,7 +1236,7 @@ export class CoreValidator implements ValidationModule {
     const isParameter = this.isAstFunctionParameter(name);
 
     if (this.constNames.has(name)) {
-      this.addError(line, column, `Cannot reassign const '${name}' with '${operator}'.`, 'PS019');
+      this.helper.addError(line, column, `Cannot reassign const '${name}' with '${operator}'.`, 'PS019');
       return;
     }
 
@@ -1289,7 +1249,7 @@ export class CoreValidator implements ValidationModule {
         const siteKey = `${line}:${name}`;
         if (!this.astReassignmentErrorSites.has(siteKey)) {
           this.astReassignmentErrorSites.add(siteKey);
-          this.addError(
+          this.helper.addError(
             line,
             column,
             `Variable '${name}' not declared before ':='. Use '=' on first assignment.`,
@@ -1306,7 +1266,7 @@ export class CoreValidator implements ValidationModule {
         const siteKey = `${line}:${name}`;
         if (!this.astCompoundAssignmentErrorSites.has(siteKey)) {
           this.astCompoundAssignmentErrorSites.add(siteKey);
-          this.addError(
+          this.helper.addError(
             line,
             column,
             `Variable '${name}' not declared before '${operator}'. Use '=' for first assignment or declare it.`,
@@ -1342,7 +1302,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     const { line, column } = call.loc.start;
-    this.addWarning(line, column, 'Expensive operation inside loop may impact performance.', 'PSP001');
+    this.helper.addWarning(line, column, 'Expensive operation inside loop may impact performance.', 'PSP001');
   }
 
   private processAstFunctionDeclaration(fn: FunctionDeclarationNode): void {
@@ -1369,7 +1329,7 @@ export class CoreValidator implements ValidationModule {
       this.context.methodNames?.add(name);
       if (methodIndex > 0) {
         const location = fn.params[methodIndex]!.identifier.loc.start;
-        this.addWarning(location.line, location.column, "In methods, 'this' should be the first parameter.", 'PSM01');
+        this.helper.addWarning(location.line, location.column, "In methods, 'this' should be the first parameter.", 'PSM01');
       }
     }
 
@@ -1446,7 +1406,7 @@ export class CoreValidator implements ValidationModule {
         const message = isMethod && paramName === 'this'
           ? `Duplicate 'this' parameter in method '${name}'.`
           : `Duplicate parameter '${paramName}' in function '${name}'.`;
-        this.addError(line, column, message, 'PSDUP01');
+        this.helper.addError(line, column, message, 'PSDUP01');
         continue;
       }
 
@@ -1557,7 +1517,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     const { line, column } = statement.loc.start;
-    this.addWarning(
+    this.helper.addWarning(
       line,
       column,
       `Unreachable code after return at line ${returnLine}.`,
@@ -1598,7 +1558,7 @@ export class CoreValidator implements ValidationModule {
     }
 
     this.astStrategyUsageErrorLines.add(line);
-    this.addError(
+    this.helper.addError(
       line,
       column,
       "Calls to 'strategy.*' are not allowed in indicators.",
@@ -1692,15 +1652,15 @@ export class CoreValidator implements ValidationModule {
     );
     
     if (!hasScriptDeclaration) {
-      this.addWarning(line, column, 'Version directive should be just above the coding block.', 'PSW01');
+      this.helper.addWarning(line, column, 'Version directive should be just above the coding block.', 'PSW01');
     }
 
     if (primary.version < 5) {
-      this.addWarning(line, column, `Pine version ${primary.version} is deprecated. Prefer v5 or v6.`, 'PSW02');
+      this.helper.addWarning(line, column, `Pine version ${primary.version} is deprecated. Prefer v5 or v6.`, 'PSW02');
     }
 
     for (const duplicate of duplicates) {
-      this.addError(
+      this.helper.addError(
         duplicate.loc.start.line,
         duplicate.loc.start.column,
         'Multiple //@version directives. Only one allowed.',
@@ -1729,7 +1689,7 @@ export class CoreValidator implements ValidationModule {
     const isIndicatorWithoutTitle = primary.scriptType === 'indicator' && primary.arguments.length === 0;
 
     if (!hasTitle && !isIndicatorWithoutTitle) {
-      this.addError(
+      this.helper.addError(
         primary.loc.start.line,
         primary.loc.start.column,
         'Script declaration should include a title (positional or title=).',
@@ -1740,7 +1700,7 @@ export class CoreValidator implements ValidationModule {
     for (const duplicate of duplicates) {
       this.astScriptDeclarationLines.add(duplicate.loc.start.line);
       if (duplicate.scriptType !== primary.scriptType) {
-        this.addError(
+        this.helper.addError(
           duplicate.loc.start.line,
           duplicate.loc.start.column,
           `Multiple script declarations not allowed (already '${primary.scriptType}').`,
@@ -1767,43 +1727,43 @@ export class CoreValidator implements ValidationModule {
   }  private performPostValidationChecks(): void {
     // Check for missing version
     if (!this.hasVersion) {
-      this.addError(1, 1, 'Missing version directive. Add //@version=6 at the top.', 'PS012');
+      this.helper.addError(1, 1, 'Missing version directive. Add //@version=6 at the top.', 'PS012');
     }
 
     // Check for missing script declaration
     if (!this.scriptType) {
       const line = this.hasVersion ? 2 : 1;
-      this.addError(line, 1, 'Missing script declaration. Add indicator(), strategy(), or library().', 'PS013');
+      this.helper.addError(line, 1, 'Missing script declaration. Add indicator(), strategy(), or library().', 'PS013');
     }
 
     // Check for missing strategy.* calls in strategies
     if (this.scriptType === 'strategy' && !this.hasStrategyCalls) {
-      this.addWarning(1, 1, 'Strategy script has no strategy.* calls. Consider adding strategy.entry() or strategy.exit().', 'PS015');
+      this.helper.addWarning(1, 1, 'Strategy script has no strategy.* calls. Consider adding strategy.entry() or strategy.exit().', 'PS015');
     }
 
     // Check for missing plotting in indicators
     if (this.scriptType === 'indicator' && !this.hasPlotting) {
-      this.addWarning(1, 1, 'Indicator script has no plotting functions. Consider adding plot() or plotshape().', 'PS014');
+      this.helper.addWarning(1, 1, 'Indicator script has no plotting functions. Consider adding plot() or plotshape().', 'PS014');
     }
 
     // Check for mixed indentation
     if (this.sawTabIndent && this.sawSpaceIndent) {
-      this.addWarning(1, 1, 'Mixed tabs and spaces for indentation detected.', 'PSI02');
+      this.helper.addWarning(1, 1, 'Mixed tabs and spaces for indentation detected.', 'PSI02');
     }
 
     // Check for unmatched brackets
     const totalLines = Math.max(1, getSourceLines(this.context).length);
     if (this.brace !== 0) {
-      this.addError(totalLines, 1, 'Unmatched curly braces across script.', 'PS011');
+      this.helper.addError(totalLines, 1, 'Unmatched curly braces across script.', 'PS011');
     } else if (this.sawBrace) {
-      this.addWarning(totalLines, 1, 'Curly braces are not used for blocks in Pine Script.', 'PSB01');
+      this.helper.addWarning(totalLines, 1, 'Curly braces are not used for blocks in Pine Script.', 'PSB01');
     }
 
     if (this.paren !== 0) {
-      this.addError(totalLines, 1, 'Unmatched parentheses across script.', 'PS009');
+      this.helper.addError(totalLines, 1, 'Unmatched parentheses across script.', 'PS009');
     }
     if (this.bracket !== 0) {
-      this.addError(totalLines, 1, 'Unmatched square brackets across script.', 'PS010');
+      this.helper.addError(totalLines, 1, 'Unmatched square brackets across script.', 'PS010');
     }
 
     // Check for unused variables
@@ -1818,7 +1778,7 @@ export class CoreValidator implements ValidationModule {
     for (const [name, line] of this.declared.entries()) {
       if (IGNORE_UNUSED.has(name)) continue;
       if (!this.used.has(name) && !isReservedKeyword(name) && !this.functionNames.has(name) && !functionParamSet.has(name)) {
-        this.addWarning(line, 1, `Variable '${name}' is declared but never used.`, 'PSU01');
+        this.helper.addWarning(line, 1, `Variable '${name}' is declared but never used.`, 'PSU01');
       }
     }
   }
@@ -1840,7 +1800,7 @@ export class CoreValidator implements ValidationModule {
         // Skip PSU-PARAM warnings for dotted function names (known limitation)
         if (fn.includes('.')) continue;
         if (!usedInFn.has(p)) {
-          this.addWarning(headerLine, 1, `Parameter '${p}' in '${fn}' is never used.`, 'PSU-PARAM');
+          this.helper.addWarning(headerLine, 1, `Parameter '${p}' in '${fn}' is never used.`, 'PSU-PARAM');
         }
       }
     }
@@ -1909,7 +1869,7 @@ export class CoreValidator implements ValidationModule {
                       const msg = (isMethod && p === 'this')
                         ? `Duplicate 'this' parameter in method '${full}'.`
                         : `Duplicate parameter '${p}' in function '${full}'.`;
-                      this.addError(startIdx + 1, 1, msg, 'PSDUP01');
+                      this.helper.addError(startIdx + 1, 1, msg, 'PSDUP01');
                     }
                     seen.add(p);
                   });
@@ -1962,7 +1922,7 @@ export class CoreValidator implements ValidationModule {
                 const msg = (isMethod && p === 'this')
                   ? `Duplicate 'this' parameter in method '${full}'.`
                   : `Duplicate parameter '${p}' in function '${full}'.`;
-                this.addError(startIdx + 1, 1, msg, 'PSDUP01');
+                this.helper.addError(startIdx + 1, 1, msg, 'PSDUP01');
               }
               seen.add(p);
             });
@@ -2118,27 +2078,27 @@ export class CoreValidator implements ValidationModule {
         const col = i + 1;
         
         if (ch === '{') { this.sawBrace = true; this.brace++; }
-        else if (ch === '}') { this.sawBrace = true; this.brace--; if (this.brace < 0) { this.addError(lineNum, col, "Unexpected '}'.", 'PS008'); this.brace = 0; break; } }
+        else if (ch === '}') { this.sawBrace = true; this.brace--; if (this.brace < 0) { this.helper.addError(lineNum, col, "Unexpected '}'.", 'PS008'); this.brace = 0; break; } }
         else if (ch === '(') this.paren++;
-        else if (ch === ')') { this.paren--; if (this.paren < 0) { this.addError(lineNum, col, 'Unexpected \')\'.', 'PS008'); this.paren = 0; break; } }
+        else if (ch === ')') { this.paren--; if (this.paren < 0) { this.helper.addError(lineNum, col, 'Unexpected \')\'.', 'PS008'); this.paren = 0; break; } }
         else if (ch === '[') this.bracket++;
-        else if (ch === ']') { this.bracket--; if (this.bracket < 0) { this.addError(lineNum, col, 'Unexpected \']\'.', 'PS008'); this.bracket = 0; break; } }
+        else if (ch === ']') { this.bracket--; if (this.bracket < 0) { this.helper.addError(lineNum, col, 'Unexpected \']\'.', 'PS008'); this.bracket = 0; break; } }
       }
   }
 
   private handleNewVar(name: string, line: number, col: number): void {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
-      this.addError(line, col, `Invalid identifier '${name}'.`, 'PS006');
+      this.helper.addError(line, col, `Invalid identifier '${name}'.`, 'PS006');
       return;
     }
     if (!this.astTypeFieldLines.has(line)) {
       if (isReservedKeyword(name)) {
-        this.addError(line, col, `Identifier '${name}' conflicts with a Pine keyword/builtin.`, 'PS007');
+        this.helper.addError(line, col, `Identifier '${name}' conflicts with a Pine keyword/builtin.`, 'PS007');
         return;
       }
 
       if (isReservedPseudoVar(name)) {
-        this.addWarning(line, col, `Identifier '${name}' shadows a built-in variable.`, 'PS007');
+        this.helper.addWarning(line, col, `Identifier '${name}' shadows a built-in variable.`, 'PS007');
         return;
       }
     }
@@ -2150,7 +2110,7 @@ export class CoreValidator implements ValidationModule {
     const paramsHere = activeAstScope?.params ?? lexicalScope.params;
 
     if (paramsHere.has(name) && name !== 'this') {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         col,
         `Identifier '${name}' shadows a function parameter.`,
@@ -2162,7 +2122,7 @@ export class CoreValidator implements ValidationModule {
     const isShadowingParameter = paramsHere.has(name) && name !== 'this';
     const alreadyInScope = lexicalScope.variables.has(name);
     if (alreadyInScope) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         col,
         `Identifier '${name}' already declared in this block; use ':=' to reassign.`,
@@ -2171,7 +2131,7 @@ export class CoreValidator implements ValidationModule {
     } else if (!isShadowingParameter) {
       for (let i = this.scopeStack.length - 2; i >= 0; i--) {
         if (this.scopeStack[i].variables.has(name)) {
-          this.addWarning(
+          this.helper.addWarning(
             line,
             col,
             `Identifier '${name}' shadows an outer declaration.`,

@@ -20,6 +20,7 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type CallExpressionNode,
@@ -60,9 +61,7 @@ export class AlertFunctionsValidator implements ValidationModule {
   name = 'AlertFunctionsValidator';
   priority = 75; // Medium priority - alert functions are important for notifications
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
 
@@ -105,25 +104,16 @@ export class AlertFunctionsValidator implements ValidationModule {
       console.log('[AlertFunctionsValidator] summary', {
         calls: this.alertFunctionCalls.length,
         usage: Object.fromEntries(this.alertFrequencyUsage),
-        infoCodes: this.info.map((m) => m.code),
-        errorCodes: this.errors.map((m) => m.code),
+        infoCount: this.helper.infoList.length,
+        errorCount: this.helper.errorList.length,
       });
     }
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.alertFunctionCalls = [];
     this.alertConditions = 0;
     this.alertFrequencyUsage.clear();
@@ -182,26 +172,14 @@ export class AlertFunctionsValidator implements ValidationModule {
 
   private validateAstAlertCall(call: CallExpressionNode, alertCall: AlertFunctionCall): void {
     if (call.args.length === 0) {
-      this.errors.push({
-        code: 'PSV6-ALERT-NO-PARAMS',
-        message: 'alert() function requires at least a message parameter',
-        line: alertCall.line,
-        column: alertCall.column,
-        severity: 'error',
-      });
+      this.helper.addError(alertCall.line, alertCall.column, 'alert() function requires at least a message parameter', 'PSV6-ALERT-NO-PARAMS');
       return;
     }
 
     const messageArg = call.args[0]?.value;
     if (messageArg?.kind === 'StringLiteral' && messageArg.value.length === 0) {
       const { line, column } = messageArg.loc.start;
-      this.warnings.push({
-        code: 'PSV6-ALERT-EMPTY-MESSAGE',
-        message: 'Alert message is empty. Consider providing a descriptive message',
-        line,
-        column,
-        severity: 'warning',
-      });
+      this.helper.addWarning(line, column, 'Alert message is empty. Consider providing a descriptive message', 'PSV6-ALERT-EMPTY-MESSAGE');
     }
 
     const freqArgument = this.findAstFrequencyArgument(call.args);
@@ -215,22 +193,9 @@ export class AlertFunctionsValidator implements ValidationModule {
     if (frequencyPath && VALID_ALERT_FREQUENCIES.has(frequencyPath)) {
       alertCall.frequency = frequencyPath;
       this.recordAlertFrequencyUsage(frequencyPath, line, column);
-      this.info.push({
-        code: 'PSV6-ALERT-FREQ-VALID',
-        message: `Alert frequency '${frequencyPath}' is properly configured`,
-        line,
-        column,
-        severity: 'info',
-      });
+      this.helper.addInfo(line, column, `Alert frequency '${frequencyPath}' is properly configured`, 'PSV6-ALERT-FREQ-VALID');
     } else if (frequencyPath && frequencyPath.startsWith('alert.freq_')) {
-      this.errors.push({
-        code: 'PSV6-ALERT-FREQ-INVALID',
-        message:
-          `Invalid alert frequency '${frequencyPath}'. Use alert.freq_all, alert.freq_once_per_bar, or alert.freq_once_per_bar_close`,
-        line,
-        column,
-        severity: 'error',
-      });
+      this.helper.addError(line, column, `Invalid alert frequency '${frequencyPath}'. Use alert.freq_all, alert.freq_once_per_bar, or alert.freq_once_per_bar_close`, 'PSV6-ALERT-FREQ-INVALID');
     }
   }
 
@@ -238,38 +203,20 @@ export class AlertFunctionsValidator implements ValidationModule {
     const conditionArg = call.args[0]?.value;
     if (conditionArg?.kind === 'BooleanLiteral') {
       const { line, column } = conditionArg.loc.start;
-      this.warnings.push({
-        code: 'PSV6-ALERTCONDITION-SIMPLE',
-        message: 'Alert condition is very simple. Consider using more specific conditions',
-        line,
-        column,
-        severity: 'warning',
-      });
+      this.helper.addWarning(line, column, 'Alert condition is very simple. Consider using more specific conditions', 'PSV6-ALERTCONDITION-SIMPLE');
     }
 
     const titleArg = call.args[1]?.value;
     if (titleArg?.kind === 'StringLiteral' && titleArg.value.length === 0) {
       const { line, column } = titleArg.loc.start;
-      this.warnings.push({
-        code: 'PSV6-ALERTCONDITION-NO-TITLE',
-        message: 'Alert condition has no title. Consider providing a descriptive title',
-        line,
-        column,
-        severity: 'warning',
-      });
+      this.helper.addWarning(line, column, 'Alert condition has no title. Consider providing a descriptive title', 'PSV6-ALERTCONDITION-NO-TITLE');
     }
 
     if (conditionArg) {
       const resolved = this.resolveConditionType(conditionArg);
       if (!resolved || !resolved.type || resolved.type === 'unknown') {
         const { line, column } = conditionArg.loc?.start ?? call.loc.start;
-        this.errors.push({
-          code: 'PSV6-ALERT-CONDITION-TYPE',
-          message: 'Unable to determine alert condition type. Expected a series bool expression.',
-          line,
-          column,
-          severity: 'error',
-        });
+        this.helper.addError(line, column, 'Unable to determine alert condition type. Expected a series bool expression.', 'PSV6-ALERT-CONDITION-TYPE');
       }
     }
   }
@@ -285,23 +232,11 @@ export class AlertFunctionsValidator implements ValidationModule {
 
   private validateAlertConditions(): void {
     if (this.alertConditions > 3) {
-      this.warnings.push({
-        code: 'PSV6-ALERT-MANY-CONDITIONS',
-        message: `Multiple alert conditions detected (${this.alertConditions}). Consider consolidating or documenting alert logic`,
-        line: 1,
-        column: 1,
-        severity: 'warning',
-      });
+      this.helper.addWarning(1, 1, `Multiple alert conditions detected (${this.alertConditions}). Consider consolidating or documenting alert logic`, 'PSV6-ALERT-MANY-CONDITIONS');
     }
 
     if (this.alertConditions === 0 && this.alertFunctionCalls.length === 0 && this.context.scriptType === 'indicator') {
-      this.info.push({
-        code: 'PSV6-ALERT-NO-CONDITIONS',
-        message: 'No alert conditions found. Consider adding alerts for important events',
-        line: 1,
-        column: 1,
-        severity: 'info',
-      });
+      this.helper.addInfo(1, 1, 'No alert conditions found. Consider adding alerts for important events', 'PSV6-ALERT-NO-CONDITIONS');
     }
   }
 
@@ -311,46 +246,22 @@ export class AlertFunctionsValidator implements ValidationModule {
     const freqOncePerBarClose = this.alertFrequencyUsage.get('alert.freq_once_per_bar_close') || 0;
 
     if (freqAll > 0 && (freqOncePerBar > 0 || freqOncePerBarClose > 0)) {
-      this.warnings.push({
-        code: 'PSV6-ALERT-MIXED-FREQUENCIES',
-        message: 'Mixed alert frequencies detected. This may cause unexpected alert behavior',
-        line: 1,
-        column: 1,
-        severity: 'warning',
-      });
+      this.helper.addWarning(1, 1, 'Mixed alert frequencies detected. This may cause unexpected alert behavior', 'PSV6-ALERT-MIXED-FREQUENCIES');
     }
 
     if (freqAll > freqOncePerBarClose && freqOncePerBarClose === 0) {
-      this.info.push({
-        code: 'PSV6-ALERT-RECOMMEND-BAR-CLOSE',
-        message: 'Consider using alert.freq_once_per_bar_close for more reliable alerts',
-        line: 1,
-        column: 1,
-        severity: 'info',
-      });
+      this.helper.addInfo(1, 1, 'Consider using alert.freq_once_per_bar_close for more reliable alerts', 'PSV6-ALERT-RECOMMEND-BAR-CLOSE');
     }
   }
 
   private validateAlertTimingAst(): void {
     for (const alertCall of this.alertFunctionCalls) {
       if (alertCall.inConditional) {
-        this.info.push({
-          code: 'PSV6-ALERT-CONDITIONAL-TIMING',
-          message: 'Alert inside conditional statement. Ensure timing expectations are met',
-          line: alertCall.line,
-          column: alertCall.column,
-          severity: 'info',
-        });
+        this.helper.addInfo(alertCall.line, alertCall.column, 'Alert inside conditional statement. Ensure timing expectations are met', 'PSV6-ALERT-CONDITIONAL-TIMING');
       }
 
       if (alertCall.inLoop) {
-        this.warnings.push({
-          code: 'PSV6-ALERT-IN-LOOP',
-          message: 'Alert inside loop detected. This may cause performance issues or excessive alerts',
-          line: alertCall.line,
-          column: alertCall.column,
-          severity: 'warning',
-        });
+        this.helper.addWarning(alertCall.line, alertCall.column, 'Alert inside loop detected. This may cause performance issues or excessive alerts', 'PSV6-ALERT-IN-LOOP');
       }
     }
   }
@@ -359,24 +270,12 @@ export class AlertFunctionsValidator implements ValidationModule {
     const totalAlerts = this.alertFunctionCalls.length;
 
     if (totalAlerts > 5) {
-      this.warnings.push({
-        code: 'PSV6-ALERT-PERFORMANCE',
-        message: `High number of alert calls (${totalAlerts}). Consider optimizing alert logic for better performance`,
-        line: 1,
-        column: 1,
-        severity: 'warning',
-      });
+      this.helper.addWarning(1, 1, `High number of alert calls (${totalAlerts}). Consider optimizing alert logic for better performance`, 'PSV6-ALERT-PERFORMANCE');
     }
 
     const freqAll = this.alertFrequencyUsage.get('alert.freq_all') || 0;
     if (freqAll >= 2) {
-      this.warnings.push({
-        code: 'PSV6-ALERT-SPAM-RISK',
-        message: `Multiple alert.freq_all usage (${freqAll}) may cause alert spam. Consider using alert.freq_once_per_bar_close`,
-        line: 1,
-        column: 1,
-        severity: 'warning',
-      });
+      this.helper.addWarning(1, 1, `Multiple alert.freq_all usage (${freqAll}) may cause alert spam. Consider using alert.freq_once_per_bar_close`, 'PSV6-ALERT-SPAM-RISK');
     }
   }
 
@@ -486,13 +385,7 @@ export class AlertFunctionsValidator implements ValidationModule {
 
     this.recordedFrequencyKeys.add(key);
     this.alertFrequencyUsage.set(frequency, (this.alertFrequencyUsage.get(frequency) || 0) + 1);
-    this.info.push({
-      code: 'PSV6-ALERT-FREQ-USAGE',
-      message: `Alert frequency constant '${frequency}' detected`,
-      line,
-      column,
-      severity: 'info',
-    });
+    this.helper.addInfo(line, column, `Alert frequency constant '${frequency}' detected`, 'PSV6-ALERT-FREQ-USAGE');
   }
 
   private formatExpression(expression: ExpressionNode): string {

@@ -20,6 +20,7 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   DISPLAY_CONSTANTS_EXTENDED as DISPLAY_CONSTANTS,
   TIMEFRAME_CONSTANTS,
@@ -41,9 +42,7 @@ export class BuiltinVariablesValidator implements ValidationModule {
   name = 'BuiltinVariablesValidator';
   priority = 70; // Lower priority - these are edge case constants
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private config!: ValidatorConfig;
 
@@ -64,9 +63,7 @@ export class BuiltinVariablesValidator implements ValidationModule {
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.context = context;
     this.config = config;
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.timeframeConstantUsage.clear();
     this.displayConstantUsage.clear();
     this.extendConstantUsage.clear();
@@ -80,14 +77,7 @@ export class BuiltinVariablesValidator implements ValidationModule {
     const program = astContext?.ast;
 
     if (!program) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: this.context.typeMap ?? new Map(),
-        scriptType: this.context.scriptType ?? null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.collectConstantsFromAst(program);
@@ -95,14 +85,7 @@ export class BuiltinVariablesValidator implements ValidationModule {
     // Provide usage information
     this.analyzeConstantUsage();
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: this.context.typeMap ?? new Map(),
-      scriptType: this.context.scriptType ?? null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
@@ -119,13 +102,7 @@ export class BuiltinVariablesValidator implements ValidationModule {
   }
 
   private addConstantInfo(code: string, message: string, line: number, column: number): void {
-    this.info.push({
-      code,
-      message,
-      line,
-      column,
-      severity: 'info'
-    });
+    this.helper.addInfo(line, column, message, code);
   }
 
   private recordConstantUsage(constant: string, line: number, column: number): void {
@@ -184,54 +161,24 @@ export class BuiltinVariablesValidator implements ValidationModule {
                           this.adjustmentConstantUsage.size + this.backadjustmentConstantUsage.size;
 
     if (totalConstants > 0) {
-      this.info.push({
-        code: Codes.BUILTIN_VARS_INFO,
-        message: `Specialized built-in variables detected: ${totalConstants} different constants used`,
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(1, 1, `Specialized built-in variables detected: ${totalConstants} different constants used`, Codes.BUILTIN_VARS_INFO);
     }
 
     // Provide recommendations for common usage patterns
     if (this.currencyConstantUsage.size > 0) {
-      this.info.push({
-        code: Codes.CURRENCY_USAGE,
-        message: 'Currency constants used. Ensure strategy declaration includes appropriate currency parameter',
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(1, 1, 'Currency constants used. Ensure strategy declaration includes appropriate currency parameter', Codes.CURRENCY_USAGE);
     }
 
     if (this.displayConstantUsage.size > 0) {
-      this.info.push({
-        code: Codes.DISPLAY_USAGE,
-        message: 'Display constants used. These control where plot information appears in the interface',
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(1, 1, 'Display constants used. These control where plot information appears in the interface', Codes.DISPLAY_USAGE);
     }
 
     if (this.scaleConstantUsage.size > 0) {
-      this.info.push({
-        code: Codes.SCALE_USAGE,
-        message: 'Scale constants used. These control price scale positioning for indicators',
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(1, 1, 'Scale constants used. These control price scale positioning for indicators', Codes.SCALE_USAGE);
     }
 
     if (this.adjustmentConstantUsage.size > 0 || this.backadjustmentConstantUsage.size > 0) {
-      this.info.push({
-        code: Codes.ADJUSTMENT_USAGE,
-        message: 'Adjustment constants used. These control dividend/split adjustments in data requests',
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(1, 1, 'Adjustment constants used. These control dividend/split adjustments in data requests', Codes.ADJUSTMENT_USAGE);
     }
   }
 }

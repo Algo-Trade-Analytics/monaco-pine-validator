@@ -1470,6 +1470,7 @@ export class TypeInferenceValidator implements ValidationModule {
       'chart.point',
       'udt',
       'analysis',
+      'enum',
       'unknown',
     ] satisfies Array<TypeInfo['type']>);
 
