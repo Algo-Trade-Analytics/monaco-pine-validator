@@ -2069,6 +2069,9 @@ export class FunctionValidator implements ValidationModule {
       const returnKinds = new Set<string>();
       let sawReturn = false;
 
+      // In Pine Script, functions return the value of the last expression in the body
+      // We should only analyze the last meaningful line, not all lines
+      let lastMeaningfulLine = '';
       for (let bodyIndex = index + 1; bodyIndex < Math.min(lines.length, index + 20); bodyIndex += 1) {
         const bodyLine = lines[bodyIndex] ?? '';
         const bodyTrimmed = bodyLine.trim();
@@ -2086,18 +2089,27 @@ export class FunctionValidator implements ValidationModule {
           break;
         }
 
-        if (/(?:"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')/.test(bodyTrimmed)) {
+        // Store the last meaningful line (this will be the return value)
+        lastMeaningfulLine = bodyTrimmed;
+      }
+
+      // Only analyze the last meaningful line for return type
+      if (lastMeaningfulLine) {
+        if (/(?:"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')/.test(lastMeaningfulLine)) {
           returnKinds.add('string');
           sawReturn = true;
-        }
-
-        if (/\b\d+\.\d+\b/.test(bodyTrimmed)) {
+        } else if (/\b\d+\.\d+\b/.test(lastMeaningfulLine)) {
           returnKinds.add('float');
           sawReturn = true;
-        } else if (/\b\d+\b/.test(bodyTrimmed)) {
+        } else if (/\b\d+\b/.test(lastMeaningfulLine)) {
           returnKinds.add('int');
           sawReturn = true;
+        } else if (/\b(true|false)\b/.test(lastMeaningfulLine)) {
+          returnKinds.add('bool');
+          sawReturn = true;
         }
+        // If the last line doesn't match any pattern, it's likely a variable/expression
+        // which we can't determine the type of in legacy mode, so we don't add anything
       }
 
       const meaningful = Array.from(returnKinds);
@@ -2154,8 +2166,11 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private collectImplicitReturnTypesFromBlock(block: BlockStatementNode, types: Set<string>): void {
-    for (const stmt of block.body) {
-      this.collectImplicitReturnTypesFromStatement(stmt, types);
+    // In Pine Script, functions return the value of the last expression in the body
+    // We should only analyze the last statement, not all statements
+    if (block.body.length > 0) {
+      const lastStatement = block.body[block.body.length - 1];
+      this.collectImplicitReturnTypesFromStatement(lastStatement, types);
     }
   }
 
