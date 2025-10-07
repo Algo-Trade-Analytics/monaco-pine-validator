@@ -843,7 +843,8 @@ export class InputFunctionsValidator implements ValidationModule {
   private extractNumericValue(arg: string): number | null {
     if (!arg) return null;
     const trimmed = arg.trim();
-    const match = trimmed.match(/^[+\-]?\d+(\.\d+)?$/);
+    // Support both .05 and 0.05 formats (Pine Script accepts both)
+    const match = trimmed.match(/^[+\-]?(?:\d+\.\d*|\.\d+|\d+)$/);
     return match ? parseFloat(trimmed) : null;
   }
 
