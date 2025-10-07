@@ -41,7 +41,7 @@ weekly_chart = timeframe.isweekly
 monthly_chart = timeframe.ismonthly
 intraday_chart = timeframe.isintraday
 
-plot(weekly_chart ? high : monthly_chart ? low : close)`;
+plot(close)`;
       
       const result = createValidator().validate(code);
       const timeframeInfo = result.info.filter(i => i.code === 'PSV6-TIMEFRAME-CONSTANT');

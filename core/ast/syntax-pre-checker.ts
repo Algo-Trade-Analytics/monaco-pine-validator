@@ -311,13 +311,36 @@ function checkMissingAssignmentOperator(line: string, lineNum: number, errors: V
  * Check for incorrect conditional operator order (?: vs :?)
  */
 function checkConditionalOperatorOrder(line: string, lineNum: number, errors: ValidationError[]): void {
+  // Remove comments first
+  const withoutComments = line.split('//')[0].split('/*')[0];
+  const trimmed = withoutComments.trim();
+  
+  // Skip if the line is empty after removing comments
+  if (!trimmed) {
+    return;
+  }
+  
   // Pattern: value : value ? value (incorrect order)
   // Should be: value ? value : value
+  // But we need to be careful not to flag nested ternaries like: a ? b : c ? d : e
   const incorrectOrderPattern = /([^?:]*)\s*:\s*([^?:]*)\s*\?\s*([^?:]*)/;
-  const match = line.match(incorrectOrderPattern);
+  const match = trimmed.match(incorrectOrderPattern);
   
   if (match) {
-    const colonIndex = line.indexOf(':');
+    // Additional check: make sure this isn't a valid nested ternary
+    // Valid nested: "a ? b : c ? d : e" (the : before c is valid)
+    // Invalid: "a : b ? c" (the : before b is invalid)
+    const beforeColon = match[1].trim();
+    const afterColon = match[2].trim();
+    const afterQuestion = match[3].trim();
+    
+    // If there's a ? before the colon, it's likely a nested ternary
+    if (beforeColon.includes('?')) {
+      return;
+    }
+    
+    // If there's no ? before the colon, it's likely an invalid order
+    const colonIndex = trimmed.indexOf(':');
     errors.push({
       line: lineNum,
       column: colonIndex + 1,
@@ -441,7 +464,7 @@ function checkBinaryOperators(line: string, lineNum: number, errors: ValidationE
   // Examples: "10 * / close", "value + - 5"
   // Exclude: "=>" (switch/function), "==", "!=", "<=", ">=", "&&", "||", etc.
   const doubleOperatorPattern = /([+\-*/%=<>!&|^])\s*([+\-*/%=<>!&|^])/;
-  const match = line.match(doubleOperatorPattern);
+  const match = withoutComments.match(doubleOperatorPattern);
   
   if (match) {
     const [, op1, op2] = match;
@@ -455,7 +478,7 @@ function checkBinaryOperators(line: string, lineNum: number, errors: ValidationE
     
     // Skip unary operators (when they appear after certain operators)
     // Examples: "x * -2", "y + -5", "z / -3" are valid unary minus
-    const unaryAfterOperators = ['*', '/', '+', '-', '=', '(', ',', ' ', '\t'];
+    const unaryAfterOperators = ['*', '/', '+', '-', '=', '(', ',', ' ', '\t', '>', '<', '!', '&', '|', '^'];
     if (op2 === '-' && unaryAfterOperators.includes(op1)) {
       return;
     }
@@ -465,10 +488,15 @@ function checkBinaryOperators(line: string, lineNum: number, errors: ValidationE
       return;
     }
     
-    const operatorIndex = line.indexOf(op2);
+    // Improved column calculation
+    const matchOffset = match.index ?? withoutComments.indexOf(match[0]);
+    const op2Offset = matchOffset + match[0].length - 1;
+    const operatorIndex = line.indexOf(op2, op2Offset);
+    const column = operatorIndex >= 0 ? operatorIndex + 1 : op2Offset + 1;
+    
     errors.push({
       line: lineNum,
-      column: operatorIndex + 1,
+      column,
       message: `Binary operator '${op2}' is missing a left operand. Check for missing values or incorrect operator usage.`,
       severity: 'error',
       code: 'PSV6-SYNTAX-MISSING-OPERAND'
