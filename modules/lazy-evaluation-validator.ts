@@ -16,7 +16,6 @@ import {
   type ValidationModule,
   type ValidationContext,
   type ValidatorConfig,
-  type ValidationError,
   type ValidationResult,
 } from '../core/types';
 import { HISTORICAL_FUNCTIONS, EXPENSIVE_HISTORICAL_FUNCTIONS } from '../core/constants';
@@ -39,6 +38,7 @@ import {
 import { findAncestor, visit, type NodePath } from '../core/ast/traversal';
 import { ensureAstContext } from '../core/ast/context-utils';
 import { getSourceLines } from '../core/ast/source-utils';
+import { ValidationHelper } from '../core/validation-helper';
 
 interface ConditionalHistoricalCall {
   functionName: string;
@@ -91,9 +91,7 @@ export class LazyEvaluationValidator implements ValidationModule {
   name = 'LazyEvaluationValidator';
   priority = 83; // High priority - lazy evaluation issues can cause subtle bugs
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
   private hasNestedTernaryHistoricalCall = false;
@@ -140,26 +138,20 @@ export class LazyEvaluationValidator implements ValidationModule {
 
     if (process.env.DEBUG_LAZY_EVAL === '1') {
       console.log('[LazyEvaluationValidator] debug snapshot', {
-        errors: this.errors,
-        warnings: this.warnings,
-        info: this.info,
+        errors: this.helper.errorList,
+        warnings: this.helper.warningList,
+        info: this.helper.infoList,
       });
     }
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap,
-      scriptType: null,
-    };
+    const result = this.helper.buildResult(context);
+    result.typeMap = typeMap;
+    result.scriptType = null;
+    return result;
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.conditionalHistoricalCalls = [];
     this.seriesInconsistencies = [];
     this.userFunctionsWithHistorical.clear();
@@ -466,12 +458,16 @@ export class LazyEvaluationValidator implements ValidationModule {
   }
 
   private removeConditionalWarningsInRange(startLine: number, endLine: number): void {
-    this.warnings = this.warnings.filter((warning) => {
+    const warnings = this.helper.warningList;
+    for (let index = warnings.length - 1; index >= 0; index--) {
+      const warning = warnings[index];
       if (warning.code !== 'PSV6-LAZY-EVAL-CONDITIONAL') {
-        return true;
+        continue;
       }
-      return warning.line < startLine || warning.line > endLine;
-    });
+      if (warning.line >= startLine && warning.line <= endLine) {
+        warnings.splice(index, 1);
+      }
+    }
   }
 
   private collectAssignmentsFromStatement(
@@ -991,33 +987,15 @@ export class LazyEvaluationValidator implements ValidationModule {
   }
 
   private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({
-      line,
-      column,
-      message,
-      severity: 'error',
-      code
-    });
+    this.helper.addError(line, column, message, code);
   }
 
   private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({
-      line,
-      column,
-      message,
-      severity: 'warning',
-      code
-    });
+    this.helper.addWarning(line, column, message, code);
   }
 
   private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({
-      line,
-      column,
-      message,
-      severity: 'info',
-      code
-    });
+    this.helper.addInfo(line, column, message, code);
   }
 
   // Getter methods for other modules
