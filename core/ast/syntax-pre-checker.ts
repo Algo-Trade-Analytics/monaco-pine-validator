@@ -90,7 +90,34 @@ export function preCheckSyntax(sourceCode: string): ValidationError[] {
     }
   }
   
-  // Second pass: Check for line wrapping with multiples of 4
+  // Second pass: Check for common syntax errors
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineNum = i + 1;
+    const trimmed = line.trim();
+    
+    // Skip empty lines and comments
+    if (!trimmed || trimmed.startsWith('//')) {
+      continue;
+    }
+    
+    // Check for missing = in variable assignments
+    checkMissingAssignmentOperator(line, lineNum, errors);
+    
+    // Check for incorrect conditional operator order
+    checkConditionalOperatorOrder(line, lineNum, errors);
+    
+    // Check for missing parentheses in function declarations
+    checkFunctionDeclarationParentheses(line, lineNum, errors);
+    
+    // Check for missing commas in function calls
+    checkMissingCommas(line, lineNum, errors);
+    
+    // Check for binary operators without left/right values
+    checkBinaryOperators(line, lineNum, errors);
+  }
+  
+  // Third pass: Check for line wrapping with multiples of 4
   // Pattern: Line ends with operator/= and next line is at wrong indent
   for (let i = 0; i < lines.length - 1; i++) {
     const line = lines[i];
@@ -245,5 +272,116 @@ function isInsideFunctionCall(line: string): boolean {
  */
 export function hasCriticalPreCheckErrors(errors: ValidationError[]): boolean {
   return errors.length > 0;
+}
+
+/**
+ * Check for missing = operators in variable assignments
+ */
+function checkMissingAssignmentOperator(line: string, lineNum: number, errors: ValidationError[]): void {
+  // Pattern: identifier followed by whitespace then identifier (without =)
+  // Example: "slowEMA ta.ema(close, 35)" should be "slowEMA = ta.ema(close, 35)"
+  const missingEqualsPattern = /^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_.]*\s*\()/;
+  const match = line.match(missingEqualsPattern);
+  
+  if (match) {
+    const [, indent, varName, funcCall] = match;
+    // Make sure this isn't already a valid assignment with =
+    if (!line.includes('=')) {
+      const column = indent.length + varName.length + 2; // Position after varName + space
+      errors.push({
+        line: lineNum,
+        column,
+        message: `Missing '=' operator. Use '${varName} = ${funcCall.trim()}' for variable assignment.`,
+        severity: 'error',
+        code: 'PSV6-SYNTAX-MISSING-EQUALS'
+      });
+    }
+  }
+}
+
+/**
+ * Check for incorrect conditional operator order (?: vs :?)
+ */
+function checkConditionalOperatorOrder(line: string, lineNum: number, errors: ValidationError[]): void {
+  // Pattern: value : value ? value (incorrect order)
+  // Should be: value ? value : value
+  const incorrectOrderPattern = /([^?:]*)\s*:\s*([^?:]*)\s*\?\s*([^?:]*)/;
+  const match = line.match(incorrectOrderPattern);
+  
+  if (match) {
+    const colonIndex = line.indexOf(':');
+    errors.push({
+      line: lineNum,
+      column: colonIndex + 1,
+      message: "Incorrect conditional operator order. Use 'condition ? value_if_true : value_if_false'.",
+      severity: 'error',
+      code: 'PSV6-SYNTAX-CONDITIONAL-ORDER'
+    });
+  }
+}
+
+/**
+ * Check for missing parentheses in function declarations
+ */
+function checkFunctionDeclarationParentheses(line: string, lineNum: number, errors: ValidationError[]): void {
+  // Pattern: identifier => expression (missing parentheses)
+  // Should be: identifier() => expression
+  const missingParensPattern = /^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s*=>/;
+  const match = line.match(missingParensPattern);
+  
+  if (match) {
+    const [, indent, funcName] = match;
+    const column = indent.length + funcName.length + 1;
+    errors.push({
+      line: lineNum,
+      column,
+      message: `Missing parentheses in function declaration. Use '${funcName}() =>' instead of '${funcName} =>'.`,
+      severity: 'error',
+      code: 'PSV6-SYNTAX-MISSING-PARENS'
+    });
+  }
+}
+
+/**
+ * Check for missing commas in function argument lists
+ */
+function checkMissingCommas(line: string, lineNum: number, errors: ValidationError[]): void {
+  // Pattern: function(arg1 arg2) - missing comma between arguments
+  const missingCommaPattern = /(\w+)\s+([A-Za-z_][A-Za-z0-9_]*\s*[=)])/;
+  const match = line.match(missingCommaPattern);
+  
+  if (match) {
+    const [, arg1, arg2] = match;
+    const commaIndex = line.indexOf(arg2);
+    errors.push({
+      line: lineNum,
+      column: commaIndex,
+      message: `Missing comma between function arguments. Use '${arg1}, ${arg2.trim()}' instead.`,
+      severity: 'error',
+      code: 'PSV6-SYNTAX-MISSING-COMMA'
+    });
+  }
+}
+
+/**
+ * Check for binary operators without proper left/right values
+ */
+function checkBinaryOperators(line: string, lineNum: number, errors: ValidationError[]): void {
+  // Pattern: operator operator (two operators in a row)
+  // Examples: "10 * / close", "value + - 5"
+  const doubleOperatorPattern = /([+\-*/%=<>!&|^])\s*([+\-*/%=<>!&|^])/;
+  const match = line.match(doubleOperatorPattern);
+  
+  if (match) {
+    const [, op1, op2] = match;
+    const operatorIndex = line.indexOf(op2);
+    errors.push({
+      line: lineNum,
+      column: operatorIndex + 1,
+      message: `Binary operator '${op2}' is missing a left operand. Check for missing values or incorrect operator usage.`,
+      severity: 'error',
+      code: 'PSV6-SYNTAX-MISSING-OPERAND'
+    });
+  }
 }
 

@@ -500,6 +500,8 @@ export class SyntaxValidator implements ValidationModule {
       return;
     }
 
+    // Common syntax errors are now handled by the pre-checker
+
     const lexResult = PineLexer.tokenize(source);
 
     this.reportLexErrors(lexResult.errors as ILexingError[]);
@@ -577,6 +579,7 @@ export class SyntaxValidator implements ValidationModule {
   private buildResult(): ValidationResult {
     return this.helper.buildResult(this.context);
   }
+
 }
 
 function isAstValidationContext(context: ValidationContext): context is AstValidationContext {
