@@ -14,6 +14,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type BinaryExpressionNode,
   type CallExpressionNode,
@@ -33,9 +35,7 @@ export class EnhancedResourceValidator implements ValidationModule {
   name = 'EnhancedResourceValidator';
   priority = 70; // Run after basic syntax validation
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
 
@@ -56,32 +56,16 @@ export class EnhancedResourceValidator implements ValidationModule {
     this.astContext = this.getAstContext(config);
     const ast = this.astContext?.ast;
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(ast);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.totalCollectionElements = 0;
     this.arrayAllocationCount = 0;
@@ -155,7 +139,7 @@ export class EnhancedResourceValidator implements ValidationModule {
 
       if (sizeValue !== null && sizeValue > 50000) {
         const { line, column } = node.loc.start;
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           `Large array allocation detected: ${sizeValue} elements. Consider using smaller arrays or alternative data structures.`,
@@ -170,7 +154,7 @@ export class EnhancedResourceValidator implements ValidationModule {
           this.varAllocationElements += sizeValue;
           if (sizeValue >= 50000) {
             const { line, column } = node.loc.start;
-            this.addError(line, column, 'Type issue detected due to large array allocation', 'PSV6-ENUM-UNDEFINED-TYPE');
+            this.helper.addError(line, column, 'Type issue detected due to large array allocation', 'PSV6-ENUM-UNDEFINED-TYPE');
           }
         }
       }
@@ -190,7 +174,7 @@ export class EnhancedResourceValidator implements ValidationModule {
 
         if (total > 50000) {
           const { line, column } = node.loc.start;
-          this.addWarning(
+          this.helper.addWarning(
             line,
             column,
             `Large matrix allocation detected: ${rows}x${cols} = ${total} elements. Consider using smaller matrices.`,
@@ -211,7 +195,7 @@ export class EnhancedResourceValidator implements ValidationModule {
 
   private finalizeAstMemoryDiagnostics(): void {
     if (this.totalCollectionElements >= 30000) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `High total collection elements detected: ${this.totalCollectionElements}. This may impact performance.`,
@@ -221,11 +205,11 @@ export class EnhancedResourceValidator implements ValidationModule {
     }
 
     if (this.sawVarAllocation && this.varAllocationElements >= 30000) {
-      this.addError(1, 1, 'Type issue detected due to high total collection elements', 'PSV6-ENUM-UNDEFINED-TYPE');
+      this.helper.addError(1, 1, 'Type issue detected due to high total collection elements', 'PSV6-ENUM-UNDEFINED-TYPE');
     }
 
     if (this.arrayAllocationCount > 10) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `Excessive array usage detected: ${this.arrayAllocationCount} arrays. This may impact performance.`,
@@ -242,7 +226,7 @@ export class EnhancedResourceValidator implements ValidationModule {
     const test = node.kind === 'ForStatement' ? node.test : node.test;
     if (this.hasConditionalComplexity(test)) {
       const { line, column } = node.loc.start;
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         'Conditional complexity detected in loop bounds. This may impact performance.',
@@ -258,7 +242,7 @@ export class EnhancedResourceValidator implements ValidationModule {
 
       if (bound !== null && bound >= 1000) {
         const { line, column } = node.loc.start;
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           `Large loop bounds detected in nested loop: bound: ${bound}. This may impact performance.`,
@@ -375,37 +359,6 @@ export class EnhancedResourceValidator implements ValidationModule {
   // Helpers
   // ──────────────────────────────────────────────────────────────────────────
 
-  private addError(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.errors.push({
-      line,
-      column,
-      message,
-      code,
-      suggestion,
-      severity: 'error',
-    });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.warnings.push({
-      line,
-      column,
-      message,
-      code,
-      suggestion,
-      severity: 'warning',
-    });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'info',
-    });
-  }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
     if (!config.ast || config.ast.mode === 'disabled') {

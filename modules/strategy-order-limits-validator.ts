@@ -20,6 +20,8 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import { STRATEGY_ORDER_LIMITS, STRATEGY_ORDER_FUNCTIONS, EXPENSIVE_CALCULATION_FUNCTIONS } from '../core/constants';
 import {
   type ArgumentNode,
@@ -57,9 +59,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
   name = 'StrategyOrderLimitsValidator';
   priority = 81; // Medium-high priority - important for strategy performance
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
@@ -105,27 +105,13 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
 
     // Only validate strategy scripts
     if (context.scriptType !== 'strategy') {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null
-      };
+      return this.helper.buildResult(context);
     }
 
     this.astContext = this.getAstContext(config);
     const ast = this.astContext?.ast;
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: context.scriptType ?? 'strategy'
-      };
+      return this.helper.buildResult(context);
     }
 
     this.collectStrategyOrdersAst(ast);
@@ -155,20 +141,11 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
       });
     }
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap,
-      scriptType: null
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.strategyOrderCalls = [];
     this.orderPatterns = [];
     this.totalOrderCount = 0;
@@ -216,7 +193,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     // Validate parameters: allow zero-arg for close_all() and cancel_all()
     const allowsZeroArgs = orderCall.functionName === 'strategy.close_all' || orderCall.functionName === 'strategy.cancel_all';
     if (orderCall.arguments.length === 0 && !allowsZeroArgs) {
-      this.addError(
+      this.helper.addError(
         orderCall.line,
         orderCall.column,
         `${orderCall.functionName} requires parameters`,
@@ -231,7 +208,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     this.checkLoopContext(orderCall);
 
     if (this.config.enablePerformanceAnalysis && orderCall.hasExpensiveCondition) {
-      this.addWarning(
+      this.helper.addWarning(
         orderCall.line,
         orderCall.column,
         'Expensive calculations in order conditions may impact performance',
@@ -247,7 +224,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     if (orderCall.orderType === 'entry' || orderCall.orderType === 'order') {
       const qtyArg = this.findParameter(args, 'qty');
       if (qtyArg && this.isNegativeNumber(qtyArg)) {
-        this.addError(
+        this.helper.addError(
           orderCall.line,
           orderCall.column,
           'Order quantity cannot be negative',
@@ -262,7 +239,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
       const limitArg = this.findParameter(args, 'limit');
       
       if (stopArg && this.isNegativeNumber(stopArg)) {
-        this.addError(
+        this.helper.addError(
           orderCall.line,
           orderCall.column,
           'Stop price cannot be negative',
@@ -271,7 +248,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
       }
       
       if (limitArg && this.isNegativeNumber(limitArg)) {
-        this.addError(
+        this.helper.addError(
           orderCall.line,
           orderCall.column,
           'Limit price cannot be negative',
@@ -283,7 +260,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
 
   private checkLoopContext(orderCall: StrategyOrderCall): void {
     if (orderCall.inLoop) {
-      this.addWarning(
+      this.helper.addWarning(
         orderCall.line,
         orderCall.column,
         'Strategy orders in loop may cause excessive order generation',
@@ -300,7 +277,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     // Broad safety net: if loops exist anywhere with any orders present, surface trimming risk
     const hasAnyLoop = this.astHasLoop;
     if (hasAnyLoop && this.strategyOrderCalls.length > 0) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         'Order trimming may occur due to orders in loops. Oldest orders will be removed when limit is reached.',
@@ -313,7 +290,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     // Find lines with multiple entries
     for (const [lineNum, count] of this.entriesPerLine) {
       if (count > 1) {
-        this.addWarning(
+        this.helper.addWarning(
           lineNum,
           1,
           `Multiple strategy entries detected on line ${lineNum}`,
@@ -328,7 +305,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
       if (entryLines[i + 1] - entryLines[i] <= 3) {
         // Multiple entries within 3 lines
         if (!this.hasConsolidationSuggestion) {
-          this.addInfo(
+          this.helper.addInfo(
             entryLines[i],
             1,
             'Consider consolidating multiple entries into a single entry with full position size',
@@ -345,7 +322,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     if (!hasPyramidingManagement && totalEntryCalls >= STRATEGY_ORDER_LIMITS.MAX_ENTRIES_PER_BAR) {
       const firstEntry = this.strategyOrderCalls.find(c => c.orderType === 'entry');
       if (firstEntry) {
-        this.addWarning(
+        this.helper.addWarning(
           firstEntry.line,
           firstEntry.column,
           'Multiple strategy entries detected across nearby conditions',
@@ -371,7 +348,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     // Check for redundant exits
     for (const [entryId, exits] of exitsByEntry) {
       if (exits.length > 2) {
-        this.addWarning(
+        this.helper.addWarning(
           exits[0].line,
           exits[0].column,
           `Redundant strategy.exit calls for entry "${entryId}"`,
@@ -392,7 +369,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     
     // Warn even for a couple of unconditional orders
     if (unconditionalCount >= 2) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         'Unconditional strategy orders detected. Consider adding conditions to prevent excessive orders.',
@@ -408,7 +385,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
       const message = this.pyramidingLevel === 0
         ? 'Excessive pyramiding entries detected without pyramiding parameter'
         : 'Excessive pyramiding entries detected';
-      this.addWarning(
+      this.helper.addWarning(
         entryCalls[0].line,
         entryCalls[0].column,
         message,
@@ -417,7 +394,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     }
 
     if (this.pyramidingLevel > 0 && entryCalls.length > this.pyramidingLevel) {
-      this.addWarning(
+      this.helper.addWarning(
         entryCalls[0].line,
         entryCalls[0].column,
         'Uncontrolled pyramiding detected. Consider checking strategy.opentrades.',
@@ -431,7 +408,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     const estimatedOrders = this.estimateOrderCount();
     
     if (estimatedOrders > STRATEGY_ORDER_LIMITS.HIGH_ORDER_COUNT_THRESHOLD) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `Many strategy orders detected (${estimatedOrders}). Consider optimization to avoid performance issues.`,
@@ -441,7 +418,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     
     // Pine Script v6: Dynamic trimming behavior - inform about trimming around 9000 orders
     if (estimatedOrders > 50) {  // Lower threshold for testing
-      this.addInfo(
+      this.helper.addInfo(
         1,
         1,
         `Strategy will use dynamic order trimming beyond ~9000 orders. Use strategy.closedtrades.first_index to track trimmed orders. Current estimate: ${estimatedOrders} orders.`,
@@ -473,7 +450,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     const hasOrderCountTracking = this.astHasOrderCountTracking;
     
     if (this.totalOrderCount > 100 && !hasOrderCountTracking) {
-      this.addInfo(
+      this.helper.addInfo(
         1,
         1,
         'Consider using strategy.closedtrades.size() and strategy.opentrades.size() to monitor order counts in high-frequency strategies.',
@@ -489,7 +466,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     const hasHighOrderCount = this.totalOrderCount > 50;
     
     if (hasHighOrderCount && !usesFirstIndex) {
-      this.addInfo(
+      this.helper.addInfo(
         1,
         1,
         'For strategies with many orders, consider using strategy.closedtrades.first_index to track the earliest non-trimmed order.',
@@ -503,7 +480,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
 
   private validateFirstIndexUsageAst(): void {
     for (const usage of this.astFirstIndexStandalone) {
-      this.addInfo(
+      this.helper.addInfo(
         usage.line,
         usage.column,
         'strategy.closedtrades.first_index represents the index of the earliest non-trimmed order. Consider using it in calculations or comparisons.',
@@ -523,7 +500,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     }
 
     if (complexCalculations.size > 0 && !this.hasCachingSuggestion) {
-      this.addInfo(
+      this.helper.addInfo(
         1,
         1,
         `Consider caching complex calculations (${Array.from(complexCalculations).join(', ')}) used in order conditions`,
@@ -539,7 +516,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
       const hasPositionSizeCheck = this.astHasPositionSizeReference;
 
       if (!hasPositionSizeCheck) {
-        this.addInfo(
+        this.helper.addInfo(
           1,
           1,
           'Consider checking strategy.position_size before placing orders to avoid duplicate positions',
@@ -554,7 +531,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
       const hasVarTracking = this.astHasVarEntryTracking;
 
       if (!hasVarTracking) {
-        this.addInfo(
+        this.helper.addInfo(
           1,
           1,
           'Consider using var for entry tracking to prevent multiple entries per condition',
@@ -566,7 +543,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     
     // Suggest time-based filtering for high-frequency strategies
     if (this.totalOrderCount >= 2 && !this.hasTimeFiltering && !this.hasTimeFilterSuggestion) {
-      this.addInfo(
+      this.helper.addInfo(
         1,
         1,
         'Consider adding time-based filtering to limit backtesting period and reduce order count',
@@ -580,7 +557,7 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     const hasCancelCalls = this.strategyOrderCalls.some(call => call.orderType === 'cancel');
     
     if (hasOrderCalls && !hasCancelCalls) {
-      this.addInfo(
+      this.helper.addInfo(
         1,
         1,
         'Consider using strategy.cancel() to clean up unfilled orders',
@@ -591,10 +568,10 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     // Recognize good practices
     if (this.strategyOrderCalls.length > 0) {
       if (this.hasTimeFiltering) {
-        this.addInfo(1, 1, 'Good practice: Time-based filtering detected for order management', 'PSV6-STRATEGY-GOOD-PRACTICE');
+        this.helper.addInfo(1, 1, 'Good practice: Time-based filtering detected for order management', 'PSV6-STRATEGY-GOOD-PRACTICE');
       }
       if (this.astHasVarEntryTracking && this.astHasPositionSizeReset) {
-        this.addInfo(1, 1, 'Good practice: Entry tracking with var and position size checks', 'PSV6-STRATEGY-GOOD-PRACTICE');
+        this.helper.addInfo(1, 1, 'Good practice: Entry tracking with var and position size checks', 'PSV6-STRATEGY-GOOD-PRACTICE');
       }
     }
   }
@@ -1008,35 +985,6 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
     return isZero;
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({
-      line,
-      column,
-      message,
-      severity: 'error',
-      code
-    });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({
-      line,
-      column,
-      message,
-      severity: 'warning',
-      code
-    });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({
-      line,
-      column,
-      message,
-      severity: 'info',
-      code
-    });
-  }
 
   // Getter methods for other modules
   getStrategyOrderCalls(): StrategyOrderCall[] {

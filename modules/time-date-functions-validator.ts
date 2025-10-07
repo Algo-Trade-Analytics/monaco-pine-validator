@@ -20,6 +20,8 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type BinaryExpressionNode,
@@ -74,17 +76,12 @@ export class TimeDateFunctionsValidator implements ValidationModule {
   name = 'TimeDateFunctionsValidator';
   priority = 75; // Medium priority - time functions are important but not critical
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
   private hasTimezoneReference = false;
   private timeComparisonEmissions: Set<string> = new Set();
   private timeArithmeticEmissions: Set<string> = new Set();
-  private errorKeys = new Set<string>();
-  private warningKeys = new Set<string>();
-  private infoKeys = new Set<string>();
 
   // Time function tracking
   private timeFunctionCalls: TimeFunctionCall[] = [];
@@ -117,18 +114,13 @@ export class TimeDateFunctionsValidator implements ValidationModule {
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.hasTimezoneReference = false;
     this.timeComparisonEmissions.clear();
     this.timeArithmeticEmissions.clear();
     this.timeFunctionCalls = [];
     this.complexTimeExpressions = 0;
-    this.errorKeys.clear();
-    this.warningKeys.clear();
-    this.infoKeys.clear();
   }
 
   private collectTimeDataFromAst(program: ProgramNode): void {
@@ -217,7 +209,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     }
 
     if (objectName === 'timezone') {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Identifier '${qualifiedName}' is not a valid Pine Script timezone constant. Provide an explicit string (e.g., "UTC") or use syminfo.timezone.`,
@@ -227,7 +219,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     }
 
     if (objectName === 'session' && !VALID_SESSION_MEMBERS.has(qualifiedName)) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Unknown session constant: ${qualifiedName}`,
@@ -286,13 +278,13 @@ export class TimeDateFunctionsValidator implements ValidationModule {
 
   private validateTimeClose(args: string[], lineNum: number, column: number): void {
     if (args.length < 1 || !args[0].trim()) {
-      this.addError(lineNum, column, 'time_close requires at least 1 parameter: timeframe', 'PSV6-TIME-CLOSE-PARAMS');
+      this.helper.addError(lineNum, column, 'time_close requires at least 1 parameter: timeframe', 'PSV6-TIME-CLOSE-PARAMS');
       return;
     }
 
     const timeframeParam = args[0].trim();
     if (!this.isValidTimeframeParameter(timeframeParam)) {
-      this.addWarning(lineNum, column,
+      this.helper.addWarning(lineNum, column,
         `First parameter for time_close should be a timeframe (string or variable), got ${timeframeParam}`,
         'PSV6-TIME-CLOSE-TIMEFRAME');
     }
@@ -327,7 +319,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
 
     if (sessionParam) {
       if (!this.isValidSessionParameter(sessionParam)) {
-        this.addWarning(lineNum, column,
+        this.helper.addWarning(lineNum, column,
           `Invalid session parameter for time_close: ${sessionParam}. Use session.regular, session.extended, or a valid session string.`,
           'PSV6-TIME-CLOSE-SESSION');
       }
@@ -342,26 +334,26 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     }
 
     if (args.length > 4) {
-      this.addWarning(lineNum, column,
+      this.helper.addWarning(lineNum, column,
         'time_close supports up to four parameters: timeframe, session, timezone, bars_back. Extra arguments will be ignored by Pine Script.',
         'PSV6-TIME-CLOSE-PARAMS-EXTRA');
     }
 
-    this.addInfo(lineNum, column,
+    this.helper.addInfo(lineNum, column,
       'time_close calculates the bar close time for a given timeframe and session. Ensure timezone/bars_back are set when needed.',
       'PSV6-TIME-CLOSE-INFO');
   }
 
   private validateTimeTradingday(args: string[], lineNum: number, column: number): void {
     if (args.length < 1) {
-      this.addError(lineNum, column, 'time_tradingday requires at least 1 parameter: time', 'PSV6-TIME-TRADINGDAY-PARAMS');
+      this.helper.addError(lineNum, column, 'time_tradingday requires at least 1 parameter: time', 'PSV6-TIME-TRADINGDAY-PARAMS');
       return;
     }
 
     // Validate time parameter
     const timeParam = args[0].trim();
     if (!this.isValidTimeParameter(timeParam)) {
-      this.addWarning(lineNum, column, 
+      this.helper.addWarning(lineNum, column, 
         `Time parameter should be a time value or time variable: ${timeParam}`, 
         'PSV6-TIME-TRADINGDAY-TIME');
     }
@@ -371,7 +363,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
       this.validateTimezoneParameter(args[1], lineNum, column);
     }
 
-    this.addInfo(lineNum, column, 'time_tradingday calculates trading day boundaries - useful for daily calculations', 'PSV6-TIME-TRADINGDAY-INFO');
+    this.helper.addInfo(lineNum, column, 'time_tradingday calculates trading day boundaries - useful for daily calculations', 'PSV6-TIME-TRADINGDAY-INFO');
   }
 
   private validateTimestamp(args: string[], lineNum: number, column: number): void {
@@ -382,13 +374,13 @@ export class TimeDateFunctionsValidator implements ValidationModule {
       // Single string parameter - validate it's a string
       const arg = args[0].trim();
       if (!this.isStringLiteral(arg)) {
-        this.addWarning(lineNum, column, 'timestamp() with single parameter expects a date string literal', 'PSV6-TIMESTAMP-FORMAT');
+        this.helper.addWarning(lineNum, column, 'timestamp() with single parameter expects a date string literal', 'PSV6-TIMESTAMP-FORMAT');
       }
       return;
     }
 
     if (args.length < 5) {
-      this.addError(lineNum, column, 'timestamp() requires either 1 date string or 5+ parameters (year, month, day, hour, minute, [second], [timezone])', 'PSV6-TIMESTAMP-PARAMS');
+      this.helper.addError(lineNum, column, 'timestamp() requires either 1 date string or 5+ parameters (year, month, day, hour, minute, [second], [timezone])', 'PSV6-TIMESTAMP-PARAMS');
       return;
     }
 
@@ -396,7 +388,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     const yearParam = args[0].trim();
     const yearValue = parseInt(yearParam);
     if (!isNaN(yearValue) && (yearValue < 1970 || yearValue > 2100)) {
-      this.addWarning(lineNum, column, 
+      this.helper.addWarning(lineNum, column, 
         `Year value ${yearValue} is outside typical range (1970-2100)`, 
         'PSV6-TIMESTAMP-YEAR-RANGE');
     }
@@ -405,7 +397,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     const monthParam = args[1].trim();
     const monthValue = parseInt(monthParam);
     if (!isNaN(monthValue) && (monthValue < 1 || monthValue > 12)) {
-      this.addError(lineNum, column, 
+      this.helper.addError(lineNum, column, 
         `Month value must be between 1 and 12, got ${monthValue}`, 
         'PSV6-TIMESTAMP-MONTH-RANGE');
     }
@@ -414,7 +406,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     const dayParam = args[2].trim();
     const dayValue = parseInt(dayParam);
     if (!isNaN(dayValue) && (dayValue < 1 || dayValue > 31)) {
-      this.addError(lineNum, column, 
+      this.helper.addError(lineNum, column, 
         `Day value must be between 1 and 31, got ${dayValue}`, 
         'PSV6-TIMESTAMP-DAY-RANGE');
     }
@@ -423,7 +415,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     const hourParam = args[3].trim();
     const hourValue = parseInt(hourParam);
     if (!isNaN(hourValue) && (hourValue < 0 || hourValue > 23)) {
-      this.addError(lineNum, column, 
+      this.helper.addError(lineNum, column, 
         `Hour value must be between 0 and 23, got ${hourValue}`, 
         'PSV6-TIMESTAMP-HOUR-RANGE');
     }
@@ -432,7 +424,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     const minuteParam = args[4].trim();
     const minuteValue = parseInt(minuteParam);
     if (!isNaN(minuteValue) && (minuteValue < 0 || minuteValue > 59)) {
-      this.addError(lineNum, column, 
+      this.helper.addError(lineNum, column, 
         `Minute value must be between 0 and 59, got ${minuteValue}`, 
         'PSV6-TIMESTAMP-MINUTE-RANGE');
     }
@@ -442,7 +434,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
       const secondParam = args[5].trim();
       const secondValue = parseInt(secondParam);
       if (!isNaN(secondValue) && (secondValue < 0 || secondValue > 59)) {
-        this.addError(lineNum, column, 
+        this.helper.addError(lineNum, column, 
           `Second value must be between 0 and 59, got ${secondValue}`, 
           'PSV6-TIMESTAMP-SECOND-RANGE');
       }
@@ -453,22 +445,22 @@ export class TimeDateFunctionsValidator implements ValidationModule {
       this.validateTimezoneParameter(args[6], lineNum, column);
     }
 
-    this.addInfo(lineNum, column, 'timestamp creates specific time values - ensure parameters are valid date/time components', 'PSV6-TIMESTAMP-INFO');
+    this.helper.addInfo(lineNum, column, 'timestamp creates specific time values - ensure parameters are valid date/time components', 'PSV6-TIMESTAMP-INFO');
   }
 
   private validateTimenow(args: string[], lineNum: number, column: number): void {
     if (args.length > 0) {
-      this.addWarning(lineNum, column, 'timenow function takes no parameters', 'PSV6-TIMENOW-NO-PARAMS');
+      this.helper.addWarning(lineNum, column, 'timenow function takes no parameters', 'PSV6-TIMENOW-NO-PARAMS');
     }
 
-    this.addInfo(lineNum, column, 'timenow returns current time - use for real-time calculations', 'PSV6-TIMENOW-INFO');
+    this.helper.addInfo(lineNum, column, 'timenow returns current time - use for real-time calculations', 'PSV6-TIMENOW-INFO');
   }
 
   private validateTimezoneParameter(timezoneParam: string, lineNum: number, column: number): void {
     const trimmed = timezoneParam.trim();
     
     if (!trimmed) {
-      this.addError(lineNum, column, 'Timezone parameter cannot be empty', 'PSV6-TIMEZONE-EMPTY');
+      this.helper.addError(lineNum, column, 'Timezone parameter cannot be empty', 'PSV6-TIMEZONE-EMPTY');
       return;
     }
 
@@ -476,13 +468,13 @@ export class TimeDateFunctionsValidator implements ValidationModule {
       // String literal timezone (custom timezone)
       const timezoneValue = trimmed.replace(/['"]/g, '');
       if (timezoneValue.length === 0) {
-        this.addError(lineNum, column, 'Empty timezone string is not allowed', 'PSV6-TIMEZONE-EMPTY-STRING');
+        this.helper.addError(lineNum, column, 'Empty timezone string is not allowed', 'PSV6-TIMEZONE-EMPTY-STRING');
       } else if (['regular', 'extended'].includes(timezoneValue.toLowerCase())) {
-        this.addWarning(lineNum, column,
+        this.helper.addWarning(lineNum, column,
           `String '${timezoneValue}' looks like a session name. Use session.* constants for sessions.`,
           'PSV6-TIMEZONE-SESSION-MISUSE');
       } else {
-        this.addInfo(lineNum, column, 
+        this.helper.addInfo(lineNum, column, 
           `Custom timezone specified: ${timezoneValue}. Ensure it's a valid timezone identifier.`, 
           'PSV6-TIMEZONE-CUSTOM');
       }
@@ -494,7 +486,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     }
 
     if (trimmed.startsWith('timezone.')) {
-      this.addWarning(lineNum, column,
+      this.helper.addWarning(lineNum, column,
         `Identifier '${trimmed}' is not a valid Pine Script timezone constant. Provide a string like "UTC" or use syminfo.timezone.`,
         'PSV6-TIMEZONE-INVALID');
       this.addEnumMismatchWarning(lineNum, column, 'Comparing enum values from different types');
@@ -502,7 +494,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     }
 
     if (!this.isVariableReference(trimmed)) {
-      this.addWarning(lineNum, column,
+      this.helper.addWarning(lineNum, column,
         `Timezone argument '${trimmed}' should be a string literal, syminfo.timezone, or a variable containing a timezone string.`,
         'PSV6-TIMEZONE-UNKNOWN');
       this.addEnumMismatchWarning(lineNum, column, 'Comparing enum values from different types');
@@ -571,20 +563,20 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     const trimmed = param.trim();
 
     if (!trimmed) {
-      this.addWarning(lineNum, column, 'bars_back parameter should not be empty', 'PSV6-TIME-CLOSE-BARS-BACK');
+      this.helper.addWarning(lineNum, column, 'bars_back parameter should not be empty', 'PSV6-TIME-CLOSE-BARS-BACK');
       return;
     }
 
     const numericValue = parseInt(trimmed, 10);
     if (!isNaN(numericValue)) {
       if (numericValue < 0) {
-        this.addWarning(lineNum, column, 'bars_back should be zero or positive for time_close.', 'PSV6-TIME-CLOSE-BARS-BACK');
+        this.helper.addWarning(lineNum, column, 'bars_back should be zero or positive for time_close.', 'PSV6-TIME-CLOSE-BARS-BACK');
       }
       return;
     }
 
     if (!this.isVariableReference(trimmed)) {
-      this.addWarning(lineNum, column,
+      this.helper.addWarning(lineNum, column,
         `bars_back parameter should be an integer or series int reference, got ${trimmed}.`,
         'PSV6-TIME-CLOSE-BARS-BACK');
     }
@@ -617,7 +609,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
   private validateTimePerformance(): void {
     // Check for too many time function calls
     if (this.timeFunctionCalls.length > 10) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `High number of time function calls (${this.timeFunctionCalls.length}). Consider caching results.`,
@@ -627,7 +619,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
 
     // Check for complex time expressions
     if (this.complexTimeExpressions > 5) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `Many complex time expressions (${this.complexTimeExpressions}). Consider simplifying for better performance.`,
@@ -646,7 +638,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     const hasTimestamp = this.timeFunctionCalls.some(call => call.functionName === 'timestamp');
 
     if (hasTimeClose && hasTimeTradingday) {
-      this.addInfo(
+      this.helper.addInfo(
         1,
         1,
         'Good time handling pattern - using both session close and trading day functions.',
@@ -655,7 +647,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     }
 
     if (hasTimestamp) {
-      this.addInfo(
+      this.helper.addInfo(
         1,
         1,
         'Using timestamp function for specific time calculations - ensure timezone handling is correct.',
@@ -666,7 +658,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     // Check for timezone awareness
     const hasTimezone = this.hasTimezoneReference;
     if ((hasTimeClose || hasTimeTradingday || hasTimestamp) && !hasTimezone) {
-      this.addInfo(
+      this.helper.addInfo(
         1,
         1,
         'Consider specifying timezone for time calculations to ensure consistent behavior across markets.',
@@ -679,7 +671,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     // Check if time functions are called inside loops (performance concern)
     for (const timeCall of this.timeFunctionCalls) {
       if (timeCall.inLoop) {
-        this.addWarning(
+        this.helper.addWarning(
           timeCall.line,
           timeCall.column,
           `Time function ${timeCall.functionName} inside loop may impact performance`,
@@ -701,7 +693,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
     this.timeComparisonEmissions.add(key);
 
     const comparedText = getNodeSource(this.context, compared).trim() || 'value';
-    this.addWarning(
+    this.helper.addWarning(
       loc.line,
       loc.column,
       `Direct comparison of ${identifier} with ${comparedText} may be fragile. Consider using time ranges or functions.`,
@@ -722,7 +714,7 @@ export class TimeDateFunctionsValidator implements ValidationModule {
 
     this.complexTimeExpressions += 1;
 
-    this.addInfo(
+    this.helper.addInfo(
       loc.line,
       loc.column,
       `Time arithmetic detected with ${identifier}. Ensure proper time unit handling.`,
@@ -789,74 +781,11 @@ export class TimeDateFunctionsValidator implements ValidationModule {
   }
 
   private buildResult(): ValidationResult {
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: this.context.scriptType,
-    };
-  }
-
-  private addError(line: number, column: number, message: string, code: string): void {
-    const key = `${line}:${column}:${code}`;
-    if (this.errorKeys.has(key)) {
-      return;
-    }
-    this.errorKeys.add(key);
-    this.errors.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'error'
-    });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    const key = `${line}:${column}:${code}`;
-    if (this.warningKeys.has(key)) {
-      return;
-    }
-    this.warningKeys.add(key);
-    this.warnings.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'warning'
-    });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    const key = `${line}:${column}:${code}`;
-    if (this.infoKeys.has(key)) {
-      return;
-    }
-    this.infoKeys.add(key);
-    this.info.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'info'
-    });
+    return this.helper.buildResult(this.context);
   }
 
   private addEnumMismatchWarning(line: number, column: number, message: string): void {
-    const key = `${line}:${column}:PSV6-ENUM-COMPARISON-TYPE-MISMATCH`;
-    if (this.warningKeys.has(key)) {
-      return;
-    }
-    this.warningKeys.add(key);
-    this.warnings.push({
-      line,
-      column,
-      message,
-      severity: 'warning',
-      code: 'PSV6-ENUM-COMPARISON-TYPE-MISMATCH'
-    });
+    this.helper.addWarning(line, column, message, 'PSV6-ENUM-COMPARISON-TYPE-MISMATCH');
   }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {

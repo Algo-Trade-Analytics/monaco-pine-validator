@@ -11,6 +11,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type CallExpressionNode,
@@ -26,9 +28,7 @@ import { getNodeSource as extractNodeSource } from '../core/ast/source-utils';
 export class TextFormattingValidator implements ValidationModule {
   name = 'TextFormattingValidator';
   
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
 
@@ -50,66 +50,21 @@ export class TextFormattingValidator implements ValidationModule {
     this.astContext = this.getAstContext(config);
 
     if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateTextFormattingAst(this.astContext.ast);
     this.validateTextFormattingPerformance();
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.formatCalls = [];
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'error'
-    });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'warning'
-    });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({
-      line,
-      column,
-      message,
-      code,
-      severity: 'info'
-    });
-  }
 
   private validateFormatString(formatString: string, parameters: string | string[], lineNum: number): void {
     // Validate format string syntax first
@@ -143,7 +98,7 @@ export class TextFormattingValidator implements ValidationModule {
     const closeBraces = (formatString.match(/\}/g) || []).length;
     
     if (openBraces !== closeBraces) {
-      this.addError(lineNum, 1, 
+      this.helper.addError(lineNum, 1, 
         `Invalid format string: unclosed braces in "${formatString}"`, 
         'PSV6-TEXT-INVALID-FORMAT');
       return;
@@ -152,7 +107,7 @@ export class TextFormattingValidator implements ValidationModule {
     // Check for invalid placeholder syntax
     const invalidPlaceholderRegex = /\{[^}]*$/;
     if (invalidPlaceholderRegex.test(formatString)) {
-      this.addError(lineNum, 1, 
+      this.helper.addError(lineNum, 1, 
         `Invalid format string: unclosed placeholder in "${formatString}"`, 
         'PSV6-TEXT-INVALID-FORMAT');
     }
@@ -163,7 +118,7 @@ export class TextFormattingValidator implements ValidationModule {
     const maxIndex = Math.max(...placeholders.map(p => p.index));
     
     if (maxIndex >= paramCount) {
-      this.addError(lineNum, 1, 
+      this.helper.addError(lineNum, 1, 
         `Format parameter mismatch: format string expects ${maxIndex + 1} parameters but only ${paramCount} provided`, 
         'PSV6-TEXT-PARAM-MISMATCH');
     }
@@ -220,14 +175,14 @@ export class TextFormattingValidator implements ValidationModule {
     
     const isValidFormat = validNumericPatterns.some(pattern => pattern.test(format));
     if (!isValidFormat) {
-      this.addWarning(lineNum, 1,
+      this.helper.addWarning(lineNum, 1,
         `Invalid numeric format: "${format}". Use patterns like #, ##, #.##, #,###, or #%`,
         'PSV6-TEXT-INVALID-NUMERIC-FORMAT');
     }
 
     // Check if parameter is numeric
     if (!this.isNumericParameter(parameter)) {
-      this.addWarning(lineNum, 1,
+      this.helper.addWarning(lineNum, 1,
         `Non-numeric parameter "${parameter}" used with numeric format`,
         'PSV6-TEXT-NON-NUMERIC-FORMAT');
     }
@@ -246,14 +201,14 @@ export class TextFormattingValidator implements ValidationModule {
     
     const isValidFormat = validDatePatterns.some(pattern => pattern.test(format));
     if (!isValidFormat) {
-      this.addWarning(lineNum, 1, 
+      this.helper.addWarning(lineNum, 1, 
         `Invalid date format: "${format}". Use patterns like dd/MM/yyyy, MM/dd/yyyy, or yyyy-MM-dd`, 
         'PSV6-TEXT-INVALID-DATE-FORMAT');
     }
     
     // Check if parameter is date-related
     if (!this.isDateParameter(parameter)) {
-      this.addWarning(lineNum, 1, 
+      this.helper.addWarning(lineNum, 1, 
         `Non-date parameter "${parameter}" used with date format`, 
         'PSV6-TEXT-NON-DATE-FORMAT');
     }
@@ -271,14 +226,14 @@ export class TextFormattingValidator implements ValidationModule {
     
     const isValidFormat = validTimePatterns.some(pattern => pattern.test(format));
     if (!isValidFormat) {
-      this.addWarning(lineNum, 1, 
+      this.helper.addWarning(lineNum, 1, 
         `Invalid time format: "${format}". Use patterns like HH:mm:ss, HH:mm, or h:mm:ss`, 
         'PSV6-TEXT-INVALID-TIME-FORMAT');
     }
     
     // Check if parameter is time-related
     if (!this.isTimeParameter(parameter)) {
-      this.addWarning(lineNum, 1,
+      this.helper.addWarning(lineNum, 1,
         `Non-time parameter "${parameter}" used with time format`,
         'PSV6-TEXT-NON-TIME-FORMAT');
     }
@@ -446,7 +401,7 @@ export class TextFormattingValidator implements ValidationModule {
         continue;
       }
 
-      this.addWarning(call.line, call.column,
+      this.helper.addWarning(call.line, call.column,
         `Text formatting in loop (line ${call.loopLine}). Consider caching formatted text outside the loop for better performance`,
         'PSV6-TEXT-PERF-LOOP');
     }
@@ -455,7 +410,7 @@ export class TextFormattingValidator implements ValidationModule {
   private validateComplexTextFormattingAst(): void {
     for (const call of this.formatCalls) {
       if (call.placeholderCount >= 3 || call.parameterCount >= 3) {
-        this.addWarning(call.line, call.column,
+        this.helper.addWarning(call.line, call.column,
           `Complex text formatting with ${call.placeholderCount} placeholders and ${call.parameterCount} parameters. Consider breaking into simpler expressions`,
           'PSV6-TEXT-PERF-COMPLEX');
       }

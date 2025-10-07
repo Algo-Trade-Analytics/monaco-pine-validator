@@ -21,6 +21,8 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   TEXTBOX_LIMITS,
   TEXT_ALIGNMENT_CONSTANTS,
@@ -67,9 +69,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
   name = 'EnhancedTextboxValidator';
   priority = 79; // Medium priority - enhances drawing functionality
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
@@ -100,14 +100,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
     this.astContext = this.getAstContext(config);
     const ast = this.astContext?.ast;
     if (!ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: this.context.typeMap ?? new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.collectTextboxDataAst(ast);
@@ -132,20 +125,11 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     this.context.typeMap = typeMap;
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap,
-      scriptType: null
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.textboxCalls = [];
     this.textboxCount = 0;
     this.textContents.clear();
@@ -273,20 +257,20 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
   private validateBoxSetText(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'box.set_text() requires exactly 2 parameters (id, text)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.set_text() requires exactly 2 parameters (id, text)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
     if (!this.isStringExpression(args[1])) {
-      this.addError(lineNum, column, 'text parameter must be a string expression', 'PSV6-TEXTBOX-TEXT-TYPE');
+      this.helper.addError(lineNum, column, 'text parameter must be a string expression', 'PSV6-TEXTBOX-TEXT-TYPE');
       if (this.hasDanglingQuote(args[1]) || this.hasUnbalancedQuotes(args[1])) {
-        this.addError(lineNum, column, 'Malformed text parameter: unbalanced quotes', 'PSV6-TEXTBOX-MALFORMED-TEXT');
+        this.helper.addError(lineNum, column, 'Malformed text parameter: unbalanced quotes', 'PSV6-TEXTBOX-MALFORMED-TEXT');
       }
       return;
     }
 
     if (this.hasDanglingQuote(args[1]) || this.hasUnbalancedQuotes(args[1])) {
-      this.addError(lineNum, column, 'Malformed text parameter: unbalanced quotes', 'PSV6-TEXTBOX-MALFORMED-TEXT');
+      this.helper.addError(lineNum, column, 'Malformed text parameter: unbalanced quotes', 'PSV6-TEXTBOX-MALFORMED-TEXT');
       return;
     }
 
@@ -295,45 +279,45 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
   private validateBoxSetTextColor(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'box.set_text_color() requires exactly 2 parameters (id, color)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.set_text_color() requires exactly 2 parameters (id, color)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
     if (!this.isColorExpression(args[1])) {
-      this.addError(lineNum, column, 'color parameter must be a valid color expression', 'PSV6-TEXTBOX-COLOR-TYPE');
+      this.helper.addError(lineNum, column, 'color parameter must be a valid color expression', 'PSV6-TEXTBOX-COLOR-TYPE');
     }
   }
 
   private validateBoxSetTextSize(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'box.set_text_size() requires exactly 2 parameters (id, size)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.set_text_size() requires exactly 2 parameters (id, size)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
     if (!this.isValidTextSize(args[1])) {
-      this.addError(lineNum, column, 'size parameter must be a valid size constant', 'PSV6-TEXTBOX-SIZE-TYPE');
+      this.helper.addError(lineNum, column, 'size parameter must be a valid size constant', 'PSV6-TEXTBOX-SIZE-TYPE');
     }
   }
 
   private validateBoxSetTextAlign(args: string[], lineNum: number, column: number, funcName: string): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, `${funcName}() requires exactly 2 parameters (id, align)`, 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, `${funcName}() requires exactly 2 parameters (id, align)`, 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
     if (!this.isValidTextAlignment(args[1])) {
-      this.addError(lineNum, column, 'alignment parameter must be a valid alignment constant', 'PSV6-TEXTBOX-ALIGN-TYPE');
+      this.helper.addError(lineNum, column, 'alignment parameter must be a valid alignment constant', 'PSV6-TEXTBOX-ALIGN-TYPE');
     }
   }
 
   private validateBoxSetTextWrap(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.addError(lineNum, column, 'box.set_text_wrap() requires exactly 2 parameters (id, wrap)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.set_text_wrap() requires exactly 2 parameters (id, wrap)', 'PSV6-FUNCTION-PARAM-COUNT');
       return;
     }
 
     if (!this.isValidTextWrap(args[1])) {
-      this.addError(lineNum, column, 'wrap parameter must be a valid wrap constant', 'PSV6-TEXTBOX-WRAP-TYPE');
+      this.helper.addError(lineNum, column, 'wrap parameter must be a valid wrap constant', 'PSV6-TEXTBOX-WRAP-TYPE');
     }
   }
 
@@ -346,7 +330,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     // Validate text length
     if (analysis.length > TEXTBOX_LIMITS.MAX_TEXT_LENGTH) {
-      this.addWarning(
+      this.helper.addWarning(
         lineNum,
         column,
         `Text content is very long (${analysis.length} characters). Consider shorter text for better performance.`,
@@ -356,32 +340,32 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     // Handle empty or null text
     if (analysis.isEmpty) {
-      this.addWarning(lineNum, column, 'Empty text parameter detected', 'PSV6-TEXTBOX-EMPTY-TEXT');
+      this.helper.addWarning(lineNum, column, 'Empty text parameter detected', 'PSV6-TEXTBOX-EMPTY-TEXT');
     }
 
     if (analysis.isNull) {
-      this.addWarning(lineNum, column, 'Text parameter is na', 'PSV6-TEXTBOX-NULL-TEXT');
+      this.helper.addWarning(lineNum, column, 'Text parameter is na', 'PSV6-TEXTBOX-NULL-TEXT');
     }
 
     // Provide info about special content
     if (analysis.hasSpecialChars) {
-      this.addInfo(lineNum, column, 'Text contains special characters (\\n, \\t, etc.)', 'PSV6-TEXTBOX-SPECIAL-CHARS');
+      this.helper.addInfo(lineNum, column, 'Text contains special characters (\\n, \\t, etc.)', 'PSV6-TEXTBOX-SPECIAL-CHARS');
     }
 
     if (analysis.hasMarkup) {
-      this.addInfo(lineNum, column, 'HTML-like markup detected in text content', 'PSV6-TEXTBOX-MARKUP-DETECTED');
+      this.helper.addInfo(lineNum, column, 'HTML-like markup detected in text content', 'PSV6-TEXTBOX-MARKUP-DETECTED');
     }
 
     if (analysis.hasColorCodes) {
-      this.addInfo(lineNum, column, 'Color codes detected in text content', 'PSV6-TEXTBOX-COLOR-CODES');
+      this.helper.addInfo(lineNum, column, 'Color codes detected in text content', 'PSV6-TEXTBOX-COLOR-CODES');
     }
 
     if (analysis.hasUnicode) {
-      this.addInfo(lineNum, column, 'Unicode characters detected in text content', 'PSV6-TEXTBOX-UNICODE-CHARS');
+      this.helper.addInfo(lineNum, column, 'Unicode characters detected in text content', 'PSV6-TEXTBOX-UNICODE-CHARS');
     }
 
     if (analysis.isDynamic) {
-      this.addInfo(lineNum, column, 'Dynamic text content detected (variables or function calls)', 'PSV6-TEXTBOX-DYNAMIC-TEXT');
+      this.helper.addInfo(lineNum, column, 'Dynamic text content detected (variables or function calls)', 'PSV6-TEXTBOX-DYNAMIC-TEXT');
     }
   }
 
@@ -413,7 +397,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
     const hasText = textParam !== undefined;
 
     if (hasText && hasNoBg && hasNoBorder) {
-      this.addInfo(
+      this.helper.addInfo(
         lineNum,
         column,
         'Consider using label.new() for simple text without background or border',
@@ -429,7 +413,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
       return;
     }
     this.astLoopWarnings.add(key);
-    this.addWarning(
+    this.helper.addWarning(
       line,
       column,
       'Text boxes in loop may impact performance. Consider limiting creation or using arrays.',
@@ -442,7 +426,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     // Check for too many textboxes
     if (this.textboxCount > TEXTBOX_LIMITS.PERFORMANCE_WARNING_THRESHOLD && !this.hasPerformanceWarning) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `Many text boxes detected (${this.textboxCount}). Consider optimizing for better performance.`,
@@ -452,7 +436,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
     }
 
     if (this.textboxCount > TEXTBOX_LIMITS.MAX_TEXTBOXES_PER_SCRIPT) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         1,
         `Excessive text boxes (${this.textboxCount}). May cause performance issues.`,
@@ -466,7 +450,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
     if (!this.hasCachingSuggestion) {
       for (const [content, count] of this.textContents) {
         if (count >= 3) {
-          this.addInfo(
+          this.helper.addInfo(
             1,
             1,
             'Consider caching repeated text content to improve performance',
@@ -484,7 +468,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
   private validateTextConsistency(): void {
     if (this.hasDrawingObjects && this.textboxCount > 0 && !this.hasConsistencySuggestion) {
-      this.addInfo(
+      this.helper.addInfo(
         1,
         1,
         'Consider consistent text styling across drawing objects (labels, boxes, tables)',
@@ -507,7 +491,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
         
         // Check if they're on consecutive lines (potential overlap)
         if (Math.abs(call1.line - call2.line) <= 2) {
-          this.addWarning(
+          this.helper.addWarning(
             call2.line,
             call2.column,
             'Potential text overlap detected between text boxes',
@@ -528,14 +512,14 @@ export class EnhancedTextboxValidator implements ValidationModule {
     if (textParam !== undefined) {
       const looksString = this.isStringExpression(textParam);
       if (!looksString) {
-        this.addError(
+        this.helper.addError(
           textboxCall.line,
           textboxCall.column,
           'text parameter must be a string expression',
           'PSV6-TEXTBOX-TEXT-TYPE'
         );
         if (this.hasDanglingQuote(textParam) || this.hasUnbalancedQuotes(textParam)) {
-          this.addError(
+          this.helper.addError(
             textboxCall.line,
             textboxCall.column,
             'Malformed text parameter: unbalanced quotes',
@@ -543,7 +527,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
           );
         }
       } else if (this.hasDanglingQuote(textParam) || this.hasUnbalancedQuotes(textParam)) {
-        this.addError(
+        this.helper.addError(
           textboxCall.line,
           textboxCall.column,
           'Malformed text parameter: unbalanced quotes',
@@ -556,7 +540,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     const textColorParam = this.findParameter(args, 'text_color');
     if (textColorParam && !this.isColorExpression(textColorParam)) {
-      this.addError(
+      this.helper.addError(
         textboxCall.line,
         textboxCall.column,
         'text_color must be a valid color expression',
@@ -566,7 +550,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     const textSizeParam = this.findParameter(args, 'text_size');
     if (textSizeParam && !this.isValidTextSize(textSizeParam)) {
-      this.addError(
+      this.helper.addError(
         textboxCall.line,
         textboxCall.column,
         'text_size must be a valid size constant',
@@ -576,7 +560,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     const textFontParam = this.findParameter(args, 'text_font');
     if (textFontParam && !this.isValidTextFont(textFontParam)) {
-      this.addError(
+      this.helper.addError(
         textboxCall.line,
         textboxCall.column,
         'text_font must be a valid font constant',
@@ -586,7 +570,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     const textHalignParam = this.findParameter(args, 'text_halign');
     if (textHalignParam && !this.isValidTextAlignment(textHalignParam)) {
-      this.addError(
+      this.helper.addError(
         textboxCall.line,
         textboxCall.column,
         'text_halign must be a valid alignment constant',
@@ -596,7 +580,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     const textValignParam = this.findParameter(args, 'text_valign');
     if (textValignParam && !this.isValidTextAlignment(textValignParam)) {
-      this.addError(
+      this.helper.addError(
         textboxCall.line,
         textboxCall.column,
         'text_valign must be a valid alignment constant',
@@ -606,7 +590,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     const textWrapParam = this.findParameter(args, 'text_wrap');
     if (textWrapParam && !this.isValidTextWrap(textWrapParam)) {
-      this.addError(
+      this.helper.addError(
         textboxCall.line,
         textboxCall.column,
         'text_wrap must be a valid wrap constant',
@@ -618,7 +602,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
 
     const textStyleParam = this.findParameter(args, 'text_style');
     if (textStyleParam && !this.isValidTextStyle(textStyleParam)) {
-      this.addError(
+      this.helper.addError(
         textboxCall.line,
         textboxCall.column,
         'text_style must be a valid text style constant',
@@ -792,35 +776,6 @@ export class EnhancedTextboxValidator implements ValidationModule {
     return name === 'label.new' || name === 'table.new' || name === 'line.new' || name === 'linefill.new';
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({
-      line,
-      column,
-      message,
-      severity: 'error',
-      code
-    });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({
-      line,
-      column,
-      message,
-      severity: 'warning',
-      code
-    });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({
-      line,
-      column,
-      message,
-      severity: 'info',
-      code
-    });
-  }
 
   // Getter methods for other modules
   getTextboxCalls(): TextboxCall[] {
@@ -863,7 +818,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
       // Pattern 1: Trailing comma before closing parenthesis
       // Example: box.new(left=0, top=1, right=1, bottom=0, text="test",)
       if (/box\.new\([^)]*,\s*\)/.test(trimmed)) {
-        this.addError(
+        this.helper.addError(
           lineNum,
           1,
           'Malformed syntax: trailing comma before closing parenthesis',
@@ -874,7 +829,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
       // Pattern 2: Named parameter with missing value
       // Example: box.new(left=0, top=1, right=1, bottom=0, text=)
       if (/\w+\s*=\s*[,)]/.test(trimmed)) {
-        this.addError(
+        this.helper.addError(
           lineNum,
           1,
           'Malformed syntax: named parameter missing value',
@@ -885,7 +840,7 @@ export class EnhancedTextboxValidator implements ValidationModule {
       // Pattern 3: Unclosed string in text parameter
       // Example: box.new(left=0, top=1, right=1, bottom=0, text=unclosed_string")
       if (/text=\s*[^"]*"[^"]*$/.test(trimmed)) {
-        this.addError(
+        this.helper.addError(
           lineNum,
           1,
           'Malformed text parameter: unclosed string',

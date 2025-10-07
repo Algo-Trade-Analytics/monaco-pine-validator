@@ -19,6 +19,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ArgumentNode,
   type CallExpressionNode,
@@ -80,9 +82,7 @@ export class EnhancedStrategyValidator implements ValidationModule {
   name = 'EnhancedStrategyValidator';
   priority = 75; // Run after basic syntax validation
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private astContext: AstValidationContext | null = null;
   private context: ValidationContext | null = null;
 
@@ -105,26 +105,12 @@ export class EnhancedStrategyValidator implements ValidationModule {
 
     const program = this.astContext?.ast ?? null;
     if (!program) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(program);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -286,7 +272,7 @@ export class EnhancedStrategyValidator implements ValidationModule {
 
     if (!hasCommission) {
       const location = data.strategyCalls[0].node.loc.start;
-      this.addWarning(
+      this.helper.addWarning(
         location.line,
         location.column,
         'Strategy lacks commission settings for realistic backtesting',
@@ -306,7 +292,7 @@ export class EnhancedStrategyValidator implements ValidationModule {
 
     if (!hasRiskManagement) {
       const location = data.strategyCalls[0].node.loc.start;
-      this.addInfo(
+      this.helper.addInfo(
         location.line,
         location.column,
         'Consider adding risk management features to your strategy',
@@ -326,7 +312,7 @@ export class EnhancedStrategyValidator implements ValidationModule {
       const value = this.getNumericLiteralValue(qtyArg.value);
       if (value !== null && value > POSITION_SIZE_THRESHOLD) {
         const location = qtyArg.value.loc.start;
-        this.addWarning(
+        this.helper.addWarning(
           location.line,
           location.column,
           'Excessive position size may not be realistic',
@@ -347,7 +333,7 @@ export class EnhancedStrategyValidator implements ValidationModule {
 
     if (!hasExit) {
       const location = data.entryCalls[0].node.loc.start;
-      this.addWarning(
+      this.helper.addWarning(
         location.line,
         location.column,
         'Strategy has entry conditions but no exit strategy',
@@ -365,7 +351,7 @@ export class EnhancedStrategyValidator implements ValidationModule {
       // Warn if accessing trades without checking count first
       if (!data.tradeCountChecks.has(access.tradeCollection)) {
         const location = access.node.loc.start;
-        this.addWarning(
+        this.helper.addWarning(
           location.line,
           location.column,
           `Accessing strategy.${access.tradeCollection}.${access.propertyName}() without checking trade count first`,
@@ -379,7 +365,7 @@ export class EnhancedStrategyValidator implements ValidationModule {
         const indexValue = this.getNumericLiteralValue(access.indexExpression);
         if (indexValue !== null && indexValue < 0) {
           const location = access.indexExpression.loc.start;
-          this.addError(
+          this.helper.addError(
             location.line,
             location.column,
             `Invalid negative index ${indexValue} for strategy.${access.tradeCollection}`,
@@ -395,7 +381,7 @@ export class EnhancedStrategyValidator implements ValidationModule {
         const parent = this.findCallParent(access.node);
         if (parent && this.getExpressionQualifiedName(parent.callee) === 'plot') {
           const location = access.node.loc.start;
-          this.addError(
+          this.helper.addError(
             location.line,
             location.column,
             `Cannot plot string property strategy.${access.tradeCollection}.${access.propertyName}()`,
@@ -416,9 +402,6 @@ export class EnhancedStrategyValidator implements ValidationModule {
     return null;
   }
 
-  private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.errors.push({ line, column, message, severity: 'error', code, suggestion });
-  }
 
   private collectNamedArguments(args: ArgumentNode[]): Map<string, ArgumentNode> {
     const map = new Map<string, ArgumentNode>();
@@ -471,18 +454,9 @@ export class EnhancedStrategyValidator implements ValidationModule {
   // ──────────────────────────────────────────────────────────────────────────
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.context = null;
   }
 
-  private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
-
-  private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.info.push({ line, column, message, severity: 'info', code, suggestion });
-  }
 }

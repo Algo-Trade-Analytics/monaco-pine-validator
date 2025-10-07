@@ -14,6 +14,8 @@ import {
   type ValidationResult,
   type ValidatorConfig,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import type {
   AssignmentStatementNode,
   BinaryExpressionNode,
@@ -43,9 +45,7 @@ export class EnhancedSemanticValidator implements ValidationModule {
   name = 'EnhancedSemanticValidator';
   priority = 85; // Run after type validation
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
 
@@ -60,59 +60,19 @@ export class EnhancedSemanticValidator implements ValidationModule {
     this.astContext = isAstValidationContext(context) && context.ast ? context : null;
 
     if (!this.astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(this.astContext.ast);
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
   }
 
-  private addError(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.errors.push({
-      line,
-      column,
-      message,
-      severity: 'error',
-      code,
-      suggestion,
-    });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    if (this.config.enableInfo === false) {
-      return;
-    }
-    this.info.push({
-      line,
-      column,
-      message,
-      severity: 'info',
-      code,
-      suggestion,
-    });
-  }
 
   private validateWithAst(program: ProgramNode): void {
     if (!this.astContext) {
@@ -168,7 +128,7 @@ export class EnhancedSemanticValidator implements ValidationModule {
 
     if (this.shouldFlagSeriesToSimple(typeInfo, initializerType)) {
       const { line, column } = node.loc.start;
-      this.addError(
+      this.helper.addError(
         line,
         column,
         "Cannot assign series value to simple variable. Use [0] to get the current value.",
@@ -182,7 +142,7 @@ export class EnhancedSemanticValidator implements ValidationModule {
       this.expressionUsesIdentifiers(node.initializer, inputVariables)
     ) {
       const { line, column } = node.loc.start;
-      this.addError(
+      this.helper.addError(
         line,
         column,
         'Input value assigned to series variable may cause issues. Consider the context.',
@@ -193,7 +153,7 @@ export class EnhancedSemanticValidator implements ValidationModule {
 
     if (!node.typeAnnotation && this.isComplexExpression(node.initializer)) {
       const { line, column } = node.loc.start;
-      this.addInfo(
+      this.helper.addInfo(
         line,
         column,
         'Consider adding explicit type annotation for better code clarity.',
@@ -221,7 +181,7 @@ export class EnhancedSemanticValidator implements ValidationModule {
     }
 
     const { line, column } = node.loc.start;
-    this.addInfo(
+    this.helper.addInfo(
       line,
       column,
       'Consider adding explicit type annotation for better code clarity.',
@@ -245,7 +205,7 @@ export class EnhancedSemanticValidator implements ValidationModule {
     }
 
     const { line, column } = node.loc.start;
-    this.addInfo(
+    this.helper.addInfo(
       line,
       column,
       'Consider adding explicit return type annotation for function clarity.',

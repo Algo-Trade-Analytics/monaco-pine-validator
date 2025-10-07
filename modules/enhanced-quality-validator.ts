@@ -15,6 +15,8 @@ import {
   type ValidationError,
   type ValidationResult,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type BlockStatementNode,
   type FunctionDeclarationNode,
@@ -37,10 +39,8 @@ export class EnhancedQualityValidator implements ValidationModule {
   name = 'EnhancedQualityValidator';
   priority = 60; // Run after other validations
 
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
   private astContext: AstValidationContext | null = null;
 
   getDependencies(): string[] {
@@ -63,14 +63,7 @@ export class EnhancedQualityValidator implements ValidationModule {
       if (fallbackLines.length > 0) {
         this.validateWithText(fallbackLines);
       }
-      return {
-        isValid: this.errors.length === 0,
-        errors: this.errors,
-        warnings: this.warnings,
-        info: this.info,
-        typeMap: new Map(),
-        scriptType: context.scriptType ?? null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.astContext = this.getAstContext(config);
@@ -80,29 +73,15 @@ export class EnhancedQualityValidator implements ValidationModule {
       if (fallbackLines.length > 0) {
         this.validateWithText(fallbackLines);
       }
-      return {
-        isValid: this.errors.length === 0,
-        errors: this.errors,
-        warnings: this.warnings,
-        info: this.info,
-        typeMap: new Map(),
-        scriptType: context.scriptType ?? null,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.validateWithAst(ast);
-    this.debug('AST metrics complete; warnings so far', this.warnings.map((w) => w.code));
+    this.debug('AST metrics complete; warnings so far', this.helper.warningList.map((w) => w.code));
     this.runTextFallbacks(fallbackLines);
-    this.debug('Final warnings after text fallback', this.warnings.map((w) => w.code));
+    this.debug('Final warnings after text fallback', this.helper.warningList.map((w) => w.code));
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: null,
-    };
+      return this.helper.buildResult(context);
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -126,18 +105,18 @@ export class EnhancedQualityValidator implements ValidationModule {
       return;
     }
 
-    if (!this.hasWarning('PSV6-QUALITY-COMPLEXITY', 1, 0)) {
+    if (!this.hasWarning(Codes.QUALITY_COMPLEXITY, 1, 0)) {
       const scriptComplexity = this.calculateScriptComplexityText(lines);
       this.debug('Script complexity (text)', scriptComplexity);
       if (lines.some((line) => line.includes('complexFunc'))) {
         this.debug('Lines for complexFunc script', lines);
       }
       if (scriptComplexity >= 6) {
-        this.addWarning(
+        this.helper.addWarning(
           1,
           0,
           `Script has high cyclomatic complexity (${scriptComplexity}). Consider breaking it into smaller functions.`,
-          'PSV6-QUALITY-COMPLEXITY',
+          Codes.QUALITY_COMPLEXITY,
           'Refactor script to reduce complexity below 8',
         );
       } else {
@@ -147,11 +126,11 @@ export class EnhancedQualityValidator implements ValidationModule {
           this.debug('AST snapshot', JSON.stringify(this.astContext.ast, null, 2));
         }
         if (roughComplexity >= 6) {
-          this.addWarning(
+          this.helper.addWarning(
             1,
             0,
             `Script has high cyclomatic complexity (${roughComplexity}). Consider breaking it into smaller functions.`,
-            'PSV6-QUALITY-COMPLEXITY',
+            Codes.QUALITY_COMPLEXITY,
             'Refactor script to reduce complexity below 8',
           );
         }
@@ -173,7 +152,7 @@ export class EnhancedQualityValidator implements ValidationModule {
     }
     for (const fn of functions) {
       this.debug('Analyzing function', fn.name, 'at', fn.startLine, fn.startColumn);
-      if (!this.hasWarning('PSV6-QUALITY-COMPLEXITY', fn.startLine, fn.startColumn)) {
+      if (!this.hasWarning(Codes.QUALITY_COMPLEXITY, fn.startLine, fn.startColumn)) {
         const complexity = this.calculateFunctionComplexityText(fn);
         this.debug('Function complexity (text)', fn.name, complexity);
         if (complexity >= 6) {
@@ -181,41 +160,41 @@ export class EnhancedQualityValidator implements ValidationModule {
         }
       }
 
-      if (!this.hasWarning('PSV6-QUALITY-LENGTH', fn.startLine, fn.startColumn)) {
+      if (!this.hasWarning(Codes.QUALITY_LENGTH, fn.startLine, fn.startColumn)) {
         const length = this.calculateFunctionLengthText(fn);
         this.debug('Function length (text)', fn.name, length);
         if (length > 50) {
-          this.addWarning(
+          this.helper.addWarning(
             fn.startLine,
             fn.startColumn,
             `Function '${fn.name}' is very long (${length} lines). Consider breaking it into smaller functions.`,
-            'PSV6-QUALITY-LENGTH',
+            Codes.QUALITY_LENGTH,
             'Refactor function to reduce length below 50 lines',
           );
         }
       }
     }
 
-    if (!this.hasWarning('PSV6-QUALITY-DEPTH')) {
+    if (!this.hasWarning(Codes.QUALITY_DEPTH)) {
       const { depth, line, column } = this.calculateMaxNestingDepthText(lines);
       this.debug('Max nesting depth (text)', depth, 'at', line, column);
       if (depth >= 4) {
-        this.addWarning(
+        this.helper.addWarning(
           line,
           column,
           `Excessive nesting depth detected (${depth} levels). Consider extracting nested logic into separate functions.`,
-          'PSV6-QUALITY-DEPTH',
+          Codes.QUALITY_DEPTH,
           'Refactor nested code to reduce depth below 3 levels',
         );
       } else {
         const roughDepth = this.calculateGlobalMaxNestingDepth(lines);
         this.debug('Rough max nesting depth', roughDepth.depth, 'at', roughDepth.line, roughDepth.column);
         if (roughDepth.depth >= 4) {
-          this.addWarning(
+          this.helper.addWarning(
             roughDepth.line,
             roughDepth.column,
             `Excessive nesting depth detected (${roughDepth.depth} levels). Consider extracting nested logic into separate functions.`,
-            'PSV6-QUALITY-DEPTH',
+            Codes.QUALITY_DEPTH,
             'Refactor nested code to reduce depth below 3 levels',
           );
         } else {
@@ -229,11 +208,11 @@ export class EnhancedQualityValidator implements ValidationModule {
     const complexity = this.calculateScriptComplexityAst(program);
     this.debug('AST script complexity', complexity);
     if (complexity >= 6) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         0,
         `Script has high cyclomatic complexity (${complexity}). Consider breaking it into smaller functions.`,
-        'PSV6-QUALITY-COMPLEXITY',
+        Codes.QUALITY_COMPLEXITY,
         'Refactor script to reduce complexity below 8',
       );
     }
@@ -320,11 +299,11 @@ export class EnhancedQualityValidator implements ValidationModule {
 
           const length = this.calculateFunctionLengthAst(fn);
           if (length > 50) {
-            this.addWarning(
+            this.helper.addWarning(
               anchor.loc.start.line,
               anchor.loc.start.column,
               `Function '${name}' is very long (${length} lines). Consider breaking it into smaller functions.`,
-              'PSV6-QUALITY-LENGTH',
+              Codes.QUALITY_LENGTH,
               'Refactor function to reduce length below 50 lines',
             );
           }
@@ -408,11 +387,11 @@ export class EnhancedQualityValidator implements ValidationModule {
   private validateScriptComplexityText(lines: string[]): void {
     const complexity = this.calculateScriptComplexityText(lines);
     if (complexity >= 6) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         0,
         `Script has high cyclomatic complexity (${complexity}). Consider breaking it into smaller functions.`,
-        'PSV6-QUALITY-COMPLEXITY',
+        Codes.QUALITY_COMPLEXITY,
         'Refactor script to reduce complexity below 8',
       );
     }
@@ -458,11 +437,11 @@ export class EnhancedQualityValidator implements ValidationModule {
 
       const length = this.calculateFunctionLengthText(fn);
       if (length > 50) {
-        this.addWarning(
+        this.helper.addWarning(
           fn.startLine,
           fn.startColumn,
           `Function '${fn.name}' is very long (${length} lines). Consider breaking it into smaller functions.`,
-          'PSV6-QUALITY-LENGTH',
+          Codes.QUALITY_LENGTH,
           'Refactor function to reduce length below 50 lines',
         );
       }
@@ -470,28 +449,27 @@ export class EnhancedQualityValidator implements ValidationModule {
   }
 
   private emitFunctionComplexityWarnings(line: number, column: number, name: string, complexity: number): void {
-    this.addWarning(
+    this.helper.addWarning(
       line,
       column,
       `Function '${name}' has high cyclomatic complexity (${complexity}). Consider breaking it into smaller functions.`,
-      'PSV6-QUALITY-COMPLEXITY',
+      Codes.QUALITY_COMPLEXITY,
       'Refactor function to reduce complexity below 8',
     );
 
     if (!this.hasWarning('PSV6-STYLE-COMPLEXITY', line, column)) {
-      this.warnings.push({
+      this.helper.addWarning(
         line,
         column,
-        message: `Function '${name}' has high complexity (${complexity}). Consider breaking it into smaller functions.`,
-        severity: 'warning',
-        code: 'PSV6-STYLE-COMPLEXITY',
-        suggestion: 'Consider breaking down complex functions into smaller routines.',
-      });
+        `Function '${name}' has high complexity (${complexity}). Consider breaking it into smaller functions.`,
+        'PSV6-STYLE-COMPLEXITY',
+        'Consider breaking down complex functions into smaller routines.',
+      );
     }
   }
 
   private hasWarning(code: string, line?: number, column?: number): boolean {
-    return this.warnings.some((warning) => {
+    return this.helper.warningList.some((warning) => {
       if (warning.code !== code) {
         return false;
       }
@@ -538,11 +516,11 @@ export class EnhancedQualityValidator implements ValidationModule {
   private validateNestingDepthText(lines: string[]): void {
     const { depth, line, column } = this.calculateMaxNestingDepthText(lines);
     if (depth >= 4) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Excessive nesting depth detected (${depth} levels). Consider extracting nested logic into separate functions.`,
-        'PSV6-QUALITY-DEPTH',
+        Codes.QUALITY_DEPTH,
         'Refactor nested code to reduce depth below 3 levels',
       );
     }
@@ -590,11 +568,11 @@ export class EnhancedQualityValidator implements ValidationModule {
   private validateNestingDepthAst(program: ProgramNode): void {
     const { depth, line, column } = this.calculateMaxNestingDepthAst(program);
     if (depth >= 4) {
-      this.addWarning(
+      this.helper.addWarning(
         line,
         column,
         `Excessive nesting depth detected (${depth} levels). Consider extracting nested logic into separate functions.`,
-        'PSV6-QUALITY-DEPTH',
+        Codes.QUALITY_DEPTH,
         'Refactor nested code to reduce depth below 3 levels',
       );
     }
@@ -717,15 +695,10 @@ export class EnhancedQualityValidator implements ValidationModule {
   // Shared helpers
   // ──────────────────────────────────────────────────────────────────────────
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
   }
 
-  private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
-  }
 
   private getAstContext(config: ValidatorConfig): AstValidationContext | null {
     if (config.ast && config.ast.mode === 'disabled') {
@@ -879,11 +852,11 @@ export class EnhancedQualityValidator implements ValidationModule {
     const joined = lines.join('\n');
     const heuristicDepth = joined.match(/\bif\b/gi)?.length ?? 0;
     if (heuristicDepth >= 6) {
-      this.addWarning(
+      this.helper.addWarning(
         1,
         0,
         `Excessive nesting depth detected (${heuristicDepth} levels). Consider extracting nested logic into separate functions.`,
-        'PSV6-QUALITY-DEPTH',
+        Codes.QUALITY_DEPTH,
         'Refactor nested code to reduce depth below 3 levels',
       );
     }

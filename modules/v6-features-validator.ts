@@ -16,6 +16,8 @@ import {
   type ValidatorConfig,
   type AstValidationContext,
 } from '../core/types';
+import { Codes } from '../core/codes';
+import { ValidationHelper } from '../core/validation-helper';
 import {
   type ProgramNode,
   type SwitchStatementNode,
@@ -47,9 +49,7 @@ const REQUEST_INFO_FUNCTIONS = new Set(['dividends', 'earnings', 'splits']);
 export class V6FeaturesValidator implements ValidationModule {
   name = 'V6FeaturesValidator';
 
-  private errors: DiagnosticEntry[] = [];
-  private warnings: DiagnosticEntry[] = [];
-  private info: DiagnosticEntry[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private astContext: AstValidationContext | null = null;
   private astTypeEnvironment: TypeEnvironment | null = null;
@@ -78,40 +78,15 @@ export class V6FeaturesValidator implements ValidationModule {
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.astContext = null;
     this.astTypeEnvironment = null;
   }
 
   private buildResult(): ValidationResult {
-    const toValidationError = (entry: DiagnosticEntry, severity: 'error' | 'warning' | 'info') => ({
-      ...entry,
-      severity,
-    });
-
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors.map((entry) => toValidationError(entry, 'error')),
-      warnings: this.warnings.map((entry) => toValidationError(entry, 'warning')),
-      info: this.info.map((entry) => toValidationError(entry, 'info')),
-      typeMap: this.context.typeMap,
-      scriptType: this.context.scriptType,
-    };
+    return this.helper.buildResult(this.context);
   }
 
-  private addError(line: number, column: number, message: string, code: string): void {
-    this.errors.push({ line, column, message, code });
-  }
-
-  private addWarning(line: number, column: number, message: string, code: string): void {
-    this.warnings.push({ line, column, message, code });
-  }
-
-  private addInfo(line: number, column: number, message: string, code: string): void {
-    this.info.push({ line, column, message, code });
-  }
 
   private validateWithAst(program: ProgramNode): void {
     visit(program, {
@@ -141,7 +116,7 @@ export class V6FeaturesValidator implements ValidationModule {
     const switchType = this.getExpressionType(node.discriminant);
 
     if (node.cases.length === 0) {
-      this.addWarning(line, column, 'Switch statement requires at least one case clause.', 'PSV6-SWITCH-NO-CASES');
+      this.helper.addWarning(line, column, 'Switch statement requires at least one case clause.', 'PSV6-SWITCH-NO-CASES');
     }
 
     let defaultEncountered = false;
@@ -150,11 +125,11 @@ export class V6FeaturesValidator implements ValidationModule {
 
       if (switchCase.test === null) {
         if (!switchCase.consequent.length) {
-          this.addError(caseLine, caseColumn, 'Default clause requires a result expression.', 'PSV6-SWITCH-DEFAULT-RESULT');
+          this.helper.addError(caseLine, caseColumn, 'Default clause requires a result expression.', 'PSV6-SWITCH-DEFAULT-RESULT');
         }
 
         if (defaultEncountered) {
-          this.addError(caseLine, caseColumn, 'Switch statement can only have one default clause.', 'PSV6-SWITCH-MULTIPLE-DEFAULT');
+          this.helper.addError(caseLine, caseColumn, 'Switch statement can only have one default clause.', 'PSV6-SWITCH-MULTIPLE-DEFAULT');
         }
 
         defaultEncountered = true;
@@ -162,12 +137,12 @@ export class V6FeaturesValidator implements ValidationModule {
       }
 
       if (!switchCase.consequent.length) {
-        this.addError(caseLine, caseColumn, 'Case clause requires a result expression.', 'PSV6-SWITCH-CASE-RESULT');
+        this.helper.addError(caseLine, caseColumn, 'Case clause requires a result expression.', 'PSV6-SWITCH-CASE-RESULT');
       }
 
       const caseType = this.getExpressionType(switchCase.test);
       if (switchType && caseType && switchType !== caseType) {
-        this.addWarning(
+        this.helper.addWarning(
           caseLine,
           caseColumn,
           `Case value type '${caseType}' may not be compatible with switch expression type '${switchType}'.`,
@@ -177,14 +152,14 @@ export class V6FeaturesValidator implements ValidationModule {
     }
 
     if (!defaultEncountered) {
-      this.addInfo(line, column, 'Consider adding a default clause to handle unexpected values.', 'PSV6-SWITCH-NO-DEFAULT');
+      this.helper.addInfo(line, column, 'Consider adding a default clause to handle unexpected values.', 'PSV6-SWITCH-NO-DEFAULT');
     }
   }
 
   private processVariableDeclaration(node: VariableDeclarationNode): void {
     if (node.declarationKind === 'varip' && this.context.scriptType === 'library') {
       const { line, column } = node.identifier.loc.start;
-      this.addError(line, column, 'varip variables are not allowed in libraries.', 'PSV6-VARIP-LIBRARY');
+      this.helper.addError(line, column, 'varip variables are not allowed in libraries.', 'PSV6-VARIP-LIBRARY');
     }
   }
 
@@ -192,7 +167,7 @@ export class V6FeaturesValidator implements ValidationModule {
     const typeName = node.identifier.name;
     if (KEYWORDS.has(typeName) || NAMESPACES.has(typeName)) {
       const { line, column } = node.identifier.loc.start;
-      this.addError(line, column, `Type name '${typeName}' conflicts with a built-in keyword or type.`, 'PSV6-UDT-CONFLICT');
+      this.helper.addError(line, column, `Type name '${typeName}' conflicts with a built-in keyword or type.`, 'PSV6-UDT-CONFLICT');
     }
   }
 
@@ -200,7 +175,7 @@ export class V6FeaturesValidator implements ValidationModule {
     const enumName = node.identifier.name;
     if (KEYWORDS.has(enumName) || NAMESPACES.has(enumName)) {
       const { line, column } = node.identifier.loc.start;
-      this.addError(line, column, `Enum name '${enumName}' conflicts with a built-in keyword or type.`, 'PSV6-ENUM-CONFLICT');
+      this.helper.addError(line, column, `Enum name '${enumName}' conflicts with a built-in keyword or type.`, 'PSV6-ENUM-CONFLICT');
     }
   }
 
@@ -216,7 +191,7 @@ export class V6FeaturesValidator implements ValidationModule {
 
     if (namespace === 'request' && member === 'security') {
       if (this.hasDynamicSeriesArgument(node.args)) {
-        this.addInfo(
+        this.helper.addInfo(
           line,
           column,
           'Dynamic data requests with series string arguments are supported in v6.',
@@ -224,19 +199,19 @@ export class V6FeaturesValidator implements ValidationModule {
         );
       }
     } else if (namespace === 'request' && member && REQUEST_INFO_FUNCTIONS.has(member)) {
-      this.addInfo(line, column, `request.${member} is available in Pine Script v6.`, 'PSV6-REQUEST-FUNCTION');
+      this.helper.addInfo(line, column, `request.${member} is available in Pine Script v6.`, 'PSV6-REQUEST-FUNCTION');
     }
 
     if (namespace === 'text' && member && TEXT_FORMAT_FUNCTIONS.has(member)) {
       const functionName = `text.${member}`;
-      this.addInfo(line, column, `${functionName} is available in Pine Script v6 for text formatting.`, 'PSV6-TEXT-FORMAT');
+      this.helper.addInfo(line, column, `${functionName} is available in Pine Script v6 for text formatting.`, 'PSV6-TEXT-FORMAT');
 
       if ((member === 'format_bold' || member === 'format_italic') && !this.firstArgumentIsString(node.args)) {
-        this.addWarning(line, column, `${functionName} requires a string argument.`, 'PSV6-TEXT-FORMAT-STRING');
+        this.helper.addWarning(line, column, `${functionName} requires a string argument.`, 'PSV6-TEXT-FORMAT-STRING');
       }
 
       if (member === 'format_color' && !this.hasColorArgument(node.args)) {
-        this.addWarning(line, column, `${functionName} requires a color argument.`, 'PSV6-TEXT-FORMAT-COLOR');
+        this.helper.addWarning(line, column, `${functionName} requires a color argument.`, 'PSV6-TEXT-FORMAT-COLOR');
       }
     }
   }
@@ -244,7 +219,7 @@ export class V6FeaturesValidator implements ValidationModule {
   private processIndexExpression(node: IndexExpressionNode): void {
     if (node.index.kind === 'NumberLiteral' && node.index.value === 0) {
       const { line, column } = node.index.loc.start;
-      this.addInfo(
+      this.helper.addInfo(
         line,
         column,
         'History reference [0] is equivalent to the current value.',
