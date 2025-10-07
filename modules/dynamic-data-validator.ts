@@ -12,6 +12,7 @@ import {
   type ValidatorConfig,
 } from '../core/types';
 import { ValidationHelper } from '../core/validation-helper';
+import { Codes } from '../core/codes';
 import { REQUEST_LIMITS } from '../core/constants';
 import {
   type ArgumentNode,
@@ -126,7 +127,7 @@ export class DynamicDataValidator implements ValidationModule {
 
   private reportRequestParamError(line: number, column: number, message: string, specificCode: string): void {
     this.helper.addError(line, column, message, specificCode);
-    this.helper.addError(line, column, message, 'PSV6-REQUEST-PARAMS');
+    this.helper.addError(line, column, message, Codes.REQUEST_PARAMS);
   }
 
   private addEnumMismatchWarning(line: number, column: number, message: string): void {
@@ -135,7 +136,7 @@ export class DynamicDataValidator implements ValidationModule {
       return;
     }
     this.enumMismatchKeys.add(key);
-    this.helper.addWarning(line, column, message, 'PSV6-ENUM-COMPARISON-TYPE-MISMATCH');
+    this.helper.addWarning(line, column, message, Codes.ENUM_COMPARISON_TYPE_MISMATCH);
   }
 
   private collectRequestCallsAst(program: ProgramNode): void {
@@ -207,7 +208,7 @@ export class DynamicDataValidator implements ValidationModule {
           call.line,
           call.column,
           `Unknown request function: ${call.name}`,
-          'PSV6-REQUEST-UNKNOWN'
+          Codes.REQUEST_UNKNOWN
         );
         continue;
       }
@@ -261,7 +262,7 @@ export class DynamicDataValidator implements ValidationModule {
         call.line,
         call.column,
         'request.security requires at least 3 parameters (symbol, timeframe, expression)',
-        'PSV6-REQUEST-SECURITY-PARAMS'
+        Codes.REQUEST_SECURITY_PARAMS
       );
     }
 
@@ -272,7 +273,7 @@ export class DynamicDataValidator implements ValidationModule {
         position.line,
         position.column,
         'Dynamic symbol parameter detected in request.security',
-        'PSV6-REQUEST-DYNAMIC-SYMBOL'
+        Codes.REQUEST_DYNAMIC_SYMBOL
       );
       this.helper.addInfo(
         position.line,
@@ -293,7 +294,7 @@ export class DynamicDataValidator implements ValidationModule {
         position.line,
         position.column,
         'Dynamic timeframe parameter detected in request.security',
-        'PSV6-REQUEST-DYNAMIC-TIMEFRAME'
+        Codes.REQUEST_DYNAMIC_TIMEFRAME
       );
       this.helper.addInfo(
         position.line,
@@ -305,13 +306,13 @@ export class DynamicDataValidator implements ValidationModule {
         position.line,
         position.column,
         'Timeframe parameter must be a string literal when calling request.security.',
-        'PSV6-FUNCTION-PARAM-TYPE'
+        Codes.FUNCTION_PARAM_TYPE
       );
       this.helper.addError(
         position.line,
         position.column,
         'Enum mismatch: request.security timeframe should use a literal timeframe string.',
-        'PSV6-ENUM-TYPE-MISMATCH'
+        Codes.ENUM_TYPE_MISMATCH
       );
     }
   }
@@ -331,7 +332,7 @@ export class DynamicDataValidator implements ValidationModule {
         call.line,
         call.column,
         'request.security_lower_tf requires at least 3 parameters (symbol, timeframe, expression)',
-        'PSV6-REQUEST-SECURITY-LOWER-TF-PARAMS'
+        Codes.REQUEST_SECURITY_LOWER_TF_PARAMS
       );
       return;
     }
@@ -343,7 +344,7 @@ export class DynamicDataValidator implements ValidationModule {
         call.line,
         call.column,
         'request.currency_rate requires at least 2 parameters (from, to)',
-        'PSV6-REQUEST-CURRENCY-RATE-PARAMS'
+        Codes.REQUEST_CURRENCY_RATE_PARAMS
       );
       return;
     }
@@ -358,7 +359,7 @@ export class DynamicDataValidator implements ValidationModule {
             position.line,
             position.column,
             `Unexpected currency code "${value}". Use ISO 4217 codes (e.g., "USD").`,
-            'PSV6-REQUEST-CURRENCY-CODE'
+            Codes.REQUEST_CURRENCY_CODE
           );
         }
       } else {
@@ -366,13 +367,13 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           'Currency source must be a string literal (e.g., "USD").',
-          'PSV6-FUNCTION-PARAM-TYPE'
+          Codes.FUNCTION_PARAM_TYPE
         );
         this.helper.addError(
           position.line,
           position.column,
           'Undefined currency enum type for request.currency_rate source parameter.',
-          'PSV6-ENUM-UNDEFINED-TYPE'
+          Codes.ENUM_UNDEFINED_TYPE
         );
       }
     }
@@ -387,7 +388,7 @@ export class DynamicDataValidator implements ValidationModule {
             position.line,
             position.column,
             `Unexpected currency code "${value}". Use ISO 4217 codes (e.g., "USD").`,
-            'PSV6-REQUEST-CURRENCY-CODE'
+            Codes.REQUEST_CURRENCY_CODE
           );
         }
       } else {
@@ -395,13 +396,13 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           'Currency target must be a string literal (e.g., "JPY").',
-          'PSV6-FUNCTION-PARAM-TYPE'
+          Codes.FUNCTION_PARAM_TYPE
         );
         this.helper.addError(
           position.line,
           position.column,
           'Undefined currency enum type for request.currency_rate target parameter.',
-          'PSV6-ENUM-UNDEFINED-TYPE'
+          Codes.ENUM_UNDEFINED_TYPE
         );
       }
     }
@@ -415,7 +416,7 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           `ignore_invalid_currency should be boolean. Received "${literal}"`,
-          'PSV6-REQUEST-CURRENCY-IGNORE'
+          Codes.REQUEST_CURRENCY_IGNORE
         );
       }
     }
@@ -427,7 +428,7 @@ export class DynamicDataValidator implements ValidationModule {
         call.line,
         call.column,
         'request.seed requires at least 3 parameters (source, symbol, expression)',
-        'PSV6-REQUEST-SEED-PARAMS'
+        Codes.REQUEST_SEED_PARAMS
       );
       return;
     }
@@ -439,7 +440,7 @@ export class DynamicDataValidator implements ValidationModule {
         position.line,
         position.column,
         'Seed source should be a string literal referencing the repository name.',
-        'PSV6-REQUEST-SEED-SOURCE'
+        Codes.REQUEST_SEED_SOURCE
       );
     }
 
@@ -451,13 +452,13 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           'Seed symbol must be a string literal reference to the CSV file.',
-          'PSV6-REQUEST-SEED-PARAMS'
+          Codes.REQUEST_SEED_PARAMS
         );
         this.helper.addWarning(
           position.line,
           position.column,
           'Seed file name should be a string literal without the .csv extension.',
-          'PSV6-REQUEST-SEED-SYMBOL'
+          Codes.REQUEST_SEED_SYMBOL
         );
         this.addEnumMismatchWarning(
           position.line,
@@ -471,7 +472,7 @@ export class DynamicDataValidator implements ValidationModule {
             position.line,
             position.column,
             'Seed symbol should omit the .csv suffix; provide the base file name only.',
-            'PSV6-REQUEST-SEED-EXT'
+            Codes.REQUEST_SEED_EXT
           );
           this.addEnumMismatchWarning(
             position.line,
@@ -489,7 +490,7 @@ export class DynamicDataValidator implements ValidationModule {
         position.line,
         position.column,
         'Seed requests require an expression or tuple to evaluate.',
-        'PSV6-REQUEST-SEED-EXPRESSION'
+        Codes.REQUEST_SEED_EXPRESSION
       );
     }
 
@@ -501,14 +502,14 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           'calc_bars_count should be an integer, not a string literal.',
-          'PSV6-REQUEST-SEED-CALC-BARS'
+          Codes.REQUEST_SEED_CALC_BARS
         );
       } else if (calcBarsArg.value.trim() && !this.argumentIsIntegerLiteral(calcBarsArg)) {
         this.helper.addInfo(
           position.line,
           position.column,
           'Dynamic calc_bars_count detected. Ensure the value stays within plan limits.',
-          'PSV6-REQUEST-SEED-CALC-BARS-DYNAMIC'
+          Codes.REQUEST_SEED_CALC_BARS_DYNAMIC
         );
       }
     }
@@ -522,7 +523,7 @@ export class DynamicDataValidator implements ValidationModule {
         call.line,
         call.column,
         'request.quandl requires at least 2 parameters (database, code)',
-        'PSV6-REQUEST-QUANDL-PARAMS'
+        Codes.REQUEST_QUANDL_PARAMS
       );
     }
 
@@ -535,7 +536,7 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           `Quandl database should be in format "DATABASE/CODE": ${value}`,
-          'PSV6-REQUEST-QUANDL-FORMAT'
+          Codes.REQUEST_QUANDL_FORMAT
         );
       }
     }
@@ -547,7 +548,7 @@ export class DynamicDataValidator implements ValidationModule {
         call.line,
         call.column,
         'request.dividends requires at least 2 parameters (ticker, field)',
-        'PSV6-REQUEST-DIVIDENDS-PARAMS'
+        Codes.REQUEST_DIVIDENDS_PARAMS
       );
       return;
     }
@@ -562,7 +563,7 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           `Unknown dividend field: ${value}. Valid fields: ${valid.join(', ')}`,
-          'PSV6-REQUEST-DIVIDENDS-FIELD'
+          Codes.REQUEST_DIVIDENDS_FIELD
         );
         this.addEnumMismatchWarning(
           position.line,
@@ -584,7 +585,7 @@ export class DynamicDataValidator implements ValidationModule {
         call.line,
         call.column,
         'request.splits requires at least 2 parameters (ticker, field)',
-        'PSV6-REQUEST-SPLITS-PARAMS'
+        Codes.REQUEST_SPLITS_PARAMS
       );
       return;
     }
@@ -599,7 +600,7 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           `Unknown split field: ${value}. Valid fields: ${valid.join(', ')}`,
-          'PSV6-REQUEST-SPLITS-FIELD'
+          Codes.REQUEST_SPLITS_FIELD
         );
         this.addEnumMismatchWarning(
           position.line,
@@ -621,7 +622,7 @@ export class DynamicDataValidator implements ValidationModule {
         call.line,
         call.column,
         'request.earnings requires at least 2 parameters (ticker, field)',
-        'PSV6-REQUEST-EARNINGS-PARAMS'
+        Codes.REQUEST_EARNINGS_PARAMS
       );
       return;
     }
@@ -641,7 +642,7 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           `Unknown earnings field: ${fieldName}. Valid fields: ${valid.join(', ')}`,
-          'PSV6-REQUEST-EARNINGS-FIELD'
+          Codes.REQUEST_EARNINGS_FIELD
         );
         this.addEnumMismatchWarning(
           position.line,
@@ -663,7 +664,7 @@ export class DynamicDataValidator implements ValidationModule {
         call.line,
         call.column,
         'request.economic requires at least 2 parameters (country_code, field)',
-        'PSV6-REQUEST-ECONOMIC-PARAMS'
+        Codes.REQUEST_ECONOMIC_PARAMS
       );
     }
 
@@ -680,7 +681,7 @@ export class DynamicDataValidator implements ValidationModule {
             position.line,
             position.column,
             `Unknown country code: ${country}. Common codes: ${validCountryCodes.join(', ')}`,
-            'PSV6-REQUEST-ECONOMIC-COUNTRY'
+            Codes.REQUEST_ECONOMIC_COUNTRY
           );
           this.addEnumMismatchWarning(
             position.line,
@@ -693,13 +694,13 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           'Country code must be provided as a string literal (e.g., "US").',
-          'PSV6-FUNCTION-PARAM-TYPE'
+          Codes.FUNCTION_PARAM_TYPE
         );
         this.helper.addError(
           position.line,
           position.column,
           'Undefined enum type for request.economic country_code parameter.',
-          'PSV6-ENUM-UNDEFINED-TYPE'
+          Codes.ENUM_UNDEFINED_TYPE
         );
       }
     }
@@ -726,7 +727,7 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           `Unknown economic field: ${fieldValue}. Valid fields: ${validEconomicFields.join(', ')}`,
-          'PSV6-REQUEST-ECONOMIC-FIELD'
+          Codes.REQUEST_ECONOMIC_FIELD
         );
         this.addEnumMismatchWarning(
           position.line,
@@ -751,14 +752,14 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           'Second parameter should be a financial field string (e.g., "TOTAL_REVENUE")',
-          'PSV6-REQUEST-FINANCIAL-FIELD'
+          Codes.REQUEST_FINANCIAL_FIELD
         );
       }
       this.reportRequestParamError(
         call.line,
         call.column,
         'request.financial requires at least 3 parameters (symbol, financial_id, period)',
-        'PSV6-REQUEST-FINANCIAL-PARAMS'
+        Codes.REQUEST_FINANCIAL_PARAMS
       );
       return;
     }
@@ -770,19 +771,19 @@ export class DynamicDataValidator implements ValidationModule {
         position.line,
         position.column,
         'First parameter should be a symbol string literal',
-        'PSV6-REQUEST-SYMBOL-FORMAT'
+        Codes.REQUEST_SYMBOL_FORMAT
       );
       this.helper.addError(
         position.line,
         position.column,
         'Financial symbol must be a string literal when calling request.financial.',
-        'PSV6-FUNCTION-PARAM-TYPE'
+        Codes.FUNCTION_PARAM_TYPE
       );
       this.helper.addError(
         position.line,
         position.column,
         'Undefined enum type for request.financial symbol parameter.',
-        'PSV6-ENUM-UNDEFINED-TYPE'
+        Codes.ENUM_UNDEFINED_TYPE
       );
     }
 
@@ -800,7 +801,7 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           `Unknown financial ID: ${value}. Valid IDs include: ${validIds.slice(0, 5).join(', ')}, etc.`,
-          'PSV6-REQUEST-FINANCIAL-ID'
+          Codes.REQUEST_FINANCIAL_ID
         );
         this.addEnumMismatchWarning(
           position.line,
@@ -814,7 +815,7 @@ export class DynamicDataValidator implements ValidationModule {
         position.line,
         position.column,
         'Second parameter should be a financial field string (e.g., "TOTAL_REVENUE")',
-        'PSV6-REQUEST-FINANCIAL-FIELD'
+        Codes.REQUEST_FINANCIAL_FIELD
       );
       this.addEnumMismatchWarning(
         position.line,
@@ -833,7 +834,7 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           `Unknown financial period: ${period}. Valid periods: ${validPeriods.join(', ')}`,
-          'PSV6-REQUEST-FINANCIAL-PERIOD'
+          Codes.REQUEST_FINANCIAL_PERIOD
         );
         this.addEnumMismatchWarning(
           position.line,
@@ -868,7 +869,7 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           `Invalid gaps parameter for request.${functionType}: ${value}. Valid values: ${validValues.join(', ')}`,
-          'PSV6-REQUEST-GAPS-INVALID'
+          Codes.REQUEST_GAPS_INVALID
         );
         this.addEnumMismatchWarning(
           position.line,
@@ -885,7 +886,7 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           `Invalid barmerge gaps constant: ${trimmed}. Use barmerge.gaps_on or barmerge.gaps_off`,
-          'PSV6-REQUEST-GAPS-BARMERGE'
+          Codes.REQUEST_GAPS_BARMERGE
         );
         this.addEnumMismatchWarning(
           position.line,
@@ -901,7 +902,7 @@ export class DynamicDataValidator implements ValidationModule {
         position.line,
         position.column,
         `Dynamic gaps parameter detected in request.${functionType}. Ensure it resolves to a valid gaps value.`,
-        'PSV6-REQUEST-GAPS-DYNAMIC'
+        Codes.REQUEST_GAPS_DYNAMIC
       );
     }
   }
@@ -939,7 +940,7 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           `Invalid lookahead parameter for request.${functionType}: ${value}. Valid values: ${validValues.join(', ')}`,
-          'PSV6-REQUEST-LOOKAHEAD-INVALID'
+          Codes.REQUEST_LOOKAHEAD_INVALID
         );
         this.addEnumMismatchWarning(
           position.line,
@@ -956,7 +957,7 @@ export class DynamicDataValidator implements ValidationModule {
           position.line,
           position.column,
           `Unknown lookahead constant: ${trimmed}. Use barmerge.lookahead_on or barmerge.lookahead_off.`,
-          'PSV6-REQUEST-LOOKAHEAD-INVALID'
+          Codes.REQUEST_LOOKAHEAD_INVALID
         );
         this.addEnumMismatchWarning(
           position.line,
@@ -972,7 +973,7 @@ export class DynamicDataValidator implements ValidationModule {
         position.line,
         position.column,
         `Dynamic lookahead parameter detected in request.${functionType}. Ensure it evaluates to barmerge.lookahead_* or a boolean.`,
-        'PSV6-REQUEST-LOOKAHEAD-DYNAMIC'
+        Codes.REQUEST_LOOKAHEAD_DYNAMIC
       );
     }
   }
@@ -983,7 +984,7 @@ export class DynamicDataValidator implements ValidationModule {
         call.line,
         call.column,
         `request.${functionType} may have slower response times. Consider caching results.`,
-        'PSV6-REQUEST-PERFORMANCE-EXPENSIVE'
+        Codes.REQUEST_PERFORMANCE_EXPENSIVE
       );
     }
 
@@ -994,7 +995,7 @@ export class DynamicDataValidator implements ValidationModule {
           call.line,
           call.column,
           `Multiple advanced request functions detected (${advancedCount}). Consider performance impact.`,
-          'PSV6-REQUEST-PERFORMANCE-MULTIPLE'
+          Codes.REQUEST_PERFORMANCE_MULTIPLE
         );
         this.advancedPerformanceWarned = true;
       }
@@ -1049,7 +1050,7 @@ export class DynamicDataValidator implements ValidationModule {
 
     for (const call of this.requestCalls) {
       if (call.inLoop) {
-        this.helper.addWarning(call.line, call.column, 'Request function inside loop may cause performance issues', 'PSV6-REQUEST-PERF-LOOP');
+        this.helper.addWarning(call.line, call.column, 'Request function inside loop may cause performance issues', Codes.REQUEST_PERF_LOOP);
         this.helper.addInfo(call.line, call.column, 'Dynamic requests are valid in v6; consider caching for performance', 'PSV6-REQUEST-DYNAMIC-V6');
       }
 
@@ -1058,7 +1059,7 @@ export class DynamicDataValidator implements ValidationModule {
           call.line,
           call.column,
           'Advanced request function may be expensive; consider minimizing calls',
-          'PSV6-REQUEST-PERFORMANCE-EXPENSIVE'
+          Codes.REQUEST_PERFORMANCE_EXPENSIVE
         );
       }
 
@@ -1068,23 +1069,23 @@ export class DynamicDataValidator implements ValidationModule {
     }
 
     if (requestCount > 10) {
-      this.helper.addWarning(1, 1, `Too many request functions (${requestCount}). Consider caching results.`, 'PSV6-REQUEST-PERF-COUNT');
+      this.helper.addWarning(1, 1, `Too many request functions (${requestCount}). Consider caching results.`, Codes.REQUEST_PERF_COUNT);
     }
 
     if (advancedCount >= 7 && !this.advancedPerformanceWarned) {
-      this.helper.addWarning(1, 1, `Multiple advanced request functions detected (${advancedCount}). Consider consolidating.`, 'PSV6-REQUEST-PERFORMANCE-MULTIPLE');
+      this.helper.addWarning(1, 1, `Multiple advanced request functions detected (${advancedCount}). Consider consolidating.`, Codes.REQUEST_PERFORMANCE_MULTIPLE);
       this.advancedPerformanceWarned = true;
     }
 
     if (requestCount >= REQUEST_LIMITS.SOFT) {
-      this.helper.addWarning(1, 1, `High number of request.* calls (${requestCount}) approaches platform limits`, 'PSV6-REQUEST-LIMIT-NEAR');
+      this.helper.addWarning(1, 1, `High number of request.* calls (${requestCount}) approaches platform limits`, Codes.REQUEST_LIMIT_NEAR);
     }
     if (requestCount >= REQUEST_LIMITS.HARD) {
       this.helper.addWarning(
         1,
         1,
         `Approaching request.* call limit (${requestCount} ≥ ${REQUEST_LIMITS.HARD}). Trim or cache requests.`,
-        'PSV6-REQUEST-LIMIT-APPROACHING'
+        Codes.REQUEST_LIMIT_APPROACHING
       );
     }
   }
@@ -1099,7 +1100,7 @@ export class DynamicDataValidator implements ValidationModule {
           call.line,
           call.column,
           'Dynamic request inside loop may cause heavy performance usage',
-          'PSV6-REQUEST-DYNAMIC-LOOP'
+          Codes.REQUEST_DYNAMIC_LOOP
         );
         this.helper.addInfo(call.line, call.column, 'Dynamic requests in loops are valid in Pine v6', 'PSV6-REQUEST-DYNAMIC-V6');
       }
@@ -1108,7 +1109,7 @@ export class DynamicDataValidator implements ValidationModule {
           call.line,
           call.column,
           'Dynamic request inside conditional block may cause inconsistent performance',
-          'PSV6-REQUEST-DYNAMIC-CONDITIONAL'
+          Codes.REQUEST_DYNAMIC_CONDITIONAL
         );
         this.helper.addInfo(call.line, call.column, 'Dynamic requests in conditionals are valid in Pine v6', 'PSV6-REQUEST-DYNAMIC-V6');
       }
@@ -1360,7 +1361,7 @@ export class DynamicDataValidator implements ValidationModule {
 
   private validateTickerSymbolFormat(symbol: string, line: number, column: number): void {
     if (!symbol || symbol.trim().length === 0) {
-      this.helper.addError(line, column, 'Empty symbol is not allowed', 'PSV6-REQUEST-SYMBOL-EMPTY');
+      this.helper.addError(line, column, 'Empty symbol is not allowed', Codes.REQUEST_SYMBOL_EMPTY);
       return;
     }
 
@@ -1371,7 +1372,7 @@ export class DynamicDataValidator implements ValidationModule {
         line,
         column,
         `Symbol "${trimmedSymbol}" contains spaces. Use underscores or proper format.`,
-        'PSV6-REQUEST-SYMBOL-FORMAT'
+        Codes.REQUEST_SYMBOL_FORMAT
       );
     }
 
@@ -1388,20 +1389,20 @@ export class DynamicDataValidator implements ValidationModule {
 
     if (!isValidFormat) {
       if (trimmedSymbol.length > 20) {
-        this.helper.addWarning(line, column, `Symbol "${trimmedSymbol}" is unusually long. Verify format.`, 'PSV6-REQUEST-SYMBOL-LENGTH');
+        this.helper.addWarning(line, column, `Symbol "${trimmedSymbol}" is unusually long. Verify format.`, Codes.REQUEST_SYMBOL_LENGTH);
       } else if (!/^[A-Z0-9:._-]+$/i.test(trimmedSymbol)) {
         this.helper.addWarning(
           line,
           column,
           `Symbol "${trimmedSymbol}" contains invalid characters. Use alphanumeric, colon, dot, underscore, or dash only.`,
-          'PSV6-REQUEST-SYMBOL-CHARS'
+          Codes.REQUEST_SYMBOL_CHARS
         );
       } else {
         this.helper.addInfo(
           line,
           column,
           `Symbol "${trimmedSymbol}" format not recognized. Verify it's a valid ticker symbol.`,
-          'PSV6-REQUEST-SYMBOL-UNKNOWN'
+          Codes.REQUEST_SYMBOL_UNKNOWN
         );
       }
     }
@@ -1413,7 +1414,7 @@ export class DynamicDataValidator implements ValidationModule {
         'BINANCE', 'COINBASE', 'KRAKEN', 'BITFINEX', 'FTX'
       ];
       if (!validExchanges.includes(exchange.toUpperCase())) {
-        this.helper.addInfo(line, column, `Exchange "${exchange}" not in common list. Verify it's supported.`, 'PSV6-REQUEST-EXCHANGE-UNKNOWN');
+        this.helper.addInfo(line, column, `Exchange "${exchange}" not in common list. Verify it's supported.`, Codes.REQUEST_EXCHANGE_UNKNOWN);
       }
     }
   }

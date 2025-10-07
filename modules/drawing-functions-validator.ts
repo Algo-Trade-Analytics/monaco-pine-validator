@@ -21,6 +21,7 @@ import {
   type ValidationResult,
 } from '../core/types';
 import { ValidationHelper } from '../core/validation-helper';
+import { Codes } from '../core/codes';
 import { IDENT, TEXT_SIZE_CONSTANTS, TEXT_STYLE_CONSTANTS } from '../core/constants';
 import {
   type ArgumentNode,
@@ -123,32 +124,32 @@ export class DrawingFunctionsValidator implements ValidationModule {
     // Only generate errors for clearly invalid cases
     
     // Parameter type errors are clearly invalid
-    if (code === 'PSV6-FUNCTION-PARAM-TYPE') {
+    if (code === Codes.FUNCTION_PARAM_TYPE) {
       return true;
     }
     
     // Parameter count errors are clearly invalid
-    if (code === 'PSV6-FUNCTION-PARAM-COUNT') {
+    if (code === Codes.FUNCTION_PARAM_COUNT) {
       return true;
     }
     
     // Unknown drawing function errors are clearly invalid
-    if (code === 'PSV6-LINE-UNKNOWN-FUNCTION' || 
-        code === 'PSV6-LABEL-UNKNOWN-FUNCTION' || 
-        code === 'PSV6-BOX-UNKNOWN-FUNCTION' || 
-        code === 'PSV6-TABLE-UNKNOWN-FUNCTION') {
+    if (code === Codes.LINE_UNKNOWN_FUNCTION || 
+        code === Codes.LABEL_UNKNOWN_FUNCTION || 
+        code === Codes.BOX_UNKNOWN_FUNCTION || 
+        code === Codes.TABLE_UNKNOWN_FUNCTION) {
       return true;
     }
     
     // Invalid drawing function usage is clearly invalid
-    if (code === 'PSV6-DRAWING-INVALID') {
+    if (code === Codes.DRAWING_INVALID) {
       return true;
     }
     // Label text style/size type errors are invalid
-    if (code === 'PSV6-LABEL-TEXT-STYLE' || code === 'PSV6-LABEL-TEXT-SIZE') {
+    if (code === Codes.LABEL_TEXT_STYLE || code === Codes.LABEL_TEXT_SIZE) {
       return true;
     }
-    if (code === 'PSV6-LINE-STYLE-TYPE') {
+    if (code === Codes.LINE_STYLE_TYPE) {
       return true;
     }
     
@@ -297,11 +298,11 @@ export class DrawingFunctionsValidator implements ValidationModule {
       case 'set_second_point':
         // Valid line functions - generic validation
         if (args.length < 1) {
-          this.helper.addError(lineNum, column, `line.${functionName}() requires at least 1 parameter`, 'PSV6-FUNCTION-PARAM-COUNT');
+          this.helper.addError(lineNum, column, `line.${functionName}() requires at least 1 parameter`, Codes.FUNCTION_PARAM_COUNT);
         }
         break;
       default:
-        this.helper.addError(lineNum, column, `Unknown line function: line.${functionName}`, 'PSV6-LINE-UNKNOWN-FUNCTION');
+        this.helper.addError(lineNum, column, `Unknown line function: line.${functionName}`, Codes.LINE_UNKNOWN_FUNCTION);
     }
   }
 
@@ -318,7 +319,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
     if (likelyChartPointOverload) {
       // New v6 signature with chart.point objects
       if (args.length < 2) {
-        this.helper.addError(lineNum, column, 'line.new() with chart.point requires at least 2 parameters (first_point, second_point)', 'PSV6-FUNCTION-PARAM-COUNT');
+        this.helper.addError(lineNum, column, 'line.new() with chart.point requires at least 2 parameters (first_point, second_point)', Codes.FUNCTION_PARAM_COUNT);
       }
       // Valid chart.point usage - skip coordinate validation
       return;
@@ -326,7 +327,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
 
     // Old signature with numeric coordinates
     if (args.length < 4) {
-      this.helper.addError(lineNum, column, 'line.new() requires at least 4 parameters (x1, y1, x2, y2)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'line.new() requires at least 4 parameters (x1, y1, x2, y2)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
 
@@ -335,9 +336,9 @@ export class DrawingFunctionsValidator implements ValidationModule {
       if (!this.isValidCoordinate(args[i])) {
         // obvious type mismatch -> error with generic code expected by tests
         if (/^\s*("[^"]*"|'[^']*'|true|false)\s*$/.test(args[i])) {
-          this.helper.addError(lineNum, column, `Invalid parameter type for line.new() coordinate ${i + 1}`, 'PSV6-FUNCTION-PARAM-TYPE');
+          this.helper.addError(lineNum, column, `Invalid parameter type for line.new() coordinate ${i + 1}`, Codes.FUNCTION_PARAM_TYPE);
         } else {
-          this.helper.addWarning(lineNum, column, `line.new() parameter ${i + 1} should be a valid coordinate`, 'PSV6-LINE-COORDINATE-TYPE');
+          this.helper.addWarning(lineNum, column, `line.new() parameter ${i + 1} should be a valid coordinate`, Codes.LINE_COORDINATE_TYPE);
         }
       }
     }
@@ -348,87 +349,87 @@ export class DrawingFunctionsValidator implements ValidationModule {
 
   private validateLineSetXY1(args: string[], lineNum: number, column: number): void {
     if (args.length !== 3) {
-      this.helper.addError(lineNum, column, 'line.set_xy1() requires exactly 3 parameters (id, x1, y1)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'line.set_xy1() requires exactly 3 parameters (id, x1, y1)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateLineSetXY2(args: string[], lineNum: number, column: number): void {
     if (args.length !== 3) {
-      this.helper.addError(lineNum, column, 'line.set_xy2() requires exactly 3 parameters (id, x2, y2)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'line.set_xy2() requires exactly 3 parameters (id, x2, y2)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateLineSetColor(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'line.set_color() requires exactly 2 parameters (id, color)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'line.set_color() requires exactly 2 parameters (id, color)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
 
     if (!this.isColorExpression(args[1])) {
       if (/^\s*("[^"]*"|'[^']*')\s*$/.test(args[1])) {
-        this.helper.addError(lineNum, column, 'Invalid parameter type for line.set_color()', 'PSV6-FUNCTION-PARAM-TYPE');
+        this.helper.addError(lineNum, column, 'Invalid parameter type for line.set_color()', Codes.FUNCTION_PARAM_TYPE);
       } else {
-        this.helper.addWarning(lineNum, column, 'line.set_color() color parameter should be a color expression', 'PSV6-LINE-COLOR-TYPE');
+        this.helper.addWarning(lineNum, column, 'line.set_color() color parameter should be a color expression', Codes.LINE_COLOR_TYPE);
       }
     }
   }
 
   private validateLineSetWidth(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'line.set_width() requires exactly 2 parameters (id, width)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'line.set_width() requires exactly 2 parameters (id, width)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
 
     const width = this.extractNumericValue(args[1]);
     if (width !== null && (width < 1 || width > 10)) {
-      this.helper.addWarning(lineNum, column, 'line.set_width() width should be between 1 and 10', 'PSV6-LINE-WIDTH-RANGE');
+      this.helper.addWarning(lineNum, column, 'line.set_width() width should be between 1 and 10', Codes.LINE_WIDTH_RANGE);
     }
   }
 
   private validateLineSetStyle(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'line.set_style() requires exactly 2 parameters (id, style)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'line.set_style() requires exactly 2 parameters (id, style)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
 
     if (!this.isLineStyleConstant(args[1])) {
-      this.helper.addError(lineNum, column, 'line.set_style() style should be a line style constant', 'PSV6-LINE-STYLE-TYPE');
+      this.helper.addError(lineNum, column, 'line.set_style() style should be a line style constant', Codes.LINE_STYLE_TYPE);
     }
   }
 
   private validateLineDelete(args: string[], lineNum: number, column: number): void {
     if (args.length !== 1) {
-      this.helper.addError(lineNum, column, 'line.delete() requires exactly 1 parameter (id)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'line.delete() requires exactly 1 parameter (id)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateLineSetX1(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'line.set_x1() requires exactly 2 parameters (id, x1)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'line.set_x1() requires exactly 2 parameters (id, x1)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateLineSetY1(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'line.set_y1() requires exactly 2 parameters (id, y1)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'line.set_y1() requires exactly 2 parameters (id, y1)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateLineSetX2(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'line.set_x2() requires exactly 2 parameters (id, x2)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'line.set_x2() requires exactly 2 parameters (id, x2)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateLineSetY2(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'line.set_y2() requires exactly 2 parameters (id, y2)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'line.set_y2() requires exactly 2 parameters (id, y2)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
@@ -439,18 +440,18 @@ export class DrawingFunctionsValidator implements ValidationModule {
       if (arg.includes('color=')) {
         const colorValue = arg.split('=')[1].trim();
         if (!this.isColorExpression(colorValue)) {
-          this.helper.addWarning(lineNum, column, 'line.new() color parameter should be a color expression', 'PSV6-LINE-COLOR-TYPE');
+          this.helper.addWarning(lineNum, column, 'line.new() color parameter should be a color expression', Codes.LINE_COLOR_TYPE);
         }
       } else if (arg.includes('width=')) {
         const widthValue = arg.split('=')[1].trim();
         const width = this.extractNumericValue(widthValue);
         if (width !== null && (width < 1 || width > 10)) {
-          this.helper.addWarning(lineNum, column, 'line.new() width should be between 1 and 10', 'PSV6-LINE-WIDTH-RANGE');
+          this.helper.addWarning(lineNum, column, 'line.new() width should be between 1 and 10', Codes.LINE_WIDTH_RANGE);
         }
       } else if (arg.includes('style=')) {
         const styleValue = arg.split('=')[1].trim();
         if (!this.isLineStyleConstant(styleValue)) {
-          this.helper.addError(lineNum, column, 'line.new() style should be a line style constant', 'PSV6-LINE-STYLE-TYPE');
+          this.helper.addError(lineNum, column, 'line.new() style should be a line style constant', Codes.LINE_STYLE_TYPE);
         }
       }
     }
@@ -497,17 +498,17 @@ export class DrawingFunctionsValidator implements ValidationModule {
       case 'set_text_formatting':
         // Valid label functions - generic validation
         if (args.length < 1) {
-          this.helper.addError(lineNum, column, `label.${functionName}() requires at least 1 parameter`, 'PSV6-FUNCTION-PARAM-COUNT');
+          this.helper.addError(lineNum, column, `label.${functionName}() requires at least 1 parameter`, Codes.FUNCTION_PARAM_COUNT);
         }
         break;
       default:
-        this.helper.addError(lineNum, column, `Unknown label function: label.${functionName}`, 'PSV6-LABEL-UNKNOWN-FUNCTION');
+        this.helper.addError(lineNum, column, `Unknown label function: label.${functionName}`, Codes.LABEL_UNKNOWN_FUNCTION);
     }
   }
 
   private validateLabelNew(args: string[], lineNum: number, column: number): void {
     if (args.length < 3) {
-      this.helper.addError(lineNum, column, 'label.new() requires at least 3 parameters (x, y, text)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'label.new() requires at least 3 parameters (x, y, text)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
 
@@ -516,9 +517,9 @@ export class DrawingFunctionsValidator implements ValidationModule {
       if (!this.isValidCoordinate(args[i])) {
         // obvious string/bool -> error with generic code expected by tests
         if (/^\s*("[^"]*"|'[^']*'|true|false)\s*$/.test(args[i])) {
-          this.helper.addError(lineNum, column, `Invalid parameter type for label.new() coordinate ${i + 1}`, 'PSV6-FUNCTION-PARAM-TYPE');
+          this.helper.addError(lineNum, column, `Invalid parameter type for label.new() coordinate ${i + 1}`, Codes.FUNCTION_PARAM_TYPE);
         } else {
-          this.helper.addWarning(lineNum, column, `label.new() parameter ${i + 1} should be a valid coordinate`, 'PSV6-LABEL-COORDINATE-TYPE');
+          this.helper.addWarning(lineNum, column, `label.new() parameter ${i + 1} should be a valid coordinate`, Codes.LABEL_COORDINATE_TYPE);
         }
       }
     }
@@ -530,7 +531,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
       textParam = textMatch[1];
     }
     if (!this.isStringLiteral(textParam)) {
-      this.helper.addWarning(lineNum, column, 'label.new() text parameter should be a string literal', 'PSV6-LABEL-TEXT-TYPE');
+      this.helper.addWarning(lineNum, column, 'label.new() text parameter should be a string literal', Codes.LABEL_TEXT_TYPE);
     }
 
     // Optional named parameters: textsize=, textstyle=
@@ -540,14 +541,14 @@ export class DrawingFunctionsValidator implements ValidationModule {
       if (mSize) {
         const val = mSize[1].trim();
         if (!this.isValidTextSizeOrPoints(val)) {
-          this.helper.addError(lineNum, column, 'label.new() textsize must be a size constant or valid point size (6..72)', 'PSV6-LABEL-TEXT-SIZE');
+          this.helper.addError(lineNum, column, 'label.new() textsize must be a size constant or valid point size (6..72)', Codes.LABEL_TEXT_SIZE);
         }
       }
       const mStyle = a.match(/\btextstyle\s*=\s*([^,]+)$/);
       if (mStyle) {
         const val = mStyle[1].trim();
         if (!this.isValidTextStyle(val)) {
-          this.helper.addError(lineNum, column, 'label.new() textstyle must be a valid text style constant', 'PSV6-LABEL-TEXT-STYLE');
+          this.helper.addError(lineNum, column, 'label.new() textstyle must be a valid text style constant', Codes.LABEL_TEXT_STYLE);
         }
       }
     }
@@ -555,52 +556,52 @@ export class DrawingFunctionsValidator implements ValidationModule {
 
   private validateLabelSetText(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'label.set_text() requires exactly 2 parameters (id, text)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'label.set_text() requires exactly 2 parameters (id, text)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateLabelSetColor(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'label.set_color() requires exactly 2 parameters (id, color)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'label.set_color() requires exactly 2 parameters (id, color)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateLabelSetStyle(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'label.set_style() requires exactly 2 parameters (id, style)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'label.set_style() requires exactly 2 parameters (id, style)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateLabelSetSize(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'label.set_size() requires exactly 2 parameters (id, size)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'label.set_size() requires exactly 2 parameters (id, size)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     if (!this.isValidTextSizeOrPoints(args[1])) {
-      this.helper.addError(lineNum, column, 'label.set_size() size must be a size constant or valid point size (6..72)', 'PSV6-LABEL-TEXT-SIZE');
+      this.helper.addError(lineNum, column, 'label.set_size() size must be a size constant or valid point size (6..72)', Codes.LABEL_TEXT_SIZE);
     }
   }
 
   private validateLabelSetX(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'label.set_x() requires exactly 2 parameters (id, x)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'label.set_x() requires exactly 2 parameters (id, x)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateLabelSetY(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'label.set_y() requires exactly 2 parameters (id, y)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'label.set_y() requires exactly 2 parameters (id, y)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateLabelDelete(args: string[], lineNum: number, column: number): void {
     if (args.length !== 1) {
-      this.helper.addError(lineNum, column, 'label.delete() requires exactly 1 parameter (id)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'label.delete() requires exactly 1 parameter (id)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
@@ -647,7 +648,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
       case 'set_xloc':
         // Valid box setter functions - generic validation
         if (args.length < 2) {
-          this.helper.addError(lineNum, column, `box.${functionName}() requires at least 2 parameters`, 'PSV6-FUNCTION-PARAM-COUNT');
+          this.helper.addError(lineNum, column, `box.${functionName}() requires at least 2 parameters`, Codes.FUNCTION_PARAM_COUNT);
         }
         break;
       case 'get_left':
@@ -656,17 +657,17 @@ export class DrawingFunctionsValidator implements ValidationModule {
       case 'get_bottom':
         // Valid box getter functions
         if (args.length !== 1) {
-          this.helper.addError(lineNum, column, `box.${functionName}() requires exactly 1 parameter (id)`, 'PSV6-FUNCTION-PARAM-COUNT');
+          this.helper.addError(lineNum, column, `box.${functionName}() requires exactly 1 parameter (id)`, Codes.FUNCTION_PARAM_COUNT);
         }
         break;
       case 'copy':
         // Valid box copy function
         if (args.length !== 1) {
-          this.helper.addError(lineNum, column, 'box.copy() requires exactly 1 parameter (id)', 'PSV6-FUNCTION-PARAM-COUNT');
+          this.helper.addError(lineNum, column, 'box.copy() requires exactly 1 parameter (id)', Codes.FUNCTION_PARAM_COUNT);
         }
         break;
       default:
-        this.helper.addError(lineNum, column, `Unknown box function: box.${functionName}`, 'PSV6-BOX-UNKNOWN-FUNCTION');
+        this.helper.addError(lineNum, column, `Unknown box function: box.${functionName}`, Codes.BOX_UNKNOWN_FUNCTION);
     }
   }
 
@@ -679,7 +680,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
     if (likelyChartPointOverload) {
       // New v6 signature with chart.point objects
       if (args.length < 2) {
-        this.helper.addError(lineNum, column, 'box.new() with chart.point requires at least 2 parameters (top_left, bottom_right)', 'PSV6-FUNCTION-PARAM-COUNT');
+        this.helper.addError(lineNum, column, 'box.new() with chart.point requires at least 2 parameters (top_left, bottom_right)', Codes.FUNCTION_PARAM_COUNT);
       }
       // Valid chart.point usage - skip coordinate validation
       return;
@@ -687,7 +688,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
 
     // Old signature with numeric coordinates
     if (args.length < 4) {
-      this.helper.addError(lineNum, column, 'box.new() requires at least 4 parameters (left, top, right, bottom)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.new() requires at least 4 parameters (left, top, right, bottom)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
 
@@ -695,9 +696,9 @@ export class DrawingFunctionsValidator implements ValidationModule {
     for (let i = 0; i < 4; i++) {
       if (!this.isValidCoordinate(args[i])) {
         if (/^\s*("[^"]*"|'[^']*'|true|false)\s*$/.test(args[i])) {
-          this.helper.addError(lineNum, column, `Invalid parameter type for box.new() coordinate ${i + 1}`, 'PSV6-FUNCTION-PARAM-TYPE');
+          this.helper.addError(lineNum, column, `Invalid parameter type for box.new() coordinate ${i + 1}`, Codes.FUNCTION_PARAM_TYPE);
         } else {
-          this.helper.addWarning(lineNum, column, `box.new() parameter ${i + 1} should be a valid coordinate`, 'PSV6-BOX-COORDINATE-TYPE');
+          this.helper.addWarning(lineNum, column, `box.new() parameter ${i + 1} should be a valid coordinate`, Codes.BOX_COORDINATE_TYPE);
         }
       }
     }
@@ -705,78 +706,78 @@ export class DrawingFunctionsValidator implements ValidationModule {
 
   private validateBoxSetBgcolor(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'box.set_bgcolor() requires exactly 2 parameters (id, color)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.set_bgcolor() requires exactly 2 parameters (id, color)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     if (!this.isColorExpression(args[1])) {
       if (/^\s*("[^"]*"|'[^']*')\s*$/.test(args[1])) {
-        this.helper.addError(lineNum, column, 'Invalid parameter type for box.set_bgcolor()', 'PSV6-FUNCTION-PARAM-TYPE');
+        this.helper.addError(lineNum, column, 'Invalid parameter type for box.set_bgcolor()', Codes.FUNCTION_PARAM_TYPE);
       } else {
-        this.helper.addWarning(lineNum, column, 'box.set_bgcolor() color parameter should be a color expression', 'PSV6-BOX-COLOR-TYPE');
+        this.helper.addWarning(lineNum, column, 'box.set_bgcolor() color parameter should be a color expression', Codes.BOX_COLOR_TYPE);
       }
     }
   }
 
   private validateBoxSetBorderColor(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'box.set_border_color() requires exactly 2 parameters (id, color)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.set_border_color() requires exactly 2 parameters (id, color)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateBoxSetBorderWidth(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'box.set_border_width() requires exactly 2 parameters (id, width)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.set_border_width() requires exactly 2 parameters (id, width)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     const width = this.extractNumericValue(args[1]);
     if (width === null && args[1].trim() !== 'na') {
       if (/^\s*("[^"]*"|'[^']*')\s*$/.test(args[1])) {
-        this.helper.addError(lineNum, column, 'Invalid parameter type for box.set_border_width()', 'PSV6-FUNCTION-PARAM-TYPE');
+        this.helper.addError(lineNum, column, 'Invalid parameter type for box.set_border_width()', Codes.FUNCTION_PARAM_TYPE);
       } else {
-        this.helper.addWarning(lineNum, column, 'box.set_border_width() width should be a number', 'PSV6-BOX-WIDTH-TYPE');
+        this.helper.addWarning(lineNum, column, 'box.set_border_width() width should be a number', Codes.BOX_WIDTH_TYPE);
       }
     }
   }
 
   private validateBoxSetBorderStyle(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'box.set_border_style() requires exactly 2 parameters (id, style)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.set_border_style() requires exactly 2 parameters (id, style)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateBoxDelete(args: string[], lineNum: number, column: number): void {
     if (args.length !== 1) {
-      this.helper.addError(lineNum, column, 'box.delete() requires exactly 1 parameter (id)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.delete() requires exactly 1 parameter (id)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateBoxSetLeft(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'box.set_left() requires exactly 2 parameters (id, left)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.set_left() requires exactly 2 parameters (id, left)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateBoxSetRight(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'box.set_right() requires exactly 2 parameters (id, right)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.set_right() requires exactly 2 parameters (id, right)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateBoxSetTop(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'box.set_top() requires exactly 2 parameters (id, top)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.set_top() requires exactly 2 parameters (id, top)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateBoxSetBottom(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'box.set_bottom() requires exactly 2 parameters (id, bottom)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'box.set_bottom() requires exactly 2 parameters (id, bottom)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
@@ -826,22 +827,22 @@ export class DrawingFunctionsValidator implements ValidationModule {
         this.validateTableDelete(args, lineNum, column);
         break;
       default:
-        this.helper.addError(lineNum, column, `Unknown table function: table.${functionName}`, 'PSV6-TABLE-UNKNOWN-FUNCTION');
+        this.helper.addError(lineNum, column, `Unknown table function: table.${functionName}`, Codes.TABLE_UNKNOWN_FUNCTION);
     }
   }
 
   private validateTableNew(args: string[], lineNum: number, column: number): void {
     if (args.length < 3) {
-      this.helper.addError(lineNum, column, 'table.new() requires at least 3 parameters (position, columns, rows)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.new() requires at least 3 parameters (position, columns, rows)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
 
     // Validate position parameter
     if (!this.isPositionConstant(args[0])) {
       if (/^\s*("[^"]*"|'[^']*')\s*$/.test(args[0])) {
-        this.helper.addError(lineNum, column, 'Invalid parameter type for table.new() position', 'PSV6-FUNCTION-PARAM-TYPE');
+        this.helper.addError(lineNum, column, 'Invalid parameter type for table.new() position', Codes.FUNCTION_PARAM_TYPE);
       } else {
-        this.helper.addWarning(lineNum, column, 'table.new() position should be a position constant', 'PSV6-TABLE-POSITION-TYPE');
+        this.helper.addWarning(lineNum, column, 'table.new() position should be a position constant', Codes.TABLE_POSITION_TYPE);
       }
     }
 
@@ -849,161 +850,161 @@ export class DrawingFunctionsValidator implements ValidationModule {
     for (let i = 1; i < 3; i++) {
       const value = this.extractNumericValue(args[i]);
       if (value === null || value < 1) {
-        this.helper.addWarning(lineNum, column, `table.new() parameter ${i + 1} should be a positive integer`, 'PSV6-TABLE-DIMENSION-TYPE');
+        this.helper.addWarning(lineNum, column, `table.new() parameter ${i + 1} should be a positive integer`, Codes.TABLE_DIMENSION_TYPE);
       }
     }
   }
 
   private validateTableCell(args: string[], lineNum: number, column: number): void {
     if (args.length < 4) {
-      this.helper.addError(lineNum, column, 'table.cell() requires at least 4 parameters (id, x, y, text)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.cell() requires at least 4 parameters (id, x, y, text)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateTableCellSetText(args: string[], lineNum: number, column: number): void {
     if (args.length !== 4) {
-      this.helper.addError(lineNum, column, 'table.cell_set_text() requires exactly 4 parameters (id, column, row, text)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.cell_set_text() requires exactly 4 parameters (id, column, row, text)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     // Recommend literal strings for static content
     if (!this.isStringLiteral(args[3])) {
-      this.helper.addWarning(lineNum, column, 'table.cell_set_text() text should be a string literal when static', 'PSV6-TABLE-CELL-TEXT-TYPE');
+      this.helper.addWarning(lineNum, column, 'table.cell_set_text() text should be a string literal when static', Codes.TABLE_CELL_TEXT_TYPE);
     }
   }
 
   private validateTableCellSetBgcolor(args: string[], lineNum: number, column: number): void {
     if (args.length !== 4) {
-      this.helper.addError(lineNum, column, 'table.cell_set_bgcolor() requires exactly 4 parameters (id, x, y, color)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.cell_set_bgcolor() requires exactly 4 parameters (id, x, y, color)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     if (!this.isColorExpression(args[3])) {
-      this.helper.addWarning(lineNum, column, 'table.cell_set_bgcolor() color parameter should be a color expression', 'PSV6-TABLE-CELL-COLOR-TYPE');
+      this.helper.addWarning(lineNum, column, 'table.cell_set_bgcolor() color parameter should be a color expression', Codes.TABLE_CELL_COLOR_TYPE);
     }
   }
 
   private validateTableCellSetTextColor(args: string[], lineNum: number, column: number): void {
     if (args.length !== 4) {
-      this.helper.addError(lineNum, column, 'table.cell_set_text_color() requires exactly 4 parameters (id, x, y, color)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.cell_set_text_color() requires exactly 4 parameters (id, x, y, color)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     if (!this.isColorExpression(args[3])) {
-      this.helper.addWarning(lineNum, column, 'table.cell_set_text_color() color parameter should be a color expression', 'PSV6-TABLE-CELL-COLOR-TYPE');
+      this.helper.addWarning(lineNum, column, 'table.cell_set_text_color() color parameter should be a color expression', Codes.TABLE_CELL_COLOR_TYPE);
     }
   }
 
   private validateTableCellSetTextSize(args: string[], lineNum: number, column: number): void {
     if (args.length !== 4) {
-      this.helper.addError(lineNum, column, 'table.cell_set_text_size() requires exactly 4 parameters (id, x, y, size)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.cell_set_text_size() requires exactly 4 parameters (id, x, y, size)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     if (!this.isValidTextSizeOrPoints(args[3])) {
-      this.helper.addWarning(lineNum, column, 'table.cell_set_text_size() size should be a size constant or 6..72', 'PSV6-TABLE-CELL-TEXT-SIZE');
+      this.helper.addWarning(lineNum, column, 'table.cell_set_text_size() size should be a size constant or 6..72', Codes.TABLE_CELL_TEXT_SIZE);
     }
   }
 
   private validateTableClear(args: string[], lineNum: number, column: number): void {
     if (args.length !== 1) {
-      this.helper.addError(lineNum, column, 'table.clear() requires exactly 1 parameter (id)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.clear() requires exactly 1 parameter (id)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
 
   private validateTableSetPosition(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'table.set_position() requires exactly 2 parameters (id, position)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.set_position() requires exactly 2 parameters (id, position)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     if (!this.isPositionConstant(args[1])) {
       if (/^\s*("[^"]*"|'[^']*')\s*$/.test(args[1])) {
-        this.helper.addError(lineNum, column, 'Invalid parameter type for table.set_position() position', 'PSV6-FUNCTION-PARAM-TYPE');
+        this.helper.addError(lineNum, column, 'Invalid parameter type for table.set_position() position', Codes.FUNCTION_PARAM_TYPE);
       } else {
-        this.helper.addWarning(lineNum, column, 'table.set_position() position should be a position constant', 'PSV6-TABLE-POSITION-TYPE');
+        this.helper.addWarning(lineNum, column, 'table.set_position() position should be a position constant', Codes.TABLE_POSITION_TYPE);
       }
     }
   }
 
   private validateTableSetBgcolor(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'table.set_bgcolor() requires exactly 2 parameters (id, color)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.set_bgcolor() requires exactly 2 parameters (id, color)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     if (!this.isColorExpression(args[1])) {
       if (/^\s*("[^"]*"|'[^']*')\s*$/.test(args[1])) {
-        this.helper.addError(lineNum, column, 'Invalid parameter type for table.set_bgcolor()', 'PSV6-FUNCTION-PARAM-TYPE');
+        this.helper.addError(lineNum, column, 'Invalid parameter type for table.set_bgcolor()', Codes.FUNCTION_PARAM_TYPE);
       } else {
-        this.helper.addWarning(lineNum, column, 'table.set_bgcolor() color should be a color expression', 'PSV6-TABLE-COLOR-TYPE');
+        this.helper.addWarning(lineNum, column, 'table.set_bgcolor() color should be a color expression', Codes.TABLE_COLOR_TYPE);
       }
     }
   }
 
   private validateTableSetBorderColor(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'table.set_border_color() requires exactly 2 parameters (id, color)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.set_border_color() requires exactly 2 parameters (id, color)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     if (!this.isColorExpression(args[1])) {
       if (/^\s*("[^"]*"|'[^']*')\s*$/.test(args[1])) {
-        this.helper.addError(lineNum, column, 'Invalid parameter type for table.set_border_color()', 'PSV6-FUNCTION-PARAM-TYPE');
+        this.helper.addError(lineNum, column, 'Invalid parameter type for table.set_border_color()', Codes.FUNCTION_PARAM_TYPE);
       } else {
-        this.helper.addWarning(lineNum, column, 'table.set_border_color() color should be a color expression', 'PSV6-TABLE-COLOR-TYPE');
+        this.helper.addWarning(lineNum, column, 'table.set_border_color() color should be a color expression', Codes.TABLE_COLOR_TYPE);
       }
     }
   }
 
   private validateTableSetBorderWidth(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'table.set_border_width() requires exactly 2 parameters (id, width)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.set_border_width() requires exactly 2 parameters (id, width)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     const width = this.extractNumericValue(args[1]);
     if (width === null) {
-      this.helper.addError(lineNum, column, 'Invalid parameter type for table.set_border_width()', 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'Invalid parameter type for table.set_border_width()', Codes.FUNCTION_PARAM_TYPE);
       return;
     }
     if (width <= 0) {
-      this.helper.addWarning(lineNum, column, 'table.set_border_width() width should be > 0', 'PSV6-TABLE-BORDER-WIDTH');
+      this.helper.addWarning(lineNum, column, 'table.set_border_width() width should be > 0', Codes.TABLE_BORDER_WIDTH);
     }
     if (width > 10) {
-      this.helper.addInfo(lineNum, column, 'Very thick table borders may affect readability', 'PSV6-DRAWING-STYLE-SUGGESTION');
+      this.helper.addInfo(lineNum, column, 'Very thick table borders may affect readability', Codes.DRAWING_STYLE_SUGGESTION);
     }
   }
 
   private validateTableSetFrameColor(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'table.set_frame_color() requires exactly 2 parameters (id, color)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.set_frame_color() requires exactly 2 parameters (id, color)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     if (!this.isColorExpression(args[1])) {
       if (/^\s*("[^"]*"|'[^']*')\s*$/.test(args[1])) {
-        this.helper.addError(lineNum, column, 'Invalid parameter type for table.set_frame_color()', 'PSV6-FUNCTION-PARAM-TYPE');
+        this.helper.addError(lineNum, column, 'Invalid parameter type for table.set_frame_color()', Codes.FUNCTION_PARAM_TYPE);
       } else {
-        this.helper.addWarning(lineNum, column, 'table.set_frame_color() color should be a color expression', 'PSV6-TABLE-COLOR-TYPE');
+        this.helper.addWarning(lineNum, column, 'table.set_frame_color() color should be a color expression', Codes.TABLE_COLOR_TYPE);
       }
     }
   }
 
   private validateTableSetFrameWidth(args: string[], lineNum: number, column: number): void {
     if (args.length !== 2) {
-      this.helper.addError(lineNum, column, 'table.set_frame_width() requires exactly 2 parameters (id, width)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.set_frame_width() requires exactly 2 parameters (id, width)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
     const width = this.extractNumericValue(args[1]);
     if (width === null) {
-      this.helper.addError(lineNum, column, 'Invalid parameter type for table.set_frame_width()', 'PSV6-FUNCTION-PARAM-TYPE');
+      this.helper.addError(lineNum, column, 'Invalid parameter type for table.set_frame_width()', Codes.FUNCTION_PARAM_TYPE);
       return;
     }
     if (width <= 0) {
-      this.helper.addWarning(lineNum, column, 'table.set_frame_width() width should be > 0', 'PSV6-TABLE-FRAME-WIDTH');
+      this.helper.addWarning(lineNum, column, 'table.set_frame_width() width should be > 0', Codes.TABLE_FRAME_WIDTH);
     }
     if (width > 10) {
-      this.helper.addInfo(lineNum, column, 'Very thick table frames may affect readability', 'PSV6-DRAWING-STYLE-SUGGESTION');
+      this.helper.addInfo(lineNum, column, 'Very thick table frames may affect readability', Codes.DRAWING_STYLE_SUGGESTION);
     }
   }
 
   private validateTableDelete(args: string[], lineNum: number, column: number): void {
     if (args.length !== 1) {
-      this.helper.addError(lineNum, column, 'table.delete() requires exactly 1 parameter (id)', 'PSV6-FUNCTION-PARAM-COUNT');
+      this.helper.addError(lineNum, column, 'table.delete() requires exactly 1 parameter (id)', Codes.FUNCTION_PARAM_COUNT);
       return;
     }
   }
@@ -1013,7 +1014,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
     if (this.drawingObjectCount > 15) {
       this.helper.addWarning(1, 1, 
         `Too many drawing objects detected (${this.drawingObjectCount}). Consider limiting the number of drawing objects.`, 
-        'PSV6-DRAWING-TOO-MANY');
+        Codes.DRAWING_TOO_MANY);
     }
 
     // Check for drawing objects in loops
@@ -1021,7 +1022,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
       if (call.functionName === 'new' && call.inLoop) {
         this.helper.addWarning(call.line, call.column,
           'Creating drawing objects in loops may cause performance issues',
-          'PSV6-DRAWING-IN-LOOP');
+          Codes.DRAWING_IN_LOOP);
       }
     }
 
@@ -1030,7 +1031,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
       if (call.functionName === 'new' && this.hasComplexExpression(call.arguments)) {
         this.helper.addWarning(call.line, call.column, 
           'Complex expressions in drawing functions may cause performance issues', 
-          'PSV6-DRAWING-COMPLEX-EXPRESSION');
+          Codes.DRAWING_COMPLEX_EXPRESSION);
       }
     }
   }
@@ -1041,7 +1042,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
       if (!this.deletedDrawingVariables.has(obj)) {
         this.helper.addInfo(1, 1,
           `Drawing object '${obj}' is created but not deleted. Consider adding cleanup code.`,
-          'PSV6-DRAWING-CLEANUP-SUGGESTION');
+          Codes.DRAWING_CLEANUP_SUGGESTION);
       }
     }
 
@@ -1051,7 +1052,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
       if (call.functionName === 'new' && call.assignedIdentifier && poorNames.has(call.assignedIdentifier)) {
         this.helper.addInfo(call.line, call.column,
           `Consider using a more descriptive name instead of '${call.assignedIdentifier}'`,
-          'PSV6-DRAWING-NAMING-SUGGESTION');
+          Codes.DRAWING_NAMING_SUGGESTION);
       }
     }
 
@@ -1067,13 +1068,13 @@ export class DrawingFunctionsValidator implements ValidationModule {
           if (x1 === x2 && y1 === y2) {
             this.helper.addInfo(call.line, call.column, 
               'Drawing object has same start and end points', 
-              'PSV6-DRAWING-POSITION-SUGGESTION');
+              Codes.DRAWING_POSITION_SUGGESTION);
           }
           
           if (Math.abs(x1) > 100000 || Math.abs(y1) > 100000 || Math.abs(x2) > 100000 || Math.abs(y2) > 100000) {
             this.helper.addInfo(call.line, call.column, 
               'Drawing object has extreme coordinate values', 
-              'PSV6-DRAWING-POSITION-SUGGESTION');
+              Codes.DRAWING_POSITION_SUGGESTION);
           }
         }
       }
@@ -1089,7 +1090,7 @@ export class DrawingFunctionsValidator implements ValidationModule {
             if (width !== null && width > 5) {
               this.helper.addInfo(call.line, call.column, 
                 'Very thick drawing lines may affect readability', 
-                'PSV6-DRAWING-STYLE-SUGGESTION');
+                Codes.DRAWING_STYLE_SUGGESTION);
             }
           }
         }
