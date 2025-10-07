@@ -3,7 +3,6 @@ import {
   type ValidationModule,
   type ValidationContext,
   type ValidatorConfig,
-  type ValidationError,
   type ValidationResult,
   type BuiltinFunctionRule,
 } from '../core/types';
@@ -37,6 +36,7 @@ import {
   getDelegatedNamespaces,
 } from '../core/constants';
 import { getNodeSource, getSourceLine, getSourceLines } from '../core/ast/source-utils';
+import { ValidationHelper } from '../core/validation-helper';
 
 interface FunctionInfo {
   name: string;
@@ -195,15 +195,10 @@ export class FunctionValidator implements ValidationModule {
   name = 'FunctionValidator';
   priority = 85; // High priority - functions are core to Pine Script
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
+  private helper = new ValidationHelper();
   private context!: ValidationContext;
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
-  private errorKeys = new Set<string>();
-  private warningKeys = new Set<string>();
-  private infoKeys = new Set<string>();
 
   // Function tracking (extracted from EnhancedPineScriptValidator)
   private functionNames = new Set<string>();
@@ -412,16 +407,14 @@ export class FunctionValidator implements ValidationModule {
     // Function metadata already shared before validation
 
     if (this.isDebugEnabled()) {
-      console.log('[FunctionValidator] final errors', this.errors.map(e => e.code));
+      console.log('[FunctionValidator] final errors', this.helper.errorList.map(e => e.code));
     }
 
     return this.buildResult();
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.functionNames.clear();
     this.methodNames.clear();
     this.functionParams.clear();
@@ -432,9 +425,6 @@ export class FunctionValidator implements ValidationModule {
     this.booleanFunctionAssignments.clear();
     this.astProgram = null;
     this.astContext = null;
-    this.errorKeys.clear();
-    this.warningKeys.clear();
-    this.infoKeys.clear();
     this.seriesLikeIdentifiers.clear();
   }
 
@@ -465,41 +455,24 @@ export class FunctionValidator implements ValidationModule {
   }
 
   private addError(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    const key = `${line}:${column}:${code ?? message}`;
-    if (this.errorKeys.has(key)) {
-      return;
-    }
     if (this.isDebugEnabled() && code && (code === 'PSV6-FUNCTION-UNKNOWN' || code === 'PSV6-FUNCTION-NAMESPACE')) {
       console.log('[FunctionValidator] addError', { line, column, code, message });
     }
-    this.errorKeys.add(key);
-    this.errors.push({ line, column, message, severity: 'error', code, suggestion });
+    this.helper.addError(line, column, message, code, suggestion);
   }
 
   private addWarning(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    const key = `${line}:${column}:${code ?? message}`;
-    if (this.warningKeys.has(key)) {
-      return;
-    }
-    this.warningKeys.add(key);
-    this.warnings.push({ line, column, message, severity: 'warning', code, suggestion });
+    this.helper.addWarning(line, column, message, code, suggestion);
   }
 
   private addInfo(line: number, column: number, message: string, code?: string, suggestion?: string): void {
-    const key = `${line}:${column}:${code ?? message}`;
-    if (this.infoKeys.has(key)) {
-      return;
-    }
-    this.infoKeys.add(key);
-    this.info.push({ line, column, message, severity: 'info', code, suggestion });
+    this.helper.addInfo(line, column, message, code, suggestion);
   }
 
   private buildResult(): ValidationResult {
+    const result = this.helper.buildResult(this.context);
     return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
+      ...result,
       typeMap: new Map(),
       scriptType: null,
     };
