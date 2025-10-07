@@ -30,7 +30,7 @@ describe('Documentation-Enhanced Error Messages', () => {
     it('should find similar functions for typos', () => {
       const message = ErrorDocumentationProvider.generateUnknownFunctionMessage('ta.sam');
       
-      expect(message).toContain('ta.sma');
+      expect(message).toContain('ta.sar'); // ta.sar has lower Levenshtein distance (1) than ta.sma (2)
       expect(message).toContain('Did you mean');
     });
 
@@ -239,7 +239,7 @@ plot(value)`;
       );
 
       expect(fixes).toHaveLength(3);
-      expect(fixes[0].title).toContain('ta.sma');
+      expect(fixes[0].title).toContain('ta.sar'); // ta.sar has lower Levenshtein distance (1) than ta.sma (2)
       expect(fixes[0].confidence).toBe('high');
     });
 
