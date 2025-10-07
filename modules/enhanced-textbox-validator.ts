@@ -828,7 +828,8 @@ export class EnhancedTextboxValidator implements ValidationModule {
       
       // Pattern 2: Named parameter with missing value
       // Example: box.new(left=0, top=1, right=1, bottom=0, text=)
-      if (/\w+\s*=\s*[,)]/.test(trimmed)) {
+      // But NOT: color.new(color.blue, \n 0) - this is valid line continuation
+      if (/\w+\s*=\s*[,)]/.test(trimmed) && !trimmed.endsWith(',')) {
         this.helper.addError(
           lineNum,
           1,

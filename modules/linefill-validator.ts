@@ -152,7 +152,8 @@ export class LinefillValidator implements ValidationModule {
       
       // Pattern 2: Named parameter with missing value
       // Example: linefill.set_color(fill, color=)
-      if (/\w+\s*=\s*[,)]/.test(trimmed)) {
+      // But NOT: color.new(color.blue, \n 0) - this is valid line continuation
+      if (/\w+\s*=\s*[,)]/.test(trimmed) && !trimmed.endsWith(',')) {
         this.helper.addError(
           lineNum,
           1,

@@ -23,8 +23,17 @@ import {
 
 const ALLOWED_KEYWORD_IDENTIFIERS = new Set<string>();
 
+// Keywords that are reserved for parameter names (excluding type names)
+const PARAMETER_RESERVED_KEYWORDS = new Set([
+  'var', 'varip', 'const', 'type', 'method', 'import', 'export', 'as',
+  'simple', 'series', 'true', 'false', 'na', 'and', 'or', 'not'
+]);
+
 const isReservedKeyword = (name: string): boolean =>
   KEYWORDS.has(name) && !ALLOWED_KEYWORD_IDENTIFIERS.has(name);
+
+const isReservedParameterName = (name: string): boolean =>
+  PARAMETER_RESERVED_KEYWORDS.has(name);
 
 const isReservedPseudoVar = (name: string): boolean =>
   PSEUDO_VARS.has(name) && !ALLOWED_KEYWORD_IDENTIFIERS.has(name);
@@ -744,7 +753,7 @@ export class CoreValidator implements ValidationModule {
       const valueLoc = argument.value.loc;
       const isMultiLineValue = valueLoc && valueLoc.end.line > valueLoc.start.line;
 
-      if (isMultiLineValue && isReservedKeyword(argName)) {
+      if (isMultiLineValue && isReservedParameterName(argName)) {
         const { line, column } = argument.name.loc.start;
         this.helper.addError(line, column, `Identifier '${argName}' conflicts with a Pine keyword/builtin.`, 'PS007');
       }

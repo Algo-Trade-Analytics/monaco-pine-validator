@@ -922,14 +922,6 @@ export class ASTIndentationValidator {
 
     // Rule 2: Wrapped line must NOT use a multiple-of-4 relative offset (reserved for blocks)
     if (wrapIndent % 4 === 0) {
-      const allowMultipleOfFour =
-        wrapIndent >= 4 &&
-        this.hasContinuationHintBefore(lineNum);
-
-      if (allowMultipleOfFour) {
-        return;
-      }
-
       const spaceLabel = wrapIndent === 1 ? 'space' : 'spaces';
       this.addError(
         lineNum,
@@ -992,6 +984,68 @@ export class ASTIndentationValidator {
     const trimmed = line.trim();
     // Switch case pattern: "case_value => expression" or just "=> expression"
     return /^\s*[^=]*\s*=>/.test(trimmed);
+  }
+
+  private isNamedParameterContext(lineNum: number): boolean {
+    const previousLine = this.findPreviousCodeLine(lineNum - 2);
+    if (!previousLine) {
+      return false;
+    }
+
+    const trimmed = previousLine.trimEnd();
+    
+    // Allow multiples of 4 for:
+    // 1. Variable assignments: "variable = expression" (top-level context)
+    // 2. Named parameter contexts: "parameter = value," (but only for top-level function calls)
+    // NOT for: "function(value," (positional parameters or nested function calls)
+    
+    // Variable assignment pattern: "variable = expression"
+    const assignmentPattern = /\w+\s*=\s*[^=]*$/;
+    
+    // Named parameter pattern: "parameter = value," (only for top-level calls)
+    const namedParamPattern = /\w+\s*=\s*[^,)]+[,)]?\s*$/;
+    
+    // Check if this is a variable assignment (always allow)
+    if (assignmentPattern.test(trimmed)) {
+      return true;
+    }
+    
+    // Check if this is a named parameter in a top-level function call
+    if (namedParamPattern.test(trimmed)) {
+      // Find the function call start line to determine if it's top-level
+      const functionCallStartLine = this.findFunctionCallStartLine(lineNum);
+      if (functionCallStartLine) {
+        return this.isTopLevelFunctionCall(functionCallStartLine);
+      }
+    }
+    
+    return false;
+  }
+
+  private findFunctionCallStartLine(currentLineNum: number): string | null {
+    // Look backwards to find the function call start (line ending with '(')
+    for (let i = currentLineNum - 2; i >= 0; i--) {
+      const line = this.sourceLines[i];
+      if (!line) {
+        continue;
+      }
+      const trimmed = line.trim();
+      if (trimmed.endsWith('(')) {
+        return line;
+      }
+    }
+    return null;
+  }
+
+  private isTopLevelFunctionCall(line: string): boolean {
+    // Check if this is a top-level function call (no nesting)
+    // Pattern: starts with function name followed by opening paren
+    // NOT: nested calls like "color.new(color.blue,"
+    const trimmed = line.trim();
+    const topLevelPattern = /^\w+\s*\(/;  // starts with identifier followed by (
+    const nestedPattern = /\.\w+\s*\(/;   // contains .identifier followed by (
+    
+    return topLevelPattern.test(trimmed) && !nestedPattern.test(trimmed);
   }
 
   private findPreviousCodeLine(startIndex: number): string | null {

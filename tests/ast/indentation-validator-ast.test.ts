@@ -63,7 +63,7 @@ myFunc(x) =>
       expect(errors).toHaveLength(0);
     });
 
-    it('should accept 4-space continuation with context', () => {
+    it('should reject 4-space continuation with context', () => {
       const code = `//@version=6
 indicator("Test")
 myFunc(x) =>
@@ -73,8 +73,8 @@ myFunc(x) =>
       const ast = parseCode(code);
       const errors = validateIndentationWithAST(code, ast);
 
-      // 4-space continuation with context (previous line ends with =) should be allowed
-      expect(errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toHaveLength(0);
+      // 4-space continuation should be rejected (multiples of 4 are reserved for blocks)
+      expect(errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toHaveLength(1);
     });
   });
 
@@ -281,8 +281,8 @@ plot(
       expect(errors).toHaveLength(0);
     });
 
-    it('should accept 4-space continuation in function call with context', () => {
-      // 4-space continuation with context (previous line ends with () should be allowed
+    it('should reject 4-space continuation in function call with context', () => {
+      // 4-space continuation should be rejected (multiples of 4 are reserved for blocks)
       const code = `//@version=6
 indicator("Test")
 plot(
@@ -292,8 +292,8 @@ plot(
       const ast = parseCode(code);
       const errors = validateIndentationWithAST(code, ast);
 
-      // 4-space continuation with context should be allowed
-      expect(errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toHaveLength(0);
+      // 4-space continuation should be rejected
+      expect(errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toHaveLength(1);
     });
   });
 

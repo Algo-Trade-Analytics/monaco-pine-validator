@@ -71,8 +71,8 @@ plot(
      linewidth = 2               // Line width
  )`;
       const { codes } = run(code);
-      // The validator correctly identifies 'color' as a keyword conflict
-      expectHas(codes, { errors: ['PS007'] });
+      // 'color' is a valid parameter name, not a keyword conflict
+      expectLacks(codes, { errors: ['PS007'] });
       // And warns about indentation mismatch
       expectHas(codes, { warnings: ['PS018'] });
     });
