@@ -352,55 +352,11 @@ export const WILDCARD_IDENT = new Set(['_']);
 
 // Regular expressions
 export const IDENT = /[A-Za-z_][A-Za-z0-9_]*/;
-export const QUALIFIED_IDENT = new RegExp(`${IDENT.source}(?:\\.${IDENT.source})*`, 'g');
 
 // Version directive
 export const VERSION_RE = /^\uFEFF?\s*\/\/\s*@version=(\d+)\s*$/;
 
-// Script declaration
-export const SCRIPT_START_RE = /^\s*(indicator|strategy|library)\s*\(/;
 
-// Function declarations
-export const QUALIFIED_FN_RE = new RegExp(
-  `^\\s*(?:export\\s+)?(${IDENT.source}(?:\\.${IDENT.source})*)\\s*\\(([^)]*)\\)\\s*=>`
-);
-
-export const METHOD_DECL_RE = new RegExp(
-  `^\\s*method\\s+(${IDENT.source})\\s*\\(([^)]*)\\)\\s*=>`
-);
-
-// Variable declarations
-export const VAR_DECL_RE = new RegExp(
-  `^\\s*(?:(?:var|varip|const)\\s+)?` +
-  `(?:(?:${IDENT.source}(?:\\.${IDENT.source})*(?:<[^>]+>)?)\\s+(?=${IDENT.source}\\s*=))?` +
-  `(${IDENT.source})\\s*=\\s*(?![=>])`
-);
-
-// Reassignment
-export const VAR_REASSIGN_RE = new RegExp(`\\b(${IDENT.source})\\s*:=`);
-
-// Compound assignment
-export const COMPOUND_ASSIGN_RE = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*([+\-*/%])=\s*(?![=])/;
-
-// Element reassignment
-export const ELEM_REASSIGN_RE = /\b([A-Za-z_][A-Za-z0-9_]*)\s*\[[^\]]+\]\s*:=/;
-
-// Element compound assignment
-export const ELEM_COMPOUND_RE = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\[[^\]]+\]\s*([+\-*/%])=\s*(?![=])/;
-
-// Simple assignment
-export const SIMPLE_ASSIGN_RE = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?![=>])/;
-
-// Tuple destructuring
-export const TUPLE_DECL_RE = /^\s*\[\s*([A-Za-z0-9_.,\s]+)\s*\]\s*=/;
-export const TUPLE_REASSIGN_RE = /^\s*\[\s*([A-Za-z0-9_.,\s]+)\s*\]\s*:=/;
-
-// Plot and strategy detection
-export const PLOT_CALL_RE = /\b(?:plot|bgcolor|hline|fill|barcolor|plotcandle|plotbar|plotchar|plotshape)\s*\(/;
-export const STRATEGY_ANY_RE = /\bstrategy\./;
-
-// Qualifier strength mapping
-export const QUALIFIER_STRENGTH = { 'const': 1, 'input': 2, 'simple': 3, 'series': 4, 'unknown': 5 };
 
 // Built-in function rules for v6
 export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {

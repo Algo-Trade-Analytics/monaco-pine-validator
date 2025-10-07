@@ -341,4 +341,3 @@ export const Codes = {
   MODULE_ERROR: 'MODULE-ERROR'
 } as const;
 
-export type Code = (typeof Codes)[keyof typeof Codes];
