@@ -391,13 +391,16 @@ function checkFunctionDeclarationParentheses(line: string, lineNum: number, erro
  * Check for missing commas in function argument lists
  */
 function checkMissingCommas(line: string, lineNum: number, errors: ValidationError[]): void {
+  // Remove inline comments before processing
+  const withoutComments = line.split('//')[0].split('/*')[0];
+  const trimmed = withoutComments.trim();
+  
   // Skip switch statements and function declarations
-  if (line.includes('switch') || line.includes('=>')) {
+  if (withoutComments.includes('switch') || withoutComments.includes('=>')) {
     return;
   }
   
   // Skip variable declarations (var, varip, const, type, method)
-  const trimmed = line.trim();
   if (trimmed.startsWith('var ') || trimmed.startsWith('varip ') || 
       trimmed.startsWith('const ') || trimmed.startsWith('type ') || 
       trimmed.startsWith('method ')) {
@@ -411,26 +414,49 @@ function checkMissingCommas(line: string, lineNum: number, errors: ValidationErr
     return;
   }
   
+  // Skip lines that are comments (start with // or /*)
+  if (trimmed.startsWith('//') || trimmed.startsWith('/*')) {
+    return;
+  }
+  
+  // Skip lines with logical operators (and, or, not) - these are valid syntax
+  const logicalOperators = ['and', 'or', 'not'];
+  const hasLogicalOperators = logicalOperators.some(op => 
+    trimmed.includes(` ${op} `) || 
+    trimmed.includes(` ${op})`) || 
+    trimmed.includes(` ${op},`) ||
+    trimmed.includes(` ${op}`) ||
+    trimmed.endsWith(` ${op}`)
+  );
+  if (hasLogicalOperators) {
+    return;
+  }
+  
   // Pattern: function(arg1 arg2) - missing comma between arguments
   // But be more specific to avoid false positives
   const missingCommaPattern = /(\w+)\s+([A-Za-z_][A-Za-z0-9_]*\s*[=)])/;
-  const match = line.match(missingCommaPattern);
+  const match = withoutComments.match(missingCommaPattern);
   
   if (match) {
     const [, arg1, arg2] = match;
     
     // Additional checks to avoid false positives
     // Skip if it looks like a variable assignment (arg1 = value)
-    if (arg2.includes('=') && !line.includes('(')) {
+    if (arg2.includes('=') && !withoutComments.includes('(')) {
       return;
     }
     
     // Skip if it's inside a switch case (looks like "case => value")
-    if (line.trim().startsWith('"') && line.includes('=>')) {
+    if (trimmed.startsWith('"') && withoutComments.includes('=>')) {
       return;
     }
     
-    const commaIndex = line.indexOf(arg2);
+    // Skip if arg1 is a logical operator
+    if (logicalOperators.includes(arg1.toLowerCase())) {
+      return;
+    }
+    
+    const commaIndex = withoutComments.indexOf(arg2);
     errors.push({
       line: lineNum,
       column: commaIndex,
