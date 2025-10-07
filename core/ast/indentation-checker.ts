@@ -53,14 +53,16 @@ export function checkIndentation(sourceCode: string): ValidationError[] {
       continue;
     }
     
-    // Check for mixed tabs and spaces
-    const hasTabs = line.includes('\t');
-    const hasSpaces = /^ /.test(line);
-    if (hasTabs && hasSpaces) {
+    // Check for mixed tabs and spaces ON THE SAME LINE (definitely invalid)
+    // Note: TradingView allows mixing tabs/spaces across different scopes
+    const leadingWhitespace = line.match(/^[\t ]+/)?.[0] || '';
+    const hasBothTabsAndSpaces = leadingWhitespace.includes('\t') && leadingWhitespace.includes(' ');
+    
+    if (hasBothTabsAndSpaces) {
       errors.push({
         line: lineNum,
         column: 1,
-        message: 'Mixed tabs and spaces in indentation',
+        message: 'Mixed tabs and spaces in indentation on the same line',
         severity: 'error',
         code: 'PSV6-INDENT-MIXED',
         suggestion: 'Use either tabs or spaces consistently, not both. Pine Script convention is 4 spaces.'

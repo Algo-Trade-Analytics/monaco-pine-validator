@@ -129,13 +129,15 @@ y = close[1`;
     // PS009 and PS010 might not trigger due to early parser error detection
   });
 
-  it('errors on mixed tabs/spaces (PSI02 is now an error like PS018 in TV)', () => {
+  it('errors on mixed tabs/spaces ON THE SAME LINE (PSI02)', () => {
+    // TradingView allows mixing tabs/spaces across different scopes,
+    // but NOT on the same line
     const code = `//@version=6
 indicator("Indent")
-\tif close > open
-      plot(close)`;
+\t    if close > open
+    plot(close)`;
     const { codes } = run(code);
-    expectHas(codes, { errors: ['PSI02'] }); // Mixed tabs/spaces is an error (like PS018 in TV)
+    expectHas(codes, { errors: ['PSI02'] }); // Mixed tabs/spaces on same line is an error
   });
 });
 

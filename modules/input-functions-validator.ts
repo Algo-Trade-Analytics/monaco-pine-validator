@@ -984,14 +984,18 @@ export class InputFunctionsValidator implements ValidationModule {
 
   private validateInputEnum(args: string[], parameters: Map<string, string>, lineNum: number, column: number): void {
     // Validate required parameters for input.enum()
-    if (args.length < 2) {
-      this.helper.addError(lineNum, column, 'input.enum() requires at least 2 arguments: default value and title', 'PSV6-INPUT-ENUM-ARGS');
+    // input.enum() requires at least the default value (positional or named)
+    const hasDefaultValue = args.length > 0 || parameters.has('defval');
+    const hasTitle = args.length > 1 || parameters.has('title');
+    
+    if (!hasDefaultValue) {
+      this.helper.addError(lineNum, column, 'input.enum() requires a default value (e.g., MyEnum.VALUE)', 'PSV6-INPUT-ENUM-ARGS');
       return;
     }
 
     // Validate default value is an enum member reference
-    const defaultValue = args[0];
-    if (!defaultValue.includes('.')) {
+    const defaultValue = args.length > 0 ? args[0] : parameters.get('defval') || '';
+    if (defaultValue && !defaultValue.includes('.')) {
       this.helper.addError(lineNum, column, 'input.enum() default value must be an enum member (e.g., MyEnum.VALUE)', 'PSV6-INPUT-ENUM-DEFAULT');
     }
 

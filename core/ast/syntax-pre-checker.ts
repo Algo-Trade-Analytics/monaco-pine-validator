@@ -135,6 +135,25 @@ export function preCheckSyntax(sourceCode: string): ValidationError[] {
       continue;
     }
     
+    // Skip block statements and if expressions - these are NOT line continuations
+    // Block statements: if, else if, else, for, while, switch cases
+    // If expressions: standalone else, else if (these are part of if expressions)
+    const isBlockStatement = /^\s*(if|else\s+if|else|for|while|switch|case|default)\s/.test(nextTrimmed);
+    const isIfExpressionPart = /^\s*(else\s+if|else)(\s|$)/.test(nextTrimmed);
+    if (isBlockStatement || isIfExpressionPart) {
+      continue;
+    }
+    
+    // Skip if expressions - lines ending with "if" followed by an if expression
+    // Pattern: "variable = if" followed by "    expression" or "else if" or "else"
+    const isIfExpressionStart = trimmed.endsWith('if') && 
+                               (nextTrimmed.startsWith('    ') || 
+                                nextTrimmed.startsWith('else') ||
+                                /^\s*(if|else\s+if|else)\s/.test(nextTrimmed));
+    if (isIfExpressionStart) {
+      continue;
+    }
+    
     // Check if line ends with operators/punctuation that suggest continuation
     // But exclude function declarations (ending with ) =>, => )
     const isFunctionDeclaration = /\)\s*=>|=>\s*$/.test(trimmed);

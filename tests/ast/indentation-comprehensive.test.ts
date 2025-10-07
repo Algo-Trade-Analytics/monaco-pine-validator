@@ -257,15 +257,33 @@ type Point
   });
 
   describe('Mixed Tabs and Spaces', () => {
-    it('should warn on mixed tabs and spaces', () => {
+    it('should warn on mixed tabs and spaces ON THE SAME LINE', () => {
+      // TradingView allows mixing tabs/spaces across different scopes,
+      // but NOT on the same line
       const code = `//@version=6
 indicator("Test")
-\tif close > open
-      plot(close)`;
+\t    if close > open
+    plot(close)`;
       
       const errors = validate(code);
       expect(errors.length).toBeGreaterThan(0);
       expect(errors.some(e => e.code === 'PSI02')).toBe(true);
+    });
+
+    it('should ALLOW mixing tabs/spaces across different scopes (TradingView behavior)', () => {
+      // This matches TradingView's behavior - tabs in one scope, spaces in another
+      // But each line uses ONLY tabs OR ONLY spaces, not both
+      const code = `//@version=6
+indicator("Test")
+\tif close > open
+\t\tplot(close)
+    
+value = input.int(10, title="Test",
+     tooltip="Description")`;
+      
+      const errors = validate(code);
+      const mixedIndentErrors = errors.filter(e => e.code === 'PSI02');
+      expect(mixedIndentErrors).toHaveLength(0);
     });
   });
 

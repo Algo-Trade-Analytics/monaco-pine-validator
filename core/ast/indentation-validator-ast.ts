@@ -17,6 +17,7 @@ import type {
   ProgramNode,
   FunctionDeclarationNode,
   IfStatementNode,
+  IfExpressionNode,
   ForStatementNode,
   WhileStatementNode,
   SwitchStatementNode,
@@ -124,34 +125,28 @@ export class ASTIndentationValidator {
   /**
    * Check for mixed tabs and spaces across the entire script
    * Returns true if mixed indentation was detected
+   * 
+   * NOTE: TradingView appears to be lenient about mixing tabs and spaces
+   * across different scopes (e.g., spaces in global, tabs in functions).
+   * We only check for mixing within the same line, which is definitely invalid.
    */
   private checkMixedIndentation(): boolean {
-    let firstTabLine = 0;
-    let firstSpaceLine = 0;
-
+    // Check for tabs and spaces mixed on the SAME line (definitely invalid)
     for (let i = 0; i < this.sourceLines.length; i++) {
       const line = this.sourceLines[i];
       if (!line || line.trim() === '' || line.trim().startsWith('//')) {
         continue;
       }
 
-      const hasLeadingTab = /^\t/.test(line);
-      const hasLeadingSpaces = /^ /.test(line);
+      // Check if the same line has both tabs and spaces in its leading whitespace
+      const leadingWhitespace = line.match(/^[\t ]+/)?.[0] || '';
+      const hasBothTabsAndSpaces = leadingWhitespace.includes('\t') && leadingWhitespace.includes(' ');
 
-      if (hasLeadingTab && firstTabLine === 0) {
-        firstTabLine = i + 1;
-      }
-      if (hasLeadingSpaces && firstSpaceLine === 0) {
-        firstSpaceLine = i + 1;
-      }
-
-      // If we've seen both tabs and spaces, report it as an error
-      if (firstTabLine > 0 && firstSpaceLine > 0) {
-        const errorLine = Math.max(firstTabLine, firstSpaceLine);
+      if (hasBothTabsAndSpaces) {
         this.addError(
-          errorLine,
+          i + 1,
           1,
-          `Mixed tabs and spaces in indentation (tabs on line ${firstTabLine}, spaces on line ${firstSpaceLine})`,
+          `Mixed tabs and spaces in indentation on the same line`,
           'PSI02'
         );
         return true; // Mixed indentation detected
@@ -183,6 +178,10 @@ export class ASTIndentationValidator {
       
       case 'IfStatement':
         this.validateIfStatement(node as IfStatementNode);
+        break;
+      
+      case 'IfExpression':
+        this.validateIfExpression(node as IfExpressionNode);
         break;
       
       case 'ForStatement':
@@ -497,6 +496,11 @@ export class ASTIndentationValidator {
         this.validateSwitchStatement(assignStmt.right as SwitchStatementNode);
         return;
       }
+      if (assignStmt.right && assignStmt.right.kind === 'IfExpression') {
+        // This is an if expression - validate the if expression, not as wrapped lines
+        this.validateIfExpression(assignStmt.right as IfExpressionNode);
+        return;
+      }
     }
 
     const stmtStartLine = stmt.loc.start.line - 1;
@@ -573,6 +577,35 @@ export class ASTIndentationValidator {
 
         this.validateBlock(node.alternate, headerIndent + 4);
         this.context = prevContext;
+      }
+    }
+  }
+
+  /**
+   * Validate if expression indentation (e.g., "value = if condition ... else ...")
+   * If expressions follow different rules than if statements - they don't use block indentation
+   */
+  private validateIfExpression(node: IfExpressionNode): void {
+    // If expressions don't use block indentation rules
+    // They are part of expressions and should be validated as such
+    // Just validate the children without changing the indentation context
+    
+    // Validate test condition
+    this.validateNode(node.test);
+    
+    // Validate consequent (then branch)
+    if (node.consequent) {
+      this.validateNode(node.consequent);
+    }
+    
+    // Validate alternate (else/else-if branch)
+    if (node.alternate) {
+      if (node.alternate.kind === 'IfExpression') {
+        // else-if: validate recursively
+        this.validateIfExpression(node.alternate);
+      } else {
+        // else: validate the block
+        this.validateNode(node.alternate);
       }
     }
   }
