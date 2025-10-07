@@ -31,6 +31,7 @@ import { inferTypes } from './ast/type-inference';
 import { buildControlFlowGraph } from './ast/control-flow';
 import { preCheckSyntax } from './ast/syntax-pre-checker';
 import { validateIndentationWithAST } from './ast/indentation-validator-ast';
+import { ErrorEnhancerV2 } from './error-enhancement-v2';
 
 type ConfigLayer = Partial<ValidatorConfig> | undefined;
 
@@ -50,6 +51,7 @@ function mergeValidatorConfig(layers: ConfigLayer[]): { config: ValidatorConfig;
     enableControlFlowAnalysis: true,
     enablePerformanceAnalysis: false,
     enableCustomRuleRawScan: true,
+    enhanceErrors: true, // Enable rich error messages by default
     customRules: [],
     ignoredCodes: [],
   };
@@ -433,11 +435,25 @@ export abstract class BaseValidator {
    * Build the final validation result
    */
   protected buildResult(): ValidationResult {
+    // Enhance errors if enabled in config
+    const shouldEnhance = this.config.enhanceErrors !== false;
+    const sourceCode = this.context.sourceText || this.context.lines.join('\n');
+    
+    let finalErrors = this.errors;
+    let finalWarnings = this.warnings;
+    let finalInfo = this.info;
+    
+    if (shouldEnhance && sourceCode) {
+      finalErrors = this.errors.map(e => ErrorEnhancerV2.enhance(e, sourceCode));
+      finalWarnings = this.warnings.map(w => ErrorEnhancerV2.enhance(w, sourceCode));
+      finalInfo = this.info.map(i => ErrorEnhancerV2.enhance(i, sourceCode));
+    }
+    
     return {
       isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
+      errors: finalErrors,
+      warnings: finalWarnings,
+      info: finalInfo,
       typeMap: this.context.typeMap,
       scriptType: this.scriptType
     };

@@ -179,7 +179,8 @@ export class CodeSnippetExtractor {
     
     // Add error indicator
     const padding = ' '.repeat(maxLineNumWidth + 3); // " | "
-    const indicator = ' '.repeat(column - 1) + '^';
+    const indicatorSpaces = Math.max(0, column - 1); // Ensure non-negative
+    const indicator = ' '.repeat(indicatorSpaces) + '^';
     lines.push(padding + indicator);
     
     lineIndex++;

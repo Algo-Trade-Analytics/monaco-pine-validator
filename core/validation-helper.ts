@@ -5,6 +5,7 @@
 
 import type { ValidationError, ValidationResult, ValidationContext, Code } from './types';
 import type { Codes } from './codes';
+import { ErrorEnhancerV2 } from './error-enhancement-v2';
 
 /**
  * Centralized validation helper for managing errors, warnings, and info messages
@@ -18,6 +19,9 @@ export class ValidationHelper {
   private errors: ValidationError[] = [];
   private warnings: ValidationError[] = [];
   private info: ValidationError[] = [];
+  
+  private sourceCode: string = '';
+  private enhanceErrors: boolean = false;
 
   /**
    * Add an error message with automatic deduplication
@@ -135,11 +139,22 @@ export class ValidationHelper {
    * Build the final validation result
    */
   buildResult(context: ValidationContext): ValidationResult {
+    // Enhance errors if enabled and source code is available
+    let finalErrors = this.errors;
+    let finalWarnings = this.warnings;
+    let finalInfo = this.info;
+    
+    if (this.enhanceErrors && this.sourceCode) {
+      finalErrors = this.errors.map(e => ErrorEnhancerV2.enhance(e, this.sourceCode));
+      finalWarnings = this.warnings.map(w => ErrorEnhancerV2.enhance(w, this.sourceCode));
+      finalInfo = this.info.map(i => ErrorEnhancerV2.enhance(i, this.sourceCode));
+    }
+    
     return {
       isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
+      errors: finalErrors,
+      warnings: finalWarnings,
+      info: finalInfo,
       typeMap: context.typeMap,
       scriptType: context.scriptType,
     };
@@ -155,6 +170,22 @@ export class ValidationHelper {
     this.errors = [];
     this.warnings = [];
     this.info = [];
+    this.sourceCode = '';
+    this.enhanceErrors = false;
+  }
+  
+  /**
+   * Set source code for error enhancement
+   */
+  setSourceCode(sourceCode: string): void {
+    this.sourceCode = sourceCode;
+  }
+  
+  /**
+   * Enable or disable error enhancement
+   */
+  setEnhanceErrors(enhance: boolean): void {
+    this.enhanceErrors = enhance;
   }
 
   // Getters for accessing arrays (for debug purposes)

@@ -82,6 +82,7 @@ export interface ValidatorConfig {
   enablePerformanceChecks?: boolean;
   enableStyleChecks?: boolean;
   enableWarnings?: boolean;
+  enhanceErrors?: boolean; // Enable rich error messages with documentation
   enableInfo?: boolean;
   enableCustomRuleRawScan?: boolean;
   customRules: ValidationRule[];
