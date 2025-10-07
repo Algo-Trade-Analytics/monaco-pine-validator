@@ -12,6 +12,7 @@ import {
   createExpressionStatement,
   createFunctionDeclaration,
   createIdentifier,
+  createIfStatement,
   createIndexExpression,
   createMemberExpression,
   createNumberLiteral,
@@ -299,5 +300,86 @@ describe('SyntaxValidator AST integration', () => {
     const result = validator.validate(source);
 
     expect(result.errors.some((error) => error.code === 'PS-EMPTY')).toBe(true);
+  });
+
+  it('detects empty if statement code blocks', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Empty If Test")',
+      'if ta.crossover(close, sma(close, 20))',
+      '    plot(close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleValue = createStringLiteral('Empty If Test', '"Empty If Test"', 15, 2);
+    const titleArgument = createArgument(titleValue, 10, 28, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 29, 2);
+
+    // Create a simple test condition
+    const testCondition = createIdentifier('condition', 3, 3);
+
+    // Create an empty block statement (this is what happens when there's no indented code after if)
+    const emptyBlock = createBlock([], 3, 37, 3, 3);
+    
+    // Create the if statement with empty block
+    const ifStatement = createIfStatement(testCondition, emptyBlock, null, 3, 37, 3);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, ifStatement]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new SyntaxValidatorHarness(service);
+    const result = validator.validate(source);
+
+    expect(result.errors.some((error) => 
+      error.code === 'PSV6-SYNTAX-ERROR' && 
+      error.message.includes('missing a local code block')
+    )).toBe(true);
+  });
+
+  it('does not flag if statements with proper code blocks', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Valid If Test")',
+      'if condition',
+      '    plot(close)',
+      '',
+    ].join('\n');
+
+    const directive = createVersionDirective(6, 0, 12, 1);
+    const titleValue = createStringLiteral('Valid If Test', '"Valid If Test"', 15, 2);
+    const titleArgument = createArgument(titleValue, 10, 27, 2, 'title');
+    const scriptDeclaration = createScriptDeclaration('indicator', null, [titleArgument], 0, 28, 2);
+
+    // Create a test condition
+    const testCondition = createIdentifier('condition', 3, 3);
+
+    // Create a block with actual content
+    const plotCallee = createIdentifier('plot', 4, 4);
+    const plotArgument = createArgument(createIdentifier('close', 9, 4));
+    const plotCall = createCallExpression(plotCallee, [plotArgument], 4, 14, 4);
+    const plotStatement = createExpressionStatement(plotCall, 4, 14, 4);
+    const validBlock = createBlock([plotStatement], 4, 14, 4, 4);
+    
+    // Create the if statement with valid block
+    const ifStatement = createIfStatement(testCondition, validBlock, null, 3, 37, 3);
+
+    const program = createProgramFromSource(source, [directive], [scriptDeclaration, ifStatement]);
+    const service = new FunctionAstService(() => ({
+      ast: program,
+      diagnostics: createAstDiagnostics(),
+    }));
+
+    const validator = new SyntaxValidatorHarness(service);
+    const result = validator.validate(source);
+
+    // Should NOT have the empty code block error
+    expect(result.errors.some((error) => 
+      error.code === 'PSV6-SYNTAX-ERROR' && 
+      error.message.includes('missing a local code block')
+    )).toBe(false);
   });
 });

@@ -23,6 +23,7 @@ import {
   type ExpressionNode,
   type FunctionDeclarationNode,
   type IdentifierNode,
+  type IfStatementNode,
   type IndexExpressionNode,
   type MemberExpressionNode,
   type ProgramNode,
@@ -93,6 +94,9 @@ export class SyntaxValidator implements ValidationModule {
       },
       UnaryExpression: {
         enter: (path) => this.validateUnaryOperatorAst(path.node as UnaryExpressionNode),
+      },
+      IfStatement: {
+        enter: (path) => this.validateIfStatementAst(path.node),
       },
     });
   }
@@ -366,6 +370,21 @@ export class SyntaxValidator implements ValidationModule {
         `Operator '${operator}' is not valid in Pine Script.`,
         'PSO01',
       );
+    }
+  }
+
+  private validateIfStatementAst(node: IfStatementNode): void {
+    // Check if the consequent (then block) is empty
+    if (node.consequent.kind === 'BlockStatement') {
+      const block = node.consequent as any; // Cast to access body property
+      if (!block.body || block.body.length === 0) {
+        this.helper.addError(
+          node.loc.start.line,
+          node.loc.start.column,
+          'The structure is missing a local code block. Functions, conditional structures, and loops must include expressions that define their local scopes.',
+          Codes.SYNTAX_ERROR,
+        );
+      }
     }
   }
 
