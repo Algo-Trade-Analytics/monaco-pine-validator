@@ -7,6 +7,7 @@
 
 import type { ValidationError } from '../types';
 import { checkIndentation } from './indentation-checker';
+import { KEYWORDS } from '../constants';
 
 export interface SyntaxPattern {
   pattern: RegExp;
@@ -285,6 +286,13 @@ function checkMissingAssignmentOperator(line: string, lineNum: number, errors: V
   
   if (match) {
     const [, indent, varName, funcCall] = match;
+    
+    // Skip if the variable name is a Pine Script keyword
+    const normalizedVar = varName.toLowerCase();
+    if (KEYWORDS.has(normalizedVar)) {
+      return;
+    }
+    
     // Make sure this isn't already a valid assignment with =
     if (!line.includes('=')) {
       const column = indent.length + varName.length + 2; // Position after varName + space
@@ -351,6 +359,21 @@ function checkMissingCommas(line: string, lineNum: number, errors: ValidationErr
     return;
   }
   
+  // Skip variable declarations (var, varip, const, type, method)
+  const trimmed = line.trim();
+  if (trimmed.startsWith('var ') || trimmed.startsWith('varip ') || 
+      trimmed.startsWith('const ') || trimmed.startsWith('type ') || 
+      trimmed.startsWith('method ')) {
+    return;
+  }
+  
+  // Skip type declarations (chart.point, array<type>, matrix<type>, map<type>, etc.)
+  // Pattern: typeName variableName = ...
+  const typeDeclarationPattern = /^(\s*)([A-Za-z_][A-Za-z0-9_.]*<[^>]*>|[A-Za-z_][A-Za-z0-9_.]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/;
+  if (typeDeclarationPattern.test(trimmed)) {
+    return;
+  }
+  
   // Pattern: function(arg1 arg2) - missing comma between arguments
   // But be more specific to avoid false positives
   const missingCommaPattern = /(\w+)\s+([A-Za-z_][A-Za-z0-9_]*\s*[=)])/;
@@ -385,6 +408,15 @@ function checkMissingCommas(line: string, lineNum: number, errors: ValidationErr
  * Check for binary operators without proper left/right values
  */
 function checkBinaryOperators(line: string, lineNum: number, errors: ValidationError[]): void {
+  // Remove comments from the line before processing
+  const withoutComments = line.split('//')[0].split('/*')[0];
+  const trimmed = withoutComments.trim();
+  
+  // Skip if the line is empty after removing comments
+  if (!trimmed) {
+    return;
+  }
+  
   // Skip switch statements and function declarations that use =>
   if (line.includes('=>') && (line.includes('switch') || line.trim().includes('=>'))) {
     return;
@@ -392,6 +424,16 @@ function checkBinaryOperators(line: string, lineNum: number, errors: ValidationE
   
   // Skip function calls - they can have complex parameter expressions
   if (line.includes('(') && line.includes(')')) {
+    return;
+  }
+  
+  // Skip variable declarations - they can have unary operators like -1
+  if (trimmed.includes('=') && !trimmed.includes('(')) {
+    return;
+  }
+  
+  // Skip lines with string literals - they can contain operators like </div>
+  if (trimmed.includes('"') || trimmed.includes("'")) {
     return;
   }
   
@@ -408,6 +450,18 @@ function checkBinaryOperators(line: string, lineNum: number, errors: ValidationE
     // Skip valid operator combinations
     const validCombinations = ['==', '!=', '<=', '>=', '&&', '||', '=>', '+=', '-=', '*=', '/=', '%='];
     if (validCombinations.includes(combined)) {
+      return;
+    }
+    
+    // Skip unary operators (when they appear after certain operators)
+    // Examples: "x * -2", "y + -5", "z / -3" are valid unary minus
+    const unaryAfterOperators = ['*', '/', '+', '-', '=', '(', ',', ' ', '\t'];
+    if (op2 === '-' && unaryAfterOperators.includes(op1)) {
+      return;
+    }
+    
+    // Skip unary plus (less common but valid)
+    if (op2 === '+' && unaryAfterOperators.includes(op1)) {
       return;
     }
     
