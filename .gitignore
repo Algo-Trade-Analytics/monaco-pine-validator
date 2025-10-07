@@ -4,4 +4,15 @@ __pycache__/
 
 playground/dist/
 
+# Temporary files
+tmp-*.ts
+tmp-*.js
+tmp-*.cjs
+tmp-*.json
+test_*.pine
+test-*.pine
+
+# Temporary directories
+tmp/
+
 

@@ -19,7 +19,7 @@ export interface EnhancedDocumentation {
   returns?: string;
   example?: string;
   remarks?: string;
-  seeAlso?: Array<{ name: string; reference: string }>;
+  seeAlso?: ReadonlyArray<{ name: string; reference: string }>;
   commonMistakes?: string[];
   bestPractices?: string[];
 }
