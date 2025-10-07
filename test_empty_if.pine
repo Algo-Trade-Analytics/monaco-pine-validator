@@ -1,0 +1,11 @@
+//@version=6
+indicator("Test Empty If")
+
+// This should trigger an error
+if ta.crossover(close, sma(close, 20))
+
+// This should be fine
+if ta.crossover(close, sma(close, 20))
+    plot(close)
+
+plot(close)
