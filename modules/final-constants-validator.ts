@@ -23,7 +23,6 @@ import {
   type ValidationModule,
   type ValidationContext,
   type ValidatorConfig,
-  type ValidationError,
   type ValidationResult,
 } from '../core/types';
 import {
@@ -47,6 +46,7 @@ import { TEXT_ALIGNMENT_CONSTANTS, TEXT_SIZE_CONSTANTS } from '../core/constants
 import { Codes } from '../core/codes';
 import { visitQualifiedMembers, updateUsage } from '../core/ast/member-utils';
 import type { ProgramNode } from '../core/ast/nodes';
+import { ValidationHelper } from '../core/validation-helper';
 
 const MATH_CONSTANTS = new Set([
   'math.e', 'math.pi', 'math.phi', 'math.rphi'
@@ -90,10 +90,7 @@ export class FinalConstantsValidator implements ValidationModule {
   name = 'FinalConstantsValidator';
   priority = 65; // Lower priority - these are the final edge cases
 
-  private errors: ValidationError[] = [];
-  private warnings: ValidationError[] = [];
-  private info: ValidationError[] = [];
-  private context!: ValidationContext;
+  private helper = new ValidationHelper();
 
   // Usage tracking for all final constants
   private mathConstantUsage: Map<string, number> = new Map();
@@ -108,19 +105,11 @@ export class FinalConstantsValidator implements ValidationModule {
   }
 
   validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
-    this.context = context;
     this.reset();
 
-    const astContext = this.getAstContext(config);
+    const astContext = this.getAstContext(context, config);
     if (!astContext?.ast) {
-      return {
-        isValid: true,
-        errors: [],
-        warnings: [],
-        info: [],
-        typeMap: new Map(),
-        scriptType: context.scriptType,
-      };
+      return this.helper.buildResult(context);
     }
 
     this.collectConstantsFromAst(astContext.ast);
@@ -128,20 +117,11 @@ export class FinalConstantsValidator implements ValidationModule {
     // Analyze usage patterns
     this.analyzeFinalConstantUsage();
 
-    return {
-      isValid: this.errors.length === 0,
-      errors: this.errors,
-      warnings: this.warnings,
-      info: this.info,
-      typeMap: new Map(),
-      scriptType: this.context.scriptType
-    };
+    return this.helper.buildResult(context);
   }
 
   private reset(): void {
-    this.errors = [];
-    this.warnings = [];
-    this.info = [];
+    this.helper.reset();
     this.mathConstantUsage.clear();
     this.styleConstantUsage.clear();
     this.orderConstantUsage.clear();
@@ -150,11 +130,11 @@ export class FinalConstantsValidator implements ValidationModule {
     this.infoKeys.clear();
   }
 
-  private getAstContext(config: ValidatorConfig): AstValidationContext | null {
+  private getAstContext(context: ValidationContext, config: ValidatorConfig): AstValidationContext | null {
     if (!config.ast || config.ast.mode === 'disabled') {
       return null;
     }
-    return 'ast' in this.context ? (this.context as AstValidationContext) : null;
+    return 'ast' in context ? (context as AstValidationContext) : null;
   }
 
   private collectConstantsFromAst(program: ProgramNode): void {
@@ -205,24 +185,11 @@ export class FinalConstantsValidator implements ValidationModule {
       return;
     }
     this.infoKeys.add(dedupeKey);
-    this.info.push({
-      code,
-      message,
-      line,
-      column,
-      severity: 'info'
-    });
+    this.helper.addInfo(line, column, message, code);
   }
 
   private addError(line: number, column: number, message: string, code: string, suggestion?: string): void {
-    this.errors.push({
-      line,
-      column,
-      message,
-      severity: 'error',
-      code,
-      suggestion,
-    });
+    this.helper.addError(line, column, message, code, suggestion);
   }
 
   private recordConstantUsage(constant: string, line: number, column: number): boolean {
@@ -466,64 +433,58 @@ export class FinalConstantsValidator implements ValidationModule {
                       totalPositionConstants + totalSpecializedConstants;
 
     if (grandTotal > 0) {
-      this.info.push({
-        code: Codes.FINAL_CONSTANTS_INFO,
-        message: `Final specialized constants detected: ${grandTotal} different constants used across all categories`,
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(
+        1,
+        1,
+        `Final specialized constants detected: ${grandTotal} different constants used across all categories`,
+        Codes.FINAL_CONSTANTS_INFO,
+      );
     }
 
     // Specific category information
     if (totalMathConstants > 0) {
-      this.info.push({
-        code: Codes.MATH_CONSTANTS_USAGE,
-        message: `Mathematical constants used (${totalMathConstants}). Ensure proper mathematical context`,
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(
+        1,
+        1,
+        `Mathematical constants used (${totalMathConstants}). Ensure proper mathematical context`,
+        Codes.MATH_CONSTANTS_USAGE,
+      );
     }
 
     if (totalStyleConstants > 0) {
-      this.info.push({
-        code: 'PSV6-STYLE-CONSTANTS-USAGE',
-        message: `Style constants used (${totalStyleConstants}). These control visual appearance of drawings`,
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(
+        1,
+        1,
+        `Style constants used (${totalStyleConstants}). These control visual appearance of drawings`,
+        'PSV6-STYLE-CONSTANTS-USAGE',
+      );
     }
 
     if (totalOrderConstants > 0) {
-      this.info.push({
-        code: 'PSV6-ORDER-CONSTANTS-USAGE',
-        message: `Array sort order constants used (${totalOrderConstants}). These control array sorting behavior`,
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(
+        1,
+        1,
+        `Array sort order constants used (${totalOrderConstants}). These control array sorting behavior`,
+        'PSV6-ORDER-CONSTANTS-USAGE',
+      );
     }
 
     if (totalPositionConstants > 0) {
-      this.info.push({
-        code: 'PSV6-POSITION-CONSTANTS-USAGE',
-        message: `Table position constants used (${totalPositionConstants}). These control table placement on chart`,
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(
+        1,
+        1,
+        `Table position constants used (${totalPositionConstants}). These control table placement on chart`,
+        'PSV6-POSITION-CONSTANTS-USAGE',
+      );
     }
 
     if (totalSpecializedConstants > 0) {
-      this.info.push({
-        code: 'PSV6-SPECIALIZED-CONSTANTS-USAGE',
-        message: `Specialized constants used (${totalSpecializedConstants}). These include strategy, earnings, and advanced features`,
-        line: 1,
-        column: 1,
-        severity: 'info'
-      });
+      this.helper.addInfo(
+        1,
+        1,
+        `Specialized constants used (${totalSpecializedConstants}). These include strategy, earnings, and advanced features`,
+        'PSV6-SPECIALIZED-CONSTANTS-USAGE',
+      );
     }
   }
 }
