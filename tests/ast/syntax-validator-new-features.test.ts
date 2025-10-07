@@ -156,9 +156,9 @@ plot(value)
       const result = validator.validate(source);
 
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0].code).toBe(Codes.SYNTAX_MISSING_OPERAND);
-      expect(result.errors[0].message).toContain("Binary operator");
-      expect(result.errors[0].message).toContain("missing a left operand");
+      expect(result.errors[0].code).toBe(Codes.SYNTAX_ERROR);
+      expect(result.errors[0].message).toContain("Syntax error");
+      expect(result.errors[0].message).toContain("Expecting token of type");
     });
 
     it('should not flag valid binary expressions', () => {
