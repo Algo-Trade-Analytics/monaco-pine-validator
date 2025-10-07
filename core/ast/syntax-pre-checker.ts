@@ -346,12 +346,30 @@ function checkFunctionDeclarationParentheses(line: string, lineNum: number, erro
  * Check for missing commas in function argument lists
  */
 function checkMissingCommas(line: string, lineNum: number, errors: ValidationError[]): void {
+  // Skip switch statements and function declarations
+  if (line.includes('switch') || line.includes('=>')) {
+    return;
+  }
+  
   // Pattern: function(arg1 arg2) - missing comma between arguments
+  // But be more specific to avoid false positives
   const missingCommaPattern = /(\w+)\s+([A-Za-z_][A-Za-z0-9_]*\s*[=)])/;
   const match = line.match(missingCommaPattern);
   
   if (match) {
     const [, arg1, arg2] = match;
+    
+    // Additional checks to avoid false positives
+    // Skip if it looks like a variable assignment (arg1 = value)
+    if (arg2.includes('=') && !line.includes('(')) {
+      return;
+    }
+    
+    // Skip if it's inside a switch case (looks like "case => value")
+    if (line.trim().startsWith('"') && line.includes('=>')) {
+      return;
+    }
+    
     const commaIndex = line.indexOf(arg2);
     errors.push({
       line: lineNum,
@@ -367,13 +385,32 @@ function checkMissingCommas(line: string, lineNum: number, errors: ValidationErr
  * Check for binary operators without proper left/right values
  */
 function checkBinaryOperators(line: string, lineNum: number, errors: ValidationError[]): void {
-  // Pattern: operator operator (two operators in a row)
+  // Skip switch statements and function declarations that use =>
+  if (line.includes('=>') && (line.includes('switch') || line.trim().includes('=>'))) {
+    return;
+  }
+  
+  // Skip function calls - they can have complex parameter expressions
+  if (line.includes('(') && line.includes(')')) {
+    return;
+  }
+  
+  // Pattern: operator operator (two operators in a row) but exclude valid combinations
   // Examples: "10 * / close", "value + - 5"
+  // Exclude: "=>" (switch/function), "==", "!=", "<=", ">=", "&&", "||", etc.
   const doubleOperatorPattern = /([+\-*/%=<>!&|^])\s*([+\-*/%=<>!&|^])/;
   const match = line.match(doubleOperatorPattern);
   
   if (match) {
     const [, op1, op2] = match;
+    const combined = op1 + op2;
+    
+    // Skip valid operator combinations
+    const validCombinations = ['==', '!=', '<=', '>=', '&&', '||', '=>', '+=', '-=', '*=', '/=', '%='];
+    if (validCombinations.includes(combined)) {
+      return;
+    }
+    
     const operatorIndex = line.indexOf(op2);
     errors.push({
       line: lineNum,
