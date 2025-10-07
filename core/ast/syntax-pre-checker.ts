@@ -339,7 +339,21 @@ function checkConditionalOperatorOrder(line: string, lineNum: number, errors: Va
       return;
     }
     
-    // If there's no ? before the colon, it's likely an invalid order
+    // Additional check: if this looks like a valid nested ternary
+    // Valid: "1 : shortCond ? -1" (value : condition ? value)
+    // Invalid: "close > open : color.green ? color.red" (condition : value ? value)
+    if (afterQuestion.trim() && afterColon.trim()) {
+      // Only allow this pattern if the part before the colon doesn't contain operators
+      // that suggest it's a condition (like >, <, ==, etc.)
+      const conditionOperators = ['>', '<', '>=', '<=', '==', '!=', '&&', '||'];
+      const hasConditionOperators = conditionOperators.some(op => beforeColon.includes(op));
+      
+      if (!hasConditionOperators) {
+        return; // This looks like a valid nested ternary
+      }
+    }
+    
+    // If there's no ? before the colon and it doesn't look like a nested ternary, it's likely an invalid order
     const colonIndex = trimmed.indexOf(':');
     errors.push({
       line: lineNum,
