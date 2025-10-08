@@ -376,7 +376,7 @@ export abstract class BaseValidator {
     context.version = this.config.targetVersion || 6;
 
     // Run pre-parser syntax check BEFORE parsing AST
-    const preCheckErrors = preCheckSyntax(code);
+    const preCheckErrors = preCheckSyntax(code, this.config.targetVersion);
     
     // Always parse AST (even if pre-check found errors) so validators can produce warnings
     // The pre-check errors will be reported, and validators can check for them if needed

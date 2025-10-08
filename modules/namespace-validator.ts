@@ -27,8 +27,17 @@ export class NamespaceValidator implements ValidationModule {
     return [];
   }
 
-  validate(context: ValidationContext, _config: ValidatorConfig): ValidationResult {
+  validate(context: ValidationContext, config: ValidatorConfig): ValidationResult {
     this.helper.reset();
+    
+    // Skip namespace validation if version is incompatible
+    // This prevents false positives for v5 scripts when targetVersion is 6
+    if (context.hasVersion && config.targetVersion) {
+      if (context.version !== config.targetVersion) {
+        // Version mismatch detected - skip namespace validation to avoid false positives
+        return this.helper.buildResult(context);
+      }
+    }
     
     // Check each line for namespace property access
     const lines = context.rawLines || context.lines || [];

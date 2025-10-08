@@ -60,11 +60,27 @@ const SYNTAX_PATTERNS: SyntaxPattern[] = [
  * 
  * Note: Indentation checking is now done via AST-based validation
  */
-export function preCheckSyntax(sourceCode: string): ValidationError[] {
+export function preCheckSyntax(sourceCode: string, targetVersion: number = 6): ValidationError[] {
   const errors: ValidationError[] = [];
   
   // Check for empty parameters and other patterns
   const lines = sourceCode.split('\n');
+  
+  // Check for version directive compatibility (fallback when AST parsing fails)
+  const versionMatch = sourceCode.match(/^\/\/@version=(\d+)/m);
+  if (versionMatch) {
+    const scriptVersion = parseInt(versionMatch[1], 10);
+    if (scriptVersion !== targetVersion) {
+      const severity = scriptVersion < targetVersion ? 'error' : 'warning';
+      errors.push({
+        line: 1,
+        column: 1,
+        message: `Script declares //@version=${scriptVersion} but targetVersion is ${targetVersion}.`,
+        severity,
+        code: 'PS001'
+      });
+    }
+  }
   
   // First pass: Check for closing parenthesis at multiples of 4
   // This is a TradingView rule that our parser doesn't enforce
