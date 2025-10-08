@@ -9,6 +9,7 @@ import {
   type WorkerReadyState,
 } from '../../core/monaco/client';
 import type { WorkerValidationResponse } from '../../core/monaco/worker-harness';
+import { registerPineLanguage } from '../../core/monaco/pine-language';
 
 const DEFAULT_SOURCE = `//@version=6
 indicator("Validator Playground", overlay = true)
@@ -30,63 +31,6 @@ function createEmptyResult(): ValidationResult {
     typeMap: new Map(),
     scriptType: null,
   };
-}
-
-function registerPineLanguage(monaco: typeof import('monaco-editor')) {
-  const id = 'pinescript';
-  if (monaco.languages.getLanguages().some((lang) => lang.id === id)) {
-    return;
-  }
-
-  monaco.languages.register({ id });
-  monaco.languages.setLanguageConfiguration(id, {
-    comments: {
-      lineComment: '//',
-      blockComment: ['/*', '*/']
-    },
-    brackets: [
-      ['{', '}'],
-      ['[', ']'],
-      ['(', ')']
-    ],
-    autoClosingPairs: [
-      { open: '{', close: '}' },
-      { open: '[', close: ']' },
-      { open: '(', close: ')' },
-      { open: '"', close: '"' },
-      { open: "'", close: "'" }
-    ]
-  });
-
-  monaco.languages.setMonarchTokensProvider(id, {
-    keywords: [
-      'indicator', 'strategy', 'library', 'var', 'varip', 'if', 'else', 'for', 'while', 'switch',
-      'case', 'default', 'break', 'continue', 'return', 'true', 'false', 'na', 'input'
-    ],
-    typeKeywords: ['int', 'float', 'bool', 'string', 'color', 'series'],
-    operators: ['=', '>', '<', '!', '~', '?', ':', '==', '<=', '>=', '!=', '&&', '||', '++', '--', '+', '-', '*', '/', '%'],
-    symbols: /[=><!~?:&|+\-*\/\^%]+/,
-    tokenizer: {
-      root: [
-        [/[a-zA-Z_][\w\.]*\b/, {
-          cases: {
-            '@keywords': 'keyword',
-            '@typeKeywords': 'type.identifier',
-            '@default': 'identifier'
-          }
-        }],
-        { include: '@whitespace' },
-        [/\d*\.\d+([eE][\-+]?\d+)?/, 'number.float'],
-        [/\d+/, 'number'],
-        [/"([^"\\]|\\.)*"/, 'string'],
-        [/\'([^'\\]|\\.)*\'/, 'string'],
-        [/@symbols/, 'delimiter']
-      ],
-      whitespace: [[/[ \t\r\n]+/, 'white'], [/\/\*/, 'comment', '@comment'], [/\/\//, 'comment', '@lineComment']],
-      comment: [[/[^/*]+/, 'comment'], [/\*\//, 'comment', '@pop'], [/./, 'comment']],
-      lineComment: [[/[^\n]+/, 'comment']]
-    }
-  });
 }
 
 const SAMPLE_SNIPPETS: Record<string, string> = {
