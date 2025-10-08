@@ -42,6 +42,7 @@ export function createCallExpressionNode(
   const safeCallee = callee ?? createPlaceholderExpression();
   const virtualSeparators = recovery?.virtualSeparators ?? [];
   const virtualArguments = recovery?.virtualArguments ?? [];
+  const virtualArgumentDetails = recovery?.virtualArgumentDetails ?? [];
   const errors = recovery?.errors ?? [];
   const virtualClosing = recovery?.virtualClosing ?? null;
   const hasRecovery =
@@ -54,6 +55,7 @@ export function createCallExpressionNode(
       ? {
           virtualSeparators,
           virtualArguments,
+          virtualArgumentDetails,
           virtualClosing,
           errors,
         }

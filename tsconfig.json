@@ -11,6 +11,12 @@
   },
   "include": [
     "pynescript/**/*.ts",
-    "tests/**/*.ts"
+    "**/*.ts"
+  ],
+  "exclude": [
+    "tests/**/*",
+    "scripts/**/*",
+    "PineScriptContext/**/*",
+    "api-coverage-analysis.ts"
   ]
 }

@@ -218,6 +218,7 @@ export abstract class BaseValidator {
     context.symbolTable = createEmptySymbolTable();
     context.typeEnvironment = createEmptyTypeEnvironment();
     context.controlFlowGraph = createEmptyControlFlowGraph();
+    context.indentationDiagnostics = [];
     return context;
   }
 
@@ -257,6 +258,12 @@ export abstract class BaseValidator {
       };
     }
 
+    if (!Array.isArray(astContext.indentationDiagnostics)) {
+      astContext.indentationDiagnostics = [];
+    } else {
+      astContext.indentationDiagnostics = [...astContext.indentationDiagnostics];
+    }
+
     if (!astContext.typeMap) {
       astContext.typeMap = this.typeMap;
     }
@@ -271,6 +278,7 @@ export abstract class BaseValidator {
     this.context.symbolTable = createEmptySymbolTable();
     this.context.typeEnvironment = createEmptyTypeEnvironment();
     this.context.controlFlowGraph = createEmptyControlFlowGraph();
+    this.context.indentationDiagnostics = [];
 
     if (!this.astConfig || this.astConfig.mode === 'disabled') {
       return;
@@ -299,14 +307,7 @@ export abstract class BaseValidator {
         // ✅ Fixed: Arrow function handling
         // ✅ Fixed: Else-if handling
         // ✅ Fixed: Mixed tabs/spaces detection
-        const indentDiagnostics = validateIndentationWithAST(source, result.ast);
-        indentDiagnostics.forEach(diagnostic => {
-          if (diagnostic.severity === 'warning') {
-            this.addWarning(diagnostic.line, diagnostic.column, diagnostic.message, diagnostic.code, diagnostic.suggestion);
-          } else {
-            this.addError(diagnostic.line, diagnostic.column, diagnostic.message, diagnostic.code);
-          }
-        });
+        this.context.indentationDiagnostics = validateIndentationWithAST(source, result.ast);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -316,6 +317,7 @@ export abstract class BaseValidator {
       this.context.symbolTable = createEmptySymbolTable();
       this.context.typeEnvironment = createEmptyTypeEnvironment();
       this.context.controlFlowGraph = createEmptyControlFlowGraph();
+      this.context.indentationDiagnostics = [];
       // Parser errors should be WARNINGS to allow validation to continue
       this.addWarning(1, 1, `Syntax error: ${message}`, Codes.SYNTAX_ERROR);
     }

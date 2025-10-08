@@ -36,7 +36,7 @@ export function createVirtualToken(
   const startOffset = insertAfter.endOffset ?? insertAfter.startOffset ?? 0;
   const startLine = insertAfter.endLine ?? insertAfter.startLine ?? 1;
   const startColumn = (insertAfter.endColumn ?? insertAfter.startColumn ?? 0) + 1;
-  const image = imageOverride ?? tokenType.LABEL ?? tokenType.name ?? tokenType.EXTEND_ID ?? '';
+  const image = imageOverride ?? tokenType.LABEL ?? tokenType.name ?? '';
   const length = image.length;
 
   return {

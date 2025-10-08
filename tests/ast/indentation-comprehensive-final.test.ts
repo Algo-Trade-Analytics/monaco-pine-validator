@@ -142,6 +142,39 @@ plot(close,
     });
   });
 
+  describe('Closing Delimiter Alignment', () => {
+    
+    it('should flag closing parenthesis aligned at a multiple-of-4 column', () => {
+      const code = `//@version=6
+indicator("Test")
+plot(
+    close,
+    title="Wrapped"
+    )`;
+
+      const ast = parseCode(code);
+      const diagnostics = validateIndentationWithAST(code, ast);
+      
+      const closingIssues = diagnostics.filter(d => d.code === 'PSV6-SYNTAX-CLOSING-PAREN');
+      expect(closingIssues.length).toBeGreaterThan(0);
+    });
+
+    it('should flag closing bracket aligned at a multiple-of-4 column', () => {
+      const code = `//@version=6
+indicator("Test")
+values = [
+    high,
+    low
+    ]`;
+
+      const ast = parseCode(code);
+      const diagnostics = validateIndentationWithAST(code, ast);
+      
+      const closingIssues = diagnostics.filter(d => d.code === 'PSV6-SYNTAX-CLOSING-PAREN');
+      expect(closingIssues.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('Ternary Operator Indentation', () => {
     
     it('should validate correct ternary indentation', () => {
@@ -310,7 +343,6 @@ volFrom(srcSeries) =>
     _vRaw = volMethod == "StDev" ? _stdev : _mad`;
 
       const result = validateWithFullValidator(code);
-      
       const wrapWarnings = result.warnings.filter(w => w.code === 'PSV6-INDENT-WRAP-BLOCK');
       expect(wrapWarnings.length).toBeGreaterThan(0);
     });

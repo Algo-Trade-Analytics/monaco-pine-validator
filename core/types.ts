@@ -70,6 +70,7 @@ export interface AstValidationContext extends ValidationContext {
   symbolTable: SymbolTable;
   typeEnvironment: TypeEnvironment;
   controlFlowGraph: ControlFlowGraph;
+  indentationDiagnostics?: ValidationError[];
 }
 
 export interface ValidatorConfig {

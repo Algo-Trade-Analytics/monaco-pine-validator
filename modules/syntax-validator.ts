@@ -500,7 +500,7 @@ export class SyntaxValidator implements ValidationModule {
       return;
     }
 
-    // Common syntax errors are now handled by the pre-checker
+    // Common syntax errors are now handled by parser recovery metadata
 
     const lexResult = PineLexer.tokenize(source);
 

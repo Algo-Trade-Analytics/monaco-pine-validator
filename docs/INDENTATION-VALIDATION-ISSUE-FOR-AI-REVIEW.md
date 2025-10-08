@@ -179,7 +179,7 @@ Add special case logic for complex `if-else` structures in the indentation valid
 
 ### Secondary Investigation
 1. `core/ast/parser/rules/control-flow.ts` - Control flow parsing
-2. `core/ast/syntax-pre-checker.ts` - Pre-parser indentation checks
+2. `core/ast/indentation-validator-ast.ts` - AST-based indentation checks
 
 ## Success Criteria
 

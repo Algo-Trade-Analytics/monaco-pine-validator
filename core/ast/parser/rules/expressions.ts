@@ -908,6 +908,10 @@ export function createArgumentListRule(parser: PineParser) {
     const args: ArgumentNode[] = [];
     const virtualSeparators: VirtualToken[] = [];
     const virtualArguments: VirtualToken[] = [];
+    const virtualArgumentDetails: {
+      token: VirtualToken;
+      position: 'first' | 'middle' | 'trailing';
+    }[] = [];
     const recoveryErrors: ParserRecoveryError[] = [];
 
     const skipNewlines = () => {
@@ -970,6 +974,7 @@ export function createArgumentListRule(parser: PineParser) {
     const createMissingArgument = (
       referenceToken: IToken | undefined,
       context: 'empty' | 'trailing',
+      position: 'first' | 'middle' | 'trailing',
     ) => {
       const reason = context === 'trailing'
         ? VirtualTokenReason.TRAILING_COMMA
@@ -982,6 +987,7 @@ export function createArgumentListRule(parser: PineParser) {
       ) as VirtualToken;
       virtualArgument.isVirtual = true;
       virtualArguments.push(virtualArgument);
+      virtualArgumentDetails.push({ token: virtualArgument, position });
 
       const isTrailing = context === 'trailing';
       const error: ParserRecoveryError = {
@@ -1019,7 +1025,7 @@ export function createArgumentListRule(parser: PineParser) {
 
       if (expectArgument) {
         if (commaJustConsumed && nextToken.tokenType === RParen) {
-          createMissingArgument(parser.lookAhead(0), 'trailing');
+          createMissingArgument(parser.lookAhead(0), 'trailing', 'trailing');
           commaJustConsumed = false;
           break;
         }
@@ -1029,7 +1035,8 @@ export function createArgumentListRule(parser: PineParser) {
         }
 
         if (!isArgumentStartToken(nextToken)) {
-          createMissingArgument(parser.lookAhead(0), 'empty');
+          const position: 'first' | 'middle' = seenArgument ? 'middle' : 'first';
+          createMissingArgument(parser.lookAhead(0), 'empty', position);
           seenArgument = true;
           expectArgument = false;
           commaJustConsumed = false;
@@ -1089,7 +1096,7 @@ export function createArgumentListRule(parser: PineParser) {
       virtualSeparators.length > 0 || virtualArguments.length > 0 || recoveryErrors.length > 0;
     parser.setArgumentListRecovery(
       hasRecovery
-        ? { virtualSeparators, virtualArguments, errors: recoveryErrors }
+        ? { virtualSeparators, virtualArguments, virtualArgumentDetails, errors: recoveryErrors }
         : null,
     );
 

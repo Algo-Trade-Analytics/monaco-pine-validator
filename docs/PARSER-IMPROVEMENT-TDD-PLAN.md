@@ -22,7 +22,7 @@ Improve the Chevrotain parser to handle syntax errors gracefully, always produce
 ### **Success Metrics**
 - All 1084 tests pass
 - Parser recovery rate > 95%
-- Pre-checker reduced to 0-2 checks
+- Legacy pre-checker fully retired
 - Error message quality improved (user feedback)
 
 ---
@@ -593,7 +593,7 @@ export function createConditionalExpressionRule(parser: PineParser) {
 # Expected results after Week 2:
 ✅ Parser recovers from 8-10 error types
 ✅ All 15 failing tests pass
-✅ 70% of pre-checker functionality moved to parser
+✅ Parser/validator pipeline now covers former pre-checker cases
 ✅ Phase 1 COMPLETE
 ```
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseWithChevrotain } from '../../core/ast/parser';
-import { ProgramNode, TypeDeclarationNode, TypeFieldNode } from '../../core/ast/pine-types';
+import type { ProgramNode, TypeDeclarationNode, TypeFieldNode } from '../../core/ast/nodes';
 
 describe('UDT with default values', () => {
   it('parses type fields with default values', () => {
@@ -20,13 +20,19 @@ describe('UDT with default values', () => {
     expect(ast).not.toBeNull();
 
     const program = ast as ProgramNode;
-    const typeDecl = program.body.find((node) => node.kind === 'TypeDeclaration') as TypeDeclarationNode;
+    const typeDecl = program.body.find(
+      (node): node is TypeDeclarationNode => node.kind === 'TypeDeclaration',
+    );
     
     expect(typeDecl).toBeDefined();
-    expect(typeDecl.identifier.name).toBe('Vals');
-    expect(typeDecl.fields).toHaveLength(3);
+    expect(typeDecl?.identifier.name).toBe('Vals');
+    expect(typeDecl?.fields).toHaveLength(3);
 
-    const [startField, topField, botField] = typeDecl.fields as [TypeFieldNode, TypeFieldNode, TypeFieldNode];
+    const [startField, topField, botField] = (typeDecl?.fields ?? []) as [
+      TypeFieldNode,
+      TypeFieldNode,
+      TypeFieldNode,
+    ];
     expect(startField.identifier.name).toBe('start');
     expect(startField.typeAnnotation?.name.name).toBe('int');
     expect(topField.identifier.name).toBe('top');
@@ -53,11 +59,12 @@ describe('UDT with default values', () => {
     expect(ast).not.toBeNull();
 
     const program = ast as ProgramNode;
-    const typeDecl = program.body.find((node) => node.kind === 'TypeDeclaration') as TypeDeclarationNode;
+    const typeDecl = program.body.find(
+      (node): node is TypeDeclarationNode => node.kind === 'TypeDeclaration',
+    );
     
     expect(typeDecl).toBeDefined();
-    expect(typeDecl.identifier.name).toBe('Mixed');
-    expect(typeDecl.fields).toHaveLength(4);
+    expect(typeDecl?.identifier.name).toBe('Mixed');
+    expect(typeDecl?.fields).toHaveLength(4);
   });
 });
-

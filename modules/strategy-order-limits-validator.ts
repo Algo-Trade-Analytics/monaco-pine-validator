@@ -133,9 +133,9 @@ export class StrategyOrderLimitsValidator implements ValidationModule {
 
     if (process.env.DEBUG_STRATEGY_ORDER_OUTPUT === '1') {
       console.log('[StrategyOrderLimitsValidator] result snapshot', {
-        errors: this.errors,
-        warnings: this.warnings,
-        info: this.info,
+        errors: this.helper.errorList,
+        warnings: this.helper.warningList,
+        info: this.helper.infoList,
         totalOrderCount: this.totalOrderCount,
         typeMapKeys: Array.from(typeMap.keys()),
       });

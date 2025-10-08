@@ -34,8 +34,7 @@ export {
 } from './ModularUltimateValidator';
 
 export {
-  createEnhancedModularValidator,
-  validatePineScriptV6Enhanced
+  createEnhancedModularValidator
 } from './EnhancedModularValidator';
 
 // Monaco worker integration

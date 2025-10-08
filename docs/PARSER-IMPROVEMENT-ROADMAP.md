@@ -17,7 +17,7 @@ Week 1-2: Phase 1 (Error Recovery Hints)
 
 📊 Milestone 1: 70% error recovery ✅
 📉 Pre-checker: 10 → 5 functions
-✅ Single validation pipeline (text pre-check now runs inside SyntaxErrorValidator)
+✅ Single validation pipeline (parser recovery drives syntax errors)
 ✅ Tests: 1069 → 1084 passing
 
 
@@ -38,7 +38,7 @@ Week 3-5: Phase 2 (Virtual Token System)
    └─ Documentation
 
 📊 Milestone 2: 90% error recovery ✅
-📉 Pre-checker: 5 → 1-2 functions
+📉 Pre-checker: 5 → 0 functions
 🎯 Always have usable AST
 
 
@@ -47,7 +47,7 @@ Week 6+: Phase 3 (Advanced Features)
 ├─ Error node types
 ├─ Suggestion generation
 ├─ Multi-pass recovery
-└─ Pre-checker elimination
+└─ Pre-checker elimination ✅
 
 📊 Milestone 3: 95%+ recovery ✅
 📉 Pre-checker: 0 functions
@@ -320,4 +320,3 @@ Reply with:
 - **"Different approach"** - We'll adjust the plan
 
 **Let's build something amazing!** 💪
-

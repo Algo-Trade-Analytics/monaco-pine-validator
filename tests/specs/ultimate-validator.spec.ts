@@ -125,8 +125,8 @@ indicator("Parens/Brackets")
 x = (close + open
 y = close[1`;
     const { codes } = run(code);
-    expectHas(codes, { errors: ['PSV6-SYNTAX-ERROR'] }); // Parser fails due to unmatched brackets
-    // PS009 and PS010 might not trigger due to early parser error detection
+    expectHas(codes, { errors: ['PSV6-SYNTAX-MISSING-BRACKET'] });
+    // Parser recovery surfaces the bracket-specific error; legacy PS009/PS010 remain secondary
   });
 
   it('errors on mixed tabs/spaces ON THE SAME LINE (PSI02)', () => {

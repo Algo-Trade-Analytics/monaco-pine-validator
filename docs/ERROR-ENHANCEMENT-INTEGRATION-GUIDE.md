@@ -443,30 +443,11 @@ if (enhanced.context?.blockType === 'if') {
 ### Syntax Validator Integration
 
 ```typescript
-// core/ast/syntax-pre-checker.ts
-function checkMissingAssignmentOperator(
-  line: string, 
-  lineNum: number, 
-  errors: ValidationError[]
-): void {
-  const match = line.match(/^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_.]*\s*\()/);
-  
-  if (match && !line.includes('=')) {
-    const [, indent, varName, funcCall] = match;
-    errors.push({
-      line: lineNum,
-      column: indent.length + varName.length + 2,
-      message: `Missing '=' operator`,
-      severity: 'error',
-      code: 'PSV6-SYNTAX-MISSING-EQUALS',
-      suggestion: `Use '${varName} = ${funcCall.trim()}' for variable assignment.`
-    });
-  }
-}
+import { convertAstDiagnosticsToErrors } from '../core/ast/syntax-error-processor';
 
-// Then in the validator
-const errors = preCheckSyntax(sourceCode);
-const enhanced = errors.map(e => ErrorEnhancer.enhance(e, sourceCode));
+// modules/syntax-error-validator.ts
+const syntaxErrors = convertAstDiagnosticsToErrors(astDiagnostics, sourceCode);
+const enhanced = syntaxErrors.map((error) => ErrorEnhancer.enhance(error, sourceCode));
 ```
 
 ---

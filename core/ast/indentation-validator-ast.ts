@@ -112,6 +112,7 @@ export class ASTIndentationValidator {
       return this.errors;
     }
 
+    this.checkClosingDelimiterIndentation();
     // Validate the program node (contains all top-level statements)
     if (this.ast.kind === 'Program' && this.ast.body) {
       for (const stmt of this.ast.body) {
@@ -154,6 +155,37 @@ export class ASTIndentationValidator {
     }
     
     return false; // No mixed indentation
+  }
+
+  private checkClosingDelimiterIndentation(): void {
+    for (let i = 0; i < this.sourceLines.length; i++) {
+      const rawLine = this.sourceLines[i];
+      if (!rawLine) {
+        continue;
+      }
+
+      const trimmed = rawLine.trim();
+      if (trimmed !== ')' && trimmed !== ']') {
+        continue;
+      }
+
+      const indent = this.getIndentWidth(rawLine);
+      if (indent % 4 !== 0) {
+        continue;
+      }
+
+      this.addError(
+        i + 1,
+        indent + 1,
+        `Closing ${trimmed} at column ${indent} (multiple of 4) will fail in TradingView. Use non-multiple-of-4 indentation for line continuations.`,
+        'PSV6-SYNTAX-CLOSING-PAREN',
+      );
+    }
+  }
+
+  private getIndentWidth(line: string): number {
+    const leadingWhitespace = line.match(/^[\t ]*/)?.[0] ?? '';
+    return leadingWhitespace.replace(/\t/g, '    ').length;
   }
 
   /**
@@ -433,6 +465,19 @@ export class ASTIndentationValidator {
             `Statement should be indented at least ${this.context.blockIndent} spaces (got ${stmtIndent})`,
             'PSV6-INDENT-BLOCK-MISMATCH'
           );
+        }
+        if (
+          (stmt.kind === 'AssignmentStatement' || stmt.kind === 'VariableDeclaration') &&
+          stmtEndLine > stmtStartLine
+        ) {
+          for (let lineIdx = stmtStartLine + 1; lineIdx <= stmtEndLine; lineIdx++) {
+            const line = this.sourceLines[lineIdx];
+            if (!line || line.trim() === '' || line.trim().startsWith('//')) {
+              continue;
+            }
+            const lineIndent = this.getLineIndent(lineIdx);
+            this.validateWrapIndentation(lineIdx + 1, lineIndent, stmtIndent);
+          }
         }
         // Note: We allow any indentation > header indent to match TradingView's leniency
       } else {
@@ -940,28 +985,42 @@ export class ASTIndentationValidator {
 
     // Rule 1: Continuation must actually change indentation relative to the statement header
     if (wrapIndent === 0) {
-      const message = baseIndent === 0
-        ? 'Line continuation at column 0 is invalid. Use any non-multiple-of-4 indentation (1, 2, 3, 5...).'
-        : 'Line continuation must change indentation relative to the statement start. Use a non-multiple-of-4 offset (1, 2, 3, 5...).';
-
-      this.addError(
-        lineNum,
-        indent + 1,
-        message,
-        'PSV6-INDENT-WRAP-INSUFFICIENT'
-      );
+      if (baseIndent === 0) {
+        this.addError(
+          lineNum,
+          indent + 1,
+          'Line continuation at column 0 is invalid. Use any non-multiple-of-4 indentation (1, 2, 3, 5...).',
+          'PSV6-INDENT-WRAP-INSUFFICIENT',
+        );
+      } else {
+        this.addWarning(
+          lineNum,
+          indent + 1,
+          `Line continuation inside the block cannot remain at ${indent} spaces (multiple of 4). Indent past the block level using a non-multiple-of-4 offset.`,
+          'PSV6-INDENT-WRAP-BLOCK',
+        );
+      }
       return;
     }
 
     // Rule 2: Wrapped line must NOT use a multiple-of-4 relative offset (reserved for blocks)
     if (wrapIndent % 4 === 0) {
-      const spaceLabel = wrapIndent === 1 ? 'space' : 'spaces';
-      this.addError(
-        lineNum,
-        indent + 1,
-        `Line continuation cannot use ${wrapIndent} ${spaceLabel} of relative indentation (multiples of 4 are reserved for blocks).`,
-        'PSV6-INDENT-WRAP-MULTIPLE-OF-4'
-      );
+      if (baseIndent === 0) {
+        const spaceLabel = wrapIndent === 1 ? 'space' : 'spaces';
+        this.addError(
+          lineNum,
+          indent + 1,
+          `Line continuation cannot use ${wrapIndent} ${spaceLabel} of relative indentation (multiples of 4 are reserved for blocks).`,
+          'PSV6-INDENT-WRAP-MULTIPLE-OF-4',
+        );
+      } else {
+        this.addWarning(
+          lineNum,
+          indent + 1,
+          `Line continuation inside the block cannot be at ${indent} spaces (multiple of 4). Move the wrap to a non-multiple-of-4 column beyond ${baseIndent}.`,
+          'PSV6-INDENT-WRAP-BLOCK',
+        );
+      }
     }
   }
 
@@ -1191,6 +1250,22 @@ export class ASTIndentationValidator {
         return 'Either make it a single-line function or use proper indentation: 4+ spaces for function body, or 1-3 spaces for line wrapping.';
       case 'PSV6-INDENT-INCONSISTENT':
         return 'Use consistent indentation. Blocks use multiples of 4 spaces, wraps use non-multiples of 4.';
+      case 'PSV6-SYNTAX-CLOSING-PAREN': {
+        const indent = Math.max(0, column - 1);
+        const suggestionOptions = new Set<number>();
+        if (indent > 0) {
+          suggestionOptions.add(indent - 1);
+        }
+        suggestionOptions.add(indent + 1);
+        suggestionOptions.add(indent + 2);
+        const formatted = Array.from(suggestionOptions)
+          .filter((value) => value > 0)
+          .slice(0, 3)
+          .join(', ');
+        return formatted
+          ? `Move the closing delimiter to a non-multiple-of-4 column (for example ${formatted}).`
+          : 'Move the closing delimiter to a non-multiple-of-4 column.';
+      }
       default:
         return '';
     }
@@ -1204,4 +1279,3 @@ export function validateIndentationWithAST(source: string, ast: ProgramNode | nu
   const validator = new ASTIndentationValidator(source, ast);
   return validator.validate();
 }
-

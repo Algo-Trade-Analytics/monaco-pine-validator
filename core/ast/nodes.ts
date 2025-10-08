@@ -1,5 +1,7 @@
 import type { Position } from './types';
-import type { VirtualToken } from './virtual-tokens';
+import type { VirtualToken as VirtualTokenBase } from './virtual-tokens';
+
+export type VirtualToken = VirtualTokenBase;
 
 export type Range = readonly [number, number];
 
@@ -13,6 +15,10 @@ export interface ParserRecoveryError {
 export interface CallArgumentRecovery {
   virtualSeparators: VirtualToken[];
   virtualArguments?: VirtualToken[];
+  virtualArgumentDetails?: {
+    token: VirtualToken;
+    position: 'first' | 'middle' | 'trailing';
+  }[];
   virtualClosing?: VirtualToken | null;
   errors: ParserRecoveryError[];
 }

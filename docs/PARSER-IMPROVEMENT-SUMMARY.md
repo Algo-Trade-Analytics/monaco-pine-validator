@@ -56,7 +56,7 @@ Total: 6-10 weeks to world-class parser
 ✅ All 1084 tests passing
 ✅ Parser recovers from 10 error types
 ✅ Better error messages
-✅ Pre-checker reduced 50%
+✅ Pre-checker coverage folded into parser recovery
 ```
 
 ### **After Phase 2 (Week 5)**
@@ -64,7 +64,7 @@ Total: 6-10 weeks to world-class parser
 ✅ Virtual token system
 ✅ Always have usable AST
 ✅ 90% error recovery
-✅ Pre-checker reduced 90%
+✅ Pre-checker retired
 ```
 
 ### **After Phase 3 (Week 10)**

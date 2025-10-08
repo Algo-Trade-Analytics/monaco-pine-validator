@@ -106,12 +106,33 @@ export function createNullLiteral(start: number, line = 1): NullLiteralNode {
   };
 }
 
-export function createTypeReference(name: string, start: number, line = 1): TypeReferenceNode {
+export function createTypeReference(
+  name: string | IdentifierNode,
+  startOrGenerics: number | TypeReferenceNode[] = 0,
+  line = 1,
+): TypeReferenceNode {
+  if (typeof name !== 'string') {
+    const generics = Array.isArray(startOrGenerics) ? startOrGenerics : [];
+    return {
+      kind: 'TypeReference',
+      name,
+      generics,
+      ...createSpan({
+        start: name.range[0],
+        end: name.range[1],
+        lineStart: name.loc.start.line,
+        lineEnd: name.loc.end.line,
+      }),
+    };
+  }
+
+  const start = typeof startOrGenerics === 'number' ? startOrGenerics : 0;
+  const generics = Array.isArray(startOrGenerics) ? startOrGenerics : [];
   const identifier = createIdentifier(name, start, line);
   return {
     kind: 'TypeReference',
     name: identifier,
-    generics: [],
+    generics,
     ...createSpan({ start, end: identifier.range[1], lineStart: line }),
   };
 }
@@ -335,6 +356,15 @@ export function createForStatement(
     ...createSpan({ start, end, lineStart: line }),
   };
 }
+
+type VariableDeclarationOptions = {
+  declarationKind?: VariableDeclarationNode['declarationKind'];
+  initializer?: ExpressionNode | null;
+  typeAnnotation?: TypeReferenceNode | null;
+  annotations?: CompilerAnnotationNode[];
+  initializerOperator?: '=' | ':=' | null;
+  lineEnd?: number;
+};
 
 export function createVariableDeclaration(
   identifier: IdentifierNode,
