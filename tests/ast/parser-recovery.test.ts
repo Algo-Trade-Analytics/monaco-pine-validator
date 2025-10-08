@@ -9,6 +9,7 @@ import type {
   AssignmentStatementNode,
   BinaryExpressionNode,
   IdentifierNode,
+  FunctionDeclarationNode,
 } from '../../core/ast/nodes';
 import { EnhancedModularValidator } from '../../EnhancedModularValidator';
 
@@ -31,6 +32,7 @@ describe('Parser Error Recovery - Missing "=" operator', () => {
     const result = parseWithChevrotain(source, { allowErrors: true });
     expect(result.ast).not.toBeNull();
 
+    expect(result.ast).not.toBeNull();
     const program = result.ast as ProgramNode;
     expect(program.body).toHaveLength(3);
 
@@ -284,5 +286,158 @@ describe('Parser Error Recovery - Binary Operators', () => {
 
     const codes = result.errors.map((error) => error.code);
     expect(codes).toContain('PSV6-SYNTAX-MISSING-BINARY-OPERAND');
+  });
+});
+
+describe('Parser Error Recovery - Function Parentheses', () => {
+  it('recovers missing parentheses in a function declaration', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'closeHigh => close - high',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+    expect(result.diagnostics.syntaxErrors.some((error) =>
+      error.message.includes('Missing parentheses in function declaration'),
+    )).toBe(true);
+    const program = result.ast as ProgramNode;
+    const func = program.body.find(
+      (statement): statement is FunctionDeclarationNode => statement.kind === 'FunctionDeclaration',
+    );
+    expect(func).toBeDefined();
+    expect(func?.params).toHaveLength(0);
+    const recovery = func?.functionRecovery?.missingParentheses;
+    expect(recovery?.errors[0]?.code).toBe('MISSING_FUNCTION_PARENS');
+    expect(recovery?.virtualLParen?.isVirtual).toBe(true);
+    expect(recovery?.virtualRParen?.isVirtual).toBe(true);
+  });
+
+  it('does not emit recovery metadata when parentheses are present', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'closeHigh() => close - high',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+    expect(result.diagnostics.syntaxErrors).toHaveLength(0);
+
+    const program = result.ast as ProgramNode;
+    const func = program.body.find(
+      (statement): statement is FunctionDeclarationNode => statement.kind === 'FunctionDeclaration',
+    );
+    expect(func?.functionRecovery).toBeUndefined();
+  });
+
+  it('surfaces PSV6-SYNTAX-MISSING-PARENS through the validator pipeline', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'closeHigh => close - high',
+      '',
+    ].join('\n');
+
+    const validator = new EnhancedModularValidator();
+    const result = validator.validate(source);
+
+    const codes = result.errors.map((error) => error.code);
+    expect(codes).toContain('PSV6-SYNTAX-MISSING-PARENS');
+  });
+});
+
+describe('Parser Error Recovery - Call Arguments', () => {
+  it('recovers missing first argument with a placeholder expression', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'value = input.int(, "Label")',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+    expect(result.diagnostics.syntaxErrors.some((error) =>
+      error.message.includes('Missing argument between commas'),
+    )).toBe(true);
+
+    const program = result.ast as ProgramNode;
+    const assignment = program.body.find(
+      (statement): statement is AssignmentStatementNode => statement.kind === 'AssignmentStatement',
+    );
+    expect(assignment).toBeDefined();
+    const call = assignment?.right as CallExpressionNode | undefined;
+    expect(call?.kind).toBe('CallExpression');
+    const recovery = call?.argumentRecovery;
+    expect(recovery?.virtualArguments?.length).toBe(1);
+    expect(recovery?.errors[0]?.code).toBe('EMPTY_ARGUMENT');
+  });
+
+  it('recovers a trailing comma with a placeholder expression', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'plot(close, )',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+    expect(result.diagnostics.syntaxErrors.some((error) =>
+      error.message.includes('Trailing comma without argument'),
+    )).toBe(true);
+
+    const program = result.ast as ProgramNode;
+    const statement = program.body[1] as ExpressionStatementNode;
+    const call = statement.expression as CallExpressionNode;
+    const recovery = call.argumentRecovery;
+    expect(recovery?.virtualArguments?.length).toBe(1);
+    expect(recovery?.errors[0]?.code).toBe('TRAILING_COMMA');
+  });
+
+  it('recovers missing arguments between commas while preserving later arguments', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'plot(close,, open)',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+    const program = result.ast as ProgramNode;
+    const statement = program.body[1] as ExpressionStatementNode;
+    const call = statement.expression as CallExpressionNode;
+    expect(call.args).toHaveLength(3);
+    const recovery = call.argumentRecovery;
+    expect(recovery?.virtualArguments?.length).toBeGreaterThanOrEqual(1);
+    expect(recovery?.errors.find((error) => error.code === 'EMPTY_ARGUMENT')).toBeDefined();
+  });
+
+  it('surfaces PSV6-SYNTAX-EMPTY-PARAM through the validator pipeline', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'value = input.int(, "Label")',
+      '',
+    ].join('\n');
+
+    const validator = new EnhancedModularValidator();
+    const result = validator.validate(source);
+    const codes = result.errors.map((error) => error.code);
+    expect(codes).toContain('PSV6-SYNTAX-EMPTY-PARAM');
+  });
+
+  it('surfaces PSV6-SYNTAX-TRAILING-COMMA through the validator pipeline', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'plot(close, )',
+      '',
+    ].join('\n');
+
+    const validator = new EnhancedModularValidator();
+    const result = validator.validate(source);
+    const codes = result.errors.map((error) => error.code);
+    expect(codes).toContain('PSV6-SYNTAX-TRAILING-COMMA');
   });
 });

@@ -127,6 +127,34 @@ plotValue = plot(close color=color.red)
       expect(result.errors[0].message).toContain("Missing comma between function arguments");
     });
 
+    it('should detect empty arguments between commas', () => {
+      const source = `
+//@version=6
+indicator("Test")
+value = input.int(, "Label")
+`;
+
+      const result = validator.validate(source);
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe(Codes.SYNTAX_EMPTY_PARAM);
+      expect(result.errors[0].message.toLowerCase()).toMatch(/missing (argument|parameter)/);
+    });
+
+    it('should detect trailing comma without argument', () => {
+      const source = `
+//@version=6
+indicator("Test")
+plot(close, )
+`;
+
+      const result = validator.validate(source);
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe(Codes.SYNTAX_TRAILING_COMMA);
+      expect(result.errors[0].message).toContain('Trailing comma');
+    });
+
     it('should not flag valid function calls', () => {
       const source = `
 //@version=6

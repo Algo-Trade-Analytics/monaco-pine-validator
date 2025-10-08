@@ -39,10 +39,11 @@ export function createCallExpressionNode(
 ): CallExpressionNode {
   const safeCallee = callee ?? createPlaceholderExpression();
   const virtualSeparators = recovery?.virtualSeparators ?? [];
+  const virtualArguments = recovery?.virtualArguments ?? [];
   const errors = recovery?.errors ?? [];
   const argumentRecovery =
-    virtualSeparators.length > 0 || errors.length > 0
-      ? { virtualSeparators, errors }
+    virtualSeparators.length > 0 || errors.length > 0 || virtualArguments.length > 0
+      ? { virtualSeparators, virtualArguments, errors }
       : undefined;
   return {
     kind: 'CallExpression',

@@ -44,6 +44,32 @@ export function translateParserError(
     };
   }
 
+  const missingFunctionParensMatch = errorMessage.match(/Missing parentheses in function declaration '([^']+)'/i);
+  if (missingFunctionParensMatch) {
+    const functionName = missingFunctionParensMatch[1];
+    return {
+      message: `Missing parentheses in function declaration '${functionName}'`,
+      suggestion: `Add parentheses after '${functionName}', even if there are no parameters (for example '${functionName}()').`,
+      code: 'PSV6-SYNTAX-MISSING-PARENS',
+    };
+  }
+
+  if (/Missing argument between commas/i.test(errorMessage)) {
+    return {
+      message: 'Missing argument between commas',
+      suggestion: 'Provide an argument between these commas.',
+      code: 'PSV6-SYNTAX-EMPTY-PARAM',
+    };
+  }
+
+  if (/Trailing comma without argument/i.test(errorMessage)) {
+    return {
+      message: 'Trailing comma without argument',
+      suggestion: 'Remove the trailing comma or provide an argument after it.',
+      code: 'PSV6-SYNTAX-TRAILING-COMMA',
+    };
+  }
+
   const missingBinaryOperandMatch = errorMessage.match(/Missing expression after binary operator '([^']+)'/);
   if (missingBinaryOperandMatch) {
     const operatorSymbol = missingBinaryOperandMatch[1];

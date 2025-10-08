@@ -47,6 +47,7 @@ import {
   createVariableDeclarationNode,
   createEnumDeclarationNode,
   createEnumMemberNode,
+  createSyntheticToken,
   tokenIndent,
 } from '../node-builders';
 import { attachLoopResultBinding } from '../helpers';
@@ -63,6 +64,7 @@ import type {
   VariableDeclarationNode,
   ParserRecoveryError,
   VirtualToken,
+  FunctionDeclarationRecovery,
 } from '../../nodes';
 import {
   isDeclarationKeywordToken,
@@ -187,12 +189,52 @@ export function createFunctionDeclarationRule(parser: PineParser) {
       identifier = createIdentifierNode(fallbackToken);
     }
 
-    parser.consumeToken(LParen);
     let params: ParameterNode[] = [];
-    if (parser.lookAhead(1).tokenType !== RParen) {
-      params = parser.invokeSubrule(parser.parameterList);
+    let functionRecovery: FunctionDeclarationRecovery | undefined;
+    let hasParentheses = false;
+
+    parser.optional(() => {
+      hasParentheses = true;
+      parser.consumeToken(LParen);
+      if (parser.lookAhead(1).tokenType !== RParen) {
+        params = parser.invokeSubrule(parser.parameterList);
+      }
+      parser.consumeToken(RParen);
+    });
+
+    if (!hasParentheses) {
+      const nameReference = consumedNameTokens[consumedNameTokens.length - 1] ?? consumedTypeTokens[consumedTypeTokens.length - 1] ?? startToken ?? parser.lookAhead(0);
+      const virtualLParen = createSyntheticToken('(', LParen, nameReference) as VirtualToken;
+      virtualLParen.isVirtual = true;
+      virtualLParen.recoveryContext = 'missing-function-paren-open';
+
+      const arrowLookahead = parser.lookAhead(1);
+      const virtualRParen = createSyntheticToken(')', RParen, arrowLookahead) as VirtualToken;
+      virtualRParen.isVirtual = true;
+      virtualRParen.recoveryContext = 'missing-function-paren-close';
+
+      const functionName = identifier?.name ?? (consumedNameTokens.length > 0 ? consumedNameTokens.map((token) => token.image).join('') : 'function');
+      const message = `Missing parentheses in function declaration '${functionName}'`;
+      const error: ParserRecoveryError = {
+        code: 'MISSING_FUNCTION_PARENS',
+        message,
+        suggestion: `Add parentheses after '${functionName}' to declare parameters.`,
+        severity: 'error',
+      };
+
+      parser.reportRecoveryError(virtualLParen, message, {
+        code: error.code,
+        suggestion: error.suggestion,
+      });
+
+      functionRecovery = {
+        missingParentheses: {
+          virtualLParen,
+          virtualRParen,
+          errors: [error],
+        },
+      };
     }
-    parser.consumeToken(RParen);
     const arrowToken = parser.consumeToken(FatArrow);
 
     let body: BlockStatementNode;
@@ -216,6 +258,7 @@ export function createFunctionDeclarationRule(parser: PineParser) {
       typeAnnotation,
       modifiers,
       functionStartToken,
+      functionRecovery,
     );
   });
 }

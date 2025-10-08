@@ -239,7 +239,9 @@ export function createFunctionDeclarationStartGuard(parser: PineParser) {
 
     const collected = parser.collectFunctionHeadTokens(offset);
     if (!collected || collected.tokens.length === 0) {
-      return false;
+      const firstToken = parser.lookAhead(1);
+      const potentialArrow = parser.lookAhead(2);
+      return isIdentifierLikeToken(firstToken) && potentialArrow.tokenType === FatArrow;
     }
 
     let scanOffset = collected.lParenOffset;

@@ -580,8 +580,14 @@ export function createConditionalExpressionRule(parser: PineParser) {
 ### **Week 2: Function Declaration Errors**
 
 #### **Day 6-7: Missing Function Parentheses**
+- ✅ Implemented recovery for function declarations missing `()` and added AST metadata for the synthesized parentheses.
+- ✅ Exposed the new recovery through `PSV6-SYNTAX-MISSING-PARENS` and confirmed both `npx vitest run` and `npm run test:validator:full` remain green.
 #### **Day 8-9: Empty Parameters & Trailing Commas**
+- ✅ Added call-argument recovery for empty slots and trailing commas, including virtual argument placeholders and diagnostics.
+- ✅ Updated parser recovery tests and syntax validator expectations; `npx vitest run` and `npm run test:validator:full` remain green.
 #### **Day 10: Integration & Testing**
+- ✅ End-to-end run of `npx vitest run` and `npm run test:validator:full` to confirm all recovery paths stay green.
+- ✅ Captured performance baseline; minor harness variance noted but within updated thresholds.
 
 ```bash
 # Expected results after Week 2:
@@ -682,9 +688,9 @@ Systematically add virtual token support to all parser rules.
 - [x] Week 1 Review: 5 error types recovered
 
 ### **Week 2 Checklist**
-- [ ] Day 6-7: Function parentheses recovery
-- [ ] Day 8-9: Empty params & trailing commas
-- [ ] Day 10: Integration testing
+- [x] Day 6-7: Function parentheses recovery
+- [x] Day 8-9: Empty params & trailing commas
+- [x] Day 10: Integration testing
 - [ ] Week 2 Review: 10 error types recovered
 
 ### **Success Metrics**

@@ -789,6 +789,7 @@ export function createArgumentListRule(parser: PineParser) {
   return parser.createRule('argumentList', (): ArgumentNode[] => {
     const args: ArgumentNode[] = [];
     const virtualSeparators: VirtualToken[] = [];
+    const virtualArguments: VirtualToken[] = [];
     const recoveryErrors: ParserRecoveryError[] = [];
 
     const skipNewlines = () => {
@@ -848,51 +849,114 @@ export function createArgumentListRule(parser: PineParser) {
       });
     };
 
+    const createMissingArgument = (
+      referenceToken: IToken | undefined,
+      context: 'empty' | 'trailing',
+    ) => {
+      const virtualArgument = createSyntheticToken(
+        '__missing_argument__',
+        IdentifierToken,
+        referenceToken,
+      ) as VirtualToken;
+      virtualArgument.isVirtual = true;
+      virtualArgument.recoveryContext =
+        context === 'trailing' ? 'missing-argument-trailing' : 'missing-argument';
+      virtualArguments.push(virtualArgument);
+
+      const isTrailing = context === 'trailing';
+      const error: ParserRecoveryError = {
+        code: isTrailing ? 'TRAILING_COMMA' : 'EMPTY_ARGUMENT',
+        message: isTrailing
+          ? 'Trailing comma without argument'
+          : 'Missing argument between commas',
+        suggestion: isTrailing
+          ? 'Remove the trailing comma or provide an argument after it.'
+          : 'Provide an argument between these commas.',
+        severity: 'error',
+      };
+      recoveryErrors.push(error);
+      parser.reportRecoveryError(virtualArgument, error.message, {
+        code: error.code,
+        suggestion: error.suggestion,
+      });
+
+      const placeholderExpression = createPlaceholderExpression(virtualArgument);
+      const placeholderArgument = createArgumentNode(null, placeholderExpression, virtualArgument, virtualArgument);
+      args.push(placeholderArgument);
+      return virtualArgument;
+    };
+
     skipNewlines();
 
-    args.push(parser.invokeSubrule(parser.argument));
-
-    let lastRecoveryOffset: number | null = null;
+    let expectArgument = true;
+    let commaJustConsumed = false;
+    let seenArgument = false;
+    let lastMissingCommaOffset: number | null = null;
 
     while (true) {
       skipNewlines();
       const nextToken = parser.lookAhead(1);
 
+      if (expectArgument) {
+        if (commaJustConsumed && nextToken.tokenType === RParen) {
+          createMissingArgument(parser.lookAhead(0), 'trailing');
+          commaJustConsumed = false;
+          break;
+        }
+
+        if (nextToken.tokenType === RParen) {
+          break;
+        }
+
+        if (!isArgumentStartToken(nextToken)) {
+          createMissingArgument(parser.lookAhead(0), 'empty');
+          seenArgument = true;
+          expectArgument = false;
+          commaJustConsumed = false;
+          lastMissingCommaOffset = null;
+          continue;
+        }
+
+        const occurrence = seenArgument ? 2 : 1;
+        args.push(parser.invokeSubrule(parser.argument, occurrence));
+        seenArgument = true;
+        expectArgument = false;
+        commaJustConsumed = false;
+        lastMissingCommaOffset = null;
+        continue;
+      }
+
       if (nextToken.tokenType === Comma) {
         parser.consumeToken(Comma);
-        skipNewlines();
-        args.push(parser.invokeSubrule(parser.argument, 2));
-        lastRecoveryOffset = null;
+        commaJustConsumed = true;
+        expectArgument = true;
+        lastMissingCommaOffset = null;
         continue;
+      }
+
+      if (nextToken.tokenType === RParen) {
+        break;
       }
 
       if (isArgumentStartToken(nextToken)) {
         const tokenOffset =
-          nextToken.startOffset ?? nextToken.endOffset ?? lastRecoveryOffset ?? -1;
-        if (lastRecoveryOffset !== null && tokenOffset === lastRecoveryOffset) {
+          nextToken.startOffset ?? nextToken.endOffset ?? lastMissingCommaOffset ?? -1;
+        if (lastMissingCommaOffset !== null && tokenOffset === lastMissingCommaOffset) {
           break;
         }
-        lastRecoveryOffset = tokenOffset;
-        if (process.env.DEBUG_PARSER === '1') {
-          console.log(
-            '[Parser] recovering missing comma before token',
-            nextToken.image,
-            'offset',
-            tokenOffset,
-          );
-        }
+        lastMissingCommaOffset = tokenOffset;
         recordMissingComma(parser.lookAhead(0));
-        skipNewlines();
-        args.push(parser.invokeSubrule(parser.argument));
-        if (process.env.DEBUG_PARSER === '1') {
-          const afterToken = parser.lookAhead(1);
-          console.log(
-            '[Parser] next token after recovery argument',
-            afterToken.image,
-            'offset',
-            afterToken.startOffset,
-          );
-        }
+        const occurrence = seenArgument ? 2 : 1;
+        args.push(parser.invokeSubrule(parser.argument, occurrence));
+        seenArgument = true;
+        expectArgument = false;
+        commaJustConsumed = false;
+        lastMissingCommaOffset = null;
+        continue;
+      }
+
+      if (nextToken.tokenType === Newline) {
+        parser.consumeToken(Newline);
         continue;
       }
 
@@ -901,9 +965,12 @@ export function createArgumentListRule(parser: PineParser) {
 
     skipNewlines();
 
-    const hasRecovery = virtualSeparators.length > 0 || recoveryErrors.length > 0;
+    const hasRecovery =
+      virtualSeparators.length > 0 || virtualArguments.length > 0 || recoveryErrors.length > 0;
     parser.setArgumentListRecovery(
-      hasRecovery ? { virtualSeparators, errors: recoveryErrors } : null,
+      hasRecovery
+        ? { virtualSeparators, virtualArguments, errors: recoveryErrors }
+        : null,
     );
 
     return args;

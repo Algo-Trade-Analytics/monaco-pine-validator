@@ -17,6 +17,7 @@ export type VirtualToken = IToken & {
 
 export interface CallArgumentRecovery {
   virtualSeparators: VirtualToken[];
+  virtualArguments?: VirtualToken[];
   errors: ParserRecoveryError[];
 }
 
@@ -31,6 +32,14 @@ export interface BinaryExpressionRecovery {
   operator: string;
   virtualOperand?: VirtualToken | null;
   errors: ParserRecoveryError[];
+}
+
+export interface FunctionDeclarationRecovery {
+  missingParentheses?: {
+    virtualLParen?: VirtualToken | null;
+    virtualRParen?: VirtualToken | null;
+    errors: ParserRecoveryError[];
+  };
 }
 
 export interface SourceLocation {
@@ -303,6 +312,7 @@ export interface FunctionDeclarationNode extends BaseNode {
   returnType: TypeReferenceNode | null;
   annotations: CompilerAnnotationNode[];
   modifiers: string[];
+  functionRecovery?: FunctionDeclarationRecovery;
 }
 
 export interface ArrowFunctionExpressionNode extends BaseNode {

@@ -9,6 +9,7 @@ import {
   type EnumMemberNode,
   type ExpressionNode,
   type FunctionDeclarationNode,
+  type FunctionDeclarationRecovery,
   type IdentifierNode,
   type ImportDeclarationNode,
   type ParameterNode,
@@ -65,9 +66,11 @@ export function createFunctionDeclarationNode(
   returnType: TypeReferenceNode | null,
   modifiers: string[],
   startToken: IToken | undefined,
+  recovery?: FunctionDeclarationRecovery | null,
 ): FunctionDeclarationNode {
   const startPosition = startToken ? tokenStart(startToken) : identifier?.loc.start ?? body.loc.start;
   const startOffset = startToken?.startOffset ?? identifier?.range[0] ?? body.range[0];
+  const functionRecovery = recovery ?? undefined;
   return {
     kind: 'FunctionDeclaration',
     identifier,
@@ -77,6 +80,7 @@ export function createFunctionDeclarationNode(
     returnType,
     annotations: [],
     modifiers,
+    functionRecovery,
     loc: createLocation(startPosition, body.loc.end),
     range: createRange(startOffset, body.range[1]),
   };
