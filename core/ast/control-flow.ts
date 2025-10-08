@@ -84,6 +84,10 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
     let pending: string[] = [];
 
     for (const statement of statements) {
+      // Skip undefined/null statements from malformed AST
+      if (!statement) {
+        continue;
+      }
       const segment = buildStatement(statement);
       if (!entry) {
         entry = segment.entry;
@@ -381,6 +385,12 @@ export function buildControlFlowGraph(program: ProgramNode | null): ControlFlowG
   };
 
   const buildStatement = (statement: StatementNode): GraphSegment => {
+    // Guard against undefined/null statements from malformed AST
+    if (!statement || typeof statement !== 'object' || !statement.kind) {
+      const placeholder = createNode('statement', null, { role: 'malformed' });
+      return { entry: placeholder, exits: [placeholder] };
+    }
+    
     switch (statement.kind) {
       case 'BlockStatement':
         return buildBlock(statement);

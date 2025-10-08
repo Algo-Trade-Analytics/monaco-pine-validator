@@ -302,6 +302,11 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
   };
 
   const visitStatement = (statement: StatementNode): void => {
+    // Guard against undefined/null statements from malformed AST
+    if (!statement || typeof statement !== 'object' || !statement.kind) {
+      return;
+    }
+    
     switch (statement.kind) {
       case 'VariableDeclaration': {
         const variable = statement as VariableDeclarationNode;
@@ -447,7 +452,14 @@ export function buildScopeGraph(program: ProgramNode | null): ScopeBuildResult {
 
   const visitProgram = (node: ProgramNode): void => {
     pushScope('module', node, { directives: node.directives.length });
-    node.body.forEach(visitStatement);
+    // Filter out undefined/null statements from malformed AST
+    if (Array.isArray(node.body)) {
+      node.body.forEach((stmt) => {
+        if (stmt) {
+          visitStatement(stmt);
+        }
+      });
+    }
     popScope();
   };
 

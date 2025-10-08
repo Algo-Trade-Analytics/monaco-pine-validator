@@ -498,7 +498,11 @@ function inferExpression(
 }
 
 function visitBlock(environment: TypeEnvironment, block: BlockStatementNode): void {
-  block.body.forEach((statement) => visitStatement(environment, statement));
+  block.body.forEach((statement) => {
+    if (statement) {
+      visitStatement(environment, statement);
+    }
+  });
 }
 
 function inferIfExpression(environment: TypeEnvironment, expression: IfExpressionNode): TypeMetadata {
@@ -841,6 +845,11 @@ function visitScriptDeclaration(environment: TypeEnvironment, statement: Stateme
 }
 
 function visitStatement(environment: TypeEnvironment, statement: StatementNode): void {
+  // Guard against undefined/null statements from malformed AST
+  if (!statement || typeof statement !== 'object' || !statement.kind) {
+    return;
+  }
+  
   switch (statement.kind) {
     case 'VariableDeclaration':
       visitVariableDeclaration(environment, statement as VariableDeclarationNode);
@@ -924,6 +933,10 @@ export function inferTypes(program: ProgramNode | null): TypeEnvironment {
     return environment;
   }
 
-  program.body.forEach((statement) => visitStatement(environment, statement));
+  program.body.forEach((statement) => {
+    if (statement) {
+      visitStatement(environment, statement);
+    }
+  });
   return environment;
 }
