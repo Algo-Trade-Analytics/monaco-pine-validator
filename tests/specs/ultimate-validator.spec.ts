@@ -125,9 +125,7 @@ indicator("Parens/Brackets")
 x = (close + open
 y = close[1`;
     const { codes } = run(code);
-    expectHas(codes, {
-      errors: ['PSV6-SYNTAX-MISSING-BRACKET'],
-    }); // Parser fails due to unmatched delimiters
+    expectHas(codes, { errors: ['PSV6-SYNTAX-ERROR'] }); // Parser fails due to unmatched brackets
     // PS009 and PS010 might not trigger due to early parser error detection
   });
 

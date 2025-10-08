@@ -287,7 +287,7 @@ export interface ParseError {
 declare module 'chevrotain' {
   interface IToken {
     isVirtual?: boolean;
-    reason?: VirtualTokenReason;
+    recoveryContext?: string;
   }
 }
 ```
@@ -607,8 +607,6 @@ export function createConditionalExpressionRule(parser: PineParser) {
 
 - ✅ Centralized virtual token definitions in `core/ast/virtual-tokens.ts` and wired parser builders to emit typed recovery tokens.
 - ✅ Extended virtual-token recovery to array/tuple literals (synthetic elements & separators) for empty slots and trailing commas.
-- ✅ Added delimiter recovery for function calls and index expressions, including virtual closing tokens that feed validator diagnostics.
-- ✅ Updated the syntax-error validator to consume recovery metadata directly, letting AST-driven diagnostics replace the textual pre-checker whenever an AST is available.
 
 #### **Task: Create VirtualToken Type System**
 
@@ -623,6 +621,7 @@ export interface VirtualToken extends IToken {
     line: number;
     column: number;
   };
+  recoveryContext?: string;
 }
 
 export enum VirtualTokenReason {
@@ -661,6 +660,7 @@ export function createVirtualToken(
     startColumn,
     endColumn: startColumn + image.length,
     tokenType,
+    tokenTypeIdx: tokenType.tokenTypeIdx,
     isVirtual: true,
     expectedType: tokenType,
     reason,
@@ -849,7 +849,7 @@ export interface VariableDeclarationNode extends Node {
 declare module 'chevrotain' {
   interface IToken {
     isVirtual?: boolean;
-    reason?: VirtualTokenReason;
+    recoveryContext?: string;
   }
 }
 ```

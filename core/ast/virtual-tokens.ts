@@ -24,6 +24,7 @@ export interface VirtualToken extends IToken {
     line: number;
     column: number;
   };
+  recoveryContext?: string;
 }
 
 export function createVirtualToken(
