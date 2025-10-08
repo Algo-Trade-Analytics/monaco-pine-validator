@@ -68,20 +68,6 @@ export class SyntaxErrorValidator implements ValidationModule {
       const recoveryErrors = this.collectRecoveryErrors(astContext.ast, existingKeys);
       this.helper.addErrors(recoveryErrors);
 
-      const indentationDiagnostics = Array.isArray(astContext.indentationDiagnostics)
-        ? astContext.indentationDiagnostics
-        : [];
-      const freshIndentationDiagnostics = indentationDiagnostics.filter((diagnostic) => {
-        const key = this.createErrorKey(diagnostic.line, diagnostic.column, diagnostic.code);
-        if (existingKeys.has(key)) {
-          return false;
-        }
-        existingKeys.add(key);
-        return true;
-      });
-      if (freshIndentationDiagnostics.length > 0) {
-        this.helper.addErrors(freshIndentationDiagnostics);
-      }
     }
 
     return this.helper.buildResult(context);

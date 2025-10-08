@@ -307,7 +307,21 @@ export abstract class BaseValidator {
         // ✅ Fixed: Arrow function handling
         // ✅ Fixed: Else-if handling
         // ✅ Fixed: Mixed tabs/spaces detection
-        this.context.indentationDiagnostics = validateIndentationWithAST(source, result.ast);
+        const indentDiagnostics = validateIndentationWithAST(source, result.ast);
+        this.context.indentationDiagnostics = indentDiagnostics;
+        indentDiagnostics.forEach((diagnostic) => {
+          if (diagnostic.severity === 'warning') {
+            this.addWarning(
+              diagnostic.line,
+              diagnostic.column,
+              diagnostic.message,
+              diagnostic.code,
+              diagnostic.suggestion,
+            );
+          } else {
+            this.addError(diagnostic.line, diagnostic.column, diagnostic.message, diagnostic.code, diagnostic.suggestion);
+          }
+        });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

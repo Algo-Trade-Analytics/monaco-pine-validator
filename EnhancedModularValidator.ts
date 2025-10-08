@@ -584,3 +584,7 @@ export function createEnhancedModularValidator(config?: Partial<ValidatorConfig>
   return new EnhancedModularValidator(config);
 }
 
+export function validatePineScriptV6Enhanced(code: string, config?: Partial<ValidatorConfig>): ValidationResult {
+  const validator = new EnhancedModularValidator(config);
+  return validator.validate(code);
+}

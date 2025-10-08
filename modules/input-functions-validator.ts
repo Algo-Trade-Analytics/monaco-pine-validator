@@ -297,14 +297,13 @@ export class InputFunctionsValidator implements ValidationModule {
     // Validate default value
     const hasNamedDef = parameters.has('defval');
     const defArgInt = parameters.get('defval') ?? args[0];
+    const rawDefault = (defArgInt ?? '').trim();
     const defaultValue = this.extractNumericValue(defArgInt ?? '');
-    if (!hasNamedDef && defaultValue === null && (defArgInt ?? '').trim() !== 'na') {
-      // Only warn; tests expect valid scenarios to remain error-free
-      this.helper.addWarning(lineNum, column, 'Default value should be an integer or na', 'PSV6-INPUT-DEFAULT-TYPE');
-      // Clearly invalid: string or bool passed as default
-      const def = (defArgInt ?? '').trim().toLowerCase();
-      if (/^".*"$/.test(def) || def === 'true' || def === 'false') {
-        this.helper.addError(lineNum, column, 'Invalid parameter type for input.int default', 'PSV6-FUNCTION-PARAM-TYPE');
+    if (!hasNamedDef && defaultValue === null && rawDefault !== 'na') {
+      this.helper.addWarning(lineNum, column, 'Default value should be an integer or na', Codes.INPUT_DEFVAL_TYPE);
+      const normalized = this.stripQuotes(rawDefault).toLowerCase();
+      if (this.isQuotedLiteral(rawDefault) || normalized === 'true' || normalized === 'false') {
+        this.helper.addError(lineNum, column, 'defval must be an integer for input.int', Codes.INPUT_DEFVAL_TYPE);
       }
     }
 
@@ -316,12 +315,13 @@ export class InputFunctionsValidator implements ValidationModule {
     // Validate default value
     const hasNamedDefF = parameters.has('defval');
     const defArgFloat = parameters.get('defval') ?? args[0];
+    const rawDefault = (defArgFloat ?? '').trim();
     const defaultValue = this.extractNumericValue(defArgFloat ?? '');
-    if (!hasNamedDefF && defaultValue === null && (defArgFloat ?? '').trim() !== 'na') {
-      this.helper.addWarning(lineNum, column, 'Default value should be a float or na', 'PSV6-INPUT-DEFAULT-TYPE');
-      const def = (defArgFloat ?? '').trim().toLowerCase();
-      if (/^".*"$/.test(def) || def === 'true' || def === 'false') {
-        this.helper.addError(lineNum, column, 'Invalid parameter type for input.float default', 'PSV6-FUNCTION-PARAM-TYPE');
+    if (!hasNamedDefF && defaultValue === null && rawDefault !== 'na') {
+      this.helper.addWarning(lineNum, column, 'Default value should be a float or na', Codes.INPUT_DEFVAL_TYPE);
+      const normalized = this.stripQuotes(rawDefault).toLowerCase();
+      if (this.isQuotedLiteral(rawDefault) || normalized === 'true' || normalized === 'false') {
+        this.helper.addError(lineNum, column, 'defval must be a number for input.float', Codes.INPUT_DEFVAL_TYPE);
       }
     }
 
@@ -337,8 +337,8 @@ export class InputFunctionsValidator implements ValidationModule {
     if (!hasNamedDefB && !['true', 'false', 'na'].includes(defaultValue)) {
       this.helper.addWarning(lineNum, column, 'Default value should be true, false, or na', 'PSV6-INPUT-DEFAULT-TYPE');
       // Clearly invalid default type for bool
-      if (/^".*"$/.test(defaultValue) || /^[+\-]?\d+(?:\.\d+)?$/.test(defaultValue)) {
-        this.helper.addError(lineNum, column, 'Invalid parameter type for input.bool default', 'PSV6-FUNCTION-PARAM-TYPE');
+      if (this.isQuotedLiteral(defaultValue) || /^[+\-]?\d+(?:\.\d+)?$/.test(defaultValue)) {
+        this.helper.addError(lineNum, column, 'Invalid parameter type for input.bool default', Codes.INPUT_DEFVAL_TYPE);
       }
     }
 
@@ -846,6 +846,17 @@ export class InputFunctionsValidator implements ValidationModule {
     // Support both .05 and 0.05 formats (Pine Script accepts both)
     const match = trimmed.match(/^[+\-]?(?:\d+\.\d*|\.\d+|\d+)$/);
     return match ? parseFloat(trimmed) : null;
+  }
+
+  private stripQuotes(value: string): string {
+    const trimmed = value.trim();
+    const match = trimmed.match(/^(["'])(.*)\1$/);
+    return match ? match[2] : trimmed;
+  }
+
+  private isQuotedLiteral(value: string): boolean {
+    const trimmed = value.trim();
+    return /^(["']).*\1$/.test(trimmed);
   }
 
   private splitTopLevelList(value: string): string[] {

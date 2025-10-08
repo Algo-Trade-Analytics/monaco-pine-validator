@@ -90,7 +90,7 @@ describe('InputFunctionsValidator (AST)', () => {
     const errorCodes = result.errors.map((error) => error.code);
     const warningCodes = result.warnings.map((warning) => warning.code);
 
-    expect(errorCodes).toContain('PSV6-FUNCTION-PARAM-TYPE');
+    expect(errorCodes).toContain('PSV6-INPUT-DEFVAL-TYPE');
     expect(warningCodes).toContain('PSV6-INPUT-DEFAULT-TYPE');
   });
 
