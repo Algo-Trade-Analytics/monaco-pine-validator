@@ -50,6 +50,7 @@ import {
   createSyntheticToken,
   tokenIndent,
 } from '../node-builders';
+import { VirtualTokenReason } from '../../virtual-tokens';
 import { attachLoopResultBinding } from '../helpers';
 import type {
   ArgumentNode,
@@ -204,14 +205,19 @@ export function createFunctionDeclarationRule(parser: PineParser) {
 
     if (!hasParentheses) {
       const nameReference = consumedNameTokens[consumedNameTokens.length - 1] ?? consumedTypeTokens[consumedTypeTokens.length - 1] ?? startToken ?? parser.lookAhead(0);
-      const virtualLParen = createSyntheticToken('(', LParen, nameReference) as VirtualToken;
-      virtualLParen.isVirtual = true;
-      virtualLParen.recoveryContext = 'missing-function-paren-open';
-
+      const virtualLParen = createSyntheticToken(
+        '(',
+        LParen,
+        nameReference,
+        VirtualTokenReason.FUNCTION_PARENTHESIS,
+      ) as VirtualToken;
       const arrowLookahead = parser.lookAhead(1);
-      const virtualRParen = createSyntheticToken(')', RParen, arrowLookahead) as VirtualToken;
-      virtualRParen.isVirtual = true;
-      virtualRParen.recoveryContext = 'missing-function-paren-close';
+      const virtualRParen = createSyntheticToken(
+        ')',
+        RParen,
+        arrowLookahead,
+        VirtualTokenReason.FUNCTION_PARENTHESIS,
+      ) as VirtualToken;
 
       const functionName = identifier?.name ?? (consumedNameTokens.length > 0 ? consumedNameTokens.map((token) => token.image).join('') : 'function');
       const message = `Missing parentheses in function declaration '${functionName}'`;
@@ -483,22 +489,7 @@ export function createVariableDeclarationRule(parser: PineParser) {
   };
 
   const createVirtualEqualsToken = (reference: IToken): VirtualToken => {
-    const baseOffset = (reference.endOffset ?? reference.startOffset ?? 0) + 1;
-    const baseColumn = (reference.endColumn ?? reference.startColumn ?? 0) + 1;
-    const line = reference.endLine ?? reference.startLine ?? 1;
-    const token: VirtualToken = {
-      image: '=',
-      startOffset: baseOffset,
-      endOffset: baseOffset,
-      startColumn: baseColumn,
-      endColumn: baseColumn,
-      startLine: line,
-      endLine: line,
-      tokenType: Equal,
-      isVirtual: true,
-      recoveryContext: 'missing-equals',
-    } as VirtualToken;
-    return token;
+    return createSyntheticToken('=', Equal, reference, VirtualTokenReason.MISSING_EQUALS) as VirtualToken;
   };
 
   const buildMissingEqualsRecovery = (

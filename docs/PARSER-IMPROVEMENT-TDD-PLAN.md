@@ -287,7 +287,7 @@ export interface ParseError {
 declare module 'chevrotain' {
   interface IToken {
     isVirtual?: boolean;
-    recoveryContext?: string;
+    reason?: VirtualTokenReason;
   }
 }
 ```
@@ -605,6 +605,11 @@ export function createConditionalExpressionRule(parser: PineParser) {
 
 ### **Week 3: Virtual Token Infrastructure**
 
+- ✅ Centralized virtual token definitions in `core/ast/virtual-tokens.ts` and wired parser builders to emit typed recovery tokens.
+- ✅ Extended virtual-token recovery to array/tuple literals (synthetic elements & separators) for empty slots and trailing commas.
+- ✅ Added delimiter recovery for function calls and index expressions, including virtual closing tokens that feed validator diagnostics.
+- ✅ Updated the syntax-error validator to consume recovery metadata directly, letting AST-driven diagnostics replace the textual pre-checker whenever an AST is available.
+
 #### **Task: Create VirtualToken Type System**
 
 ```typescript
@@ -621,36 +626,48 @@ export interface VirtualToken extends IToken {
 }
 
 export enum VirtualTokenReason {
+  UNKNOWN = 'UNKNOWN',
   MISSING_EQUALS = 'MISSING_EQUALS',
   MISSING_COMMA = 'MISSING_COMMA',
   MISSING_SEMICOLON = 'MISSING_SEMICOLON',
   MISSING_PAREN = 'MISSING_PAREN',
   MISSING_BRACKET = 'MISSING_BRACKET',
   MISSING_BRACE = 'MISSING_BRACE',
+  MISSING_OPERAND = 'MISSING_OPERAND',
+  MISSING_ARGUMENT = 'MISSING_ARGUMENT',
+  TRAILING_COMMA = 'TRAILING_COMMA',
+  CONDITIONAL_QUESTION = 'CONDITIONAL_QUESTION',
+  CONDITIONAL_COLON = 'CONDITIONAL_COLON',
+  FUNCTION_PARENTHESIS = 'FUNCTION_PARENTHESIS',
 }
 
 export function createVirtualToken(
   tokenType: TokenType,
   insertAfter: IToken,
-  reason: VirtualTokenReason
+  reason: VirtualTokenReason = VirtualTokenReason.UNKNOWN,
+  imageOverride?: string
 ): VirtualToken {
+  const image = imageOverride ?? tokenType.name;
+  const startOffset = insertAfter.endOffset ?? insertAfter.startOffset ?? 0;
+  const startLine = insertAfter.endLine ?? insertAfter.startLine ?? 1;
+  const startColumn = (insertAfter.endColumn ?? insertAfter.startColumn ?? 0) + 1;
+
   return {
-    image: tokenType.name,
-    startOffset: insertAfter.endOffset ?? insertAfter.startOffset,
-    startLine: insertAfter.endLine ?? insertAfter.startLine,
-    startColumn: (insertAfter.endColumn ?? insertAfter.startColumn) + 1,
-    endOffset: insertAfter.endOffset ?? insertAfter.startOffset,
-    endLine: insertAfter.endLine ?? insertAfter.startLine,
-    endColumn: (insertAfter.endColumn ?? insertAfter.startColumn) + 1,
+    image,
+    startOffset,
+    endOffset: startOffset + image.length,
+    startLine,
+    endLine: startLine,
+    startColumn,
+    endColumn: startColumn + image.length,
     tokenType,
-    tokenTypeIdx: tokenType.tokenTypeIdx,
     isVirtual: true,
     expectedType: tokenType,
     reason,
     insertedAt: {
-      line: insertAfter.endLine ?? insertAfter.startLine,
-      column: (insertAfter.endColumn ?? insertAfter.startColumn) + 1
-    }
+      line: startLine,
+      column: startColumn,
+    },
   };
 }
 ```
@@ -832,7 +849,7 @@ export interface VariableDeclarationNode extends Node {
 declare module 'chevrotain' {
   interface IToken {
     isVirtual?: boolean;
-    recoveryContext?: string;
+    reason?: VirtualTokenReason;
   }
 }
 ```

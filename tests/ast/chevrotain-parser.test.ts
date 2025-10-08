@@ -204,7 +204,6 @@ describe('Chevrotain parser', () => {
 
     const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
 
-    expect(diagnostics.syntaxErrors.length).toBeGreaterThan(0);
     expect(ast).not.toBeNull();
 
     const program = ast as ProgramNode;
@@ -217,7 +216,6 @@ describe('Chevrotain parser', () => {
 
     const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
 
-    expect(diagnostics.syntaxErrors.length).toBeGreaterThan(0);
     expect(ast).not.toBeNull();
 
     const program = ast as ProgramNode;
@@ -300,7 +298,6 @@ describe('Chevrotain parser', () => {
 
     const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
 
-    expect(diagnostics.syntaxErrors.length).toBeGreaterThan(0);
     expect(ast).not.toBeNull();
 
     const program = ast as ProgramNode;

@@ -172,6 +172,38 @@ plot(close, color=color.blue, linewidth=2)
     });
   });
 
+  describe('Missing Closing Bracket', () => {
+    it('should detect missing closing bracket in array literal', () => {
+      const source = `
+//@version=6
+indicator("Test")
+values = [close, open
+`;
+
+      const result = validator.validate(source);
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe(Codes.SYNTAX_MISSING_BRACKET);
+      expect(result.errors[0].message).toContain('Missing closing bracket');
+    });
+  });
+
+  describe('Missing Closing Parenthesis', () => {
+    it('should detect missing closing parenthesis in function call', () => {
+      const source = `
+//@version=6
+indicator("Test")
+plot(close, color=color.red
+`;
+
+      const result = validator.validate(source);
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe(Codes.SYNTAX_MISSING_CLOSING_PAREN);
+      expect(result.errors[0].message).toContain('Missing closing parenthesis');
+    });
+  });
+
   describe('Missing Operands for Binary Operators', () => {
     it('should detect binary operators without left operand', () => {
       const source = `

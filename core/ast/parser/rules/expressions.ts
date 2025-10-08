@@ -15,6 +15,7 @@ import {
   type CallArgumentRecovery,
   type ConditionalExpressionRecovery,
   type BinaryExpressionRecovery,
+  type IndexExpressionRecovery,
 } from '../../nodes';
 import {
   And,
@@ -93,6 +94,7 @@ import {
   tokenIndent,
   createSyntheticToken,
 } from '../node-builders';
+import { VirtualTokenReason } from '../../virtual-tokens';
 
 type ConditionalExpressionOptions = {
   allowMisorderedRecovery?: boolean;
@@ -160,14 +162,12 @@ function createConditionalRecoveryTokens(
   colonToken: IToken,
   questionToken: IToken | null,
 ): ConditionalExpressionRecovery {
-  const virtualQuestion = createSyntheticToken('?', Question, colonToken) as VirtualToken;
+  const virtualQuestion = createSyntheticToken('?', Question, colonToken, VirtualTokenReason.CONDITIONAL_QUESTION) as VirtualToken;
   virtualQuestion.isVirtual = true;
-  virtualQuestion.recoveryContext = 'conditional-operator-question';
 
   const colonReference = questionToken ?? colonToken;
-  const virtualColon = createSyntheticToken(':', Colon, colonReference) as VirtualToken;
+  const virtualColon = createSyntheticToken(':', Colon, colonReference, VirtualTokenReason.CONDITIONAL_COLON) as VirtualToken;
   virtualColon.isVirtual = true;
-  virtualColon.recoveryContext = 'conditional-operator-colon';
 
   const error: ParserRecoveryError = {
     code: 'CONDITIONAL_OPERATOR_ORDER',
@@ -237,9 +237,13 @@ function createMissingBinaryOperandRecovery(
     code: error.code,
     suggestion: error.suggestion,
   });
-  const virtualOperandToken = createSyntheticToken('__missing_operand__', IdentifierToken, operatorToken) as VirtualToken;
+  const virtualOperandToken = createSyntheticToken(
+    '__missing_operand__',
+    IdentifierToken,
+    operatorToken,
+    VirtualTokenReason.MISSING_OPERAND,
+  ) as VirtualToken;
   virtualOperandToken.isVirtual = true;
-  virtualOperandToken.recoveryContext = 'missing-binary-operand';
   const placeholder = createPlaceholderExpression(virtualOperandToken);
   return {
     placeholder,
@@ -697,35 +701,97 @@ export function createCallExpressionRule(parser: PineParser) {
           parser.consumeToken(Newline);
         }
 
-        parser.consumeToken(LParen);
+        const lParen = parser.consumeToken(LParen);
+        parser.setArgumentListRecovery(null);
         let args: ArgumentNode[] = [];
         let argumentRecovery: CallArgumentRecovery | null = null;
         if (parser.lookAhead(1).tokenType !== RParen) {
           args = parser.invokeSubrule(parser.argumentList);
           argumentRecovery = parser.consumeArgumentListRecovery();
-        } else {
-          parser.setArgumentListRecovery(null);
         }
-        const rParen = parser.consumeToken(RParen);
+        while (parser.lookAhead(1).tokenType === Newline) {
+          parser.consumeToken(Newline);
+        }
+
+        let closingToken: IToken | VirtualToken;
+        if (parser.lookAhead(1).tokenType === RParen) {
+          closingToken = parser.consumeToken(RParen);
+        } else {
+          const referenceToken = parser.lookAhead(0) ?? lParen;
+          const virtualClosing = createSyntheticToken(')', RParen, referenceToken, VirtualTokenReason.MISSING_PAREN) as VirtualToken;
+          const error: ParserRecoveryError = {
+            code: 'MISSING_CLOSING_PAREN',
+            message: 'Missing closing parenthesis for function call',
+            suggestion: 'Add \')\' to close the argument list.',
+            severity: 'error',
+          };
+          parser.reportRecoveryError(virtualClosing, error.message, {
+            code: error.code,
+            suggestion: error.suggestion,
+          });
+          if (argumentRecovery) {
+            argumentRecovery.virtualClosing = virtualClosing;
+            argumentRecovery.errors.push(error);
+          } else {
+            argumentRecovery = {
+              virtualSeparators: [],
+              virtualArguments: [],
+              virtualClosing: virtualClosing,
+              errors: [error],
+            };
+          }
+          closingToken = virtualClosing;
+        }
         const typeArguments = typeArgumentTokenGroups
           .map((group) => buildTypeReferenceFromTokens(group))
           .filter((node): node is TypeReferenceNode => node !== null);
-        expression = createCallExpressionNode(expression, args, rParen, typeArguments, argumentRecovery);
+        expression = createCallExpressionNode(expression, args, closingToken, typeArguments, argumentRecovery);
         continue;
       }
 
       if (tokenType === LParen) {
-        parser.consumeToken(LParen);
+        const lParen = parser.consumeToken(LParen);
+        parser.setArgumentListRecovery(null);
         let args: ArgumentNode[] = [];
         let argumentRecovery: CallArgumentRecovery | null = null;
         if (parser.lookAhead(1).tokenType !== RParen) {
           args = parser.invokeSubrule(parser.argumentList);
           argumentRecovery = parser.consumeArgumentListRecovery();
-        } else {
-          parser.setArgumentListRecovery(null);
         }
-        const rParen = parser.consumeToken(RParen);
-        expression = createCallExpressionNode(expression, args, rParen, [], argumentRecovery);
+        while (parser.lookAhead(1).tokenType === Newline) {
+          parser.consumeToken(Newline);
+        }
+
+        let closingToken: IToken | VirtualToken;
+        if (parser.lookAhead(1).tokenType === RParen) {
+          closingToken = parser.consumeToken(RParen);
+        } else {
+          const referenceToken = parser.lookAhead(0) ?? lParen;
+          const virtualClosing = createSyntheticToken(')', RParen, referenceToken, VirtualTokenReason.MISSING_PAREN) as VirtualToken;
+          const error: ParserRecoveryError = {
+            code: 'MISSING_CLOSING_PAREN',
+            message: 'Missing closing parenthesis for function call',
+            suggestion: 'Add \')\' to close the argument list.',
+            severity: 'error',
+          };
+          parser.reportRecoveryError(virtualClosing, error.message, {
+            code: error.code,
+            suggestion: error.suggestion,
+          });
+          if (argumentRecovery) {
+            argumentRecovery.virtualClosing = virtualClosing;
+            argumentRecovery.errors.push(error);
+          } else {
+            argumentRecovery = {
+              virtualSeparators: [],
+              virtualArguments: [],
+              virtualClosing: virtualClosing,
+              errors: [error],
+            };
+          }
+          closingToken = virtualClosing;
+        }
+        expression = createCallExpressionNode(expression, args, closingToken, [], argumentRecovery);
         continue;
       }
 
@@ -743,8 +809,34 @@ export function createCallExpressionRule(parser: PineParser) {
         if (parser.lookAhead(1).tokenType !== RBracket) {
           indexExpression = parser.invokeSubrule(parser.expression, 2);
         }
-        const rBracket = parser.consumeToken(RBracket);
-        expression = createIndexExpressionNode(expression, indexExpression, rBracket ?? lBracket);
+        while (parser.lookAhead(1).tokenType === Newline) {
+          parser.consumeToken(Newline);
+        }
+
+        let closingToken: IToken | VirtualToken;
+        let indexRecovery: IndexExpressionRecovery | null = null;
+        if (parser.lookAhead(1).tokenType === RBracket) {
+          closingToken = parser.consumeToken(RBracket);
+        } else {
+          const referenceToken = parser.lookAhead(0) ?? lBracket;
+          const virtualClosing = createSyntheticToken(']', RBracket, referenceToken, VirtualTokenReason.MISSING_BRACKET) as VirtualToken;
+          const error: ParserRecoveryError = {
+            code: 'MISSING_BRACKET',
+            message: 'Missing closing bracket',
+            suggestion: 'Add \']\' to close the expression.',
+            severity: 'error',
+          };
+          parser.reportRecoveryError(virtualClosing, error.message, {
+            code: error.code,
+            suggestion: error.suggestion,
+          });
+          indexRecovery = {
+            virtualClosing: virtualClosing,
+            errors: [error],
+          };
+          closingToken = virtualClosing;
+        }
+        expression = createIndexExpressionNode(expression, indexExpression, closingToken, indexRecovery);
         continue;
       }
 
@@ -775,8 +867,34 @@ export function createMemberExpressionRule(parser: PineParser) {
             if (parser.lookAhead(1).tokenType !== RBracket) {
               indexExpression = parser.invokeSubrule(parser.expression, 2);
             }
-            const rBracket = parser.consumeToken(RBracket);
-            expression = createIndexExpressionNode(expression, indexExpression, rBracket ?? lBracket);
+            while (parser.lookAhead(1).tokenType === Newline) {
+              parser.consumeToken(Newline);
+            }
+
+            let closingToken: IToken | VirtualToken;
+            let indexRecovery: IndexExpressionRecovery | null = null;
+            if (parser.lookAhead(1).tokenType === RBracket) {
+              closingToken = parser.consumeToken(RBracket);
+            } else {
+              const referenceToken = parser.lookAhead(0) ?? lBracket;
+              const virtualClosing = createSyntheticToken(']', RBracket, referenceToken, VirtualTokenReason.MISSING_BRACKET) as VirtualToken;
+              const error: ParserRecoveryError = {
+                code: 'MISSING_BRACKET',
+                message: 'Missing closing bracket',
+                suggestion: 'Add \']\' to close the expression.',
+                severity: 'error',
+              };
+              parser.reportRecoveryError(virtualClosing, error.message, {
+                code: error.code,
+                suggestion: error.suggestion,
+              });
+              indexRecovery = {
+                virtualClosing: virtualClosing,
+                errors: [error],
+              };
+              closingToken = virtualClosing;
+            }
+            expression = createIndexExpressionNode(expression, indexExpression, closingToken, indexRecovery);
           },
         },
       ]);
@@ -802,6 +920,7 @@ export function createArgumentListRule(parser: PineParser) {
       IdentifierToken,
       NumberToken,
       StringToken,
+      ColorToken,
       LParen,
       LBracket,
       Minus,
@@ -832,9 +951,8 @@ export function createArgumentListRule(parser: PineParser) {
     };
 
     const recordMissingComma = (referenceToken: IToken | undefined) => {
-      const virtualComma = createSyntheticToken(',', Comma, referenceToken) as VirtualToken;
+      const virtualComma = createSyntheticToken(',', Comma, referenceToken, VirtualTokenReason.MISSING_COMMA) as VirtualToken;
       virtualComma.isVirtual = true;
-      virtualComma.recoveryContext = 'missing-comma';
       virtualSeparators.push(virtualComma);
       const error: ParserRecoveryError = {
         code: 'MISSING_COMMA',
@@ -853,14 +971,16 @@ export function createArgumentListRule(parser: PineParser) {
       referenceToken: IToken | undefined,
       context: 'empty' | 'trailing',
     ) => {
+      const reason = context === 'trailing'
+        ? VirtualTokenReason.TRAILING_COMMA
+        : VirtualTokenReason.MISSING_ARGUMENT;
       const virtualArgument = createSyntheticToken(
         '__missing_argument__',
         IdentifierToken,
         referenceToken,
+        reason,
       ) as VirtualToken;
       virtualArgument.isVirtual = true;
-      virtualArgument.recoveryContext =
-        context === 'trailing' ? 'missing-argument-trailing' : 'missing-argument';
       virtualArguments.push(virtualArgument);
 
       const isTrailing = context === 'trailing';
@@ -1003,12 +1123,71 @@ export function createBracketExpressionRule(parser: PineParser) {
     const elements: (ExpressionNode | null)[] = [];
     let expectElement = true;
     let hasParsedElement = false;
+    const virtualSeparators: VirtualToken[] = [];
+    const virtualElements: VirtualToken[] = [];
+    const recoveryErrors: ParserRecoveryError[] = [];
+    let virtualClosingToken: VirtualToken | null = null;
+
+    const recordMissingComma = (referenceToken: IToken | undefined) => {
+      if (mode !== 'expression') {
+        return;
+      }
+      const virtualComma = createSyntheticToken(',', Comma, referenceToken, VirtualTokenReason.MISSING_COMMA) as VirtualToken;
+      virtualSeparators.push(virtualComma);
+      const error: ParserRecoveryError = {
+        code: 'MISSING_COMMA',
+        message: `Missing ',' between elements`,
+        suggestion: 'Separate elements with a comma.',
+        severity: 'error',
+      };
+      recoveryErrors.push(error);
+      parser.reportRecoveryError(virtualComma, error.message, {
+        code: error.code,
+        suggestion: error.suggestion,
+      });
+    };
+
+    const recordMissingElement = (referenceToken: IToken | undefined, context: 'empty' | 'trailing') => {
+      if (mode !== 'expression') {
+        return;
+      }
+      const reason = context === 'trailing'
+        ? VirtualTokenReason.TRAILING_COMMA
+        : VirtualTokenReason.MISSING_ARGUMENT;
+      const virtualElement = createSyntheticToken(
+        '__missing_element__',
+        IdentifierToken,
+        referenceToken,
+        reason,
+      ) as VirtualToken;
+      virtualElements.push(virtualElement);
+      const error: ParserRecoveryError = {
+        code: context === 'trailing' ? 'TRAILING_COMMA' : 'EMPTY_ARGUMENT',
+        message: context === 'trailing'
+          ? 'Trailing comma without argument'
+          : 'Missing argument between commas',
+        suggestion: context === 'trailing'
+          ? 'Remove the trailing comma or provide an element after it.'
+          : 'Provide an argument between these commas.',
+        severity: 'error',
+      };
+      recoveryErrors.push(error);
+      parser.reportRecoveryError(virtualElement, error.message, {
+        code: error.code,
+        suggestion: error.suggestion,
+      });
+    };
 
     while (true) {
       const next = parser.lookAhead(1);
       const tokenType = next.tokenType;
 
       if (tokenType === RBracket || tokenType === EOF) {
+        if (expectElement && tokenType === RBracket && elements.length > 0) {
+          recordMissingElement(parser.lookAhead(0), 'trailing');
+          elements.push(null);
+          expectElement = false;
+        }
         break;
       }
 
@@ -1020,6 +1199,7 @@ export function createBracketExpressionRule(parser: PineParser) {
       if (tokenType === Comma) {
         parser.consumeToken(Comma);
         if (expectElement) {
+          recordMissingElement(parser.lookAhead(0), 'empty');
           elements.push(null);
         }
         expectElement = true;
@@ -1045,13 +1225,51 @@ export function createBracketExpressionRule(parser: PineParser) {
       }
     }
 
-    if (expectElement && elements.length > 0 && parser.lookAhead(1).tokenType === RBracket) {
-      elements.push(null);
+    while (parser.lookAhead(1).tokenType === Newline) {
+      parser.consumeToken(Newline);
     }
 
-    const rBracket = parser.consumeToken(RBracket);
+    let closingToken = parser.lookAhead(1);
+    if (closingToken.tokenType === RBracket) {
+      closingToken = parser.consumeToken(RBracket);
+    } else {
+      const virtualClosing = createSyntheticToken(']', RBracket, parser.lookAhead(0), VirtualTokenReason.MISSING_BRACKET) as VirtualToken;
+      virtualClosingToken = virtualClosing;
+      const error: ParserRecoveryError = {
+        code: 'MISSING_BRACKET',
+        message: 'Missing closing bracket',
+        suggestion: 'Add "]" to close the collection.',
+        severity: 'error',
+      };
+      recoveryErrors.push(error);
+      parser.reportRecoveryError(virtualClosing, error.message, {
+        code: error.code,
+        suggestion: error.suggestion,
+      });
+      closingToken = virtualClosing;
+    }
 
-    const tuple = createTupleExpressionNode(elements, lBracket, rBracket);
+    const hasRecovery =
+      virtualSeparators.length > 0 ||
+      virtualElements.length > 0 ||
+      recoveryErrors.length > 0 ||
+      virtualClosingToken !== null;
+
+    const collectionRecovery = hasRecovery && mode === 'expression'
+      ? {
+          virtualSeparators,
+          virtualElements,
+          virtualClosing: virtualClosingToken,
+          errors: recoveryErrors,
+        }
+      : undefined;
+
+    const tuple = createTupleExpressionNode(
+      elements,
+      lBracket,
+      closingToken,
+      mode === 'expression' ? collectionRecovery ?? null : null,
+    );
     if (mode === 'tuple') {
       return tuple;
     }
@@ -1072,11 +1290,11 @@ export function createBracketExpressionRule(parser: PineParser) {
         const rows = rowCandidates.map((row) =>
           row.elements.map((child) => child ?? createPlaceholderExpression()),
         );
-        return createMatrixLiteralNode(rows, lBracket, rBracket);
+        return createMatrixLiteralNode(rows, lBracket, closingToken);
       }
     }
 
-    return createArrayLiteralNode(elements, lBracket, rBracket);
+    return createArrayLiteralNode(elements, lBracket, closingToken, collectionRecovery ?? null);
   });
 }
 
@@ -1115,9 +1333,28 @@ export function createPrimaryExpressionRule(parser: PineParser) {
         if (isArrowFunctionStart(parser)) {
           return parser.invokeSubrule(parser.arrowFunctionExpression);
         }
-        parser.consumeToken(LParen);
+        const lParen = parser.consumeToken(LParen);
         const expression = parser.invokeSubrule(parser.expression);
-        parser.consumeToken(RParen);
+        while (parser.lookAhead(1).tokenType === Newline) {
+          parser.consumeToken(Newline);
+        }
+
+        if (parser.lookAhead(1).tokenType === RParen) {
+          parser.consumeToken(RParen);
+        } else {
+          const referenceToken = parser.lookAhead(0) ?? lParen;
+          const virtualClosing = createSyntheticToken(')', RParen, referenceToken, VirtualTokenReason.MISSING_PAREN) as VirtualToken;
+          const error: ParserRecoveryError = {
+            code: 'MISSING_CLOSING_PAREN',
+            message: 'Missing closing parenthesis',
+            suggestion: 'Add \')\' to close the expression.',
+            severity: 'error',
+          };
+          parser.reportRecoveryError(virtualClosing, error.message, {
+            code: error.code,
+            suggestion: error.suggestion,
+          });
+        }
         return expression ?? createPlaceholderExpression();
       }
       default:

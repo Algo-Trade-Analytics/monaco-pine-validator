@@ -87,21 +87,6 @@ export function parseWithChevrotain(source: string, options: AstParseOptions = {
     syntaxErrors.push(tokenToSyntaxError(token as IToken, error.message, source, filename));
   }
 
-  for (const error of sharedParser.recoveryErrors) {
-    const token = error.token;
-    const key = [
-      error.message,
-      token.startLine ?? token.endLine ?? 0,
-      token.startColumn ?? token.endColumn ?? 0,
-      token.startOffset ?? token.endOffset ?? 0,
-    ].join(':');
-    if (seenRecoveryKeys.has(key)) {
-      continue;
-    }
-    seenRecoveryKeys.add(key);
-    syntaxErrors.push(tokenToSyntaxError(token, error.message, source, filename));
-  }
-
   sharedParser.reset();
   const hasErrors = syntaxErrors.length > 0;
   if (hasErrors && options.allowErrors !== true) {

@@ -1,5 +1,5 @@
-import type { IToken } from 'chevrotain';
 import type { Position } from './types';
+import type { VirtualToken } from './virtual-tokens';
 
 export type Range = readonly [number, number];
 
@@ -10,14 +10,10 @@ export interface ParserRecoveryError {
   severity?: 'error' | 'warning';
 }
 
-export type VirtualToken = IToken & {
-  isVirtual?: boolean;
-  recoveryContext?: string;
-};
-
 export interface CallArgumentRecovery {
   virtualSeparators: VirtualToken[];
   virtualArguments?: VirtualToken[];
+  virtualClosing?: VirtualToken | null;
   errors: ParserRecoveryError[];
 }
 
@@ -40,6 +36,18 @@ export interface FunctionDeclarationRecovery {
     virtualRParen?: VirtualToken | null;
     errors: ParserRecoveryError[];
   };
+}
+
+export interface CollectionRecovery {
+  virtualSeparators: VirtualToken[];
+  virtualElements: VirtualToken[];
+  virtualClosing?: VirtualToken | null;
+  errors: ParserRecoveryError[];
+}
+
+export interface IndexExpressionRecovery {
+  virtualClosing?: VirtualToken | null;
+  errors: ParserRecoveryError[];
 }
 
 export interface SourceLocation {
@@ -268,11 +276,13 @@ export interface AssignmentStatementNode extends BaseNode {
 export interface TupleExpressionNode extends BaseNode {
   kind: 'TupleExpression';
   elements: (ExpressionNode | null)[];
+  collectionRecovery?: CollectionRecovery;
 }
 
 export interface ArrayLiteralNode extends BaseNode {
   kind: 'ArrayLiteral';
   elements: (ExpressionNode | null)[];
+  collectionRecovery?: CollectionRecovery;
 }
 
 export interface EnumMemberNode extends BaseNode {
@@ -439,6 +449,7 @@ export interface IndexExpressionNode extends BaseNode {
   kind: 'IndexExpression';
   object: ExpressionNode;
   index: ExpressionNode;
+  indexRecovery?: IndexExpressionRecovery;
 }
 
 export interface MatrixLiteralNode extends BaseNode {

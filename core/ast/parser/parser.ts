@@ -96,6 +96,8 @@ type RecoveryError = {
 
 type ArgumentListRecovery = {
   virtualSeparators: VirtualToken[];
+  virtualArguments?: VirtualToken[];
+  virtualClosing?: VirtualToken | null;
   errors: ParserRecoveryError[];
 };
 

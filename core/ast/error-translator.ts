@@ -30,8 +30,16 @@ export function translateParserError(
 
   if (/Missing ',' between arguments/i.test(errorMessage)) {
     return {
-      message: `Missing comma between parameters`,
-      suggestion: `Separate function parameters with commas.`,
+      message: 'Missing comma between function arguments',
+      suggestion: 'Separate function arguments with commas.',
+      code: 'PSV6-SYNTAX-MISSING-COMMA',
+    };
+  }
+
+  if (/Missing ',' between elements/i.test(errorMessage)) {
+    return {
+      message: 'Missing comma between elements',
+      suggestion: 'Separate elements with a comma.',
       code: 'PSV6-SYNTAX-MISSING-COMMA',
     };
   }
@@ -77,6 +85,22 @@ export function translateParserError(
       message: `Missing expression after operator '${operatorSymbol}'`,
       suggestion: `Provide an expression after '${operatorSymbol}'.`,
       code: 'PSV6-SYNTAX-MISSING-BINARY-OPERAND',
+    };
+  }
+
+  if (/Missing closing bracket/i.test(errorMessage)) {
+    return {
+      message: 'Missing closing bracket',
+      suggestion: 'Add "]" to close the collection.',
+      code: 'PSV6-SYNTAX-MISSING-BRACKET',
+    };
+  }
+
+  if (/Missing closing parenthesis/i.test(errorMessage)) {
+    return {
+      message: 'Missing closing parenthesis',
+      suggestion: 'Add \')\' to complete the expression.',
+      code: 'PSV6-SYNTAX-MISSING-CLOSING-PAREN',
     };
   }
 

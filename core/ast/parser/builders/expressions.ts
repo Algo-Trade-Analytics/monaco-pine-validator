@@ -22,6 +22,8 @@ import {
   type UnaryExpressionNode,
   type CallArgumentRecovery,
   type ConditionalExpressionRecovery,
+  type CollectionRecovery,
+  type IndexExpressionRecovery,
 } from '../../nodes';
 import { ensureToken, spanFromNodes, spanFromTokens, tokenEnd, tokenStart } from './base';
 import { createIdentifierNode } from './identifiers';
@@ -41,9 +43,20 @@ export function createCallExpressionNode(
   const virtualSeparators = recovery?.virtualSeparators ?? [];
   const virtualArguments = recovery?.virtualArguments ?? [];
   const errors = recovery?.errors ?? [];
+  const virtualClosing = recovery?.virtualClosing ?? null;
+  const hasRecovery =
+    virtualSeparators.length > 0 ||
+    errors.length > 0 ||
+    virtualArguments.length > 0 ||
+    virtualClosing !== null;
   const argumentRecovery =
-    virtualSeparators.length > 0 || errors.length > 0 || virtualArguments.length > 0
-      ? { virtualSeparators, virtualArguments, errors }
+    hasRecovery
+      ? {
+          virtualSeparators,
+          virtualArguments,
+          virtualClosing,
+          errors,
+        }
       : undefined;
   return {
     kind: 'CallExpression',
@@ -92,6 +105,7 @@ export function createIndexExpressionNode(
   object: ExpressionNode | undefined,
   index: ExpressionNode | undefined,
   closingToken: IToken | undefined,
+  recovery?: IndexExpressionRecovery | null,
 ): IndexExpressionNode {
   const safeObject = object ?? createPlaceholderExpression();
   const safeIndex = index ?? createPlaceholderExpression();
@@ -99,6 +113,7 @@ export function createIndexExpressionNode(
     kind: 'IndexExpression',
     object: safeObject,
     index: safeIndex,
+    indexRecovery: recovery ?? undefined,
     ...spanFromNodes(safeObject, closingToken),
   };
 }
@@ -107,12 +122,14 @@ export function createTupleExpressionNode(
   elements: (ExpressionNode | null)[],
   startToken: IToken | undefined,
   endToken: IToken | undefined,
+  recovery?: CollectionRecovery | null,
 ): TupleExpressionNode {
   const safeStart = ensureToken(startToken);
   const safeEnd = ensureToken(endToken, safeStart);
   return {
     kind: 'TupleExpression',
     elements,
+    collectionRecovery: recovery ?? undefined,
     ...spanFromTokens(safeStart, safeEnd),
   };
 }
@@ -121,12 +138,14 @@ export function createArrayLiteralNode(
   elements: (ExpressionNode | null)[],
   startToken: IToken | undefined,
   endToken: IToken | undefined,
+  recovery?: CollectionRecovery | null,
 ): ArrayLiteralNode {
   const safeStart = ensureToken(startToken);
   const safeEnd = ensureToken(endToken, safeStart);
   return {
     kind: 'ArrayLiteral',
     elements,
+    collectionRecovery: recovery ?? undefined,
     ...spanFromTokens(safeStart, safeEnd),
   };
 }

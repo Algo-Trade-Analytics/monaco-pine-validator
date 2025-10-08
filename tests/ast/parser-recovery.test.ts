@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { parseWithChevrotain } from '../../core/ast/parser';
 import type {
   ProgramNode,
@@ -10,6 +11,8 @@ import type {
   BinaryExpressionNode,
   IdentifierNode,
   FunctionDeclarationNode,
+  ArrayLiteralNode,
+  IndexExpressionNode,
 } from '../../core/ast/nodes';
 import { EnhancedModularValidator } from '../../EnhancedModularValidator';
 
@@ -67,7 +70,7 @@ describe('Parser Error Recovery - Missing "=" operator', () => {
     const program = result.ast as ProgramNode;
     const declarations = getVariableDeclarations(program);
     expect(declarations).toHaveLength(2);
-    expect(result.diagnostics.syntaxErrors).toHaveLength(2);
+    expect(result.diagnostics.syntaxErrors).toHaveLength(0);
 
     const [slow, fast] = declarations;
     expect(slow.missingInitializerOperator).toBe(true);
@@ -106,7 +109,7 @@ describe('Parser Error Recovery - Missing Comma', () => {
 
     const result = parseWithChevrotain(source, { allowErrors: true });
     expect(result.ast).not.toBeNull();
-    expect(result.diagnostics.syntaxErrors).toHaveLength(1);
+    expect(result.diagnostics.syntaxErrors).toHaveLength(0);
 
     const program = result.ast as ProgramNode;
     const statement = program.body[1] as ExpressionStatementNode;
@@ -131,7 +134,7 @@ describe('Parser Error Recovery - Missing Comma', () => {
 
     const result = parseWithChevrotain(source, { allowErrors: true });
     expect(result.ast).not.toBeNull();
-    expect(result.diagnostics.syntaxErrors).toHaveLength(2);
+    expect(result.diagnostics.syntaxErrors).toHaveLength(0);
 
     const program = result.ast as ProgramNode;
     const statement = program.body[1] as ExpressionStatementNode;
@@ -172,7 +175,7 @@ describe('Parser Error Recovery - Conditional Operator Order', () => {
 
     const result = parseWithChevrotain(source, { allowErrors: true });
     expect(result.ast).not.toBeNull();
-    expect(result.diagnostics.syntaxErrors).toHaveLength(1);
+    expect(result.diagnostics.syntaxErrors).toHaveLength(0);
 
     const program = result.ast as ProgramNode;
     const assignment = program.body.find(
@@ -220,10 +223,7 @@ describe('Parser Error Recovery - Binary Operators', () => {
     ].join('\n');
 
     const result = parseWithChevrotain(source, { allowErrors: true });
-    expect(result.diagnostics.syntaxErrors).toHaveLength(1);
-    expect(result.diagnostics.syntaxErrors[0]?.message).toBe(
-      "Missing expression after binary operator '+'",
-    );
+    expect(result.diagnostics.syntaxErrors).toHaveLength(0);
 
     const program = result.ast as ProgramNode;
     const statement = program.body[1] as ExpressionStatementNode;
@@ -263,7 +263,7 @@ describe('Parser Error Recovery - Binary Operators', () => {
     ].join('\n');
 
     const result = parseWithChevrotain(source, { allowErrors: true });
-    expect(result.diagnostics.syntaxErrors).toHaveLength(1);
+    expect(result.diagnostics.syntaxErrors).toHaveLength(0);
 
     const program = result.ast as ProgramNode;
     const statement = program.body[1] as ExpressionStatementNode;
@@ -299,9 +299,7 @@ describe('Parser Error Recovery - Function Parentheses', () => {
     ].join('\n');
 
     const result = parseWithChevrotain(source, { allowErrors: true });
-    expect(result.diagnostics.syntaxErrors.some((error) =>
-      error.message.includes('Missing parentheses in function declaration'),
-    )).toBe(true);
+    expect(result.diagnostics.syntaxErrors).toHaveLength(0);
     const program = result.ast as ProgramNode;
     const func = program.body.find(
       (statement): statement is FunctionDeclarationNode => statement.kind === 'FunctionDeclaration',
@@ -349,6 +347,22 @@ describe('Parser Error Recovery - Function Parentheses', () => {
 });
 
 describe('Parser Error Recovery - Call Arguments', () => {
+  it('does not report closing recovery on well-formed function calls', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'plot(close, color=color.red)',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+    expect(result.diagnostics.syntaxErrors).toHaveLength(0);
+
+    const program = result.ast as ProgramNode;
+    const statement = program.body[1] as ExpressionStatementNode;
+    const call = statement.expression as CallExpressionNode;
+    expect(call.argumentRecovery?.virtualClosing).toBeUndefined();
+  });
   it('recovers missing first argument with a placeholder expression', () => {
     const source = [
       '//@version=6',
@@ -358,9 +372,6 @@ describe('Parser Error Recovery - Call Arguments', () => {
     ].join('\n');
 
     const result = parseWithChevrotain(source, { allowErrors: true });
-    expect(result.diagnostics.syntaxErrors.some((error) =>
-      error.message.includes('Missing argument between commas'),
-    )).toBe(true);
 
     const program = result.ast as ProgramNode;
     const assignment = program.body.find(
@@ -383,9 +394,6 @@ describe('Parser Error Recovery - Call Arguments', () => {
     ].join('\n');
 
     const result = parseWithChevrotain(source, { allowErrors: true });
-    expect(result.diagnostics.syntaxErrors.some((error) =>
-      error.message.includes('Trailing comma without argument'),
-    )).toBe(true);
 
     const program = result.ast as ProgramNode;
     const statement = program.body[1] as ExpressionStatementNode;
@@ -439,5 +447,171 @@ describe('Parser Error Recovery - Call Arguments', () => {
     const result = validator.validate(source);
     const codes = result.errors.map((error) => error.code);
     expect(codes).toContain('PSV6-SYNTAX-TRAILING-COMMA');
+  });
+
+  it('recovers missing closing bracket in array literal', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'values = [close, open',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+
+    const program = result.ast as ProgramNode;
+    const assignment = program.body.find(
+      (statement): statement is AssignmentStatementNode => statement.kind === 'AssignmentStatement',
+    );
+    const array = assignment?.right as ArrayLiteralNode | undefined;
+    expect(array?.collectionRecovery?.errors.some((error) => error.code === 'MISSING_BRACKET')).toBe(true);
+    expect(array?.collectionRecovery?.virtualClosing?.isVirtual).toBe(true);
+  });
+
+  it('surfaces PSV6-SYNTAX-MISSING-BRACKET through the validator pipeline', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'values = [close, open',
+      '',
+    ].join('\n');
+
+    const validator = new EnhancedModularValidator();
+    const result = validator.validate(source);
+    const codes = result.errors.map((error) => error.code);
+    expect(codes).toContain('PSV6-SYNTAX-MISSING-BRACKET');
+  });
+
+  it('recovers missing closing parenthesis in a function call', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'plot(close, color=color.red',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+
+    const program = result.ast as ProgramNode;
+    const statement = program.body[1] as ExpressionStatementNode;
+    const call = statement.expression as CallExpressionNode;
+    const recovery = call.argumentRecovery;
+    expect(recovery?.virtualClosing?.isVirtual).toBe(true);
+    expect(recovery?.errors.some((error) => error.code === 'MISSING_CLOSING_PAREN')).toBe(true);
+  });
+
+  it('surfaces PSV6-SYNTAX-MISSING-CLOSING-PAREN through the validator pipeline', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'plot(close, color=color.red',
+      '',
+    ].join('\n');
+
+    const validator = new EnhancedModularValidator();
+    const result = validator.validate(source);
+    const codes = result.errors.map((error) => error.code);
+    expect(codes).toContain('PSV6-SYNTAX-MISSING-CLOSING-PAREN');
+  });
+});
+
+describe('Parser Error Recovery - Array Elements', () => {
+  it('recovers missing array element between commas', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'values = [close, , open]',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+
+    const program = result.ast as ProgramNode;
+    const assignment = program.body.find(
+      (statement): statement is AssignmentStatementNode => statement.kind === 'AssignmentStatement',
+    );
+    expect(assignment).toBeDefined();
+    const array = assignment?.right as ArrayLiteralNode | undefined;
+    expect(array?.kind).toBe('ArrayLiteral');
+    const recovery = array?.collectionRecovery;
+    expect(recovery?.virtualElements.length).toBeGreaterThan(0);
+    expect(recovery?.errors[0]?.code).toBe('EMPTY_ARGUMENT');
+  });
+
+  it('recovers trailing comma without element', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'values = [close, open, ]',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+
+    const program = result.ast as ProgramNode;
+    const assignment = program.body.find(
+      (statement): statement is AssignmentStatementNode => statement.kind === 'AssignmentStatement',
+    );
+    const array = assignment?.right as ArrayLiteralNode | undefined;
+    expect(array?.collectionRecovery?.errors.some((error) => error.code === 'TRAILING_COMMA')).toBe(true);
+  });
+
+  it('surfaces PSV6-SYNTAX-EMPTY-PARAM for missing array elements', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'values = [close, , open]',
+      '',
+    ].join('\n');
+
+    const validator = new EnhancedModularValidator();
+    const result = validator.validate(source);
+    const codes = result.errors.map((error) => error.code);
+    expect(codes).toContain('PSV6-SYNTAX-EMPTY-PARAM');
+  });
+
+  it('surfaces PSV6-SYNTAX-TRAILING-COMMA for trailing array commas', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'values = [close, open, ]',
+      '',
+    ].join('\n');
+
+    const validator = new EnhancedModularValidator();
+    const result = validator.validate(source);
+    const codes = result.errors.map((error) => error.code);
+    expect(codes).toContain('PSV6-SYNTAX-TRAILING-COMMA');
+  });
+});
+
+describe('Parser Error Recovery - Index Expressions', () => {
+  it('recovers a missing closing bracket in an index expression', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'value = close[bar_index',
+      'plot(value)',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+
+    const program = result.ast as ProgramNode;
+    const assignment = program.body.find(
+      (statement): statement is AssignmentStatementNode => statement.kind === 'AssignmentStatement',
+    );
+    expect(assignment).toBeDefined();
+    const indexExpression = assignment?.right as IndexExpressionNode | undefined;
+    expect(indexExpression?.indexRecovery?.virtualClosing?.isVirtual).toBe(true);
+    expect(indexExpression?.indexRecovery?.errors.some((error) => error.code === 'MISSING_BRACKET')).toBe(true);
+  });
+});
+
+describe('Parser Recovery - Real World Scripts', () => {
+  it('parses Uptrick Volatility without recovery diagnostics', () => {
+    const source = readFileSync('./tests/popular-pine-scripts/Uptrick-Volatility.pine', 'utf8');
+    const result = parseWithChevrotain(source, { allowErrors: true });
+    expect(result.diagnostics.syntaxErrors).toHaveLength(0);
   });
 });

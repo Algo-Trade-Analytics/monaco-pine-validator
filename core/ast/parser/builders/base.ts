@@ -7,6 +7,7 @@ import {
   type SourceLocation,
 } from '../../nodes';
 import { Identifier as IdentifierToken } from '../tokens';
+import { createVirtualToken, VirtualTokenReason, type VirtualToken } from '../../virtual-tokens';
 
 export function createFallbackToken(): IToken {
   return {
@@ -67,24 +68,9 @@ export function createSyntheticToken(
   image: string,
   tokenType: TokenType,
   reference?: IToken,
-): IToken {
+  reason: VirtualTokenReason = VirtualTokenReason.UNKNOWN,
+): VirtualToken {
   const base = ensureToken(reference);
-  const length = image.length;
-  const startLine = base.startLine ?? 1;
-  const startColumn = base.startColumn ?? 1;
-  const startOffset = base.startOffset ?? 0;
-  const endLine = base.endLine ?? startLine;
-  const endColumn = startColumn + length;
-  const endOffset = startOffset + length;
-
-  return {
-    image,
-    startLine,
-    startColumn,
-    startOffset,
-    endLine,
-    endColumn,
-    endOffset,
-    tokenType,
-  } as IToken;
+  const virtualToken = createVirtualToken(tokenType, base, reason, image);
+  return virtualToken;
 }
