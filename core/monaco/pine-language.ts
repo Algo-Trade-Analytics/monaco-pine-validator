@@ -1,5 +1,6 @@
 import type { languages } from 'monaco-editor';
 import { KEYWORDS, NAMESPACES } from '../constants';
+import { NAMESPACE_MEMBERS } from '../namespace-members';
 
 const LANGUAGE_ID = 'pinescript';
 
@@ -110,6 +111,43 @@ const gatherConstantRoots = (): string[] => {
   });
 };
 
+const buildNamespaceMemberRules = (): languages.IMonarchLanguageRule[] => {
+  const rules: languages.IMonarchLanguageRule[] = [];
+
+  for (const [namespace, entries] of Object.entries(NAMESPACE_MEMBERS)) {
+    const members = Array.from(entries ?? []);
+    if (members.length === 0) {
+      continue;
+    }
+
+    const sortedMembers = members
+      .filter((member) => member.length > 0)
+      .sort((a, b) => {
+        if (a === b) return 0;
+        if (a.length !== b.length) {
+          return b.length - a.length;
+        }
+        return a.localeCompare(b);
+      })
+      .map(escapeRegExp);
+
+    if (sortedMembers.length === 0) {
+      continue;
+    }
+
+    const pattern =
+      `\\b(${escapeRegExp(namespace)})(\\.)(` +
+      `${sortedMembers.join('|')})\\b`;
+
+    rules.push([
+      new RegExp(pattern),
+      ['type.identifier', 'delimiter', 'type.identifier'],
+    ]);
+  }
+
+  return rules;
+};
+
 export function registerPineLanguage(
   monaco: typeof import('monaco-editor'),
 ): void {
@@ -135,6 +173,8 @@ export function registerPineLanguage(
   const constantPattern = `\\b(?:${constantRoots
     .map(escapeRegExp)
     .join('|')})\\.[A-Za-z_][A-Za-z0-9_]*\\b`;
+
+  const namespaceMemberRules = buildNamespaceMemberRules();
 
   monaco.languages.register({ id: LANGUAGE_ID });
   monaco.languages.setLanguageConfiguration(LANGUAGE_ID, {
@@ -199,50 +239,51 @@ export function registerPineLanguage(
     ],
     symbols: /[=><!~?:&|+\-*/^%]+/,
     tokenizer: {
-      root: [
-        { include: '@whitespace' },
+      root: (() => {
+        const rules: languages.IMonarchLanguageRule[] = [
+          { include: '@whitespace' },
 
-        // Version directives and compiler annotations
-        [/(\/\/\s*[@]version\s*=\s*\d+)/, 'meta.directive'],
-        [/(\/\/\s*[@][A-Za-z_][\w]*.*$)/, 'meta.annotation'],
+          [/(\/\/\s*[@]version\s*=\s*\d+)/, 'meta.directive'],
+          [/(\/\/\s*[@][A-Za-z_][\w]*.*$)/, 'meta.annotation'],
 
-        // Comments
-        [/\/\*/, 'comment', '@comment'],
-        [/\/\/.*$/, 'comment'],
+          [/\/\*/, 'comment', '@comment'],
+          [/\/\/.*$/, 'comment'],
 
-        // Strings
-        [/"([^"\\]|\\.)*$/, 'string.invalid'],
-        [/"([^"\\]|\\.)*"/, 'string'],
-        [/'([^'\\]|\\.)*$/, 'string.invalid'],
-        [/'([^'\\]|\\.)*'/, 'string'],
+          [/"([^"\\]|\\.)*$/, 'string.invalid'],
+          [/"([^"\\]|\\.)*"/, 'string'],
+          [/'([^'\\]|\\.)*$/, 'string.invalid'],
+          [/'([^'\\]|\\.)*'/, 'string'],
 
-        // Numbers
-        [new RegExp(`#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})\\b`), 'number.hex'],
-        [new RegExp(FLOAT_NUMBER_PATTERN), 'number.float'],
-        [new RegExp(GENERAL_NUMBER_PATTERN), { cases: { '@default': 'number' } }],
+          [new RegExp(`#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})\\b`), 'number.hex'],
+          [new RegExp(FLOAT_NUMBER_PATTERN), 'number.float'],
+          [new RegExp(GENERAL_NUMBER_PATTERN), { cases: { '@default': 'number' } }],
+        ];
 
-        // Namespaces and constants
-        [new RegExp(namespacePattern), 'namespace'],
-        [new RegExp(constantPattern), 'constant.language'],
+        for (const memberRule of namespaceMemberRules) {
+          rules.push(memberRule);
+        }
 
-        // Identifiers
-        [
-          /[A-Za-z_][\w]*/,
-          {
-            cases: {
-              '@keywords': 'keyword',
-              '@typeKeywords': 'type.identifier',
-              '@literals': 'keyword.constant',
-              '@default': 'identifier',
+        rules.push(
+          [new RegExp(namespacePattern), 'namespace'],
+          [new RegExp(constantPattern), 'constant.language'],
+          [
+            /[A-Za-z_][\w]*/,
+            {
+              cases: {
+                '@keywords': 'keyword',
+                '@typeKeywords': 'type.identifier',
+                '@literals': 'keyword.constant',
+                '@default': 'identifier',
+              },
             },
-          },
-        ],
+          ],
+          [/@symbols/, { cases: { '@operators': 'operator', '@default': '' } }],
+          [/[{}()\[\]]/, '@brackets'],
+          [/[;,]/, 'delimiter'],
+        );
 
-        // Operators and delimiters
-        [/@symbols/, { cases: { '@operators': 'operator', '@default': '' } }],
-        [/[{}()\[\]]/, '@brackets'],
-        [/[;,]/, 'delimiter'],
-      ],
+        return rules;
+      })(),
 
       comment: [
         [/[^\/*]+/, 'comment'],

@@ -44,3 +44,4 @@ export * from './core/monaco/worker-harness';
 export * from './core/monaco/worker';
 export * from './core/monaco/semantic-model';
 export * from './core/monaco/client';
+export { registerPineLanguage } from './core/monaco/pine-language';
