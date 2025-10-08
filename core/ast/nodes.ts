@@ -1,6 +1,30 @@
+import type { IToken } from 'chevrotain';
 import type { Position } from './types';
 
 export type Range = readonly [number, number];
+
+export interface ParserRecoveryError {
+  code: string;
+  message: string;
+  suggestion?: string;
+  severity?: 'error' | 'warning';
+}
+
+export type VirtualToken = IToken & {
+  isVirtual?: boolean;
+  recoveryContext?: string;
+};
+
+export interface CallArgumentRecovery {
+  virtualSeparators: VirtualToken[];
+  errors: ParserRecoveryError[];
+}
+
+export interface ConditionalExpressionRecovery {
+  virtualQuestion: VirtualToken;
+  virtualColon: VirtualToken;
+  errors: ParserRecoveryError[];
+}
 
 export interface SourceLocation {
   start: Position;
@@ -206,6 +230,9 @@ export interface VariableDeclarationNode extends BaseNode {
   initializer: ExpressionNode | null;
   annotations: CompilerAnnotationNode[];
   initializerOperator: '=' | ':=' | null;
+  missingInitializerOperator?: boolean;
+  virtualInitializerOperator?: VirtualToken | null;
+  recoveryErrors?: ParserRecoveryError[];
 }
 
 export interface LoopResultBinding {
@@ -289,6 +316,7 @@ export interface CallExpressionNode extends BaseNode {
   callee: ExpressionNode;
   args: ArgumentNode[];
   typeArguments: TypeReferenceNode[];
+  argumentRecovery?: CallArgumentRecovery;
 }
 
 export interface ArgumentNode extends BaseNode {
@@ -386,6 +414,7 @@ export interface ConditionalExpressionNode extends BaseNode {
   test: ExpressionNode;
   consequent: ExpressionNode;
   alternate: ExpressionNode;
+  conditionalRecovery?: ConditionalExpressionRecovery;
 }
 
 export interface IndexExpressionNode extends BaseNode {

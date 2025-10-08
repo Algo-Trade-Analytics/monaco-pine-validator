@@ -62,6 +62,7 @@ export function parseWithChevrotain(source: string, options: AstParseOptions = {
   const { directives, body } = programResult;
 
   const syntaxErrors: SyntaxError[] = [];
+  const seenRecoveryKeys = new Set<string>();
 
   const filename = options.filename ?? '<input>';
 
@@ -84,6 +85,21 @@ export function parseWithChevrotain(source: string, options: AstParseOptions = {
   for (const error of sharedParser.errors) {
     const token = error.token ?? { startLine: 1, startColumn: 1, image: '', tokenType: EOF_TOKEN };
     syntaxErrors.push(tokenToSyntaxError(token as IToken, error.message, source, filename));
+  }
+
+  for (const error of sharedParser.recoveryErrors) {
+    const token = error.token;
+    const key = [
+      error.message,
+      token.startLine ?? token.endLine ?? 0,
+      token.startColumn ?? token.endColumn ?? 0,
+      token.startOffset ?? token.endOffset ?? 0,
+    ].join(':');
+    if (seenRecoveryKeys.has(key)) {
+      continue;
+    }
+    seenRecoveryKeys.add(key);
+    syntaxErrors.push(tokenToSyntaxError(token, error.message, source, filename));
   }
 
   sharedParser.reset();

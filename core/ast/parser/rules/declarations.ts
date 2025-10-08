@@ -2,23 +2,33 @@ import { EOF, type IToken } from 'chevrotain';
 import type { PineParser } from '../parser';
 import {
   As,
+  Bang,
+  Colon,
   ColonEqual,
   Comma,
   Enum,
   Equal,
+  False,
   FatArrow,
-  LParen,
-  Colon,
-  Less,
   Greater,
   Identifier as IdentifierToken,
+  If,
   Import,
   Indicator,
+  LBracket,
+  LParen,
+  Less,
   Library,
+  Minus,
+  NaToken,
   Newline,
-  StringLiteral as StringToken,
+  NumberLiteral as NumberToken,
+  Plus,
   RParen,
   Strategy,
+  StringLiteral as StringToken,
+  TrailingNumberLiteral,
+  True,
   Type,
 } from '../tokens';
 import {
@@ -51,6 +61,8 @@ import type {
   TypeReferenceNode,
   VariableDeclarationKind,
   VariableDeclarationNode,
+  ParserRecoveryError,
+  VirtualToken,
 } from '../../nodes';
 import {
   isDeclarationKeywordToken,
@@ -226,6 +238,9 @@ export function createScriptDeclarationRule(parser: PineParser) {
     let args: ArgumentNode[] = [];
     if (parser.lookAhead(1).tokenType !== RParen) {
       args = parser.invokeSubrule(parser.argumentList);
+      parser.consumeArgumentListRecovery();
+    } else {
+      parser.setArgumentListRecovery(null);
     }
     const endToken = parser.consumeToken(RParen);
 
@@ -393,6 +408,86 @@ export function createTypeDeclarationRule(parser: PineParser) {
 }
 
 export function createVariableDeclarationRule(parser: PineParser) {
+  const expressionStartTokenTypes = new Set([
+    IdentifierToken,
+    NumberToken,
+    TrailingNumberLiteral,
+    StringToken,
+    LParen,
+    LBracket,
+    Minus,
+    Plus,
+    Bang,
+    True,
+    False,
+    NaToken,
+    If,
+  ]);
+
+  const isExpressionStartToken = (token: IToken): boolean => {
+    const tokenType = token.tokenType;
+    if (!tokenType || tokenType === EOF_TOKEN || tokenType === Newline) {
+      return false;
+    }
+    if (expressionStartTokenTypes.has(tokenType)) {
+      return true;
+    }
+    const categories = (tokenType as { CATEGORIES?: unknown[] }).CATEGORIES;
+    if (Array.isArray(categories)) {
+      return categories.some((category) => expressionStartTokenTypes.has(category as any));
+    }
+    return false;
+  };
+
+  const createVirtualEqualsToken = (reference: IToken): VirtualToken => {
+    const baseOffset = (reference.endOffset ?? reference.startOffset ?? 0) + 1;
+    const baseColumn = (reference.endColumn ?? reference.startColumn ?? 0) + 1;
+    const line = reference.endLine ?? reference.startLine ?? 1;
+    const token: VirtualToken = {
+      image: '=',
+      startOffset: baseOffset,
+      endOffset: baseOffset,
+      startColumn: baseColumn,
+      endColumn: baseColumn,
+      startLine: line,
+      endLine: line,
+      tokenType: Equal,
+      isVirtual: true,
+      recoveryContext: 'missing-equals',
+    } as VirtualToken;
+    return token;
+  };
+
+  const buildMissingEqualsRecovery = (
+    identifierToken: IToken,
+    identifierName: string,
+  ): { token: VirtualToken; errors: ParserRecoveryError[]; message: string } => {
+    const virtualToken = createVirtualEqualsToken(identifierToken);
+    const message = `Missing '=' after variable '${identifierName}'`;
+    const errors: ParserRecoveryError[] = [
+      {
+        code: 'MISSING_EQUALS',
+        message,
+        suggestion: `Use '${identifierName} = ...' to assign a value.`,
+        severity: 'error',
+      },
+    ];
+    return { token: virtualToken, errors, message };
+  };
+
+  const pushMissingEqualsError = (token: IToken, recoveryError: ParserRecoveryError): void => {
+    parser.reportRecoveryError(token, recoveryError.message, {
+      code: recoveryError.code,
+      suggestion: recoveryError.suggestion,
+    });
+    if (process.env.DEBUG_PARSER === '1') {
+      console.log('[Parser] recorded missing "=" error', {
+        message: recoveryError.message,
+        code: recoveryError.code,
+      });
+    }
+  };
+
   return parser.createRule('variableDeclaration', () => {
     let declarationKind: VariableDeclarationKind = 'simple';
     let declarationToken: IToken | undefined;
@@ -432,13 +527,28 @@ export function createVariableDeclarationRule(parser: PineParser) {
 
     let initializer: ExpressionNode | undefined;
     let operatorToken: IToken | undefined;
-    const nextTokenType = parser.lookAhead(1).tokenType;
+    let missingInitializerOperator = false;
+    let virtualInitializerOperator: VirtualToken | null = null;
+    let recoveryErrors: ParserRecoveryError[] | undefined;
+    const nextToken = parser.lookAhead(1);
+    const nextTokenType = nextToken.tokenType;
     if (nextTokenType === Equal) {
       operatorToken = parser.consumeToken(Equal);
       initializer = parser.invokeSubrule(parser.expression);
     } else if (nextTokenType === ColonEqual) {
       operatorToken = parser.consumeToken(ColonEqual);
       initializer = parser.invokeSubrule(parser.expression, 2);
+    } else if (isExpressionStartToken(nextToken)) {
+      const recovery = buildMissingEqualsRecovery(identifierToken, identifier.name);
+      missingInitializerOperator = true;
+      virtualInitializerOperator = recovery.token;
+      recoveryErrors = recovery.errors;
+      operatorToken = virtualInitializerOperator;
+      const recoveryError = recovery.errors[0];
+      if (recoveryError) {
+        pushMissingEqualsError(virtualInitializerOperator, recoveryError);
+      }
+      initializer = parser.invokeSubrule(parser.expression);
     }
 
     const startToken = declarationToken ?? typeTokens[0] ?? identifierToken;
@@ -454,6 +564,11 @@ export function createVariableDeclarationRule(parser: PineParser) {
       operatorImage === ':=' || operatorImage === '=' ? (operatorImage as '=' | ':=') : null,
       startToken,
     );
+    if (missingInitializerOperator) {
+      firstDeclaration.missingInitializerOperator = true;
+      firstDeclaration.virtualInitializerOperator = virtualInitializerOperator;
+      firstDeclaration.recoveryErrors = recoveryErrors ?? [];
+    }
     declarations.push(firstDeclaration);
 
     if (
@@ -508,6 +623,9 @@ export function createVariableDeclarationRule(parser: PineParser) {
 
       let nextInitializer: ExpressionNode | undefined;
       let nextOperatorToken: IToken | undefined;
+      let nextMissingInitializerOperator = false;
+      let nextVirtualInitializerOperator: VirtualToken | null = null;
+      let nextRecoveryErrors: ParserRecoveryError[] | undefined;
       const lookaheadType = parser.lookAhead(1).tokenType;
       if (lookaheadType === Equal) {
         nextOperatorToken = parser.consumeToken(Equal);
@@ -515,6 +633,17 @@ export function createVariableDeclarationRule(parser: PineParser) {
       } else if (lookaheadType === ColonEqual) {
         nextOperatorToken = parser.consumeToken(ColonEqual);
         nextInitializer = parser.invokeSubrule(parser.expression, 2);
+      } else if (isExpressionStartToken(parser.lookAhead(1))) {
+        const recovery = buildMissingEqualsRecovery(nextIdentifierToken, nextIdentifier.name);
+        nextMissingInitializerOperator = true;
+        nextVirtualInitializerOperator = recovery.token;
+        nextRecoveryErrors = recovery.errors;
+        nextOperatorToken = nextVirtualInitializerOperator;
+        const recoveryError = recovery.errors[0];
+        if (recoveryError) {
+          pushMissingEqualsError(nextVirtualInitializerOperator, recoveryError);
+        }
+        nextInitializer = parser.invokeSubrule(parser.expression);
       }
 
       const declaration = createVariableDeclarationNode(
@@ -529,6 +658,11 @@ export function createVariableDeclarationRule(parser: PineParser) {
           : null,
         nextIdentifierToken,
       );
+      if (nextMissingInitializerOperator) {
+        declaration.missingInitializerOperator = true;
+        declaration.virtualInitializerOperator = nextVirtualInitializerOperator;
+        declaration.recoveryErrors = nextRecoveryErrors ?? [];
+      }
 
       if (
         nextInitializer &&
@@ -553,6 +687,7 @@ export function createVariableDeclarationRule(parser: PineParser) {
         hasColonType: Boolean(colonIndex >= 0),
         initializerPresent: Boolean(initializer),
         operator: operatorToken?.image ?? null,
+        recoveredMissingEquals: missingInitializerOperator,
         additionalDeclarations: declarations.length - 1,
       });
     }

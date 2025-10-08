@@ -19,6 +19,8 @@ import {
   type TypeReferenceNode,
   type TupleExpressionNode,
   type UnaryExpressionNode,
+  type CallArgumentRecovery,
+  type ConditionalExpressionRecovery,
 } from '../../nodes';
 import { ensureToken, spanFromNodes, spanFromTokens, tokenEnd, tokenStart } from './base';
 import { createIdentifierNode } from './identifiers';
@@ -32,13 +34,21 @@ export function createCallExpressionNode(
   args: ArgumentNode[],
   closingToken: IToken | undefined,
   typeArguments: TypeReferenceNode[] = [],
+  recovery?: CallArgumentRecovery | null,
 ): CallExpressionNode {
   const safeCallee = callee ?? createPlaceholderExpression();
+  const virtualSeparators = recovery?.virtualSeparators ?? [];
+  const errors = recovery?.errors ?? [];
+  const argumentRecovery =
+    virtualSeparators.length > 0 || errors.length > 0
+      ? { virtualSeparators, errors }
+      : undefined;
   return {
     kind: 'CallExpression',
     callee: safeCallee,
     args,
     typeArguments,
+    argumentRecovery,
     ...spanFromNodes(safeCallee, closingToken),
   };
 }
@@ -158,6 +168,7 @@ export function createConditionalExpressionNode(
   questionToken: IToken | undefined,
   colonToken: IToken | undefined,
   endToken: IToken | undefined,
+  recovery?: ConditionalExpressionRecovery | null,
 ): ConditionalExpressionNode {
   const testNode = test ?? createPlaceholderExpression();
   const consequentNode = consequent ?? createPlaceholderExpression();
@@ -168,12 +179,14 @@ export function createConditionalExpressionNode(
   const rangeEnd = hasRealAlternate
     ? alternateNode.range[1]
     : (fallbackEndToken.endOffset ?? fallbackEndToken.startOffset ?? 0) + 1;
+  const conditionalRecovery = recovery ?? undefined;
 
   return {
     kind: 'ConditionalExpression',
     test: testNode,
     consequent: consequentNode,
     alternate: alternateNode,
+    conditionalRecovery,
     loc: createLocation(testNode.loc.start, endPosition),
     range: createRange(testNode.range[0], rangeEnd),
   };

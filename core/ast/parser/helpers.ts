@@ -281,11 +281,25 @@ export function createFunctionDeclarationStartGuard(parser: PineParser) {
 export function createVariableDeclarationStartGuard(parser: PineParser) {
   return (): boolean => {
     const first = parser.lookAhead(1);
+    const looksLikeMissingEquals = (startOffset: number): boolean => {
+      const firstToken = parser.lookAhead(startOffset);
+      if (!isIdentifierLikeToken(firstToken)) {
+        return false;
+      }
+      const secondToken = parser.lookAhead(startOffset + 1);
+      if (!secondToken || secondToken.tokenType === Newline || secondToken.tokenType === EOF) {
+        return false;
+      }
+      if (secondToken.tokenType === LParen) {
+        return false;
+      }
+      return isIdentifierLikeToken(secondToken);
+    };
 
     if (isDeclarationKeywordToken(first)) {
       const collected = parser.collectDeclarationTokens(2);
       if (!collected) {
-        return false;
+        return looksLikeMissingEquals(2);
       }
 
       const identifierCount = collected.tokens.filter((token) => isIdentifierLikeToken(token)).length;
@@ -304,11 +318,14 @@ export function createVariableDeclarationStartGuard(parser: PineParser) {
 
     const collected = parser.collectDeclarationTokens(1);
     if (!collected) {
-      return false;
+      return looksLikeMissingEquals(1);
     }
 
     const terminatorType = collected.terminator.tokenType;
     if (terminatorType !== Equal && terminatorType !== ColonEqual) {
+      if (terminatorType === Newline && looksLikeMissingEquals(1)) {
+        return true;
+      }
       return false;
     }
 

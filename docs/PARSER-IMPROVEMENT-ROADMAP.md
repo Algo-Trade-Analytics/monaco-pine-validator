@@ -17,6 +17,7 @@ Week 1-2: Phase 1 (Error Recovery Hints)
 
 📊 Milestone 1: 70% error recovery ✅
 📉 Pre-checker: 10 → 5 functions
+✅ Single validation pipeline (text pre-check now runs inside SyntaxErrorValidator)
 ✅ Tests: 1069 → 1084 passing
 
 

@@ -1,4 +1,4 @@
-import type { IToken } from 'chevrotain';
+import type { IToken, TokenType } from 'chevrotain';
 import {
   createLocation,
   createPosition,
@@ -65,7 +65,7 @@ export function tokenIndent(token?: IToken): number {
 
 export function createSyntheticToken(
   image: string,
-  tokenType: typeof IdentifierToken,
+  tokenType: TokenType,
   reference?: IToken,
 ): IToken {
   const base = ensureToken(reference);

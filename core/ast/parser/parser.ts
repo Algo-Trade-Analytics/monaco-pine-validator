@@ -1,6 +1,12 @@
 import { EmbeddedActionsParser, type IToken, type TokenType } from 'chevrotain';
 import { AllTokens, LBracket } from './tokens';
-import type { ExpressionNode, IfExpressionNode, IfStatementNode } from '../nodes';
+import type {
+  ExpressionNode,
+  IfExpressionNode,
+  IfStatementNode,
+  ParserRecoveryError,
+  VirtualToken,
+} from '../nodes';
 
 import {
   createAssignmentStartGuard,
@@ -81,6 +87,18 @@ type OrAlternative<T> = { ALT: () => T } & Record<string, unknown>;
 type ActionMethod = (callback: () => void) => void;
 type BacktrackMethod = <T>(production: () => T) => () => T;
 
+type RecoveryError = {
+  token: IToken;
+  message: string;
+  code?: string;
+  suggestion?: string;
+};
+
+type ArgumentListRecovery = {
+  virtualSeparators: VirtualToken[];
+  errors: ParserRecoveryError[];
+};
+
 export class PineParser extends EmbeddedActionsParser {
   private lineIndentCache = new Map<number, number>();
 
@@ -102,6 +120,9 @@ export class PineParser extends EmbeddedActionsParser {
 
   public isAssignmentStart = createAssignmentStartGuard(this);
 
+  public recoveryErrors: RecoveryError[] = [];
+  private argumentListRecovery: ArgumentListRecovery | null = null;
+
   constructor() {
     super(AllTokens, {
       recoveryEnabled: true,
@@ -122,6 +143,8 @@ export class PineParser extends EmbeddedActionsParser {
   public override reset(): void {
     super.reset();
     this.lineIndentCache.clear();
+    this.recoveryErrors.length = 0;
+    this.argumentListRecovery = null;
   }
 
   public program = createProgramRule(this);
@@ -305,6 +328,28 @@ export class PineParser extends EmbeddedActionsParser {
   public backtrack<T>(production: () => T): () => T {
     const method = this.getDslMethod<BacktrackMethod>('BACKTRACK', 1);
     return method(production);
+  }
+
+  public reportRecoveryError(
+    token: IToken,
+    message: string,
+    extras: Partial<Omit<RecoveryError, 'token' | 'message'>> = {},
+  ): void {
+    this.recoveryErrors.push({
+      token,
+      message,
+      ...extras,
+    });
+  }
+
+  public setArgumentListRecovery(recovery: ArgumentListRecovery | null): void {
+    this.argumentListRecovery = recovery;
+  }
+
+  public consumeArgumentListRecovery(): ArgumentListRecovery | null {
+    const recovery = this.argumentListRecovery;
+    this.argumentListRecovery = null;
+    return recovery;
   }
 
   private removeInvalidRecoveryTokens(): void {

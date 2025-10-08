@@ -17,7 +17,33 @@ export function translateParserError(
   column: number,
   sourceCode?: string
 ): UserFriendlyError {
-  
+
+  const missingEqualsMatch = errorMessage.match(/Missing '=' after variable '([^']+)'/);
+  if (missingEqualsMatch) {
+    const variableName = missingEqualsMatch[1];
+    return {
+      message: `Missing '=' operator after variable '${variableName}'`,
+      suggestion: `Assign a value using '${variableName} = ...'.`,
+      code: 'PSV6-SYNTAX-MISSING-EQUALS',
+    };
+  }
+
+  if (/Missing ',' between arguments/i.test(errorMessage)) {
+    return {
+      message: `Missing comma between parameters`,
+      suggestion: `Separate function parameters with commas.`,
+      code: 'PSV6-SYNTAX-MISSING-COMMA',
+    };
+  }
+
+  if (/Incorrect conditional operator order/i.test(errorMessage)) {
+    return {
+      message: "Incorrect conditional operator order. Use 'condition ? value_if_true : value_if_false'.",
+      suggestion: "Swap the '?' and ':' operators so the question mark comes before the colon.",
+      code: 'PSV6-SYNTAX-CONDITIONAL-ORDER',
+    };
+  }
+
   // Pattern: Mismatched input "," expecting ")"
   // Common when: Missing function parameter before comma
   if (/Mismatched input\s+"," expecting\s+"\\?"?\)"?/.test(errorMessage)) {
@@ -160,4 +186,3 @@ export function processParserError(
   const translated = translateParserError(rawError, line, column, sourceCode);
   return enhanceErrorWithContext(translated, line, column, sourceCode);
 }
-

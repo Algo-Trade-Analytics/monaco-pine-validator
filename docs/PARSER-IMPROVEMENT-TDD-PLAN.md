@@ -668,10 +668,13 @@ Systematically add virtual token support to all parser rules.
 
 ## ✅ **Progress Tracking**
 
+### **Setup Checklist**
+- [x] Merge textual syntax pre-check into main validator pipeline
+
 ### **Week 1 Checklist**
-- [ ] Day 1: Missing = operator recovery + tests
-- [ ] Day 2: Missing comma recovery + tests
-- [ ] Day 3-4: Conditional operator recovery + tests
+- [x] Day 1: Missing = operator recovery + tests
+- [x] Day 2: Missing comma recovery + tests
+- [x] Day 3-4: Conditional operator recovery + tests
 - [ ] Day 5: Binary operators + full test run
 - [ ] Week 1 Review: 5 error types recovered
 
@@ -700,4 +703,3 @@ Week 6+: Advanced features → Phase 3
 5. **Iterate daily** - Small, testable improvements
 
 **Ready to start?** Let me create the initial test file and begin Day 1! 🚀
-

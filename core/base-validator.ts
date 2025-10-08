@@ -29,7 +29,6 @@ import { ChevrotainAstService, createNullAstService } from './ast/service';
 import { buildScopeGraph } from './ast/scope';
 import { inferTypes } from './ast/type-inference';
 import { buildControlFlowGraph } from './ast/control-flow';
-import { preCheckSyntax } from './ast/syntax-pre-checker';
 import { validateIndentationWithAST } from './ast/indentation-validator-ast';
 import { ErrorEnhancerV2 } from './error-enhancement-v2';
 
@@ -375,19 +374,8 @@ export abstract class BaseValidator {
     context.controlFlowGraph = createEmptyControlFlowGraph();
     context.version = this.config.targetVersion || 6;
 
-    // Run pre-parser syntax check BEFORE parsing AST
-    const preCheckErrors = preCheckSyntax(code, this.config.targetVersion);
-    
-    // Always parse AST (even if pre-check found errors) so validators can produce warnings
-    // The pre-check errors will be reported, and validators can check for them if needed
+    // Always parse AST so validators can produce warnings even when syntax errors exist
     this.parseAst(code);
-    
-    // If pre-check found errors, add them to diagnostics
-    if (preCheckErrors.length > 0 && context.astDiagnostics) {
-      if (context.astDiagnostics) {
-        (context.astDiagnostics as { preCheckErrors?: ValidationError[] }).preCheckErrors = preCheckErrors;
-      }
-    }
 
     context.typeMap = this.typeMap;
     context.usedVars = this.used;

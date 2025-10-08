@@ -9,14 +9,14 @@ import type {
   ValidationModule,
   ValidationContext,
   ValidatorConfig,
-  ValidationError,
   ValidationResult,
   AstValidationContext,
+  ValidationError,
 } from '../core/types';
-import { Codes } from '../core/codes';
 import { ValidationHelper } from '../core/validation-helper';
 import { convertAstDiagnosticsToErrors, hasCriticalSyntaxErrors } from '../core/ast/syntax-error-processor';
 import { preCheckSyntax } from '../core/ast/syntax-pre-checker';
+import { createAstDiagnostics } from '../core/ast/types';
 
 export class SyntaxErrorValidator implements ValidationModule {
   name = 'SyntaxErrorValidator';
@@ -35,23 +35,24 @@ export class SyntaxErrorValidator implements ValidationModule {
     // Get source code
     this.sourceCode = this.getSourceCode(context);
     
-    // Check if this is an AST context with diagnostics
+    // STEP 1: Run textual pre-checks for high-accuracy syntax hints
     const astContext = this.isAstContext(context) ? context : null;
+    const targetVersion = _config.targetVersion ?? 6;
+    const preCheckErrors = preCheckSyntax(this.sourceCode, targetVersion);
+    if (astContext) {
+      this.attachPreCheckDiagnostics(astContext, preCheckErrors);
+    }
+    if (preCheckErrors.length > 0) {
+      this.helper.addErrors(preCheckErrors);
+      return this.helper.buildResult(context);
+    }
+
+    // STEP 2: Check if this is an AST context with diagnostics
     if (!astContext || !astContext.astDiagnostics) {
       return this.helper.buildResult(context);
     }
 
-    // STEP 1: Check for pre-check errors (found before AST parsing)
-    const diagnostics = astContext.astDiagnostics as { preCheckErrors?: ValidationError[] };
-    if (diagnostics.preCheckErrors && diagnostics.preCheckErrors.length > 0) {
-      // Pre-check found errors - these are accurate with good line/column info
-      this.helper.addErrors(diagnostics.preCheckErrors);
-      // Don't add parser errors - they're cascading from the pre-check error
-      return this.helper.buildResult(context);
-    }
-
-    // STEP 2: Convert parser errors to user-friendly validation errors
-    // (only if there were NO pre-check errors)
+    // STEP 3: Convert parser errors to user-friendly validation errors
     const syntaxErrors = convertAstDiagnosticsToErrors(
       astContext.astDiagnostics,
       this.sourceCode
@@ -69,6 +70,10 @@ export class SyntaxErrorValidator implements ValidationModule {
     const astContext = this.isAstContext(context) ? context : null;
     if (!astContext || !astContext.astDiagnostics) {
       return false;
+    }
+    const diagnostics = astContext.astDiagnostics as { preCheckErrors?: ValidationError[] };
+    if (diagnostics.preCheckErrors && diagnostics.preCheckErrors.length > 0) {
+      return true;
     }
     return hasCriticalSyntaxErrors(astContext.astDiagnostics);
   }
@@ -90,5 +95,15 @@ export class SyntaxErrorValidator implements ValidationModule {
     return '';
   }
 
+  private attachPreCheckDiagnostics(
+    astContext: AstValidationContext,
+    preCheckErrors: ValidationError[],
+  ): void {
+    if (!astContext.astDiagnostics) {
+      astContext.astDiagnostics = createAstDiagnostics();
+    }
+    const diagnostics = astContext.astDiagnostics as { preCheckErrors?: ValidationError[] };
+    diagnostics.preCheckErrors = preCheckErrors;
+  }
 }
 

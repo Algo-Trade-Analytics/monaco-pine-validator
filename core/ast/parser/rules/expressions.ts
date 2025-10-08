@@ -10,6 +10,10 @@ import {
   type TupleExpressionNode,
   type ArrayLiteralNode,
   type TypeReferenceNode,
+  type ParserRecoveryError,
+  type VirtualToken,
+  type CallArgumentRecovery,
+  type ConditionalExpressionRecovery,
 } from '../../nodes';
 import {
   And,
@@ -85,7 +89,12 @@ import {
   createUnaryExpressionNode,
   buildTypeReferenceFromTokens,
   tokenIndent,
+  createSyntheticToken,
 } from '../node-builders';
+
+type ConditionalExpressionOptions = {
+  allowMisorderedRecovery?: boolean;
+};
 
 function createLiteralFromToken(token: IToken) {
   if (token.tokenType === StringToken) {
@@ -142,6 +151,36 @@ function isArrowFunctionStart(parser: PineParser): boolean {
   return parser.lookAhead(offset).tokenType === FatArrow;
 }
 
+const CONDITIONAL_OPERATOR_ORDER_MESSAGE =
+  "Incorrect conditional operator order. Use 'condition ? value_if_true : value_if_false'.";
+
+function createConditionalRecoveryTokens(
+  colonToken: IToken,
+  questionToken: IToken | null,
+): ConditionalExpressionRecovery {
+  const virtualQuestion = createSyntheticToken('?', Question, colonToken) as VirtualToken;
+  virtualQuestion.isVirtual = true;
+  virtualQuestion.recoveryContext = 'conditional-operator-question';
+
+  const colonReference = questionToken ?? colonToken;
+  const virtualColon = createSyntheticToken(':', Colon, colonReference) as VirtualToken;
+  virtualColon.isVirtual = true;
+  virtualColon.recoveryContext = 'conditional-operator-colon';
+
+  const error: ParserRecoveryError = {
+    code: 'CONDITIONAL_OPERATOR_ORDER',
+    message: CONDITIONAL_OPERATOR_ORDER_MESSAGE,
+    suggestion: "Swap the '?' and ':' operators so the question mark comes first.",
+    severity: 'error',
+  };
+
+  return {
+    virtualQuestion,
+    virtualColon,
+    errors: [error],
+  };
+}
+
 export function createArrowFunctionExpressionRule(parser: PineParser) {
   return parser.createRule('arrowFunctionExpression', () => {
     const lParen = parser.consumeToken(LParen);
@@ -171,19 +210,83 @@ export function createArrowFunctionExpressionRule(parser: PineParser) {
 }
 
 export function createExpressionRule(parser: PineParser) {
-  return parser.createRule('expression', () => parser.invokeSubrule(parser.conditionalExpression));
+  return parser.createRule('expression', (...args: unknown[]) => {
+    const options = (args[0] ?? {}) as ConditionalExpressionOptions | undefined;
+    if (options && options.allowMisorderedRecovery !== undefined) {
+      return parser.invokeSubrule(parser.conditionalExpression, 1, { ARGS: [options] });
+    }
+    return parser.invokeSubrule(parser.conditionalExpression);
+  });
 }
 
 export function createConditionalExpressionRule(parser: PineParser) {
-  return parser.createRule('conditionalExpression', () => {
+  return parser.createRule('conditionalExpression', (...args: unknown[]) => {
+    const options = (args[0] ?? {}) as ConditionalExpressionOptions | undefined;
+    const allowMisorderedRecovery = options?.allowMisorderedRecovery !== false;
     const test = parser.invokeSubrule(parser.nullishCoalescingExpression);
-    if (parser.lookAhead(1).tokenType === Question) {
+    const nextTokenType = parser.lookAhead(1).tokenType;
+
+    if (nextTokenType === Question) {
       const questionToken = parser.consumeToken(Question);
       while (parser.lookAhead(1).tokenType === Newline) {
         parser.consumeToken(Newline);
       }
-      const consequent = parser.invokeSubrule(parser.expression, 2);
+      const consequent = parser.invokeSubrule(parser.expression, 2, {
+        ARGS: [{ allowMisorderedRecovery: false }],
+      });
       const colonToken = parser.consumeToken(Colon);
+      while (parser.lookAhead(1).tokenType === Newline) {
+        parser.consumeToken(Newline);
+      }
+      const alternate = parser.invokeSubrule(parser.expression, 3, {
+        ARGS: [{ allowMisorderedRecovery: false }],
+      });
+      const endToken = parser.lookAhead(0);
+      return createConditionalExpressionNode(
+        test,
+        consequent,
+        alternate,
+        questionToken,
+        colonToken,
+        endToken,
+      );
+    }
+    if (allowMisorderedRecovery && nextTokenType === Colon) {
+      const findNextQuestion = (): IToken | null => {
+        for (let offset = 2; offset < 20; offset += 1) {
+          const lookahead = parser.lookAhead(offset);
+          if (!lookahead || lookahead.tokenType === EOF) {
+            return null;
+          }
+          if (lookahead.tokenType === Question) {
+            return lookahead;
+          }
+        }
+        return null;
+      };
+
+      const colonToken = parser.lookAhead(1);
+      const upcomingQuestion = findNextQuestion();
+      if (!upcomingQuestion) {
+        return test;
+      }
+
+      parser.consumeToken(Colon);
+      while (parser.lookAhead(1).tokenType === Newline) {
+        parser.consumeToken(Newline);
+      }
+
+      const recovery = createConditionalRecoveryTokens(colonToken, upcomingQuestion);
+      const recoveryError = recovery.errors[0];
+      if (recoveryError) {
+        parser.reportRecoveryError(recovery.virtualQuestion, recoveryError.message, {
+          code: recoveryError.code,
+          suggestion: recoveryError.suggestion,
+        });
+      }
+
+      const consequent = parser.invokeSubrule(parser.nullishCoalescingExpression, 2);
+      const questionToken = parser.consumeToken(Question);
       while (parser.lookAhead(1).tokenType === Newline) {
         parser.consumeToken(Newline);
       }
@@ -193,9 +296,10 @@ export function createConditionalExpressionRule(parser: PineParser) {
         test,
         consequent,
         alternate,
-        questionToken,
-        colonToken,
+        recovery.virtualQuestion,
+        recovery.virtualColon ?? questionToken,
         endToken,
+        recovery,
       );
     }
     return test;
@@ -490,25 +594,33 @@ export function createCallExpressionRule(parser: PineParser) {
 
         parser.consumeToken(LParen);
         let args: ArgumentNode[] = [];
+        let argumentRecovery: CallArgumentRecovery | null = null;
         if (parser.lookAhead(1).tokenType !== RParen) {
           args = parser.invokeSubrule(parser.argumentList);
+          argumentRecovery = parser.consumeArgumentListRecovery();
+        } else {
+          parser.setArgumentListRecovery(null);
         }
         const rParen = parser.consumeToken(RParen);
         const typeArguments = typeArgumentTokenGroups
           .map((group) => buildTypeReferenceFromTokens(group))
           .filter((node): node is TypeReferenceNode => node !== null);
-        expression = createCallExpressionNode(expression, args, rParen, typeArguments);
+        expression = createCallExpressionNode(expression, args, rParen, typeArguments, argumentRecovery);
         continue;
       }
 
       if (tokenType === LParen) {
         parser.consumeToken(LParen);
         let args: ArgumentNode[] = [];
+        let argumentRecovery: CallArgumentRecovery | null = null;
         if (parser.lookAhead(1).tokenType !== RParen) {
           args = parser.invokeSubrule(parser.argumentList);
+          argumentRecovery = parser.consumeArgumentListRecovery();
+        } else {
+          parser.setArgumentListRecovery(null);
         }
         const rParen = parser.consumeToken(RParen);
-        expression = createCallExpressionNode(expression, args, rParen, []);
+        expression = createCallExpressionNode(expression, args, rParen, [], argumentRecovery);
         continue;
       }
 
@@ -571,24 +683,123 @@ export function createMemberExpressionRule(parser: PineParser) {
 export function createArgumentListRule(parser: PineParser) {
   return parser.createRule('argumentList', (): ArgumentNode[] => {
     const args: ArgumentNode[] = [];
+    const virtualSeparators: VirtualToken[] = [];
+    const recoveryErrors: ParserRecoveryError[] = [];
 
-    while (parser.lookAhead(1).tokenType === Newline) {
-      parser.consumeToken(Newline);
-    }
-
-    args.push(parser.invokeSubrule(parser.argument));
-
-    while (parser.lookAhead(1).tokenType === Comma) {
-      parser.consumeToken(Comma);
+    const skipNewlines = () => {
       while (parser.lookAhead(1).tokenType === Newline) {
         parser.consumeToken(Newline);
       }
-      args.push(parser.invokeSubrule(parser.argument, 2));
+    };
+
+    const argumentStartTokenTypes = new Set([
+      IdentifierToken,
+      NumberToken,
+      StringToken,
+      LParen,
+      LBracket,
+      Minus,
+      Plus,
+      Bang,
+      True,
+      False,
+      NaToken,
+      If,
+    ]);
+
+    const isArgumentStartToken = (token: IToken): boolean => {
+      const tokenType = token.tokenType;
+      if (!tokenType || tokenType === EOF || tokenType === RParen || tokenType === Comma) {
+        return false;
+      }
+      if (tokenType === Newline) {
+        return false;
+      }
+      if (argumentStartTokenTypes.has(tokenType)) {
+        return true;
+      }
+      const categories = (tokenType as { CATEGORIES?: unknown[] }).CATEGORIES;
+      if (Array.isArray(categories)) {
+        return categories.some((category) => argumentStartTokenTypes.has(category as any));
+      }
+      return false;
+    };
+
+    const recordMissingComma = (referenceToken: IToken | undefined) => {
+      const virtualComma = createSyntheticToken(',', Comma, referenceToken) as VirtualToken;
+      virtualComma.isVirtual = true;
+      virtualComma.recoveryContext = 'missing-comma';
+      virtualSeparators.push(virtualComma);
+      const error: ParserRecoveryError = {
+        code: 'MISSING_COMMA',
+        message: `Missing ',' between arguments`,
+        suggestion: 'Separate arguments with a comma.',
+        severity: 'error',
+      };
+      recoveryErrors.push(error);
+      parser.reportRecoveryError(virtualComma, error.message, {
+        code: error.code,
+        suggestion: error.suggestion,
+      });
+    };
+
+    skipNewlines();
+
+    args.push(parser.invokeSubrule(parser.argument));
+
+    let lastRecoveryOffset: number | null = null;
+
+    while (true) {
+      skipNewlines();
+      const nextToken = parser.lookAhead(1);
+
+      if (nextToken.tokenType === Comma) {
+        parser.consumeToken(Comma);
+        skipNewlines();
+        args.push(parser.invokeSubrule(parser.argument, 2));
+        lastRecoveryOffset = null;
+        continue;
+      }
+
+      if (isArgumentStartToken(nextToken)) {
+        const tokenOffset =
+          nextToken.startOffset ?? nextToken.endOffset ?? lastRecoveryOffset ?? -1;
+        if (lastRecoveryOffset !== null && tokenOffset === lastRecoveryOffset) {
+          break;
+        }
+        lastRecoveryOffset = tokenOffset;
+        if (process.env.DEBUG_PARSER === '1') {
+          console.log(
+            '[Parser] recovering missing comma before token',
+            nextToken.image,
+            'offset',
+            tokenOffset,
+          );
+        }
+        recordMissingComma(parser.lookAhead(0));
+        skipNewlines();
+        args.push(parser.invokeSubrule(parser.argument));
+        if (process.env.DEBUG_PARSER === '1') {
+          const afterToken = parser.lookAhead(1);
+          console.log(
+            '[Parser] next token after recovery argument',
+            afterToken.image,
+            'offset',
+            afterToken.startOffset,
+          );
+        }
+        continue;
+      }
+
+      break;
     }
 
-    while (parser.lookAhead(1).tokenType === Newline) {
-      parser.consumeToken(Newline);
-    }
+    skipNewlines();
+
+    const hasRecovery = virtualSeparators.length > 0 || recoveryErrors.length > 0;
+    parser.setArgumentListRecovery(
+      hasRecovery ? { virtualSeparators, errors: recoveryErrors } : null,
+    );
 
     return args;
   });
