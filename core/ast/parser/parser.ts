@@ -1,5 +1,5 @@
 import { EmbeddedActionsParser, type IToken, type TokenType } from 'chevrotain';
-import { AllTokens, LBracket } from './tokens';
+import { AllTokens, LBracket, Newline } from './tokens';
 import type {
   ExpressionNode,
   IfExpressionNode,
@@ -268,6 +268,12 @@ export class PineParser extends EmbeddedActionsParser {
 
   public switchExpression = createSwitchExpressionRule(this);
 
+  public consumeOptionalNewlines = this.RULE('consumeOptionalNewlines', () => {
+    this.MANY(() => {
+      this.CONSUME(Newline);
+    });
+  });
+
   private getDslMethod<T extends (...args: any[]) => any>(baseName: string, occurrence: number): T {
     const methodName = occurrence <= 1 ? baseName : `${baseName}${occurrence}`;
     const bound = (this as Record<string, unknown>)[methodName];
@@ -312,9 +318,14 @@ export class PineParser extends EmbeddedActionsParser {
     return method(callback) as T | undefined;
   }
 
-  public repeatMany(callback: () => void, occurrence = 1): void {
+  public repeatMany(
+    callbackOrOptions:
+      | (() => void)
+      | { DEF: () => void; GATE?: () => boolean; MAX_LOOKAHEAD?: number },
+    occurrence = 1,
+  ): void {
     const method = this.getDslMethod<DslMethod>('MANY', occurrence);
-    method(callback);
+    method(callbackOrOptions);
   }
 
   public choose<T>(alternatives: OrAlternative<T>[], occurrence = 1): T {

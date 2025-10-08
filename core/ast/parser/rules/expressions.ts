@@ -1,4 +1,4 @@
-import { EOF, type IToken } from 'chevrotain';
+import { EOF, type IToken, type TokenType } from 'chevrotain';
 import type { PineParser } from '../parser';
 import { isIdentifierLikeToken, isNumberLiteralToken } from '../parser-utils';
 import {
@@ -273,6 +273,25 @@ function parseBinaryRightOperand(
   return { operand: placeholder, recovery };
 }
 
+function hasBinaryOperatorAhead(parser: PineParser, operatorTokens: TokenType[]): boolean {
+  let offset = 1;
+  let next = parser.lookAhead(offset);
+  while (next.tokenType === Newline) {
+    offset += 1;
+    next = parser.lookAhead(offset);
+  }
+
+  return operatorTokens.includes(next.tokenType);
+}
+
+function consumeOptionalNewlinesRule(parser: PineParser, occurrence = 1): void {
+  parser.invokeSubrule(parser.consumeOptionalNewlines, occurrence);
+}
+
+function isRecordingPhase(parser: PineParser): boolean {
+  return Boolean((parser as unknown as { RECORDING_PHASE?: boolean }).RECORDING_PHASE);
+}
+
 export function createArrowFunctionExpressionRule(parser: PineParser) {
   return parser.createRule('arrowFunctionExpression', () => {
     const lParen = parser.consumeToken(LParen);
@@ -401,16 +420,19 @@ export function createConditionalExpressionRule(parser: PineParser) {
 export function createNullishCoalescingExpressionRule(parser: PineParser) {
   return parser.createRule('nullishCoalescingExpression', () => {
     let expression = parser.invokeSubrule(parser.logicalOrExpression);
-    parser.repeatMany(() => {
-      const operator = parser.consumeToken(NullishCoalescing);
-      while (parser.lookAhead(1).tokenType === Newline) {
-        parser.consumeToken(Newline);
-      }
-      const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
-        parser.invokeSubrule(parser.logicalOrExpression, 2),
-      );
-      const endToken = parser.lookAhead(0);
-      expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+    parser.repeatMany({
+      GATE: () =>
+        isRecordingPhase(parser) || hasBinaryOperatorAhead(parser, [NullishCoalescing]),
+      DEF: () => {
+        consumeOptionalNewlinesRule(parser);
+        const operator = parser.consumeToken(NullishCoalescing);
+        consumeOptionalNewlinesRule(parser, 2);
+        const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
+          parser.invokeSubrule(parser.logicalOrExpression, 2),
+        );
+        const endToken = parser.lookAhead(0);
+        expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+      },
     });
     return expression;
   });
@@ -419,22 +441,24 @@ export function createNullishCoalescingExpressionRule(parser: PineParser) {
 export function createLogicalOrExpressionRule(parser: PineParser) {
   return parser.createRule('logicalOrExpression', () => {
     let expression = parser.invokeSubrule(parser.logicalAndExpression);
-    parser.repeatMany(() => {
-      const operator = parser.choose<IToken>([
-        { ALT: () => parser.consumeToken(Or) },
-        { ALT: () => parser.consumeToken(InvalidLogicalOr) },
-      ]);
+    parser.repeatMany({
+      GATE: () =>
+        isRecordingPhase(parser) || hasBinaryOperatorAhead(parser, [Or, InvalidLogicalOr]),
+      DEF: () => {
+        consumeOptionalNewlinesRule(parser);
+        const operator = parser.choose<IToken>([
+          { ALT: () => parser.consumeToken(Or) },
+          { ALT: () => parser.consumeToken(InvalidLogicalOr) },
+        ]);
 
-      // Handle line continuations after operators
-      while (parser.lookAhead(1).tokenType === Newline) {
-        parser.consumeToken(Newline);
-      }
+        consumeOptionalNewlinesRule(parser, 2);
 
-      const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
-        parser.invokeSubrule(parser.logicalAndExpression, 2),
-      );
-      const endToken = parser.lookAhead(0);
-      expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+        const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
+          parser.invokeSubrule(parser.logicalAndExpression, 2),
+        );
+        const endToken = parser.lookAhead(0);
+        expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+      },
     });
     return expression;
   });
@@ -443,22 +467,24 @@ export function createLogicalOrExpressionRule(parser: PineParser) {
 export function createLogicalAndExpressionRule(parser: PineParser) {
   return parser.createRule('logicalAndExpression', () => {
     let expression = parser.invokeSubrule(parser.equalityExpression);
-    parser.repeatMany(() => {
-      const operator = parser.choose<IToken>([
-        { ALT: () => parser.consumeToken(And) },
-        { ALT: () => parser.consumeToken(InvalidLogicalAnd) },
-      ]);
+    parser.repeatMany({
+      GATE: () =>
+        isRecordingPhase(parser) || hasBinaryOperatorAhead(parser, [And, InvalidLogicalAnd]),
+      DEF: () => {
+        consumeOptionalNewlinesRule(parser);
+        const operator = parser.choose<IToken>([
+          { ALT: () => parser.consumeToken(And) },
+          { ALT: () => parser.consumeToken(InvalidLogicalAnd) },
+        ]);
 
-      // Handle line continuations after operators
-      while (parser.lookAhead(1).tokenType === Newline) {
-        parser.consumeToken(Newline);
-      }
+        consumeOptionalNewlinesRule(parser, 2);
 
-      const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
-        parser.invokeSubrule(parser.equalityExpression, 2),
-      );
-      const endToken = parser.lookAhead(0);
-      expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+        const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
+          parser.invokeSubrule(parser.equalityExpression, 2),
+        );
+        const endToken = parser.lookAhead(0);
+        expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+      },
     });
     return expression;
   });
@@ -467,25 +493,28 @@ export function createLogicalAndExpressionRule(parser: PineParser) {
 export function createEqualityExpressionRule(parser: PineParser) {
   return parser.createRule('equalityExpression', () => {
     let expression = parser.invokeSubrule(parser.relationalExpression);
-    parser.repeatMany(() => {
-      const operator = parser.choose<IToken>([
-        { ALT: () => parser.consumeToken(EqualEqual) },
-        { ALT: () => parser.consumeToken(NotEqual) },
-        { ALT: () => parser.consumeToken(StrictEqual) },
-        { ALT: () => parser.consumeToken(StrictNotEqual) },
-        { ALT: () => parser.consumeToken(Equal) },
-      ]);
+    parser.repeatMany({
+      GATE: () =>
+        isRecordingPhase(parser) ||
+        hasBinaryOperatorAhead(parser, [EqualEqual, NotEqual, StrictEqual, StrictNotEqual, Equal]),
+      DEF: () => {
+        consumeOptionalNewlinesRule(parser);
+        const operator = parser.choose<IToken>([
+          { ALT: () => parser.consumeToken(EqualEqual) },
+          { ALT: () => parser.consumeToken(NotEqual) },
+          { ALT: () => parser.consumeToken(StrictEqual) },
+          { ALT: () => parser.consumeToken(StrictNotEqual) },
+          { ALT: () => parser.consumeToken(Equal) },
+        ]);
 
-      // Handle line continuations after operators
-      while (parser.lookAhead(1).tokenType === Newline) {
-        parser.consumeToken(Newline);
-      }
+        consumeOptionalNewlinesRule(parser, 2);
 
-      const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
-        parser.invokeSubrule(parser.relationalExpression, 2),
-      );
-      const endToken = parser.lookAhead(0);
-      expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+        const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
+          parser.invokeSubrule(parser.relationalExpression, 2),
+        );
+        const endToken = parser.lookAhead(0);
+        expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+      },
     });
     return expression;
   });
@@ -494,24 +523,27 @@ export function createEqualityExpressionRule(parser: PineParser) {
 export function createRelationalExpressionRule(parser: PineParser) {
   return parser.createRule('relationalExpression', () => {
     let expression = parser.invokeSubrule(parser.additiveExpression);
-    parser.repeatMany(() => {
-      const operator = parser.choose<IToken>([
-        { ALT: () => parser.consumeToken(LessEqual) },
-        { ALT: () => parser.consumeToken(GreaterEqual) },
-        { ALT: () => parser.consumeToken(Less) },
-        { ALT: () => parser.consumeToken(Greater) },
-      ]);
+    parser.repeatMany({
+      GATE: () =>
+        isRecordingPhase(parser) ||
+        hasBinaryOperatorAhead(parser, [LessEqual, GreaterEqual, Less, Greater]),
+      DEF: () => {
+        consumeOptionalNewlinesRule(parser);
+        const operator = parser.choose<IToken>([
+          { ALT: () => parser.consumeToken(LessEqual) },
+          { ALT: () => parser.consumeToken(GreaterEqual) },
+          { ALT: () => parser.consumeToken(Less) },
+          { ALT: () => parser.consumeToken(Greater) },
+        ]);
 
-      // Handle line continuations after operators
-      while (parser.lookAhead(1).tokenType === Newline) {
-        parser.consumeToken(Newline);
-      }
+        consumeOptionalNewlinesRule(parser, 2);
 
-      const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
-        parser.invokeSubrule(parser.additiveExpression, 2),
-      );
-      const endToken = parser.lookAhead(0);
-      expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+        const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
+          parser.invokeSubrule(parser.additiveExpression, 2),
+        );
+        const endToken = parser.lookAhead(0);
+        expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+      },
     });
     return expression;
   });
@@ -520,24 +552,27 @@ export function createRelationalExpressionRule(parser: PineParser) {
 export function createAdditiveExpressionRule(parser: PineParser) {
   return parser.createRule('additiveExpression', () => {
     let expression = parser.invokeSubrule(parser.multiplicativeExpression);
-    parser.repeatMany(() => {
-      const operator = parser.choose<IToken>([
-        { ALT: () => parser.consumeToken(Plus) },
-        { ALT: () => parser.consumeToken(Minus) },
-        { ALT: () => parser.consumeToken(BitwiseOr) },
-        { ALT: () => parser.consumeToken(BitwiseXor) },
-      ]);
+    parser.repeatMany({
+      GATE: () =>
+        isRecordingPhase(parser) ||
+        hasBinaryOperatorAhead(parser, [Plus, Minus, BitwiseOr, BitwiseXor]),
+      DEF: () => {
+        consumeOptionalNewlinesRule(parser);
+        const operator = parser.choose<IToken>([
+          { ALT: () => parser.consumeToken(Plus) },
+          { ALT: () => parser.consumeToken(Minus) },
+          { ALT: () => parser.consumeToken(BitwiseOr) },
+          { ALT: () => parser.consumeToken(BitwiseXor) },
+        ]);
 
-      // Handle line continuations after operators
-      while (parser.lookAhead(1).tokenType === Newline) {
-        parser.consumeToken(Newline);
-      }
+        consumeOptionalNewlinesRule(parser, 2);
 
-      const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
-        parser.invokeSubrule(parser.multiplicativeExpression, 2),
-      );
-      const endToken = parser.lookAhead(0);
-      expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+        const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
+          parser.invokeSubrule(parser.multiplicativeExpression, 2),
+        );
+        const endToken = parser.lookAhead(0);
+        expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+      },
     });
     return expression;
   });
@@ -546,24 +581,27 @@ export function createAdditiveExpressionRule(parser: PineParser) {
 export function createMultiplicativeExpressionRule(parser: PineParser) {
   return parser.createRule('multiplicativeExpression', () => {
     let expression = parser.invokeSubrule(parser.unaryExpression);
-    parser.repeatMany(() => {
-      const operator = parser.choose<IToken>([
-        { ALT: () => parser.consumeToken(Star) },
-        { ALT: () => parser.consumeToken(Slash) },
-        { ALT: () => parser.consumeToken(Percent) },
-        { ALT: () => parser.consumeToken(BitwiseAnd) },
-      ]);
+    parser.repeatMany({
+      GATE: () =>
+        isRecordingPhase(parser) ||
+        hasBinaryOperatorAhead(parser, [Star, Slash, Percent, BitwiseAnd]),
+      DEF: () => {
+        consumeOptionalNewlinesRule(parser);
+        const operator = parser.choose<IToken>([
+          { ALT: () => parser.consumeToken(Star) },
+          { ALT: () => parser.consumeToken(Slash) },
+          { ALT: () => parser.consumeToken(Percent) },
+          { ALT: () => parser.consumeToken(BitwiseAnd) },
+        ]);
 
-      // Handle line continuations after operators
-      while (parser.lookAhead(1).tokenType === Newline) {
-        parser.consumeToken(Newline);
-      }
+        consumeOptionalNewlinesRule(parser, 2);
 
-      const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
-        parser.invokeSubrule(parser.unaryExpression, 2),
-      );
-      const endToken = parser.lookAhead(0);
-      expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+        const { operand: right, recovery } = parseBinaryRightOperand(parser, operator, () =>
+          parser.invokeSubrule(parser.unaryExpression, 2),
+        );
+        const endToken = parser.lookAhead(0);
+        expression = createBinaryExpressionNode(expression, operator, right, endToken, recovery);
+      },
     });
     return expression;
   });
@@ -1341,6 +1379,9 @@ export function createPrimaryExpressionRule(parser: PineParser) {
           return parser.invokeSubrule(parser.arrowFunctionExpression);
         }
         const lParen = parser.consumeToken(LParen);
+        while (parser.lookAhead(1).tokenType === Newline) {
+          parser.consumeToken(Newline);
+        }
         const expression = parser.invokeSubrule(parser.expression);
         while (parser.lookAhead(1).tokenType === Newline) {
           parser.consumeToken(Newline);

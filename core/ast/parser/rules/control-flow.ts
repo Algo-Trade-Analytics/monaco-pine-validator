@@ -25,6 +25,7 @@ import {
   createPlaceholderExpression,
   createRepeatStatementNode,
   createReturnStatementNode,
+  createBooleanNode,
   createSwitchCaseNode,
   createSwitchStatementNode,
   createSyntheticToken,
@@ -374,7 +375,18 @@ export function createSwitchCaseRule(parser: PineParser) {
 
 export function createParseSwitchStructure(parser: PineParser) {
   return (switchToken: IToken): SwitchStatementNode => {
-    const discriminant = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
+    parser.invokeSubrule(parser.consumeOptionalNewlines);
+
+    const canParseCaseImmediately =
+      parser.backtrack(() => {
+        parser.invokeSubrule(parser.switchCase);
+        return true;
+      }).call(parser) === true;
+
+    const discriminant = canParseCaseImmediately
+      ? createBooleanNode(switchToken, true)
+      : parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
+
     let indent = tokenIndent(switchToken);
     const cases: SwitchCaseNode[] = [];
 
