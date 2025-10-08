@@ -44,6 +44,16 @@ export function translateParserError(
     };
   }
 
+  const missingBinaryOperandMatch = errorMessage.match(/Missing expression after binary operator '([^']+)'/);
+  if (missingBinaryOperandMatch) {
+    const operatorSymbol = missingBinaryOperandMatch[1];
+    return {
+      message: `Missing expression after operator '${operatorSymbol}'`,
+      suggestion: `Provide an expression after '${operatorSymbol}'.`,
+      code: 'PSV6-SYNTAX-MISSING-BINARY-OPERAND',
+    };
+  }
+
   // Pattern: Mismatched input "," expecting ")"
   // Common when: Missing function parameter before comma
   if (/Mismatched input\s+"," expecting\s+"\\?"?\)"?/.test(errorMessage)) {

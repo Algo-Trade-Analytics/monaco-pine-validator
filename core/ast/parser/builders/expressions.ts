@@ -5,6 +5,7 @@ import {
   type ArgumentNode,
   type ArrowFunctionExpressionNode,
   type BinaryExpressionNode,
+  type BinaryExpressionRecovery,
   type BlockStatementNode,
   type CallExpressionNode,
   type ConditionalExpressionNode,
@@ -25,8 +26,8 @@ import {
 import { ensureToken, spanFromNodes, spanFromTokens, tokenEnd, tokenStart } from './base';
 import { createIdentifierNode } from './identifiers';
 
-export function createPlaceholderExpression(): ExpressionNode {
-  return createIdentifierNode();
+export function createPlaceholderExpression(token?: IToken): ExpressionNode {
+  return createIdentifierNode(token);
 }
 
 export function createCallExpressionNode(
@@ -148,15 +149,23 @@ export function createBinaryExpressionNode(
   operatorToken: IToken | undefined,
   right: ExpressionNode | undefined,
   endToken: IToken | undefined,
+  recovery?: BinaryExpressionRecovery | BinaryExpressionRecovery[] | null,
 ): BinaryExpressionNode {
   const leftNode = left ?? createPlaceholderExpression();
   const rightNode = right ?? createPlaceholderExpression();
   const safeOperator = ensureToken(operatorToken);
+  const recoveries =
+    recovery == null
+      ? undefined
+      : Array.isArray(recovery)
+        ? recovery
+        : [recovery];
   return {
     kind: 'BinaryExpression',
     operator: safeOperator.image,
     left: leftNode,
     right: rightNode,
+    binaryRecovery: recoveries,
     ...spanFromNodes(leftNode, endToken ?? safeOperator),
   };
 }

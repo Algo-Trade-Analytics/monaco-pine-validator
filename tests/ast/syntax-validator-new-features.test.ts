@@ -156,9 +156,8 @@ plot(value)
       const result = validator.validate(source);
 
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0].code).toBe(Codes.SYNTAX_ERROR);
-      expect(result.errors[0].message).toContain("Syntax error");
-      expect(result.errors[0].message).toContain("Expecting token of type");
+      expect(result.errors[0].code).toBe(Codes.SYNTAX_MISSING_BINARY_OPERAND);
+      expect(result.errors[0].message).toContain("Missing expression after operator '*'");
     });
 
     it('should not flag valid binary expressions', () => {
@@ -173,7 +172,7 @@ plot(result)
       const result = validator.validate(source);
 
       const syntaxErrors = result.errors.filter(e => 
-        e.code === Codes.SYNTAX_MISSING_OPERAND
+        e.code === Codes.SYNTAX_MISSING_BINARY_OPERAND
       );
       expect(syntaxErrors).toHaveLength(0);
     });

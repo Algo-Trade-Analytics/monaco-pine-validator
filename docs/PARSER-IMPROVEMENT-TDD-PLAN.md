@@ -564,6 +564,9 @@ export function createConditionalExpressionRule(parser: PineParser) {
 ##### **Task 4.3: Fix Regressions**
 ##### **Task 4.4: Update Documentation**
 
+- ✅ Implemented recovery for missing binary operands and introduced the `PSV6-SYNTAX-MISSING-BINARY-OPERAND` diagnostic.
+- ✅ `npm run test:validator:full` (1084 specs) now passes alongside `npx vitest run`.
+
 ```bash
 # Expected results after Week 1:
 ✅ Parser recovers from 5 error types
@@ -675,8 +678,8 @@ Systematically add virtual token support to all parser rules.
 - [x] Day 1: Missing = operator recovery + tests
 - [x] Day 2: Missing comma recovery + tests
 - [x] Day 3-4: Conditional operator recovery + tests
-- [ ] Day 5: Binary operators + full test run
-- [ ] Week 1 Review: 5 error types recovered
+- [x] Day 5: Binary operators + full test run
+- [x] Week 1 Review: 5 error types recovered
 
 ### **Week 2 Checklist**
 - [ ] Day 6-7: Function parentheses recovery
@@ -691,6 +694,355 @@ Week 2: 10/10 error types → 100% Phase 1
 Week 3-5: Virtual tokens   → Phase 2
 Week 6+: Advanced features → Phase 3
 ```
+
+---
+
+## 📦 **PHASE 2: Virtual Tokens (Weeks 3-5)**
+
+### **What Are Virtual Tokens?**
+
+**Virtual tokens** are "fake" tokens that the parser inserts into the AST when syntax elements are missing. They act as scaffolding that allows:
+- **Parser to continue** despite missing syntax
+- **AST to remain valid** for validators to process
+- **Better error messages** by catching multiple errors in one pass
+
+### **How Virtual Tokens Work**
+
+**Example: Missing `=` operator**
+
+**❌ User writes (INVALID):**
+```pine
+//@version=6
+indicator("Test")
+myVar ta.sma(close, 14)  // Missing = operator!
+```
+
+**🔧 Parser with Virtual Token:**
+```typescript
+// 1. Detect missing =
+if (!parser.OPTION(() => parser.CONSUME(Equals))) {
+  // 2. Record error
+  parser.errors.push({
+    message: "Missing '=' after variable 'myVar'",
+    code: 'PSV6-SYNTAX-MISSING-EQUALS'
+  });
+  
+  // 3. Insert virtual = token
+  operatorToken = {
+    image: '=',
+    isVirtual: true,  // 🎯 Not actually in source!
+    startLine: identifier.startLine,
+    startColumn: identifier.endColumn + 1
+  };
+}
+```
+
+**✅ Result:**
+- AST built as if code was: `myVar = ta.sma(close, 14)`
+- Parser continues and finds `ta.sma` needs 2 params
+- User gets **both** errors in one validation run
+
+### **Phase 2 Goals (Weeks 3-5)**
+
+#### **Week 3: Missing Delimiters**
+- Day 11-12: Missing commas in function calls
+- Day 13-14: Missing commas in array/tuple literals
+- Day 15: Integration testing
+
+#### **Week 4: Unmatched Brackets**
+- Day 16-17: Missing closing `)` in function calls
+- Day 18-19: Missing closing `]` in array access
+- Day 20: Missing closing `}` in if/for/while blocks
+
+#### **Week 5: Missing Expressions**
+- Day 21-22: Missing condition in `if` statements
+- Day 23-24: Missing value in variable assignments
+- Day 25: Integration testing
+
+### **Virtual Token Implementation Pattern**
+
+```typescript
+// File: core/ast/parser/rules/declarations.ts
+
+parser.RULE('variableDeclaration', () => {
+  const identifier = parser.CONSUME(Identifier);
+  let operatorToken: IToken | null = null;
+  
+  // Try to consume =, create virtual if missing
+  const hasEquals = parser.OPTION(() => {
+    operatorToken = parser.CONSUME(Equals);
+    return true;
+  });
+  
+  if (!hasEquals) {
+    // Create virtual token
+    operatorToken = {
+      image: '=',
+      isVirtual: true,
+      startOffset: identifier.endOffset,
+      startLine: identifier.startLine,
+      startColumn: identifier.endColumn + 1,
+      tokenType: Equals
+    } as IToken & { isVirtual: boolean };
+    
+    // Record error
+    parser.errors.push({
+      message: `Missing '=' after '${identifier.image}'`,
+      token: identifier,
+      code: 'PSV6-SYNTAX-MISSING-EQUALS'
+    });
+  }
+  
+  // Continue parsing with real or virtual token
+  const value = parser.SUBRULE(parser.expression);
+  
+  return createVariableDeclaration(
+    identifier,
+    operatorToken,
+    value,
+    { missingOperator: !hasEquals }
+  );
+});
+```
+
+### **AST Node Updates for Virtual Tokens**
+
+```typescript
+// File: core/ast/nodes.ts
+
+export interface VariableDeclarationNode extends Node {
+  kind: 'VariableDeclaration';
+  name: IdentifierNode;
+  operator: IToken | null;  // Can be virtual
+  value: ExpressionNode;
+  
+  // Recovery metadata
+  missingOperator?: boolean;
+  virtualTokens?: IToken[];
+  errors?: ParseError[];
+}
+
+// Extend IToken to support virtual tokens
+declare module 'chevrotain' {
+  interface IToken {
+    isVirtual?: boolean;
+    recoveryContext?: string;
+  }
+}
+```
+
+### **Validator Updates for Virtual Tokens**
+
+```typescript
+// File: modules/syntax-validator.ts
+
+visitVariableDeclaration(node: VariableDeclarationNode): void {
+  // Skip validation if operator is virtual (error already recorded)
+  if (node.operator?.isVirtual) {
+    return; // Parser already reported the error
+  }
+  
+  // Normal validation for real tokens
+  this.validateOperator(node.operator);
+}
+```
+
+### **Phase 2 Success Metrics**
+```
+Week 3:  3 delimiter types → Virtual commas
+Week 4:  3 bracket types   → Virtual ), ], }
+Week 5:  3 expression types → Virtual placeholders
+Total: 9 new virtual token types
+```
+
+---
+
+## 🚀 **PHASE 3: Advanced Features (Weeks 6+)**
+
+### **What Are Advanced Features?**
+
+Phase 3 builds on Phases 1 & 2 to handle complex recovery scenarios:
+- **Multi-line error recovery** - Errors spanning multiple lines
+- **Contextual recovery** - Different recovery based on context
+- **Error cascades** - Preventing one error from causing many false positives
+- **Ambiguity resolution** - Choosing best recovery strategy
+
+### **Phase 3 Goals (Weeks 6-10)**
+
+#### **Week 6: Multi-Line Recovery**
+- Day 26-27: Line continuation errors (missing operators)
+- Day 28-29: Block structure errors (missing indentation)
+- Day 30: Integration testing
+
+**Example: Line Continuation**
+```pine
+// Error: Line ends with operator but no continuation
+value = close +
+plot(value)  // Should be indented!
+
+// Recovery: Insert virtual newline escape or flag indentation
+```
+
+#### **Week 7: Contextual Recovery**
+- Day 31-32: Function context (params vs body)
+- Day 33-34: Expression context (ternary vs function call)
+- Day 35: Integration testing
+
+**Example: Context Matters**
+```pine
+// In function call context
+plot(close  // Missing closing )
+     color = color.blue)  // Parser knows we're in call params
+
+// In expression context
+value = close > open ? color.green  // Missing : and else value
+```
+
+#### **Week 8: Error Cascade Prevention**
+- Day 36-37: Error deduplication logic
+- Day 38-39: False positive filtering
+- Day 40: Integration testing
+
+**Example: Cascade Prevention**
+```pine
+// Single error causes cascade
+myVar ta.sma(close, 14)  // Missing =
+
+// Without cascade prevention:
+// ❌ Missing = operator
+// ❌ Unexpected identifier 'ta'
+// ❌ Invalid statement
+// ❌ Unreachable code
+
+// With cascade prevention:
+// ✅ Missing = operator (root cause only)
+```
+
+#### **Week 9: Ambiguity Resolution**
+- Day 41-42: Choose best recovery strategy
+- Day 43-44: User intent detection
+- Day 45: Integration testing
+
+**Example: Ambiguous Recovery**
+```pine
+// Ambiguous: What's missing?
+value = ta.sma close, 14)
+         //    ^ Missing ( or extra ) ?
+
+// Strategy 1: Insert ( before close
+value = ta.sma(close, 14)  // More likely!
+
+// Strategy 2: Remove ) after 14
+value = ta.sma close, 14  // Less likely
+
+// Choose based on:
+// - Token patterns
+// - Function signatures
+// - Common mistakes
+```
+
+#### **Week 10: Polish & Optimize**
+- Day 46-47: Performance optimization
+- Day 48-49: Error message quality
+- Day 50: Full regression testing
+
+### **Advanced Recovery Patterns**
+
+#### **1. Error Buffering**
+```typescript
+// Collect multiple related errors before reporting
+class ErrorBuffer {
+  private errors: ParseError[] = [];
+  
+  add(error: ParseError): void {
+    // Check if error is cascade from previous
+    if (this.isCascade(error)) {
+      return; // Skip cascade errors
+    }
+    this.errors.push(error);
+  }
+  
+  private isCascade(error: ParseError): boolean {
+    // Check if caused by previous error
+    return this.errors.some(prev => 
+      prev.line === error.line - 1 &&
+      prev.code.startsWith('PSV6-SYNTAX-MISSING')
+    );
+  }
+}
+```
+
+#### **2. Context-Aware Recovery**
+```typescript
+// Different recovery based on parsing context
+parser.RULE('expression', () => {
+  const context = parser.getContext(); // function | assignment | condition
+  
+  try {
+    return parser.SUBRULE(parser.primaryExpression);
+  } catch (error) {
+    // Recover based on context
+    switch (context) {
+      case 'function':
+        return parser.recoverInFunctionContext(error);
+      case 'assignment':
+        return parser.recoverInAssignmentContext(error);
+      case 'condition':
+        return parser.recoverInConditionContext(error);
+    }
+  }
+});
+```
+
+#### **3. Heuristic-Based Recovery**
+```typescript
+// Use patterns to guess user intent
+function chooseBestRecovery(
+  token: IToken,
+  context: ParseContext
+): RecoveryStrategy {
+  // Pattern: Missing opening bracket
+  if (context.inFunctionCall && token.image === ')') {
+    return { type: 'INSERT_TOKEN', token: '(' };
+  }
+  
+  // Pattern: Missing comma in list
+  if (context.inArrayLiteral && isIdentifier(token)) {
+    return { type: 'INSERT_TOKEN', token: ',' };
+  }
+  
+  // Pattern: Missing operator in expression
+  if (context.inExpression && isIdentifier(token)) {
+    return { type: 'INSERT_TOKEN', token: '=' };
+  }
+  
+  return { type: 'SKIP_TOKEN' };
+}
+```
+
+### **Phase 3 Success Metrics**
+```
+Week  6: Multi-line recovery     → 95% of line continuation errors
+Week  7: Contextual recovery     → Smart recovery in 8+ contexts
+Week  8: Cascade prevention      → 80% reduction in false positives
+Week  9: Ambiguity resolution    → Correct choice 90% of time
+Week 10: Polish                  → Parser matches TradingView quality
+```
+
+### **Final Outcome (After Phase 3)**
+
+**Parser Capabilities:**
+- ✅ Recovers from 30+ syntax error types
+- ✅ Provides context-aware error messages
+- ✅ Prevents error cascades
+- ✅ Builds valid AST even with multiple errors
+- ✅ Performance: <100ms for 1000-line scripts
+
+**User Experience:**
+- ✅ See all errors at once (not one-by-one)
+- ✅ Get smart suggestions based on context
+- ✅ Faster development (fix multiple errors per cycle)
+- ✅ Matches TradingView editor quality
 
 ---
 

@@ -26,6 +26,13 @@ export interface ConditionalExpressionRecovery {
   errors: ParserRecoveryError[];
 }
 
+export interface BinaryExpressionRecovery {
+  missingSide: 'left' | 'right';
+  operator: string;
+  virtualOperand?: VirtualToken | null;
+  errors: ParserRecoveryError[];
+}
+
 export interface SourceLocation {
   start: Position;
   end: Position;
@@ -400,6 +407,7 @@ export interface BinaryExpressionNode extends BaseNode {
   operator: string;
   left: ExpressionNode;
   right: ExpressionNode;
+  binaryRecovery?: BinaryExpressionRecovery[];
 }
 
 export interface UnaryExpressionNode extends BaseNode {

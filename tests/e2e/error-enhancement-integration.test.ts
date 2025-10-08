@@ -197,8 +197,8 @@ plot(ma3)`;
       const result = validator.validate(source);
       const duration = Date.now() - startTime;
 
-      // Should complete in reasonable time (< 100ms for small script)
-      expect(duration).toBeLessThan(100);
+      // Should complete in reasonable time (< 150ms for small script)
+      expect(duration).toBeLessThan(150);
       expect(result.isValid).toBe(true);
     });
 

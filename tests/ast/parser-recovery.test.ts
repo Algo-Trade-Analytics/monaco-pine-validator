@@ -7,6 +7,8 @@ import type {
   ExpressionStatementNode,
   ConditionalExpressionNode,
   AssignmentStatementNode,
+  BinaryExpressionNode,
+  IdentifierNode,
 } from '../../core/ast/nodes';
 import { EnhancedModularValidator } from '../../EnhancedModularValidator';
 
@@ -203,5 +205,84 @@ describe('Parser Error Recovery - Conditional Operator Order', () => {
 
     const codes = result.errors.map((error) => error.code);
     expect(codes).toContain('PSV6-SYNTAX-CONDITIONAL-ORDER');
+  });
+});
+
+describe('Parser Error Recovery - Binary Operators', () => {
+  it('recovers a missing right-hand operand before a closing parenthesis', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'plot(close + )',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+    expect(result.diagnostics.syntaxErrors).toHaveLength(1);
+    expect(result.diagnostics.syntaxErrors[0]?.message).toBe(
+      "Missing expression after binary operator '+'",
+    );
+
+    const program = result.ast as ProgramNode;
+    const statement = program.body[1] as ExpressionStatementNode;
+    const call = statement.expression as CallExpressionNode;
+    const binary = call.args[0]?.value as BinaryExpressionNode;
+    expect(binary?.kind).toBe('BinaryExpression');
+    expect(binary?.binaryRecovery?.[0]?.errors[0]?.code).toBe('MISSING_BINARY_OPERAND');
+    expect(binary?.binaryRecovery?.[0]?.missingSide).toBe('right');
+    expect(binary?.right.kind).toBe('Identifier');
+    expect((binary?.right as IdentifierNode).name).toBe('__missing_operand__');
+  });
+
+  it('does not emit recovery when the operand is present', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'plot(close + open)',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+    expect(result.diagnostics.syntaxErrors).toHaveLength(0);
+
+    const program = result.ast as ProgramNode;
+    const statement = program.body[1] as ExpressionStatementNode;
+    const call = statement.expression as CallExpressionNode;
+    const binary = call.args[0]?.value as BinaryExpressionNode;
+    expect(binary?.binaryRecovery).toBeUndefined();
+  });
+
+  it('recovers multiple missing operands within a chained expression', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'plot(close + open - )',
+      '',
+    ].join('\n');
+
+    const result = parseWithChevrotain(source, { allowErrors: true });
+    expect(result.diagnostics.syntaxErrors).toHaveLength(1);
+
+    const program = result.ast as ProgramNode;
+    const statement = program.body[1] as ExpressionStatementNode;
+    const call = statement.expression as CallExpressionNode;
+    const binary = call.args[0]?.value as BinaryExpressionNode;
+    expect(binary?.binaryRecovery?.[0]?.errors[0]?.code).toBe('MISSING_BINARY_OPERAND');
+    expect(binary?.operator).toBe('-');
+  });
+
+  it('surfaces PSV6-SYNTAX-MISSING-BINARY-OPERAND through the validator pipeline', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'plot(close + )',
+      '',
+    ].join('\n');
+
+    const validator = new EnhancedModularValidator();
+    const result = validator.validate(source);
+
+    const codes = result.errors.map((error) => error.code);
+    expect(codes).toContain('PSV6-SYNTAX-MISSING-BINARY-OPERAND');
   });
 });
