@@ -285,8 +285,9 @@ export class MatrixValidator implements ValidationModule {
     const args = call.args;
     const typeProvidedViaArgument = !hasGenericType && elementTypeIsKnown;
     const dimensionArgumentCount = args.length - (typeProvidedViaArgument ? 1 : 0);
+    const allowEmptyMatrix = dimensionArgumentCount === 0;
 
-    if (dimensionArgumentCount < 2) {
+    if (!allowEmptyMatrix && dimensionArgumentCount < 2) {
       this.helper.addError(
         line,
         column,

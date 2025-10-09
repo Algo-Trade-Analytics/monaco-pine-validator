@@ -348,6 +348,12 @@ export class TAFunctionsValidator implements ValidationModule {
     column: number,
     fullFunctionName: string,
   ): void {
+    if (parameters.length === 2) {
+      // New Pine behaviour: ta.pivot_point_levels(type, enable) returns tuple lazily.
+      // TradingView allows passing a boolean condition as the second argument.
+      return;
+    }
+
     if (parameters.length < 4) {
       this.helper.addError(
         lineNumber,

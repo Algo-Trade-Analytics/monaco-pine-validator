@@ -383,7 +383,7 @@ export function createParseSwitchStructure(parser: PineParser) {
       }).call(parser) === true;
 
     const discriminant = canParseCaseImmediately
-      ? createPlaceholderExpression()
+      ? createIdentifierNode(createSyntheticToken('__switch_guard__', IdentifierToken, switchToken))
       : parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
 
     let indent = tokenIndent(switchToken);

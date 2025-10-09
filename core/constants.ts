@@ -1021,15 +1021,15 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   'ta.pivot_point_levels': {
     parameters: [
       { name: 'type', type: 'string', qualifier: 'simple', required: true },
-      { name: 'high', type: 'float', qualifier: 'series', required: true },
-      { name: 'low', type: 'float', qualifier: 'series', required: true },
-      { name: 'close', type: 'float', qualifier: 'series', required: true }
+      { name: 'enabled', type: 'bool', qualifier: 'series', required: true }
     ],
     overloads: [
       {
         parameters: [
           { name: 'type', type: 'string', qualifier: 'simple', required: true },
-          { name: 'condition', type: 'bool', qualifier: 'series', required: true }
+          { name: 'high', type: 'float', qualifier: 'series', required: true },
+          { name: 'low', type: 'float', qualifier: 'series', required: true },
+          { name: 'close', type: 'float', qualifier: 'series', required: true }
         ]
       }
     ],
@@ -1554,11 +1554,16 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   },
 
   // Request functions
-  'request.security': {
+'request.security': {
     parameters: [
-      { name: 'symbol', type: 'string', qualifier: 'series' },
-      { name: 'timeframe', type: 'string', qualifier: 'series' },
-      { name: 'expression', type: 'any', qualifier: 'series' }
+      { name: 'symbol', type: 'string', qualifier: 'series', required: true },
+      { name: 'timeframe', type: 'string', qualifier: 'series', required: true },
+      { name: 'expression', type: 'any', qualifier: 'series', required: true },
+      { name: 'gaps', type: 'string', qualifier: 'simple', required: false },
+      { name: 'lookahead', type: 'string', qualifier: 'simple', required: false },
+      { name: 'ignore_invalid_symbol', type: 'bool', qualifier: 'simple', required: false },
+      { name: 'currency', type: 'string', qualifier: 'series', required: false },
+      { name: 'allow_request', type: 'bool', qualifier: 'simple', required: false }
     ],
     returnType: 'series',
     v6Changes: 'Dynamic requests are enabled: `symbol` and `timeframe` arguments can now be of `series` form.'
