@@ -39,5 +39,32 @@ describe('registerPineLanguage', () => {
     registerPineLanguage(monaco);
     expect(registered).toHaveLength(1);
   });
-});
 
+  it('registers a tokenizer rule that highlights user-defined functions', () => {
+    const { monaco, tokens } = createMonacoStub();
+
+    registerPineLanguage(monaco);
+
+    const definition = tokens.pinescript as {
+      tokenizer: { root: unknown[] };
+    };
+    expect(definition).toBeDefined();
+
+    const rootRules = definition.tokenizer.root as unknown[];
+    const supportFunctionRules = rootRules.filter(
+      (rule) => Array.isArray(rule) && rule.length >= 2 && rule[1] === 'support.function',
+    ) as Array<[RegExp, string]>;
+
+    expect(supportFunctionRules.length).toBeGreaterThan(0);
+
+    const functionRule = supportFunctionRules[supportFunctionRules.length - 1];
+
+    expect(functionRule).toBeDefined();
+    expect(functionRule?.[0]).toBeInstanceOf(RegExp);
+
+    const regex = functionRule![0];
+    expect(regex.test('pivotTimeframeChangeCounter(')).toBe(true);
+    expect(regex.test('indicator(')).toBe(true);
+    expect(regex.test('if(')).toBe(false);
+  });
+});

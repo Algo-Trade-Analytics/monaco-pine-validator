@@ -5,6 +5,7 @@ export default defineConfig({
     include: [
       'tests/ast/**/*.test.ts',
       'tests/e2e/**/*.test.ts',
+      'tests/monaco/**/*.test.ts',
       'tests/constants-registry-lint.test.ts'
     ],
     environment: 'node',

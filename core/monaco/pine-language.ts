@@ -20,12 +20,12 @@ const CONTROL_KEYWORDS = [
   'to',
   'by',
   'in',
+  'and',
+  'not',
+  'or',
 ];
 
 const DECLARATION_KEYWORDS = [
-  'indicator',
-  'strategy',
-  'library',
   'import',
   'export',
   'as',
@@ -35,7 +35,6 @@ const DECLARATION_KEYWORDS = [
   'type',
   'method',
   'enum',
-  'input',
 ];
 
 const TYPE_KEYWORDS = [
@@ -55,6 +54,35 @@ const TYPE_KEYWORDS = [
   'polyline',
   'simple',
   'series',
+];
+
+const BUILTIN_FUNCTIONS = [
+  'plot',
+  'plotchar',
+  'plotshape',
+  'plotarrow',
+  'plotbar',
+  'plotcandle',
+  'plotcandle',
+  'bgcolor',
+  'barcolor',
+  'fill',
+  'hline',
+  'input',
+  'var',
+  'varip',
+  'na',
+  'nz',
+  'math',
+  'str',
+  'color',
+  'request',
+  'alert',
+  'alertcondition',
+  'log',
+  'indicator',
+  'strategy',
+  'library',
 ];
 
 const LITERAL_KEYWORDS = ['true', 'false', 'na'];
@@ -139,9 +167,10 @@ const buildNamespaceMemberRules = (): languages.IMonarchLanguageRule[] => {
       `\\b(${escapeRegExp(namespace)})(\\.)(` +
       `${sortedMembers.join('|')})\\b`;
 
+    // Use a single token type for the entire namespace expression
     rules.push([
       new RegExp(pattern),
-      ['type.identifier', 'delimiter', 'type.identifier'],
+      'type.identifier',
     ]);
   }
 
@@ -163,6 +192,42 @@ export function registerPineLanguage(
       ...LITERAL_KEYWORDS,
     ]),
   ).sort();
+
+  const keywordPatternSource = keywordList.map(escapeRegExp).join('|');
+  
+  const functionExcludeKeywords = Array.from(
+    new Set([
+      ...CONTROL_KEYWORDS,
+      ...TYPE_KEYWORDS,
+      ...LITERAL_KEYWORDS,
+      'enum',
+      'type',
+      'method',
+      'var',
+      'varip',
+      'const',
+      'as',
+      'import',
+      'export',
+    ]),
+  )
+    .filter((keyword) => !['indicator', 'strategy', 'library', 'input'].includes(keyword))
+    .sort();
+
+
+  const functionExcludePatternSource = functionExcludeKeywords
+    .map(escapeRegExp)
+    .join('|');
+
+  const functionCallPattern =
+    functionExcludePatternSource.length > 0
+      ? `\\b(?!(?:${functionExcludePatternSource})\\b)[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()`
+      : `\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()`;
+
+  const builtinFunctionPattern =
+    BUILTIN_FUNCTIONS.length > 0
+      ? `\\b(?:${BUILTIN_FUNCTIONS.map(escapeRegExp).join('|')})\\b(?=\\s*\\()`
+      : null;
 
   const namespaceRoots = gatherNamespaceRoots();
   const namespacePattern = `\\b(?:${namespaceRoots
@@ -206,6 +271,7 @@ export function registerPineLanguage(
   monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, {
     keywords: keywordList,
     typeKeywords: TYPE_KEYWORDS,
+    builtinFunctions: BUILTIN_FUNCTIONS,
     literals: LITERAL_KEYWORDS,
     operators: [
       '=',
@@ -236,8 +302,10 @@ export function registerPineLanguage(
       '?:',
       '??',
       '=>',
+      ':=',
+      ',',
     ],
-    symbols: /[=><!~?:&|+\-*/^%]+/,
+    symbols: /[=><!~?:&|+\-*/^%,]+/,
     tokenizer: {
       root: (() => {
         const rules: languages.IMonarchLanguageRule[] = [
@@ -259,19 +327,36 @@ export function registerPineLanguage(
           [new RegExp(GENERAL_NUMBER_PATTERN), { cases: { '@default': 'number' } }],
         ];
 
+        // Add namespace member rules first to ensure they take precedence
         for (const memberRule of namespaceMemberRules) {
           rules.push(memberRule);
         }
 
+        rules.push([new RegExp(namespacePattern), 'namespace']);
+        rules.push([new RegExp(constantPattern), 'constant.language']);
+
+        if (builtinFunctionPattern) {
+          rules.push([new RegExp(builtinFunctionPattern), 'support.function']);
+        }
+
+        rules.push([/\b(?:and|or|not)\b/, 'operator']);
+
+        rules.push([new RegExp(functionCallPattern), 'support.function']);
+
         rules.push(
-          [new RegExp(namespacePattern), 'namespace'],
-          [new RegExp(constantPattern), 'constant.language'],
           [
-            /[A-Za-z_][\w]*/,
+            // Match namespace.member patterns explicitly (must come before general identifiers)
+            /(color|input|ta|math|str|array|matrix|map|request|alert|plot|line|label|box|table|session|strategy|barmerge|dayofweek|hline|log|runtime|alert|xloc|yloc|shape|location|linefill|chart|timeframe|ticker|currency|syminfo|scale|position|display|extend|na|color|type|bool|int|float|string)\.([\w]+)/,
+            'type.identifier',
+          ],
+          [
+            // General identifiers, but exclude function calls (already handled above)
+            /[A-Za-z_][\w]*(?!\s*\()/,
             {
               cases: {
                 '@keywords': 'keyword',
                 '@typeKeywords': 'type.identifier',
+                '@builtinFunctions': 'type.identifier',
                 '@literals': 'keyword.constant',
                 '@default': 'identifier',
               },
@@ -279,7 +364,7 @@ export function registerPineLanguage(
           ],
           [/@symbols/, { cases: { '@operators': 'operator', '@default': '' } }],
           [/[{}()\[\]]/, '@brackets'],
-          [/[;,]/, 'delimiter'],
+          [/[;]/, 'delimiter'],
         );
 
         return rules;

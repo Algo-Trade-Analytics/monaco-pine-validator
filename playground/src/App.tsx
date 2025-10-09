@@ -14,12 +14,19 @@ import { registerPineLanguage } from '../../core/monaco/pine-language';
 const DEFAULT_SOURCE = `//@version=6
 indicator("Validator Playground", overlay = true)
 
+// User-defined function
+myCustomAverage(src, len) =>
+    sum = 0.0
+    for i = 0 to len - 1
+        sum := sum + src[i]
+    sum / len
+
 length = input.int(20, minval = 1, tooltip = "Period length")
 ma = ta.sma(close, length)
-plot(ma, color = color.new(color.blue, 0))
+customMa = myCustomAverage(close, length)
 
-if ta.crossover(close, ma)
-    strategy.entry("Long", strategy.long)
+plot(ma, "Built-in SMA", color = color.blue)
+plot(customMa, "Custom Average", color = color.orange)
 `; // Template script used on load
 
 function createEmptyResult(): ValidationResult {
@@ -35,6 +42,28 @@ function createEmptyResult(): ValidationResult {
 
 const SAMPLE_SNIPPETS: Record<string, string> = {
   'Moving Average': DEFAULT_SOURCE,
+  'User Functions': `//@version=6
+indicator("User-Defined Functions Demo")
+
+// Calculate momentum
+calcMomentum(src, len) =>
+    src - src[len]
+
+// Check if bullish
+isBullish(value) =>
+    value > 0
+
+// Get color based on condition
+getColor(condition) =>
+    condition ? color.green : color.red
+
+momentum = calcMomentum(close, 14)
+bullish = isBullish(momentum)
+barColor = getColor(bullish)
+
+plot(momentum, "Momentum", barColor)
+bgcolor(color.new(barColor, 90))
+`,
   'Broken Script': `//@version=6
 indicator("Broken Script", overlay = true)
 
@@ -177,6 +206,37 @@ export default function App() {
 
   const handleEditorWillMount = useCallback((monaco: typeof import('monaco-editor')) => {
     registerPineLanguage(monaco);
+    
+    // Define custom theme for Pine Script with UDF highlighting
+    monaco.editor.defineTheme('pinescript-light', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'support.function', foreground: 'ff6b35', fontStyle: 'bold' }, // UDFs in orange
+        { token: 'type.identifier', foreground: '0066cc', fontStyle: 'bold' }, // Built-in functions in blue
+        { token: 'keyword', foreground: '7c3aed', fontStyle: 'bold' }, // Keywords in purple
+        { token: 'operator', foreground: 'd73a49', fontStyle: 'bold' }, // Operators in red
+        { token: 'delimiter', foreground: '6f42c1', fontStyle: 'bold' }, // Delimiters in purple
+        { token: 'comment', foreground: '6a737d', fontStyle: 'italic' }, // Comments in gray
+        { token: 'identifier', foreground: '333333' } // Regular identifiers in dark gray
+      ],
+      colors: {}
+    });
+    
+    monaco.editor.defineTheme('pinescript-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'support.function', foreground: 'ff8c42', fontStyle: 'bold' }, // UDFs in light orange
+        { token: 'type.identifier', foreground: '4fc3f7', fontStyle: 'bold' }, // Built-in functions in light blue
+        { token: 'keyword', foreground: 'c678dd', fontStyle: 'bold' }, // Keywords in light purple
+        { token: 'operator', foreground: 'f97583', fontStyle: 'bold' }, // Operators in light red
+        { token: 'delimiter', foreground: 'b084f5', fontStyle: 'bold' }, // Delimiters in light purple
+        { token: 'comment', foreground: '8b949e', fontStyle: 'italic' }, // Comments in light gray
+        { token: 'identifier', foreground: 'e6e6e6' } // Regular identifiers in light gray
+      ],
+      colors: {}
+    });
   }, []);
 
   const handleEditorMount = useCallback((editor: MonacoEditor.IStandaloneCodeEditor, monaco: typeof import('monaco-editor')) => {
@@ -366,7 +426,7 @@ dump(tree, indent=2, include_attributes=True)
               onChange={onEditorChange}
               onMount={handleEditorMount}
               beforeMount={handleEditorWillMount}
-              theme={theme}
+              theme={theme === 'vs-light' ? 'pinescript-light' : 'pinescript-dark'}
               options={{
                 fontSize: 14,
                 minimap: { enabled: false },
@@ -464,7 +524,7 @@ dump(tree, indent=2, include_attributes=True)
               onChange={onEditorChange}
               onMount={handleEditorMount}
               beforeMount={handleEditorWillMount}
-              theme={theme}
+              theme={theme === 'vs-light' ? 'pinescript-light' : 'pinescript-dark'}
               options={{
                 fontSize: 14,
                 minimap: { enabled: false },
