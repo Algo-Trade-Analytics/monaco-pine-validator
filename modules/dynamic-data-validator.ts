@@ -302,18 +302,6 @@ export class DynamicDataValidator implements ValidationModule {
         'Series timeframe parameters are valid in Pine v6',
         'PSV6-REQUEST-DYNAMIC-V6'
       );
-      this.helper.addError(
-        position.line,
-        position.column,
-        'Timeframe parameter must be a string literal when calling request.security.',
-        Codes.FUNCTION_PARAM_TYPE
-      );
-      this.helper.addError(
-        position.line,
-        position.column,
-        'Enum mismatch: request.security timeframe should use a literal timeframe string.',
-        Codes.ENUM_TYPE_MISMATCH
-      );
     }
   }
 

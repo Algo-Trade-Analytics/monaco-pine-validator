@@ -641,7 +641,9 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
       { name: 'transp', type: 'int', qualifier: 'simple', required: false },
       { name: 'editable', type: 'bool', qualifier: 'simple', required: false },
       { name: 'show_last', type: 'bool', qualifier: 'simple', required: false },
-      { name: 'display', type: 'int', qualifier: 'simple', required: false }
+      { name: 'offset', type: 'int', qualifier: 'simple', required: false },
+      { name: 'display', type: 'int', qualifier: 'simple', required: false },
+      { name: 'force_overlay', type: 'bool', qualifier: 'const', required: false }
     ],
     returnType: 'series',
     deprecatedParams: ['transp'],
@@ -1022,6 +1024,14 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
       { name: 'high', type: 'float', qualifier: 'series', required: true },
       { name: 'low', type: 'float', qualifier: 'series', required: true },
       { name: 'close', type: 'float', qualifier: 'series', required: true }
+    ],
+    overloads: [
+      {
+        parameters: [
+          { name: 'type', type: 'string', qualifier: 'simple', required: true },
+          { name: 'condition', type: 'bool', qualifier: 'series', required: true }
+        ]
+      }
     ],
     returnType: 'tuple'
   },

@@ -78,6 +78,7 @@ const KNOWN_NAMESPACES = new Set([
   'format',
   'scale',
   'adjustment',
+  'barmerge',
   'backadjustment',
 ]);
 
