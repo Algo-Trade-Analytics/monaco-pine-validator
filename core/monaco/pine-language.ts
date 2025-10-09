@@ -85,6 +85,26 @@ const BUILTIN_FUNCTIONS = [
   'library',
 ];
 
+const BUILTIN_IDENTIFIERS = [
+  'open', 
+  'high', 
+  'low', 
+  'close', 
+  'volume', 
+  'time', 
+  'timenow', 
+  'time_close', 
+  'bar_index', 
+  'year', 
+  'month', 
+  'weekofyear', 
+  'dayofmonth', 
+  'dayofweek', 
+  'hour', 
+  'minute', 
+  'second'
+];
+
 const LITERAL_KEYWORDS = ['true', 'false', 'na'];
 
 const FLOAT_NUMBER_PATTERN =
@@ -215,6 +235,11 @@ export function registerPineLanguage(
     .sort();
 
 
+const builtinIdentifierPattern =
+  BUILTIN_IDENTIFIERS.length > 0
+    ? `\\b(?:${BUILTIN_IDENTIFIERS.map(escapeRegExp).join('|')})\\b`
+    : null;
+
   const functionExcludePatternSource = functionExcludeKeywords
     .map(escapeRegExp)
     .join('|');
@@ -223,11 +248,6 @@ export function registerPineLanguage(
     functionExcludePatternSource.length > 0
       ? `\\b(?!(?:${functionExcludePatternSource})\\b)[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()`
       : `\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()`;
-
-  const builtinFunctionPattern =
-    BUILTIN_FUNCTIONS.length > 0
-      ? `\\b(?:${BUILTIN_FUNCTIONS.map(escapeRegExp).join('|')})\\b(?=\\s*\\()`
-      : null;
 
   const namespaceRoots = gatherNamespaceRoots();
   const namespacePattern = `\\b(?:${namespaceRoots
@@ -335,23 +355,39 @@ export function registerPineLanguage(
         rules.push([new RegExp(namespacePattern), 'namespace']);
         rules.push([new RegExp(constantPattern), 'constant.language']);
 
-        if (builtinFunctionPattern) {
-          rules.push([new RegExp(builtinFunctionPattern), 'support.function']);
+        rules.push([/\b(?:and|or|not)\b/, 'operator']);
+
+        if (builtinIdentifierPattern) {
+          rules.push([new RegExp(builtinIdentifierPattern), 'variable.language']);
         }
 
-        rules.push([/\b(?:and|or|not)\b/, 'operator']);
+        rules.push([
+          /\b[A-Za-z_][\w]*(?=\.(?:new|delete|get_[A-Za-z_]+|set_[A-Za-z_]+))/,
+          'type.identifier',
+        ]);
+        rules.push([new RegExp(
+          `\\b(?!(?:${functionExcludePatternSource})\\b)(?:(?!\\d)[A-Za-z_][\\w]*)(?=\\s+[A-Za-z_][\\w]*\\s*(?:[,)=]))`,
+        ), 'type.identifier']);
 
         rules.push([new RegExp(functionCallPattern), 'support.function']);
 
         rules.push(
+          [
+            /\b(type)(\s+)([A-Za-z_][\w]*)/,
+            ['keyword', 'white', 'type.identifier'],
+          ],
+          [
+            /\b(enum)(\s+)([A-Za-z_][\w]*)/,
+            ['keyword', 'white', 'type.identifier'],
+          ],
           [
             // Match namespace.member patterns explicitly (must come before general identifiers)
             /(color|input|ta|math|str|array|matrix|map|request|alert|plot|line|label|box|table|session|strategy|barmerge|dayofweek|hline|log|runtime|alert|xloc|yloc|shape|location|linefill|chart|timeframe|ticker|currency|syminfo|scale|position|display|extend|na|color|type|bool|int|float|string)\.([\w]+)/,
             'type.identifier',
           ],
           [
-            // General identifiers, but exclude function calls (already handled above)
-            /[A-Za-z_][\w]*(?!\s*\()/,
+            // General identifiers (keywords, variables, etc.)
+            /[A-Za-z_][\w]*/,
             {
               cases: {
                 '@keywords': 'keyword',

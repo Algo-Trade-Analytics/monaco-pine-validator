@@ -67,4 +67,42 @@ describe('registerPineLanguage', () => {
     expect(regex.test('indicator(')).toBe(true);
     expect(regex.test('if(')).toBe(false);
   });
+
+  // Additional tokenizer behaviour is verified indirectly via Monaco runtime tests.
+
+  it('exposes rules that highlight type and enum declarations', () => {
+    const { monaco, tokens } = createMonacoStub();
+
+    registerPineLanguage(monaco);
+
+    const definition = tokens.pinescript as {
+      tokenizer: { root: unknown[] };
+    };
+
+    const rootRules = definition.tokenizer.root as unknown[];
+
+    const findRule = (pattern: RegExp) =>
+      rootRules.find(
+        (rule): rule is [RegExp, string[]] =>
+          Array.isArray(rule) &&
+          rule.length === 2 &&
+          rule[0] instanceof RegExp &&
+          rule[0].source === pattern.source &&
+          Array.isArray(rule[1]),
+      );
+
+    const typeDeclarationRule = findRule(/\b(type)(\s+)([A-Za-z_][\w]*)/);
+    expect(typeDeclarationRule).toBeDefined();
+    const [typeRegex, typeAction] = typeDeclarationRule!;
+    expect(typeRegex.test('type pivotGraphic')).toBe(true);
+    expect(typeAction[0]).toBe('keyword');
+    expect(typeAction[2]).toBe('type.identifier');
+
+    const enumDeclarationRule = findRule(/\b(enum)(\s+)([A-Za-z_][\w]*)/);
+    expect(enumDeclarationRule).toBeDefined();
+    const [enumRegex, enumAction] = enumDeclarationRule!;
+    expect(enumRegex.test('enum SLOption')).toBe(true);
+    expect(enumAction[0]).toBe('keyword');
+    expect(enumAction[2]).toBe('type.identifier');
+  });
 });
