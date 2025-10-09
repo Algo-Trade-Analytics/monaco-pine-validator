@@ -467,7 +467,11 @@ export class ASTIndentationValidator {
           );
         }
         if (
-          (stmt.kind === 'AssignmentStatement' || stmt.kind === 'VariableDeclaration') &&
+          (
+            stmt.kind === 'AssignmentStatement' ||
+            stmt.kind === 'VariableDeclaration' ||
+            stmt.kind === 'ExpressionStatement'
+          ) &&
           stmtEndLine > stmtStartLine
         ) {
           for (let lineIdx = stmtStartLine + 1; lineIdx <= stmtEndLine; lineIdx++) {
@@ -673,19 +677,30 @@ export class ASTIndentationValidator {
     }
 
     // Validate loop body
-    if (node.body) {
-      const prevContext = this.context;
-      this.context = {
-        blockIndent: headerIndent + 4,
-        expectedBlockIndent: headerIndent + 4,
-        inBlock: true,
-        blockType: 'for',
-        parentContext: prevContext
-      };
-
-      this.validateBlock(node.body, headerIndent + 4);
-      this.context = prevContext;
+    if (!node.body || (node.body.kind === 'BlockStatement' && (node.body.body?.length ?? 0) === 0)) {
+      this.addError(
+        node.loc.end.line,
+        headerIndent + 1,
+        'For loop requires an indented body.',
+        'PSV6-SYNTAX-ERROR'
+      );
+      return;
     }
+
+    const bodyStartIndex = (node.body?.loc.start.line ?? node.loc.end.line) - 1;
+    this.validateHeaderContinuationLines(headerLine + 1, bodyStartIndex, headerIndent);
+
+    const prevContext = this.context;
+    this.context = {
+      blockIndent: headerIndent + 4,
+      expectedBlockIndent: headerIndent + 4,
+      inBlock: true,
+      blockType: 'for',
+      parentContext: prevContext
+    };
+
+    this.validateBlock(node.body, headerIndent + 4);
+    this.context = prevContext;
   }
 
   /**
@@ -706,19 +721,30 @@ export class ASTIndentationValidator {
     }
 
     // Validate loop body
-    if (node.body) {
-      const prevContext = this.context;
-      this.context = {
-        blockIndent: headerIndent + 4,
-        expectedBlockIndent: headerIndent + 4,
-        inBlock: true,
-        blockType: 'while',
-        parentContext: prevContext
-      };
-
-      this.validateBlock(node.body, headerIndent + 4);
-      this.context = prevContext;
+    if (!node.body || (node.body.kind === 'BlockStatement' && (node.body.body?.length ?? 0) === 0)) {
+      this.addError(
+        node.loc.end.line,
+        headerIndent + 1,
+        'While loop requires an indented body.',
+        'PSV6-SYNTAX-ERROR'
+      );
+      return;
     }
+
+    const bodyStartIndex = (node.body?.loc.start.line ?? node.loc.end.line) - 1;
+    this.validateHeaderContinuationLines(headerLine + 1, bodyStartIndex, headerIndent);
+
+    const prevContext = this.context;
+    this.context = {
+      blockIndent: headerIndent + 4,
+      expectedBlockIndent: headerIndent + 4,
+      inBlock: true,
+      blockType: 'while',
+      parentContext: prevContext
+    };
+
+    this.validateBlock(node.body, headerIndent + 4);
+    this.context = prevContext;
   }
 
   /**
@@ -985,42 +1011,47 @@ export class ASTIndentationValidator {
 
     // Rule 1: Continuation must actually change indentation relative to the statement header
     if (wrapIndent === 0) {
-      if (baseIndent === 0) {
-        this.addError(
-          lineNum,
-          indent + 1,
-          'Line continuation at column 0 is invalid. Use any non-multiple-of-4 indentation (1, 2, 3, 5...).',
-          'PSV6-INDENT-WRAP-INSUFFICIENT',
-        );
-      } else {
-        this.addWarning(
-          lineNum,
-          indent + 1,
-          `Line continuation inside the block cannot remain at ${indent} spaces (multiple of 4). Indent past the block level using a non-multiple-of-4 offset.`,
-          'PSV6-INDENT-WRAP-BLOCK',
-        );
-      }
+      this.addError(
+        lineNum,
+        indent + 1,
+        'Line continuation cannot stay at the block indentation. Use a non-multiple-of-4 indentation offset.',
+        'PSV6-INDENT-WRAP-INSUFFICIENT',
+      );
       return;
     }
 
     // Rule 2: Wrapped line must NOT use a multiple-of-4 relative offset (reserved for blocks)
     if (wrapIndent % 4 === 0) {
-      if (baseIndent === 0) {
-        const spaceLabel = wrapIndent === 1 ? 'space' : 'spaces';
-        this.addError(
-          lineNum,
-          indent + 1,
-          `Line continuation cannot use ${wrapIndent} ${spaceLabel} of relative indentation (multiples of 4 are reserved for blocks).`,
-          'PSV6-INDENT-WRAP-MULTIPLE-OF-4',
-        );
-      } else {
-        this.addWarning(
-          lineNum,
-          indent + 1,
-          `Line continuation inside the block cannot be at ${indent} spaces (multiple of 4). Move the wrap to a non-multiple-of-4 column beyond ${baseIndent}.`,
-          'PSV6-INDENT-WRAP-BLOCK',
-        );
+      const spaceLabel = wrapIndent === 1 ? 'space' : 'spaces';
+      this.addError(
+        lineNum,
+        indent + 1,
+        `Line continuation cannot use ${wrapIndent} ${spaceLabel} of relative indentation (multiples of 4 are reserved for blocks).`,
+        'PSV6-INDENT-WRAP-MULTIPLE-OF-4',
+      );
+      return;
+    }
+  }
+
+  private validateHeaderContinuationLines(startIndex: number, endExclusive: number, baseIndent: number): void {
+    if (endExclusive <= startIndex) {
+      return;
+    }
+
+    for (let lineIdx = startIndex; lineIdx < endExclusive; lineIdx++) {
+      if (lineIdx < 0 || lineIdx >= this.sourceLines.length) {
+        continue;
       }
+      const rawLine = this.sourceLines[lineIdx];
+      if (!rawLine) {
+        continue;
+      }
+      const trimmed = rawLine.trim();
+      if (!trimmed || trimmed.startsWith('//')) {
+        continue;
+      }
+      const indent = this.getLineIndent(lineIdx);
+      this.validateWrapIndentation(lineIdx + 1, indent, baseIndent);
     }
   }
 

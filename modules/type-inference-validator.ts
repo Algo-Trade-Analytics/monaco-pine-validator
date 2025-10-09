@@ -344,6 +344,48 @@ export class TypeInferenceValidator implements ValidationModule {
       const identifier = node.left as IdentifierNode;
       const existingInfo = this.context.typeMap.get(identifier.name);
 
+      const existingTypeRaw = existingInfo?.type ?? 'unknown';
+      const guardedTypes = new Set<TypeInfo['type']>(['int', 'float', 'bool', 'string', 'color']);
+      if (existingInfo && guardedTypes.has(existingTypeRaw as TypeInfo['type'])) {
+        const existingType = this.normalizeType(existingTypeRaw);
+        const normalizedValueType = valueType ? this.normalizeType(valueType) : 'unknown';
+        const existingIsSimple = !existingInfo.isSeries && existingType !== 'series';
+        const expressionIsSeries = this.isSeriesExpression(right);
+        let valueIsSeries = expressionIsSeries || normalizedValueType === 'series';
+
+        if (valueIsSeries && right.kind === 'Identifier') {
+          const idName = (right as IdentifierNode).name;
+          const idInfo = this.context.typeMap.get(idName);
+          if (idInfo && !idInfo.isSeries && idInfo.type !== 'series') {
+            valueIsSeries = false;
+          }
+        }
+
+        if (!valueIsSeries && normalizedValueType === 'unknown' && expressionIsSeries) {
+          valueIsSeries = true;
+        }
+
+        if (existingIsSimple && valueIsSeries) {
+          this.helper.addError(
+            line,
+            column,
+            `Cannot assign series expression to simple ${existingType} variable '${identifier.name}'. Series values change on every bar and cannot be stored in simple variables.`,
+            'PSV6-TYPE-ASSIGNMENT-MISMATCH',
+          );
+          return;
+        }
+
+        if (!this.areTypesCompatible(existingType, normalizedValueType)) {
+          this.helper.addError(
+            line,
+            column,
+            `Type mismatch: cannot assign ${normalizedValueType} to ${existingType} variable '${identifier.name}'.`,
+            'PSV6-TYPE-ASSIGNMENT-MISMATCH',
+          );
+          return;
+        }
+      }
+
       if (!existingInfo && this.isLiteralExpression(right)) {
         this.helper.addInfo(
           identifier.loc.start.line,
@@ -785,6 +827,10 @@ export class TypeInferenceValidator implements ValidationModule {
           return true;
         }
       }
+    }
+
+    if (expression.kind === 'IndexExpression') {
+      return true;
     }
 
     // Check for call expressions - some functions return series

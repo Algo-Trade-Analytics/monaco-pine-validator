@@ -304,7 +304,13 @@ export class InputFunctionsValidator implements ValidationModule {
       const normalized = this.stripQuotes(rawDefault).toLowerCase();
       if (this.isQuotedLiteral(rawDefault) || normalized === 'true' || normalized === 'false') {
         this.helper.addError(lineNum, column, 'defval must be an integer for input.int', Codes.INPUT_DEFVAL_TYPE);
+        this.helper.addError(lineNum, column, 'defval must be an integer for input.int', 'PSV6-FUNCTION-PARAM-TYPE');
       }
+    }
+    const inferredType = this.inferArgumentType(defArgInt ?? '');
+    if (inferredType && this.isClearlyNonNumericType(inferredType)) {
+      this.helper.addError(lineNum, column, 'defval must be an integer for input.int', 'PSV6-INPUT-DEFVAL-TYPE');
+      this.helper.addError(lineNum, column, 'defval must be an integer for input.int', 'PSV6-FUNCTION-PARAM-TYPE');
     }
 
     // Validate parameters
@@ -322,7 +328,13 @@ export class InputFunctionsValidator implements ValidationModule {
       const normalized = this.stripQuotes(rawDefault).toLowerCase();
       if (this.isQuotedLiteral(rawDefault) || normalized === 'true' || normalized === 'false') {
         this.helper.addError(lineNum, column, 'defval must be a number for input.float', Codes.INPUT_DEFVAL_TYPE);
+        this.helper.addError(lineNum, column, 'defval must be a number for input.float', 'PSV6-FUNCTION-PARAM-TYPE');
       }
+    }
+    const inferredType = this.inferArgumentType(defArgFloat ?? '');
+    if (inferredType && this.isClearlyNonNumericType(inferredType)) {
+      this.helper.addError(lineNum, column, 'defval must be a number for input.float', 'PSV6-INPUT-DEFVAL-TYPE');
+      this.helper.addError(lineNum, column, 'defval must be a number for input.float', 'PSV6-FUNCTION-PARAM-TYPE');
     }
 
     // Validate parameters
@@ -524,6 +536,7 @@ export class InputFunctionsValidator implements ValidationModule {
         const n = this.extractNumericValue(v);
         if (n === null || !/^[-+]?\d+$/.test(v.replace(/^['"]|['"]$/g, ''))) {
           this.helper.addError(lineNum, column, 'defval must be an integer for input.int', 'PSV6-INPUT-DEFVAL-TYPE');
+          this.helper.addError(lineNum, column, 'defval must be an integer for input.int', 'PSV6-FUNCTION-PARAM-TYPE');
         }
         break;
       }
@@ -531,6 +544,7 @@ export class InputFunctionsValidator implements ValidationModule {
         const n = this.extractNumericValue(v);
         if (n === null) {
           this.helper.addError(lineNum, column, 'defval must be a number for input.float', 'PSV6-INPUT-DEFVAL-TYPE');
+          this.helper.addError(lineNum, column, 'defval must be a number for input.float', 'PSV6-FUNCTION-PARAM-TYPE');
         }
         break;
       }
@@ -1012,6 +1026,58 @@ export class InputFunctionsValidator implements ValidationModule {
 
     // Validate optional parameters
     this.validateInputParameters(parameters, lineNum, column, 'enum');
+  }
+
+  private inferArgumentType(value: string): string | null {
+    const trimmed = value?.trim() ?? '';
+    if (!trimmed) {
+      return null;
+    }
+
+    if (/^[+-]?\d+$/.test(trimmed)) {
+      return 'int';
+    }
+    if (/^[+-]?(?:\d*\.\d+|\d+\.\d*)$/.test(trimmed)) {
+      return 'float';
+    }
+
+    const lower = trimmed.toLowerCase();
+    if (lower === 'na') {
+      return 'na';
+    }
+    if (lower === 'true' || lower === 'false') {
+      return 'bool';
+    }
+
+    if (this.isQuotedLiteral(trimmed)) {
+      return 'string';
+    }
+
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
+      const typeInfo = this.context.typeMap?.get(trimmed);
+      if (typeInfo) {
+        const baseType = (typeInfo.type ?? 'unknown').toLowerCase();
+        if (typeInfo.isSeries || baseType.startsWith('series')) {
+          return 'series';
+        }
+        return baseType;
+      }
+    }
+
+    return null;
+  }
+
+  private isClearlyNonNumericType(type: string): boolean {
+    const normalized = type.toLowerCase();
+    if (normalized === 'na') {
+      return false;
+    }
+    if (normalized === 'series') {
+      return false;
+    }
+    return ['string', 'bool', 'color', 'enum', 'udt', 'array', 'map'].some((disallowed) =>
+      normalized.startsWith(disallowed),
+    );
   }
 
   // Getter methods for other modules

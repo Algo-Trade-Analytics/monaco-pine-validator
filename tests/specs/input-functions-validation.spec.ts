@@ -53,6 +53,19 @@ myBool = input.bool(10, "Boolean Input")  // Error: default should be bool
       expect(result.errors.some(e => e.code === 'PSV6-FUNCTION-PARAM-TYPE')).toBe(true);
     });
 
+    it('should error when default value variable has wrong type', () => {
+      const code = `
+//@version=6
+indicator("Input Test")
+
+var defaultStr = '23'
+length = input.int(defaultStr, "Length Input")
+      `;
+
+      const result = createValidator().validate(code);
+      expect(result.errors.some(e => e.code === 'PSV6-INPUT-DEFVAL-TYPE')).toBe(true);
+    });
+
     it('should error on missing required parameters', () => {
       const code = `
 //@version=6
@@ -623,4 +636,3 @@ myString = input.string("very long default value that might cause issues", "Stri
     });
   });
 });
-

@@ -457,7 +457,8 @@ export class TAFunctionsValidator implements ValidationModule {
         if (expectedParam.required && !this.isValidTAParameter(param, expectedParam.type)) {
           // Only error if it's clearly wrong (like passing a string to a numeric parameter)
           const inferred = this.inferParameterType(param);
-          if (expectedParam.type === 'float' && inferred === 'string') {
+          if (this.shouldReportTypeMismatch(expectedParam.type, inferred)) {
+            const paramLabel = expectedParam.name ?? `parameter ${index + 1}`;
             // TA-specific
             this.helper.addError(
               lineNumber,
@@ -469,7 +470,7 @@ export class TAFunctionsValidator implements ValidationModule {
             this.helper.addError(
               lineNumber,
               column,
-              `Parameter '${expectedParam.name}' of '${functionName}' should be ${expectedParam.type}, got ${inferred}`,
+              `Parameter '${paramLabel}' of '${functionName}' should be ${expectedParam.type}, got ${inferred}`,
               'PSV6-FUNCTION-PARAM-TYPE'
             );
           }
@@ -716,6 +717,22 @@ export class TAFunctionsValidator implements ValidationModule {
     
     // Default to unknown for plain identifiers (avoid false series/simple mismatches)
     return 'unknown';
+  }
+
+  private shouldReportTypeMismatch(expectedType: string, actualType: string): boolean {
+    if (!actualType || actualType === 'unknown') {
+      return false;
+    }
+
+    if ((expectedType === 'float' || expectedType === 'int') && (actualType === 'string' || actualType === 'bool')) {
+      return true;
+    }
+
+    if (expectedType === 'bool' && actualType === 'string') {
+      return true;
+    }
+
+    return false;
   }
 
   private argumentToString(argument: ArgumentNode): string {

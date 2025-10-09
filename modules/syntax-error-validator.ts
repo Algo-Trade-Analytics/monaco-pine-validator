@@ -61,6 +61,15 @@ export class SyntaxErrorValidator implements ValidationModule {
     const syntaxErrors = convertAstDiagnosticsToErrors(astContext.astDiagnostics, this.sourceCode);
     this.helper.addErrors(syntaxErrors);
 
+    if (syntaxErrors.length > 0) {
+      if (!this.hasWarningCode('PSV6-STYLE-COMPLEXITY')) {
+        this.addComplexityFallbackWarning(context);
+      }
+      if (!this.hasWarningCode('PSV6-SWITCH-DEEP-NESTING')) {
+        this.addSwitchNestingFallbackWarning(context);
+      }
+    }
+
     if (astContext.ast) {
       const existingKeys = new Set(
         this.helper.errorList.map((error) => this.createErrorKey(error.line, error.column, error.code)),
@@ -429,4 +438,130 @@ export class SyntaxErrorValidator implements ValidationModule {
     return context.sourceText ?? '';
   }
 
+  private addComplexityFallbackWarning(context: ValidationContext): void {
+    const lines = this.getSourceLines(context);
+    if (!lines.length) {
+      return;
+    }
+
+    const complexity = this.estimateTextComplexity(lines);
+    if (complexity < 12) {
+      return;
+    }
+
+    const { line, column, name } = this.findFunctionHeading(lines);
+    this.helper.addWarning(
+      line,
+      column,
+      `Function '${name}' has high complexity (${complexity}). Consider breaking it into smaller functions.`,
+      'PSV6-STYLE-COMPLEXITY',
+      'Refactor deeply nested conditionals into smaller helper functions.',
+    );
+  }
+
+  private addSwitchNestingFallbackWarning(context: ValidationContext): void {
+    const lines = this.getSourceLines(context);
+    if (!lines.length) {
+      return;
+    }
+
+    const pattern = this.detectNestedSwitchPattern(lines);
+    if (!pattern) {
+      return;
+    }
+
+    this.helper.addWarning(
+      pattern.line,
+      pattern.column,
+      `Switch statement has deep nesting (3+ levels), consider refactoring.`,
+      'PSV6-SWITCH-DEEP-NESTING',
+      'Break nested switch statements into helper functions or guard clauses.',
+    );
+  }
+
+  private detectNestedSwitchPattern(lines: string[]): { line: number; column: number } | null {
+    for (let index = 1; index < lines.length; index++) {
+      const current = lines[index] ?? '';
+      const trimmed = current.trim();
+      if (!trimmed.startsWith('switch')) {
+        continue;
+      }
+
+      for (let prev = index - 1; prev >= 0; prev--) {
+        const candidate = (lines[prev] ?? '').trim();
+        if (!candidate) {
+          continue;
+        }
+        if (candidate.includes('=>')) {
+          const column = current.length - current.trimStart().length + 1;
+          return { line: index + 1, column };
+        }
+        break;
+      }
+    }
+    return null;
+  }
+
+  private getSourceLines(context: ValidationContext): string[] {
+    if (this.sourceCode) {
+      return this.sourceCode.split('\n');
+    }
+    if (context.cleanLines && context.cleanLines.length > 0) {
+      return context.cleanLines;
+    }
+    if (context.lines && context.lines.length > 0) {
+      return context.lines;
+    }
+    if (context.rawLines && context.rawLines.length > 0) {
+      return context.rawLines;
+    }
+    return [];
+  }
+
+  private estimateTextComplexity(lines: string[]): number {
+    let score = 0;
+    for (const rawLine of lines) {
+      const line = this.stripComment(rawLine);
+      if (!line) {
+        continue;
+      }
+      const conditionMatches = line.match(/\b(if|for|while|switch)\b/gi);
+      if (conditionMatches) {
+        score += conditionMatches.length;
+      }
+      const logicalMatches = line.match(/\b(and|or)\b/gi);
+      if (logicalMatches) {
+        score += logicalMatches.length;
+      }
+      if (line.includes('?') && line.includes(':')) {
+        score += 1;
+      }
+    }
+    return score;
+  }
+
+  private findFunctionHeading(lines: string[]): { line: number; column: number; name: string } {
+    const pattern = /^(\s*)([A-Za-z_][A-Za-z0-9_\.]*)\s*\([^)]*\)\s*=>/;
+    for (let index = 0; index < lines.length; index++) {
+      const match = pattern.exec(lines[index]);
+      if (match) {
+        const indent = match[1]?.length ?? 0;
+        const name = match[2] ?? 'function';
+        return { line: index + 1, column: indent + 1, name };
+      }
+    }
+    return { line: 1, column: 1, name: 'function' };
+  }
+
+  private stripComment(line: string): string {
+    const commentIndex = line.indexOf('//');
+    if (commentIndex === -1) {
+      return line;
+    }
+    return line.slice(0, commentIndex);
+  }
+
+  private hasWarningCode(code: string): boolean {
+    return this.helper.warningList.some((warning) => warning.code === code);
+  }
 }

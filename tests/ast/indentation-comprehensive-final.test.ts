@@ -142,6 +142,61 @@ plot(close,
     });
   });
 
+  describe('Loop indentation', () => {
+    it('should error when for loop body is missing indentation', () => {
+      const code = `//@version=6
+indicator("Test")
+myFunction() =>
+    sum = 0.0
+    for i = 0 to 10
+        
+    sum := sum + i`;
+
+      const ast = parseCode(code);
+      const diagnostics = validateIndentationWithAST(code, ast);
+      const indentErrors = diagnostics.filter(d => d.severity === 'error');
+      expect(indentErrors.some(e => e.code === 'PSV6-SYNTAX-ERROR')).toBe(true);
+
+      const result = validateWithFullValidator(code);
+      expect(result.errors.some(e => e.code === 'PSV6-SYNTAX-ERROR')).toBe(true);
+    });
+
+    it('should error when loop header wraps without proper indentation', () => {
+      const code = `//@version=6
+indicator("Test")
+myFunction() =>
+    sum = 0.0
+    for i = 0 to len - 
+    1
+        sum := sum + src[i]
+    sum / len`;
+
+      const ast = parseCode(code);
+      const diagnostics = validateIndentationWithAST(code, ast);
+      const errors = diagnostics.filter(d => d.severity === 'error');
+      expect(errors.some(e => e.code === 'PSV6-INDENT-WRAP-INSUFFICIENT')).toBe(true);
+
+      const result = validateWithFullValidator(code);
+      expect(result.errors.some(e => e.code === 'PSV6-INDENT-WRAP-INSUFFICIENT' || e.code === 'PSV6-SYNTAX-ERROR')).toBe(true);
+    });
+
+    it('should error when expression continuation uses block indentation', () => {
+      const code = `//@version=6
+indicator("Test")
+myFunction() =>
+    value = close / 
+    open`;
+
+      const ast = parseCode(code);
+      const diagnostics = validateIndentationWithAST(code, ast);
+      const errors = diagnostics.filter(d => d.severity === 'error');
+      expect(errors.some(e => e.code === 'PSV6-INDENT-WRAP-INSUFFICIENT')).toBe(true);
+
+      const result = validateWithFullValidator(code);
+      expect(result.errors.some(e => e.code === 'PSV6-INDENT-WRAP-INSUFFICIENT' || e.code === 'PSV6-SYNTAX-ERROR')).toBe(true);
+    });
+  });
+
   describe('Closing Delimiter Alignment', () => {
     
     it('should flag closing parenthesis aligned at a multiple-of-4 column', () => {
@@ -333,7 +388,7 @@ volFrom(srcSeries) =>
       expect(errors).toHaveLength(0);
     });
 
-    it('should warn on 4-space continuation (block boundary)', () => {
+    it('should error on 4-space continuation (block boundary)', () => {
       const code = `//@version=6
 indicator("Test")
 volFrom(srcSeries) =>
@@ -342,12 +397,16 @@ volFrom(srcSeries) =>
     ta.sma(srcSeries, 20)), 20) * 1.4826
     _vRaw = volMethod == "StDev" ? _stdev : _mad`;
 
+      const ast = parseCode(code);
+      const diagnostics = validateIndentationWithAST(code, ast);
+      const errors = diagnostics.filter(d => d.severity === 'error');
+      expect(errors.some(e => e.code === 'PSV6-INDENT-WRAP-INSUFFICIENT')).toBe(true);
+
       const result = validateWithFullValidator(code);
-      const wrapWarnings = result.warnings.filter(w => w.code === 'PSV6-INDENT-WRAP-BLOCK');
-      expect(wrapWarnings.length).toBeGreaterThan(0);
+      expect(result.errors.some(e => e.code === 'PSV6-INDENT-WRAP-INSUFFICIENT' || e.code === 'PSV6-SYNTAX-ERROR')).toBe(true);
     });
 
-    it('should warn on 0-space continuation (block boundary)', () => {
+    it('should error on 0-space continuation (block boundary)', () => {
       const code = `//@version=6
 indicator("Test")
 volFrom(srcSeries) =>
@@ -356,10 +415,13 @@ volFrom(srcSeries) =>
 ta.sma(srcSeries, 20)), 20) * 1.4826
     _vRaw = volMethod == "StDev" ? _stdev : _mad`;
 
+      const ast = parseCode(code);
+      const diagnostics = validateIndentationWithAST(code, ast);
+      const errors = diagnostics.filter(d => d.severity === 'error');
+      expect(errors.some(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toBe(true);
+
       const result = validateWithFullValidator(code);
-      
-      const wrapWarnings = result.warnings.filter(w => w.code === 'PSV6-INDENT-WRAP-BLOCK' || w.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4');
-      expect(wrapWarnings.length).toBeGreaterThan(0);
+      expect(result.errors.some(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4' || e.code === 'PSV6-SYNTAX-ERROR')).toBe(true);
     });
   });
 

@@ -245,6 +245,20 @@ invalidStoch = ta.stoch(close, high, "string", 14)
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors.some(e => e.code === 'PSV6-TA-FUNCTION-PARAM')).toBe(true);
     });
+
+    it('should error when oscillator length argument is a string variable', () => {
+      const code = `
+//@version=6
+indicator("RSI Length Type Test")
+
+rsiLength = 'jl'
+rsi = ta.rsi(close, rsiLength)
+      `;
+
+      const result = createValidator().validate(code);
+      expect(result.errors.some(e => e.code === 'PSV6-TA-FUNCTION-PARAM')).toBe(true);
+      expect(result.errors.some(e => e.code === 'PSV6-FUNCTION-PARAM-TYPE')).toBe(true);
+    });
   });
 
   describe('PSV6-TA-BANDS: Band Functions', () => {

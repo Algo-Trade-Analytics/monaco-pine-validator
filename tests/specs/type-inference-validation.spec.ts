@@ -62,6 +62,19 @@ plot(close)`;
       const result = run(code);
       expectHas(result, { errors: ['PSV6-TYPE-ASSIGNMENT-MISMATCH'] });
     });
+
+    it('should error when reassignment changes variable type', () => {
+      const code = `//@version=6
+indicator("Reassign Type Test")
+
+sum = 0
+sum := sum + close
+
+plot(sum)`;
+
+      const result = run(code);
+      expectHas(result, { errors: ['PSV6-TYPE-ASSIGNMENT-MISMATCH'] });
+    });
   });
 
   describe('PSV6-TYPE-FUNCTION: Function Parameter Type Validation', () => {
