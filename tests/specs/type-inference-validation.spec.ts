@@ -75,6 +75,23 @@ plot(sum)`;
       const result = run(code);
       expectHas(result, { errors: ['PSV6-TYPE-ASSIGNMENT-MISMATCH'] });
     });
+
+    it('should error when accumulating series into simple variable', () => {
+      const code = `//@version=6
+indicator("Series Accumulation Test")
+
+myFunc(src, len) =>
+    total = 0
+    for i = 0 to len - 1
+        total := total + src[i]
+    total / len
+
+acc = myFunc(close, 5)
+plot(acc)`;
+
+      const result = run(code);
+      expectHas(result, { errors: ['PSV6-TYPE-ASSIGNMENT-MISMATCH'] });
+    });
   });
 
   describe('PSV6-TYPE-FUNCTION: Function Parameter Type Validation', () => {

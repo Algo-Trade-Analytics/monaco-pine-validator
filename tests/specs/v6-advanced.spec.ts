@@ -200,6 +200,24 @@ ta.rsi(close, rsiLength)`;
       );
       expect(hasTypeErrors).toBe(true);
     });
+
+    it('should error on multiline for loop header without proper indentation', () => {
+      const code = `//@version=6
+indicator("Test")
+
+avg(src, len) =>
+    sum = 0
+    for i = 0 to len -
+    1
+        sum := sum + src[i]
+    sum / len
+
+result = avg(close, 5)
+plot(result)`;
+
+      const { codes } = run(code);
+      expectHas(codes, { errors: ['PSV6-INDENT-WRAP-INSUFFICIENT'] });
+    });
   });
 
   // ────────────────────────────────────────────────────────────────────────────────

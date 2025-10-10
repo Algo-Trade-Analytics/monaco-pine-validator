@@ -64,6 +64,7 @@ length = input.int(defaultStr, "Length Input")
 
       const result = createValidator().validate(code);
       expect(result.errors.some(e => e.code === 'PSV6-INPUT-DEFVAL-TYPE')).toBe(true);
+      expect(result.errors.some(e => e.code === 'PSV6-FUNCTION-PARAM-TYPE')).toBe(true);
     });
 
     it('should error on missing required parameters', () => {
