@@ -719,7 +719,13 @@ export const BUILTIN_FUNCTIONS_V6_RULES: Record<string, any> = {
   },
   'bgcolor': {
     parameters: [
-      { name: 'color', type: 'color', qualifier: 'simple', required: true }
+      { name: 'color', type: 'color', qualifier: 'series', required: true },
+      { name: 'offset', type: 'int', qualifier: 'simple', required: false },
+      { name: 'title', type: 'string', qualifier: 'simple', required: false },
+      { name: 'editable', type: 'bool', qualifier: 'input', required: false },
+      { name: 'show_last', type: 'int', qualifier: 'simple', required: false },
+      { name: 'display', type: 'int', qualifier: 'simple', required: false },
+      { name: 'force_overlay', type: 'bool', qualifier: 'simple', required: false }
     ],
     returnType: 'void',
     deprecatedParams: ['transp']

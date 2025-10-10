@@ -129,15 +129,15 @@ y = close[1`;
     // Parser recovery surfaces the bracket-specific error; legacy PS009/PS010 remain secondary
   });
 
-  it('errors on mixed tabs/spaces ON THE SAME LINE (PSI02)', () => {
-    // TradingView allows mixing tabs/spaces across different scopes,
-    // but NOT on the same line
+  it('warns on mixed tabs/spaces anywhere in the script (PSI02)', () => {
     const code = `//@version=6
 indicator("Indent")
-\t    if close > open
-    plot(close)`;
+if close > open
+    if bar_index > 0
+    \tplot(close)`;
     const { codes } = run(code);
-    expectHas(codes, { errors: ['PSI02'] }); // Mixed tabs/spaces on same line is an error
+    expect(codes.errors).toEqual([]);
+    expectHas(codes, { warnings: ['PSI02'] });
   });
 });
 

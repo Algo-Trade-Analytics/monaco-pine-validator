@@ -51,7 +51,7 @@ plot(close)`;
     console.log('');
 
     // Should detect mixed indentation
-    const mixedIndentErrors = result.errors.filter(e => e.code === 'PSI02');
-    expect(mixedIndentErrors.length).toBeGreaterThan(0);
+    const mixedIndentWarnings = result.warnings.filter(e => e.code === 'PSI02');
+    expect(mixedIndentWarnings.length).toBeGreaterThan(0);
   });
 });

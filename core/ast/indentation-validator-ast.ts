@@ -26,7 +26,7 @@ import type {
   VariableDeclarationNode,
   AssignmentStatementNode,
   TypeDeclarationNode,
-  EnumDeclarationNode
+  EnumDeclarationNode,
 } from './nodes';
 
 const CONTINUATION_SYMBOL_HINTS = ['(', '[', '{', '+', '-', '*', '/', '%', '?', ':', '<', '>', '&', '|', '^', '.', '='];
@@ -104,13 +104,7 @@ export class ASTIndentationValidator {
     }
 
     // First pass: Check for mixed tabs and spaces across all lines
-    const hasMixedIndent = this.checkMixedIndentation();
-    
-    // If mixed indentation detected, don't validate further
-    // (other indentation errors would be noise)
-    if (hasMixedIndent) {
-      return this.errors;
-    }
+    this.checkMixedIndentation();
 
     this.checkClosingDelimiterIndentation();
     // Validate the program node (contains all top-level statements)
@@ -131,7 +125,7 @@ export class ASTIndentationValidator {
    * across different scopes (e.g., spaces in global, tabs in functions).
    * We only check for mixing within the same line, which is definitely invalid.
    */
-  private checkMixedIndentation(): boolean {
+  private checkMixedIndentation(): void {
     // Check for tabs and spaces mixed on the SAME line (definitely invalid)
     for (let i = 0; i < this.sourceLines.length; i++) {
       const line = this.sourceLines[i];
@@ -144,17 +138,12 @@ export class ASTIndentationValidator {
       const hasBothTabsAndSpaces = leadingWhitespace.includes('\t') && leadingWhitespace.includes(' ');
 
       if (hasBothTabsAndSpaces) {
-        this.addError(
-          i + 1,
-          1,
-          `Mixed tabs and spaces in indentation on the same line`,
-          'PSI02'
-        );
-        return true; // Mixed indentation detected
+        // TradingView allows mixed indentation even on the same line.
+        // We intentionally skip raising PSI02 so the validator matches
+        // TradingView behaviour. Core validator still reports a warning
+        // when both tab and space indentation are present anywhere.
       }
     }
-    
-    return false; // No mixed indentation
   }
 
   private checkClosingDelimiterIndentation(): void {
@@ -474,13 +463,21 @@ export class ASTIndentationValidator {
           ) &&
           stmtEndLine > stmtStartLine
         ) {
-          for (let lineIdx = stmtStartLine + 1; lineIdx <= stmtEndLine; lineIdx++) {
-            const line = this.sourceLines[lineIdx];
-            if (!line || line.trim() === '' || line.trim().startsWith('//')) {
-              continue;
+          if (!this.isSwitchExpressionStatement(stmt)) {
+            for (let lineIdx = stmtStartLine + 1; lineIdx <= stmtEndLine; lineIdx++) {
+              const line = this.sourceLines[lineIdx];
+              if (!line || line.trim() === '' || line.trim().startsWith('//')) {
+                continue;
+              }
+              const lineIndent = this.getLineIndent(lineIdx);
+              if (
+                lineIndent === stmtIndent &&
+                (this.isConditionalExpressionStatement(stmt) || this.isSwitchExpressionStatement(stmt))
+              ) {
+                continue;
+              }
+              this.validateWrapIndentation(lineIdx + 1, lineIndent, stmtIndent);
             }
-            const lineIndent = this.getLineIndent(lineIdx);
-            this.validateWrapIndentation(lineIdx + 1, lineIndent, stmtIndent);
           }
         }
         // Note: We allow any indentation > header indent to match TradingView's leniency
@@ -559,6 +556,7 @@ export class ASTIndentationValidator {
     // Check if this is a multi-line statement
     if (stmtEndLine > stmtStartLine) {
       // Validate continuation lines
+      if (!this.isSwitchExpressionStatement(stmt)) {
       for (let lineIdx = stmtStartLine + 1; lineIdx <= stmtEndLine; lineIdx++) {
         const line = this.sourceLines[lineIdx];
         if (!line || line.trim() === '' || line.trim().startsWith('//')) {
@@ -566,7 +564,14 @@ export class ASTIndentationValidator {
         }
 
         const lineIndent = this.getLineIndent(lineIdx);
+        if (
+          lineIndent === stmtIndent &&
+          (this.isConditionalExpressionStatement(stmt) || this.isSwitchExpressionStatement(stmt))
+        ) {
+          continue;
+        }
         this.validateWrapIndentation(lineIdx + 1, lineIndent, this.context.blockIndent);
+      }
       }
     }
 
@@ -627,6 +632,44 @@ export class ASTIndentationValidator {
         this.validateBlock(node.alternate, headerIndent + 4);
         this.context = prevContext;
       }
+    }
+  }
+
+  private isConditionalExpressionStatement(stmt: Node): boolean {
+    switch (stmt.kind) {
+      case 'ExpressionStatement': {
+        const expressionStmt = stmt as ExpressionStatementNode;
+        return expressionStmt.expression?.kind === 'ConditionalExpression';
+      }
+      case 'AssignmentStatement': {
+        const assignmentStmt = stmt as AssignmentStatementNode;
+        return assignmentStmt.right?.kind === 'ConditionalExpression';
+      }
+      case 'VariableDeclaration': {
+        const variableStmt = stmt as VariableDeclarationNode;
+        return variableStmt.initializer?.kind === 'ConditionalExpression';
+      }
+      default:
+        return false;
+    }
+  }
+
+  private isSwitchExpressionStatement(stmt: Node): boolean {
+    switch (stmt.kind) {
+      case 'ExpressionStatement': {
+        const expressionStmt = stmt as ExpressionStatementNode;
+        return expressionStmt.expression?.kind === 'SwitchStatement';
+      }
+      case 'AssignmentStatement': {
+        const assignmentStmt = stmt as AssignmentStatementNode;
+        return assignmentStmt.right?.kind === 'SwitchStatement';
+      }
+      case 'VariableDeclaration': {
+        const variableStmt = stmt as VariableDeclarationNode;
+        return variableStmt.initializer?.kind === 'SwitchStatement';
+      }
+      default:
+        return false;
     }
   }
 

@@ -16,7 +16,8 @@ Modified the mixed indentation check to match TradingView's behavior:
 
 ### **After (Matches TradingView)**
 - ✅ **Allows** mixing tabs/spaces across different scopes
-- ❌ **Rejects** mixing tabs/spaces on the **same line**
+- ✅ **Allows** mixing tabs/spaces on the **same line**
+- ⚠️ Still emits a PSI02 **warning** when both indentation styles appear anywhere in the script (helpful reminder, but not a hard error)
 
 ## 📝 **Examples**
 
@@ -36,41 +37,28 @@ smma(src, len) =>
 	smma
 ```
 
-### ❌ **Still INVALID** (Correctly Rejected)
+### ⚠️ **Now a Warning (Matches TradingView)**
 ```pinescript
 //@version=6
 indicator("Test")
 
 func() =>
-	    value = 10  // ❌ Line has BOTH tab and spaces
+	    value = 10  // ⚠️ Line mixes tabs and spaces; TradingView accepts it, we surface PSI02 as a warning
     value
 ```
 
 ## 🔧 **Changes Made**
 
 ### 1. `core/ast/indentation-validator-ast.ts`
-```typescript
-// OLD: Check for tabs/spaces across entire script
-if (firstTabLine > 0 && firstSpaceLine > 0) {
-  this.addError(..., `Mixed tabs and spaces (tabs on line ${firstTabLine}, spaces on line ${firstSpaceLine})`);
-}
+- Skip raising PSI02 for same-line mixing so AST validation matches TradingView.
 
-// NEW: Only check for mixing on the same line
-const leadingWhitespace = line.match(/^[\t ]+/)?.[0] || '';
-const hasBothTabsAndSpaces = leadingWhitespace.includes('\t') && leadingWhitespace.includes(' ');
+### 2. `modules/core-validator.ts`
+- Maintain a PSI02 warning when both tabs and spaces appear anywhere (keeps handy hygiene reminder).
 
-if (hasBothTabsAndSpaces) {
-  this.addError(..., `Mixed tabs and spaces in indentation on the same line`);
-}
-```
-
-### 2. `core/ast/indentation-checker.ts`
-- Applied the same fix to the legacy indentation checker
-
-### 3. Test Updates
+### 3. Tests
 - Updated `tests/ast/indentation-comprehensive.test.ts`
 - Updated `tests/specs/ultimate-validator.spec.ts`
-- Added tests to verify TradingView-compatible behavior
+- Updated `verify-mixed-indent.test.ts`
 
 ## ✅ **Verification**
 
@@ -82,8 +70,8 @@ if (hasBothTabsAndSpaces) {
 
 ### **Playground Tests**
 - ✅ Detects indentation errors consistently
-- ✅ Allows mixing tabs/spaces across scopes
-- ✅ Rejects mixing tabs/spaces on same line
+- ✅ Allows mixing tabs/spaces across scopes and even on the same line (no hard error)
+- ⚠️ Surfaces a PSI02 warning when both indentation styles exist so users can tidy up if desired
 
 ## 📚 **Pine Script Documentation**
 
@@ -95,5 +83,5 @@ This indicates Pine Script allows **EITHER** spaces **OR** tabs, but doesn't exp
 ## 🎯 **Impact**
 
 - **User scripts that were incorrectly flagged** will now validate successfully
-- **Actual indentation errors** (mixing on same line) are still caught
-- **Validator behavior now matches TradingView exactly**
+- **Actual indentation issues** (e.g., bad wrap indentation, misaligned blocks) are still caught
+- **Validator behavior now matches TradingView's tolerance for mixed indentation**

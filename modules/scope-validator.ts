@@ -426,6 +426,13 @@ export class ScopeValidator implements ValidationModule {
     context.usedVars.forEach((name) => ignored.add(name));
     context.declaredVars.forEach((_line, declaredName) => ignored.add(declaredName));
 
+    // Add namespaces from symbol table (e.g., import aliases)
+    this.astContext?.symbolTable.forEach((record) => {
+      if (record.kind === 'namespace') {
+        ignored.add(record.name);
+      }
+    });
+
     // NOTE: Function parameters are NOT added here because they are scope-limited.
     // They are handled separately in emitAstUndefinedReferenceWarnings via scopedDeclarations.
     // This ensures parameters like 's' in 'toSize(s)' are only valid inside that function.

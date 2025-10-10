@@ -31,6 +31,7 @@ import {
   type StringLiteralNode,
   type BooleanLiteralNode,
   type ColorLiteralNode,
+  type VariableDeclarationKind,
 } from '../core/ast/nodes';
 import { visit } from '../core/ast/traversal';
 import { ensureAstContext } from '../core/ast/context-utils';
@@ -63,6 +64,7 @@ export class TypeInferenceValidator implements ValidationModule {
   private config!: ValidatorConfig;
   private astContext: AstValidationContext | null = null;
   private astTypeEnvironment: TypeEnvironment | null = null;
+  private importNamespaceAliases = new Map<string, string>();
 
   getDependencies(): string[] {
     return ['SyntaxValidator', 'TypeValidator'];
@@ -91,6 +93,7 @@ export class TypeInferenceValidator implements ValidationModule {
     this.helper.reset();
     this.astContext = null;
     this.astTypeEnvironment = null;
+    this.importNamespaceAliases.clear();
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -113,6 +116,9 @@ export class TypeInferenceValidator implements ValidationModule {
       },
       BinaryExpression: {
         enter: (path) => this.handleBinaryExpression(path.node),
+      },
+      ImportDeclaration: {
+        enter: (path) => this.handleImportDeclaration(path.node),
       },
     });
   }
@@ -202,6 +208,8 @@ export class TypeInferenceValidator implements ValidationModule {
           line,
           column,
           node.declarationKind === 'const',
+          false,
+          this.isSeriesQualifiedDeclaration(node.declarationKind),
         );
       } else if (collectionInfo) {
         if (process.env.DEBUG_TYPE_INFERENCE === '1' && node.identifier.name === 'allBoxes') {
@@ -216,6 +224,8 @@ export class TypeInferenceValidator implements ValidationModule {
           line,
           column,
           node.declarationKind === 'const',
+          false,
+          this.isSeriesQualifiedDeclaration(node.declarationKind),
         );
       }
 
@@ -245,7 +255,11 @@ export class TypeInferenceValidator implements ValidationModule {
     // Check for series qualifier mismatch
     // Example: int len = barstate.islast ? 20 : 10 (series cannot be assigned to simple)
     const initializerIsSeries = this.isSeriesExpression(initializer);
-    const declaredTypeIsSimple = declaredType && declaredType !== 'series' && !node.typeAnnotation?.name.name.includes('series');
+    const isSeriesDeclarationKind = this.isSeriesQualifiedDeclaration(node.declarationKind);
+    const declaredTypeIsSimple =
+      !isSeriesDeclarationKind &&
+      this.isSimpleQualifiedType(declaredType) &&
+      !node.typeAnnotation?.name.name.includes('series');
     
     // Be more lenient for function parameters - Pine Script allows flexible type qualifiers
     const isFunctionParameter = this.isInsideFunction(node);
@@ -295,7 +309,23 @@ export class TypeInferenceValidator implements ValidationModule {
       column,
       node.declarationKind === 'const',
       Boolean(node.typeAnnotation),
+      this.isSeriesQualifiedDeclaration(node.declarationKind),
     );
+  }
+
+  private isSeriesQualifiedDeclaration(kind: VariableDeclarationKind | undefined): boolean {
+    if (!kind) {
+      return false;
+    }
+    return kind === 'var' || kind === 'varip';
+  }
+
+  private isSimpleQualifiedType(type: string | null): boolean {
+    if (!type) {
+      return false;
+    }
+    const normalized = this.normalizeType(type);
+    return normalized === 'int' || normalized === 'float' || normalized === 'bool' || normalized === 'string' || normalized === 'color';
   }
 
   private handleAssignment(node: AssignmentStatementNode): void {
@@ -343,6 +373,7 @@ export class TypeInferenceValidator implements ValidationModule {
 
     if (node.left.kind === 'Identifier') {
       const identifier = node.left as IdentifierNode;
+      const expectedTypeAliasForIdentifier = this.getVariableType(identifier.name);
       let existingInfo = this.context.typeMap.get(identifier.name);
 
       const guardedTypes = new Set<TypeInfo['type']>(['int', 'float', 'bool', 'string', 'color']);
@@ -353,8 +384,10 @@ export class TypeInferenceValidator implements ValidationModule {
           // No compatibility checks needed; type will be updated below.
         } else {
           let normalizedValueType = valueType ? this.normalizeType(valueType) : 'unknown';
-          const existingType = this.normalizeType(existingTypeRaw);
-          const existingIsSimple = existingTypeRaw !== 'unknown' && !existingInfo.isSeries && existingType !== 'series';
+          const existingType = expectedTypeAliasForIdentifier
+            ? this.normalizeType(expectedTypeAliasForIdentifier)
+            : this.normalizeType(existingInfo?.type ?? existingTypeRaw);
+          const existingIsSimple = this.isSimpleQualifiedType(existingType) && !existingInfo.isSeries;
           const expressionIsSeries = this.isSeriesExpression(right);
           let valueIsSeries = expressionIsSeries || normalizedValueType === 'series';
 
@@ -390,6 +423,8 @@ export class TypeInferenceValidator implements ValidationModule {
             identifier.loc.start.line,
             identifier.loc.start.column,
             existingInfo.isConst ?? false,
+            false,
+            true,
           );
 
           existingInfo = this.context.typeMap.get(identifier.name);
@@ -398,7 +433,9 @@ export class TypeInferenceValidator implements ValidationModule {
           valueType = 'series';
         }
 
-        const effectiveExpectedType = this.normalizeType(existingInfo?.type ?? existingTypeRaw);
+        const effectiveExpectedType = expectedTypeAliasForIdentifier
+          ? this.normalizeType(expectedTypeAliasForIdentifier)
+          : this.normalizeType(existingInfo?.type ?? existingTypeRaw);
         if (
           effectiveExpectedType !== 'unknown' &&
           !this.areTypesCompatible(effectiveExpectedType, normalizedValueType)
@@ -434,6 +471,7 @@ export class TypeInferenceValidator implements ValidationModule {
           identifier.loc.start.line,
           identifier.loc.start.column,
           false,
+          false,
         );
       } else if (valueType && valueType !== 'unknown') {
         this.registerVariableTypeInfo(
@@ -444,6 +482,7 @@ export class TypeInferenceValidator implements ValidationModule {
           undefined,
           identifier.loc.start.line,
           identifier.loc.start.column,
+          false,
           false,
         );
       }
@@ -567,6 +606,53 @@ export class TypeInferenceValidator implements ValidationModule {
       'Implicit numeric conversion detected. Cast explicitly to clarify intent.',
       'PSV6-TYPE-CONVERSION',
     );
+  }
+
+  private handleImportDeclaration(node: ImportDeclarationNode): void {
+    const alias = node.alias.name;
+    const canonical = this.getCanonicalNamespaceForImport(node.path.value);
+
+    if (canonical) {
+      this.importNamespaceAliases.set(alias, canonical);
+    } else {
+      this.importNamespaceAliases.set(alias, alias);
+    }
+
+    const { line, column } = node.alias.loc.start;
+    this.registerVariableTypeInfo(
+      alias,
+      'namespace',
+      undefined,
+      undefined,
+      undefined,
+      line,
+      column,
+      false,
+      true,
+      false,
+    );
+  }
+
+  private getCanonicalNamespaceForImport(path: string): string | null {
+    const segments = path.split('/');
+    if (segments.length < 2) {
+      return null;
+    }
+    const key = `${segments[0]}/${segments[1]}`.toLowerCase();
+    const builtinMap = new Map<string, string>([
+      ['tradingview/ta', 'ta'],
+      ['tradingview/math', 'math'],
+      ['tradingview/str', 'str'],
+      ['tradingview/color', 'color'],
+      ['tradingview/array', 'array'],
+      ['tradingview/map', 'map'],
+      ['tradingview/request', 'request'],
+      ['tradingview/time', 'time'],
+      ['tradingview/line', 'line'],
+      ['tradingview/label', 'label'],
+      ['tradingview/box', 'box'],
+    ]);
+    return builtinMap.get(key) ?? null;
   }
 
   private isImplicitNumericConversion(leftType: string | null, rightType: string | null): boolean {
@@ -1105,7 +1191,8 @@ export class TypeInferenceValidator implements ValidationModule {
 
   private resolveCalleeName(expression: ExpressionNode): string | null {
     if (expression.kind === 'Identifier') {
-      return (expression as IdentifierNode).name;
+      const name = (expression as IdentifierNode).name;
+      return this.mapNamespaceAlias(name);
     }
 
     if (expression.kind === 'MemberExpression') {
@@ -1118,11 +1205,25 @@ export class TypeInferenceValidator implements ValidationModule {
       if (!objectName) {
         return null;
       }
-
-      return `${objectName}.${member.property.name}`;
+      const mappedObject = this.mapNamespaceAlias(objectName);
+      return `${mappedObject}.${member.property.name}`;
     }
 
     return null;
+  }
+
+  private mapNamespaceAlias(name: string): string {
+    if (!name) {
+      return name;
+    }
+    const parts = name.split('.');
+    const alias = parts[0];
+    const canonical = this.importNamespaceAliases.get(alias);
+    if (!canonical || canonical === alias) {
+      return name;
+    }
+    parts[0] = canonical;
+    return parts.join('.');
   }
 
   private parseTypeReference(reference: TypeReferenceNode): { type: TypeInfo['type']; elementType?: string; keyType?: string; valueType?: string } {
@@ -1309,6 +1410,7 @@ export class TypeInferenceValidator implements ValidationModule {
     column: number,
     isConst: boolean,
     lockType = false,
+    forceSeries = false,
   ): void {
     if (!type || type === 'unknown') {
       return;
@@ -1341,12 +1443,19 @@ export class TypeInferenceValidator implements ValidationModule {
       if (this.shouldOverrideExistingType(updated.type, type)) {
         const previousType = updated.type;
         updated.type = type;
-        updated.isSeries = type === 'series' || updated.isSeries;
+        if (type === 'series' && !updated.isSeries) {
+          updated.isSeries = true;
+        }
         changed = true;
 
         if (process.env.DEBUG_TYPE_INFERENCE === '1' && name === 'idx') {
           console.log(`[TypeInference] Overriding ${name} type from ${previousType} to ${type}`);
         }
+      }
+
+      if (forceSeries && !updated.isSeries) {
+        updated.isSeries = true;
+        changed = true;
       }
 
       if (normalizedElement && (!updated.elementType || updated.elementType === 'unknown')) {
@@ -1381,7 +1490,7 @@ export class TypeInferenceValidator implements ValidationModule {
     const info: TypeInfo = {
       type,
       isConst,
-      isSeries: type === 'series',
+      isSeries: type === 'series' || forceSeries,
       declaredAt: { line, column },
       usages: [],
       locked: lockType,
@@ -1450,6 +1559,7 @@ export class TypeInferenceValidator implements ValidationModule {
       case 'chart.point':
       case 'analysis':
       case 'udt':
+      case 'namespace':
         return 2;
       case 'series':
         return 3;
@@ -1509,6 +1619,7 @@ export class TypeInferenceValidator implements ValidationModule {
       'chart.point',
       'udt',
       'analysis',
+      'namespace',
       'enum',
       'unknown',
     ] satisfies Array<TypeInfo['type']>);

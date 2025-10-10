@@ -74,7 +74,7 @@ myFunc(x) =>
       const errors = validateIndentationWithAST(code, ast);
 
       // 4-space continuation should be rejected (multiples of 4 are reserved for blocks)
-      expect(errors.filter(e => e.code === 'PSV6-INDENT-WRAP-BLOCK')).toHaveLength(1);
+      expect(errors.filter(e => e.code === 'PSV6-INDENT-WRAP-MULTIPLE-OF-4')).toHaveLength(1);
     });
   });
 
