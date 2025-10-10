@@ -6,6 +6,10 @@ const createMonacoStub = () => {
   const registered: Array<{ id: string }> = [];
   const configs: Record<string, languages.LanguageConfiguration> = {};
   const tokens: Record<string, unknown> = {};
+  const hoverProviders: Array<{
+    languageId: string;
+    provider: languages.HoverProvider;
+  }> = [];
 
   const monaco = {
     languages: {
@@ -21,10 +25,16 @@ const createMonacoStub = () => {
       setMonarchTokensProvider: vi.fn((id: string, definition: unknown) => {
         tokens[id] = definition;
       }),
+      registerHoverProvider: vi.fn(
+        (languageId: string, provider: languages.HoverProvider) => {
+          hoverProviders.push({ languageId, provider });
+          return { dispose: vi.fn() };
+        },
+      ),
     },
   } as unknown as typeof import('monaco-editor');
 
-  return { monaco, registered, configs, tokens };
+  return { monaco, registered, configs, tokens, hoverProviders };
 };
 
 describe('registerPineLanguage', () => {
@@ -104,5 +114,36 @@ describe('registerPineLanguage', () => {
     expect(enumRegex.test('enum SLOption')).toBe(true);
     expect(enumAction[0]).toBe('keyword');
     expect(enumAction[2]).toBe('type.identifier');
+  });
+
+  it('registers a hover provider that surfaces Pine Script documentation', () => {
+    const { monaco, hoverProviders } = createMonacoStub();
+
+    registerPineLanguage(monaco);
+
+    expect(hoverProviders).toHaveLength(1);
+    const provider = hoverProviders[0]?.provider;
+    expect(provider).toBeDefined();
+
+    const model = {
+      getLineContent: () => 'plot(close)',
+    } as unknown as import('monaco-editor').editor.ITextModel;
+
+    const hover = provider?.provideHover(
+      model,
+      { lineNumber: 1, column: 3 } as unknown as import('monaco-editor').Position,
+      {} as import('monaco-editor').CancellationToken,
+    );
+
+    expect(hover).not.toBeNull();
+    if (hover && 'contents' in hover) {
+      const value = hover.contents[0]?.value ?? '';
+      expect(value).toContain('plot (built-in function)');
+      expect(value).toContain('**Syntax**');
+      expect(value).toContain('```pinescript');
+      expect(value).not.toContain('See also');
+      expect(value).not.toContain('⌘ + click');
+      expect(value).toContain('[TradingView reference](https://www.tradingview.com/pine-script-reference/v6/#fun_plot)');
+    }
   });
 });

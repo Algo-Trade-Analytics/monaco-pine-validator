@@ -1,8 +1,9 @@
 import type { languages } from 'monaco-editor';
 import { KEYWORDS, NAMESPACES } from '../constants';
 import { NAMESPACE_MEMBERS } from '../namespace-members';
+import { ensurePineHoverProvider } from './pine-tooltips';
 
-const LANGUAGE_ID = 'pinescript';
+export const PINE_LANGUAGE_ID = 'pinescript';
 
 const CONTROL_KEYWORDS = [
   'if',
@@ -200,7 +201,9 @@ const buildNamespaceMemberRules = (): languages.IMonarchLanguageRule[] => {
 export function registerPineLanguage(
   monaco: typeof import('monaco-editor'),
 ): void {
-  if (monaco.languages.getLanguages().some((lang) => lang.id === LANGUAGE_ID)) {
+  ensurePineHoverProvider(monaco, PINE_LANGUAGE_ID);
+
+  if (monaco.languages.getLanguages().some((lang) => lang.id === PINE_LANGUAGE_ID)) {
     return;
   }
 
@@ -261,8 +264,8 @@ const builtinIdentifierPattern =
 
   const namespaceMemberRules = buildNamespaceMemberRules();
 
-  monaco.languages.register({ id: LANGUAGE_ID });
-  monaco.languages.setLanguageConfiguration(LANGUAGE_ID, {
+  monaco.languages.register({ id: PINE_LANGUAGE_ID });
+  monaco.languages.setLanguageConfiguration(PINE_LANGUAGE_ID, {
     comments: {
       lineComment: '//',
       blockComment: ['/*', '*/'],
@@ -288,7 +291,7 @@ const builtinIdentifierPattern =
     ],
   } satisfies languages.LanguageConfiguration);
 
-  monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, {
+  monaco.languages.setMonarchTokensProvider(PINE_LANGUAGE_ID, {
     keywords: keywordList,
     typeKeywords: TYPE_KEYWORDS,
     builtinFunctions: BUILTIN_FUNCTIONS,
