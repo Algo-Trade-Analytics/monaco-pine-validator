@@ -44,6 +44,7 @@ export interface TypeInfo {
   keyType?: string; // For maps to store the key type
   valueType?: string; // For maps to store the value type
   udtName?: string; // Preserve the specific UDT identifier when type === 'udt'
+  locked?: boolean; // Indicates the type came from an explicit annotation and cannot be widened
 }
 
 export interface ValidationContext {

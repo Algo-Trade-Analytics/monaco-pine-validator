@@ -63,7 +63,7 @@ plot(close)`;
       expectHas(result, { errors: ['PSV6-TYPE-ASSIGNMENT-MISMATCH'] });
     });
 
-    it('should error when reassignment changes variable type', () => {
+    it('should allow reassignment to promote inferred variables to series', () => {
       const code = `//@version=6
 indicator("Reassign Type Test")
 
@@ -73,10 +73,23 @@ sum := sum + close
 plot(sum)`;
 
       const result = run(code);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('should error when annotated variable accumulates series data', () => {
+      const code = `//@version=6
+indicator("Annotated Series Test")
+
+float sum = 0.0
+sum := sum + close
+
+plot(sum)`;
+
+      const result = run(code);
       expectHas(result, { errors: ['PSV6-TYPE-ASSIGNMENT-MISMATCH'] });
     });
 
-    it('should error when accumulating series into simple variable', () => {
+    it('should allow series accumulation inside helper functions', () => {
       const code = `//@version=6
 indicator("Series Accumulation Test")
 
@@ -90,7 +103,7 @@ acc = myFunc(close, 5)
 plot(acc)`;
 
       const result = run(code);
-      expectHas(result, { errors: ['PSV6-TYPE-ASSIGNMENT-MISMATCH'] });
+      expect(result.errors).toEqual([]);
     });
   });
 

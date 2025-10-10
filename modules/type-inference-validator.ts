@@ -294,6 +294,7 @@ export class TypeInferenceValidator implements ValidationModule {
       line,
       column,
       node.declarationKind === 'const',
+      Boolean(node.typeAnnotation),
     );
   }
 
@@ -324,7 +325,7 @@ export class TypeInferenceValidator implements ValidationModule {
       );
     }
 
-    const valueType = this.getExpressionType(right);
+    let valueType = this.getExpressionType(right);
     const inferredCollection = this.inferCollectionTypeFromExpression(right);
     
     if (process.env.DEBUG_TYPE_INFERENCE === '1' && node.left.kind === 'Identifier' && (node.left as IdentifierNode).name === 'allBoxes') {
@@ -342,16 +343,20 @@ export class TypeInferenceValidator implements ValidationModule {
 
     if (node.left.kind === 'Identifier') {
       const identifier = node.left as IdentifierNode;
-      const existingInfo = this.context.typeMap.get(identifier.name);
+      let existingInfo = this.context.typeMap.get(identifier.name);
 
-      const existingTypeRaw = existingInfo?.type ?? 'unknown';
       const guardedTypes = new Set<TypeInfo['type']>(['int', 'float', 'bool', 'string', 'color']);
-      if (existingInfo && guardedTypes.has(existingTypeRaw as TypeInfo['type'])) {
-        const existingType = this.normalizeType(existingTypeRaw);
-        const normalizedValueType = valueType ? this.normalizeType(valueType) : 'unknown';
-        const existingIsSimple = !existingInfo.isSeries && existingType !== 'series';
-        const expressionIsSeries = this.isSeriesExpression(right);
-        let valueIsSeries = expressionIsSeries || normalizedValueType === 'series';
+      if (existingInfo) {
+        let existingTypeRaw = existingInfo.type ?? 'unknown';
+        const shouldGuard = existingInfo.locked || guardedTypes.has(existingTypeRaw as TypeInfo['type']);
+        if (!shouldGuard) {
+          // No compatibility checks needed; type will be updated below.
+        } else {
+          let normalizedValueType = valueType ? this.normalizeType(valueType) : 'unknown';
+          const existingType = this.normalizeType(existingTypeRaw);
+          const existingIsSimple = existingTypeRaw !== 'unknown' && !existingInfo.isSeries && existingType !== 'series';
+          const expressionIsSeries = this.isSeriesExpression(right);
+          let valueIsSeries = expressionIsSeries || normalizedValueType === 'series';
 
         if (valueIsSeries && right.kind === 'Identifier') {
           const idName = (right as IdentifierNode).name;
@@ -365,24 +370,47 @@ export class TypeInferenceValidator implements ValidationModule {
           valueIsSeries = true;
         }
 
-        if (existingIsSimple && valueIsSeries) {
+        if (existingIsSimple && valueIsSeries && guardedTypes.has(existingTypeRaw as TypeInfo['type'])) {
+          if (existingInfo.locked) {
+            this.helper.addError(
+              line,
+              column,
+              `Cannot assign series expression to simple ${existingType} variable '${identifier.name}'. Series values change on every bar and cannot be stored in simple variables.`,
+              'PSV6-TYPE-ASSIGNMENT-MISMATCH',
+            );
+            return;
+          }
+
+          this.registerVariableTypeInfo(
+            identifier.name,
+            'series',
+            undefined,
+            undefined,
+            undefined,
+            identifier.loc.start.line,
+            identifier.loc.start.column,
+            existingInfo.isConst ?? false,
+          );
+
+          existingInfo = this.context.typeMap.get(identifier.name);
+          existingTypeRaw = existingInfo?.type ?? 'series';
+          normalizedValueType = 'series';
+          valueType = 'series';
+        }
+
+        const effectiveExpectedType = this.normalizeType(existingInfo?.type ?? existingTypeRaw);
+        if (
+          effectiveExpectedType !== 'unknown' &&
+          !this.areTypesCompatible(effectiveExpectedType, normalizedValueType)
+        ) {
           this.helper.addError(
             line,
             column,
-            `Cannot assign series expression to simple ${existingType} variable '${identifier.name}'. Series values change on every bar and cannot be stored in simple variables.`,
+            `Type mismatch: cannot assign ${normalizedValueType} to ${effectiveExpectedType} variable '${identifier.name}'.`,
             'PSV6-TYPE-ASSIGNMENT-MISMATCH',
           );
           return;
         }
-
-        if (!this.areTypesCompatible(existingType, normalizedValueType)) {
-          this.helper.addError(
-            line,
-            column,
-            `Type mismatch: cannot assign ${normalizedValueType} to ${existingType} variable '${identifier.name}'.`,
-            'PSV6-TYPE-ASSIGNMENT-MISMATCH',
-          );
-          return;
         }
       }
 
@@ -1280,6 +1308,7 @@ export class TypeInferenceValidator implements ValidationModule {
     line: number,
     column: number,
     isConst: boolean,
+    lockType = false,
   ): void {
     if (!type || type === 'unknown') {
       return;
@@ -1301,6 +1330,9 @@ export class TypeInferenceValidator implements ValidationModule {
     const existing = this.context.typeMap.get(name) as TypeInfo | undefined;
 
     if (existing) {
+      if (existing.locked && !lockType) {
+        return;
+      }
       const updated: TypeInfo = { ...existing };
       let changed = false;
 
@@ -1332,6 +1364,11 @@ export class TypeInferenceValidator implements ValidationModule {
         changed = true;
       }
 
+      if (lockType && !updated.locked) {
+        updated.locked = true;
+        changed = true;
+      }
+
       if (changed) {
         if (process.env.DEBUG_TYPE_INFERENCE === '1' && name === 'idx') {
           console.log(`[TypeInference] Updated ${name} type from ${existing.type} to ${updated.type}`);
@@ -1347,6 +1384,7 @@ export class TypeInferenceValidator implements ValidationModule {
       isSeries: type === 'series',
       declaredAt: { line, column },
       usages: [],
+      locked: lockType,
     };
 
     if (normalizedElement) {
