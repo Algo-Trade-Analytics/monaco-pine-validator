@@ -23,6 +23,7 @@ import {
   NaToken,
   Newline,
   NumberLiteral as NumberToken,
+  Slash,
   Plus,
   RParen,
   Strategy,
@@ -301,11 +302,76 @@ export function createScriptDeclarationRule(parser: PineParser) {
 export function createImportDeclarationRule(parser: PineParser) {
   return parser.createRule('importDeclaration', () => {
     const importToken = parser.consumeToken(Import);
-    const pathToken = parser.consumeToken(StringToken);
+    const { pathToken } = consumeImportPath(parser);
     parser.consumeToken(As);
     const aliasToken = parser.consumeToken(IdentifierToken);
     return createImportDeclarationNode(pathToken, aliasToken, importToken, aliasToken);
   });
+}
+
+function consumeImportPath(parser: PineParser): { pathToken: IToken } {
+  const immediate = parser.lookAhead(1);
+  if (immediate.tokenType === StringToken) {
+    const token = parser.consumeToken(StringToken);
+    return { pathToken: token };
+  }
+
+  const segments: IToken[] = [];
+  let expectSegment = true;
+
+  // Accept sequences like Identifier ("/" Identifier | "/" Number)+
+  while (true) {
+    const next = parser.lookAhead(1);
+    const tokenType = next.tokenType;
+
+    if (expectSegment) {
+      if (tokenType === IdentifierToken || tokenType === NumberToken) {
+        segments.push(parser.consumeToken(tokenType));
+        expectSegment = false;
+        continue;
+      }
+      break;
+    }
+
+    if (tokenType === Slash) {
+      segments.push(parser.consumeToken(Slash));
+      expectSegment = true;
+      continue;
+    }
+
+    break;
+  }
+
+  if (segments.length === 0 || expectSegment) {
+    const fallback = parser.consumeToken(StringToken);
+    return { pathToken: fallback };
+  }
+
+  const concat = segments.map((segment) => segment.image).join('');
+  const first = segments[0];
+  const last = segments[segments.length - 1];
+
+  const startLine = first.startLine ?? first.endLine ?? 1;
+  const startColumn = first.startColumn ?? first.endColumn ?? 1;
+  const startOffset = first.startOffset ?? first.endOffset ?? 0;
+  const endLine = last.endLine ?? last.startLine ?? startLine;
+  const endColumn =
+    last.endColumn ?? ((last.startColumn ?? 1) + (last.image?.length ?? 1) - 1);
+  const endOffset =
+    last.endOffset ?? ((last.startOffset ?? 0) + (last.image?.length ?? 0));
+
+  const syntheticPathToken: IToken = {
+    image: `"${concat}"`,
+    tokenType: StringToken,
+    startLine,
+    startColumn,
+    startOffset,
+    endLine,
+    endColumn,
+    endOffset,
+  } as IToken;
+
+  return { pathToken: syntheticPathToken };
 }
 
 export function createEnumMemberRule(parser: PineParser) {
