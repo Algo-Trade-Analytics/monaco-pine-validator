@@ -53,7 +53,6 @@ Tested with a 665-line strategy script that previously showed 0 errors. After th
 - AST processing completes successfully despite 33 syntax errors from the parser
 
 ## Files Changed
-1. `/Users/egr/Desktop/TradeSync/pine-validator/core/ast/scope.ts`
-2. `/Users/egr/Desktop/TradeSync/pine-validator/core/ast/type-inference.ts`
-3. `/Users/egr/Desktop/TradeSync/pine-validator/core/ast/control-flow.ts`
-
+1. `/Users/egr/Desktop/AlgoTradeAnalytics/pine-validator/core/ast/scope.ts`
+2. `/Users/egr/Desktop/AlgoTradeAnalytics/pine-validator/core/ast/type-inference.ts`
+3. `/Users/egr/Desktop/AlgoTradeAnalytics/pine-validator/core/ast/control-flow.ts`

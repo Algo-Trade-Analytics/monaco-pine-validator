@@ -103,7 +103,7 @@ export class SwitchValidator implements ValidationModule {
       }
 
       const typeLabel = this.inferAstCaseReturnType(caseNode);
-      if (typeLabel) {
+      if (typeLabel && typeLabel !== 'unknown') {
         returnTypes.add(typeLabel);
       }
     }

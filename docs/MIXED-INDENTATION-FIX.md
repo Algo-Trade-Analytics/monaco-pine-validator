@@ -17,7 +17,6 @@ Modified the mixed indentation check to match TradingView's behavior:
 ### **After (Matches TradingView)**
 - ✅ **Allows** mixing tabs/spaces across different scopes
 - ✅ **Allows** mixing tabs/spaces on the **same line**
-- ⚠️ Still emits a PSI02 **warning** when both indentation styles appear anywhere in the script (helpful reminder, but not a hard error)
 
 ## 📝 **Examples**
 
@@ -37,13 +36,13 @@ smma(src, len) =>
 	smma
 ```
 
-### ⚠️ **Now a Warning (Matches TradingView)**
+### ✅ **Also VALID** (Matches TradingView)
 ```pinescript
 //@version=6
 indicator("Test")
 
 func() =>
-	    value = 10  // ⚠️ Line mixes tabs and spaces; TradingView accepts it, we surface PSI02 as a warning
+	    value = 10  // Line mixes tabs and spaces; TradingView accepts it and we now match that behaviour without extra warnings
     value
 ```
 
@@ -52,10 +51,7 @@ func() =>
 ### 1. `core/ast/indentation-validator-ast.ts`
 - Skip raising PSI02 for same-line mixing so AST validation matches TradingView.
 
-### 2. `modules/core-validator.ts`
-- Maintain a PSI02 warning when both tabs and spaces appear anywhere (keeps handy hygiene reminder).
-
-### 3. Tests
+### 2. Tests
 - Updated `tests/ast/indentation-comprehensive.test.ts`
 - Updated `tests/specs/ultimate-validator.spec.ts`
 - Updated `verify-mixed-indent.test.ts`
@@ -71,7 +67,6 @@ func() =>
 ### **Playground Tests**
 - ✅ Detects indentation errors consistently
 - ✅ Allows mixing tabs/spaces across scopes and even on the same line (no hard error)
-- ⚠️ Surfaces a PSI02 warning when both indentation styles exist so users can tidy up if desired
 
 ## 📚 **Pine Script Documentation**
 

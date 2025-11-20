@@ -1049,6 +1049,12 @@ export class ASTIndentationValidator {
    * - Inside blocks, continuation can be ANY non-multiple-of-4 (including < block level)
    */
   private validateWrapIndentation(lineNum: number, indent: number, baseIndent: number): void {
+    const currentLine = this.sourceLines[lineNum - 1];
+    if (currentLine && this.isSwitchCaseExpression(currentLine)) {
+      this.validateSwitchCaseIndentation(lineNum, indent, baseIndent);
+      return;
+    }
+
     const relativeIndent = indent - baseIndent;
     const wrapIndent = Math.abs(relativeIndent);
 
@@ -1107,7 +1113,8 @@ export class ASTIndentationValidator {
     // Check if this is a switch case expression (starts with case value and =>)
     const currentLine = this.sourceLines[lineNum - 1];
     if (currentLine && this.isSwitchCaseExpression(currentLine)) {
-      return true; // Switch cases should be allowed at 4+ spaces
+      // Switch cases are validated separately for indentation
+      return true;
     }
 
     // Only allow 4+ space continuations for very specific patterns
@@ -1150,6 +1157,51 @@ export class ASTIndentationValidator {
     const trimmed = line.trim();
     // Switch case pattern: "case_value => expression" or just "=> expression"
     return /^\s*[^=]*\s*=>/.test(trimmed);
+  }
+
+  private validateSwitchCaseIndentation(lineNum: number, indent: number, baseIndent: number): void {
+    const headerIndent = this.findSwitchHeaderIndent(lineNum) ?? baseIndent;
+    const expectedIndent = headerIndent + 4;
+
+    if (indent !== expectedIndent) {
+      this.addError(
+        lineNum,
+        indent + 1,
+        `Switch case should be indented with ${expectedIndent} spaces, got ${indent}`,
+        'PSV6-INDENT-BLOCK-MISMATCH',
+      );
+    }
+  }
+
+  private findSwitchHeaderIndent(lineNum: number): number | null {
+    let index = lineNum - 2;
+
+    while (index >= 0) {
+      const rawLine = this.sourceLines[index];
+      if (!rawLine) {
+        index--;
+        continue;
+      }
+
+      const trimmed = rawLine.trim();
+      if (!trimmed || trimmed.startsWith('//')) {
+        index--;
+        continue;
+      }
+
+      if (this.isSwitchCaseExpression(rawLine)) {
+        index--;
+        continue;
+      }
+
+      if (/^\s*(?:switch\b|.*=\s*switch\b)/.test(trimmed)) {
+        return this.getLineIndent(index);
+      }
+
+      break;
+    }
+
+    return null;
   }
 
   private isNamedParameterContext(lineNum: number): boolean {

@@ -1,6 +1,6 @@
 # Pine Validator Playground
 
-A lightweight Monaco Editor runner bundled with the Pine Script v6 validator. Use it to iterate on scripts and observe validator output in real time without launching the full TradeSync application.
+A lightweight Monaco Editor runner bundled with the Pine Script v6 validator. Use it to iterate on scripts and observe validator output in real time without launching the full Algo Trade Analytics application.
 
 ## Getting Started
 

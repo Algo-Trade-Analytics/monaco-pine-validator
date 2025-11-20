@@ -33,6 +33,7 @@ export class ScopeValidator implements ValidationModule {
   private astInvalidIdentifierErrorSites = new Set<string>();
   private astKeywordErrorSites = new Set<string>();
   private astUdtFieldLocations = new Set<string>();
+  private astContext: AstValidationContext | null = null;
 
   getDependencies(): string[] {
     return ['CoreValidator']; // Depends on core validation
@@ -42,6 +43,7 @@ export class ScopeValidator implements ValidationModule {
     this.reset();
 
     const astContext = this.isAstContext(context) && context.ast ? context : null;
+    this.astContext = astContext;
     if (!astContext?.ast) {
       return this.helper.buildResult(context);
     }
@@ -60,6 +62,7 @@ export class ScopeValidator implements ValidationModule {
     this.astInvalidIdentifierErrorSites.clear();
     this.astKeywordErrorSites.clear();
     this.astUdtFieldLocations.clear();
+    this.astContext = null;
   }
 
 

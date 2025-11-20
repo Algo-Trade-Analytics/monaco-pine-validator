@@ -50,6 +50,7 @@ const KNOWN_NAMESPACES = new Set([
   'label',
   'box',
   'table',
+  'hline',
   'position',
   'plot',
   'size',
