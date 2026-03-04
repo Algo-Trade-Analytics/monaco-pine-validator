@@ -29,7 +29,6 @@ import {
   createSwitchStatementNode,
   createSyntheticToken,
   createWhileStatementNode,
-  tokenIndent,
 } from '../node-builders';
 import { attachLoopResultBinding } from '../helpers';
 import type { PineParser } from '../parser';
@@ -47,6 +46,8 @@ import {
   If,
   In,
   LBracket,
+  Indent,
+  Dedent,
   LessEqual,
   MinusEqual,
   Newline,
@@ -214,7 +215,7 @@ export function createIfStatementRule(parser: PineParser): () => IfStatementNode
     const indentOverride = args[0] as number | undefined;
     const ifToken = parser.consumeToken(If);
     const test = parser.invokeSubrule(parser.expression);
-    const indent = indentOverride ?? tokenIndent(ifToken);
+    const indent = indentOverride ?? parser.resolveTokenIndent(ifToken);
     const consequent = parser.parseIndentedBlock(indent);
 
     let alternate: StatementNode | null = null;
@@ -224,16 +225,16 @@ export function createIfStatementRule(parser: PineParser): () => IfStatementNode
       offset += 1;
     }
     const potentialElse = parser.lookAhead(offset);
-    const elseIndent = tokenIndent(potentialElse);
+    const elseIndent = parser.resolveTokenIndent(potentialElse);
     if (potentialElse.tokenType === Else && elseIndent === indent) {
       while (parser.lookAhead(1).tokenType === Newline) {
         parser.consumeToken(Newline);
       }
       const elseToken = parser.consumeToken(Else);
       if (parser.lookAhead(1).tokenType === If) {
-        alternate = parser.invokeSubrule(parser.ifStatement, 2, { ARGS: [tokenIndent(elseToken)] });
+        alternate = parser.invokeSubrule(parser.ifStatement, 2, { ARGS: [parser.resolveTokenIndent(elseToken)] });
       } else if (parser.lookAhead(1).tokenType === Newline) {
-        alternate = parser.parseIndentedBlock(tokenIndent(elseToken));
+        alternate = parser.parseIndentedBlock(parser.resolveTokenIndent(elseToken));
       } else {
         const alternateStatement = parser.invokeSubrule(parser.statement, 2);
         alternate = alternateStatement;
@@ -320,7 +321,7 @@ export function createParseForLoop(parser: PineParser) {
       }
     }
 
-    const body = parser.parseIndentedBlock(tokenIndent(forToken));
+    const body = parser.parseIndentedBlock(parser.resolveTokenIndent(forToken));
     const result = extractLoopResult(body);
     const endToken = parser.lookAhead(0);
     return createForStatementNode(
@@ -361,19 +362,76 @@ export function createSwitchCaseRule(parser: PineParser) {
 
     if (startToken.tokenType === FatArrow) {
       const arrowToken = parser.consumeToken(FatArrow);
-      const { statements, endToken } = parseSwitchCaseConsequent(parser, tokenIndent(startToken));
+      const { statements, endToken } = parseSwitchCaseConsequent(parser, parser.resolveTokenIndent(startToken));
       return createSwitchCaseNode(test, statements, startToken, arrowToken, endToken);
     }
 
     test = parser.invokeSubrule(parser.expression);
     const arrowToken = parser.consumeToken(FatArrow);
-    const { statements, endToken } = parseSwitchCaseConsequent(parser, tokenIndent(startToken));
+    const { statements, endToken } = parseSwitchCaseConsequent(parser, parser.resolveTokenIndent(startToken));
     return createSwitchCaseNode(test, statements, startToken, arrowToken, endToken);
   });
 }
 
 export function createParseSwitchStructure(parser: PineParser) {
   return (switchToken: IToken): SwitchStatementNode => {
+    if (parser.usesVirtualIndentationTokens()) {
+      const consumeVirtualLineBreaks = () => {
+        while (parser.lookAhead(1).tokenType === Newline) {
+          parser.consumeToken(Newline);
+        }
+      };
+
+      const canParseCaseImmediately =
+        parser.backtrack(() => {
+          consumeVirtualLineBreaks();
+          if (parser.lookAhead(1).tokenType === Indent) {
+            parser.consumeToken(Indent);
+          }
+          parser.invokeSubrule(parser.switchCase);
+          return true;
+        }).call(parser) === true;
+
+      let discriminant: ExpressionNode;
+
+      if (canParseCaseImmediately) {
+        discriminant = createIdentifierNode(
+          createSyntheticToken('__switch_guard__', IdentifierToken, switchToken),
+        );
+        consumeVirtualLineBreaks();
+        if (parser.lookAhead(1).tokenType === Indent) {
+          parser.consumeToken(Indent);
+        }
+      } else {
+        discriminant = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
+        consumeVirtualLineBreaks();
+        if (parser.lookAhead(1).tokenType === Indent) {
+          parser.consumeToken(Indent);
+        }
+      }
+
+      const cases: SwitchCaseNode[] = [];
+      let lastToken: IToken | undefined;
+
+      while (true) {
+        consumeVirtualLineBreaks();
+        const next = parser.lookAhead(1);
+        if (next.tokenType === EOF || next.tokenType === Dedent) {
+          break;
+        }
+        const caseNode = parser.invokeSubrule(parser.switchCase);
+        cases.push(caseNode);
+        lastToken = parser.lookAhead(0);
+      }
+
+      if (parser.lookAhead(1).tokenType === Dedent) {
+        lastToken = parser.consumeToken(Dedent);
+      }
+
+      const endToken = parser.lookAhead(0) ?? lastToken ?? switchToken;
+      return createSwitchStatementNode(discriminant, cases, switchToken, endToken);
+    }
+
     parser.invokeSubrule(parser.consumeOptionalNewlines);
 
     const canParseCaseImmediately =
@@ -386,7 +444,7 @@ export function createParseSwitchStructure(parser: PineParser) {
       ? createIdentifierNode(createSyntheticToken('__switch_guard__', IdentifierToken, switchToken))
       : parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
 
-    let indent = tokenIndent(switchToken);
+    let indent = parser.resolveTokenIndent(switchToken);
     const cases: SwitchCaseNode[] = [];
 
     let lastToken: IToken | undefined;
@@ -402,7 +460,7 @@ export function createParseSwitchStructure(parser: PineParser) {
       lookahead = parser.lookAhead(lookaheadOffset);
     }
     if (lookahead.tokenType !== EOF) {
-      const lookaheadIndent = tokenIndent(lookahead);
+      const lookaheadIndent = parser.resolveTokenIndent(lookahead);
       if (lookaheadIndent <= indent) {
         indent = Math.max(0, lookaheadIndent - 1);
       }
@@ -427,7 +485,7 @@ export function createParseSwitchStructure(parser: PineParser) {
           continue;
         }
 
-        if (tokenIndent(innerLookahead) <= indent) {
+        if (parser.resolveTokenIndent(innerLookahead) <= indent) {
           shouldBreak = true;
           break;
         }
@@ -442,7 +500,7 @@ export function createParseSwitchStructure(parser: PineParser) {
       }
 
       next = parser.lookAhead(1);
-      if (next.tokenType === EOF || tokenIndent(next) <= indent) {
+      if (next.tokenType === EOF || parser.resolveTokenIndent(next) <= indent) {
         break;
       }
 
@@ -466,7 +524,7 @@ export function createWhileStatementRule(parser: PineParser) {
 export function createParseWhileLoop(parser: PineParser) {
   return (whileToken: IToken) => {
     const test = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
-    const body = parser.parseIndentedBlock(tokenIndent(whileToken));
+    const body = parser.parseIndentedBlock(parser.resolveTokenIndent(whileToken));
     const result = extractLoopResult(body);
     const endToken = parser.lookAhead(0);
     return createWhileStatementNode(test, body, result, whileToken, endToken);
@@ -476,7 +534,7 @@ export function createParseWhileLoop(parser: PineParser) {
 export function createRepeatStatementRule(parser: PineParser) {
   return parser.createRule('repeatStatement', () => {
     const repeatToken = parser.consumeToken(Repeat);
-    const body = parser.parseIndentedBlock(tokenIndent(repeatToken));
+    const body = parser.parseIndentedBlock(parser.resolveTokenIndent(repeatToken));
     const result = extractLoopResult(body);
     parser.repeatMany(() => parser.consumeToken(Newline));
     const untilToken = parser.consumeToken(Until);

@@ -32,9 +32,9 @@ import {
   createSyntheticToken,
 } from './base';
 import { createPlaceholderExpression } from './expressions';
-import { createIdentifierNode } from './identifiers';
+import { createIdentifierFromTokens, createIdentifierNode } from './identifiers';
 import { createStringNode } from './literals';
-import { Comma, Greater, Identifier as IdentifierToken, LBracket, Less, RBracket, Return } from '../tokens';
+import { Comma, Dot, Greater, Identifier as IdentifierToken, LBracket, Less, RBracket, Return } from '../tokens';
 import { isIdentifierLikeToken } from '../parser-utils';
 
 export function createParameterNode(
@@ -321,14 +321,25 @@ export function buildTypeReferenceFromTokens(tokens: IToken[]): TypeReferenceNod
   let index = 0;
 
   function parseType(): { node: TypeReferenceNode; endToken: IToken } {
-    const nameToken = tokens[index] ?? createFallbackToken();
+    const firstNameToken = tokens[index] ?? createFallbackToken();
+    const nameTokens: IToken[] = [firstNameToken];
     index += 1;
-    const name = createIdentifierNode(nameToken);
+
+    while (
+      tokens[index]?.tokenType === Dot &&
+      isIdentifierLikeToken(tokens[index + 1])
+    ) {
+      nameTokens.push(tokens[index] as IToken);
+      nameTokens.push(tokens[index + 1] as IToken);
+      index += 2;
+    }
+
+    const name = createIdentifierFromTokens(nameTokens);
     const generics: TypeReferenceNode[] = [];
-    let endToken = nameToken;
+    let endToken = nameTokens[nameTokens.length - 1] ?? firstNameToken;
 
     if (tokens[index]?.tokenType === Less) {
-      const lessToken = tokens[index] ?? nameToken;
+      const lessToken = tokens[index] ?? firstNameToken;
       index += 1;
       endToken = lessToken;
 
@@ -360,7 +371,7 @@ export function buildTypeReferenceFromTokens(tokens: IToken[]): TypeReferenceNod
       kind: 'TypeReference',
       name,
       generics,
-      ...spanFromTokens(nameToken, endToken),
+      ...spanFromTokens(firstNameToken, endToken),
     };
 
     while (index < tokens.length && tokens[index]?.tokenType === LBracket) {
@@ -375,12 +386,12 @@ export function buildTypeReferenceFromTokens(tokens: IToken[]): TypeReferenceNod
         break;
       }
 
-      const arrayToken = createSyntheticToken('array', IdentifierToken, nameToken);
+      const arrayToken = createSyntheticToken('array', IdentifierToken, firstNameToken);
       node = {
         kind: 'TypeReference',
         name: createIdentifierNode(arrayToken),
         generics: [node],
-        ...spanFromTokens(nameToken, closingBracket),
+        ...spanFromTokens(firstNameToken, closingBracket),
       };
       endToken = closingBracket;
     }

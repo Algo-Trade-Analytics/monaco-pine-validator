@@ -1,15 +1,18 @@
 import type { SyntaxError } from '../../pynescript/ast/error';
-import type { Node, ProgramNode } from './nodes';
+import type { CommentNode, Node, ProgramNode } from './nodes';
 
 export type AstMode = 'disabled' | 'shadow' | 'primary';
 
 export interface AstDiagnostics {
   syntaxErrors: SyntaxError[];
+  comments: CommentNode[];
 }
 
 export interface AstParseOptions {
   filename?: string;
   allowErrors?: boolean;
+  includeComments?: boolean;
+  useIndentationTokens?: boolean;
 }
 
 export interface AstParseResult {
@@ -194,6 +197,12 @@ export function cloneTypeMetadata(
   };
 }
 
-export function createAstDiagnostics(errors: SyntaxError[] = []): AstDiagnostics {
-  return { syntaxErrors: [...errors] };
+export function createAstDiagnostics(
+  errors: SyntaxError[] = [],
+  comments: CommentNode[] = [],
+): AstDiagnostics {
+  return {
+    syntaxErrors: [...errors],
+    comments: [...comments],
+  };
 }

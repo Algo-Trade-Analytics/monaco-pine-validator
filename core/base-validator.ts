@@ -93,6 +93,9 @@ function normaliseDiagnostics(diagnostics?: AstDiagnostics): AstDiagnostics {
     syntaxErrors: Array.isArray(diagnostics.syntaxErrors)
       ? [...diagnostics.syntaxErrors]
       : [],
+    comments: Array.isArray(diagnostics.comments)
+      ? [...diagnostics.comments]
+      : [],
   };
 }
 

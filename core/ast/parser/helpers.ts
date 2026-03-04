@@ -12,7 +12,6 @@ import {
   createCompilerAnnotationNode,
   createExpressionStatementNode,
   createPlaceholderExpression,
-  tokenIndent,
 } from './node-builders';
 import {
   attachCompilerAnnotations,
@@ -25,6 +24,7 @@ import {
   ColonEqual,
   Comma,
   CompilerAnnotation,
+  Dedent,
   Dot,
   Equal,
   FatArrow,
@@ -36,6 +36,7 @@ import {
   LParen,
   MinusEqual,
   Newline,
+  Indent,
   PercentEqual,
   PlusEqual,
   RBracket,
@@ -53,7 +54,12 @@ export function createNextSignificantTokenHelper(parser: PineParser) {
       if (token.tokenType === EOF) {
         return token;
       }
-      if (token.tokenType !== Newline && token.tokenType !== CompilerAnnotation) {
+      if (
+        token.tokenType !== Newline &&
+        token.tokenType !== CompilerAnnotation &&
+        token.tokenType !== Indent &&
+        token.tokenType !== Dedent
+      ) {
         return token;
       }
       offset += 1;
@@ -70,12 +76,18 @@ export function createGetLineIndentHelper(
       return lineIndentCache.get(line) ?? 0;
     }
 
+    const preprocessedIndent = parser.getPreprocessedLineIndent(line);
+    if (preprocessedIndent !== undefined) {
+      lineIndentCache.set(line, preprocessedIndent);
+      return preprocessedIndent;
+    }
+
     let indent: number | undefined;
     for (const token of parser.getInputTokens()) {
       if ((token.startLine ?? 0) !== line) {
         continue;
       }
-      if (token.tokenType === Newline) {
+      if (token.tokenType === Newline || token.tokenType === Indent || token.tokenType === Dedent) {
         continue;
       }
       const startColumn = token.startColumn ?? 1;
@@ -347,7 +359,28 @@ export function createVariableDeclarationStartGuard(parser: PineParser) {
       }
     }
     if (hasDotOutsideGenerics) {
-      return false;
+      let lastIdentifierIndex = -1;
+      for (let index = collected.tokens.length - 1; index >= 0; index -= 1) {
+        if (isIdentifierLikeToken(collected.tokens[index])) {
+          lastIdentifierIndex = index;
+          break;
+        }
+      }
+
+      if (lastIdentifierIndex <= 0) {
+        return false;
+      }
+
+      // Member assignments end with an identifier directly after `.` (e.g., foo.bar = ...).
+      // Typed declarations keep the final variable name separate from the dotted type
+      // path (e.g., chart.point p = ...), so the token before the final identifier is
+      // not a dot.
+      const tokenBeforeLastIdentifier = collected.tokens[lastIdentifierIndex - 1];
+      if (tokenBeforeLastIdentifier?.tokenType === Dot) {
+        return false;
+      }
+
+      return true;
     }
 
     const identifierCount = collected.tokens.filter((token) => isIdentifierLikeToken(token)).length;
@@ -456,6 +489,9 @@ export function createAssignmentStartGuard(parser: PineParser) {
 
       if (tokenType === Dot) {
         offset += 1;
+        while (parser.lookAhead(offset).tokenType === Newline) {
+          offset += 1;
+        }
         const next = parser.lookAhead(offset);
         if (!isIdentifierLikeToken(next)) {
           return false;
@@ -504,6 +540,94 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
     let firstStatementToken: IToken | undefined;
     let lastToken: IToken | undefined;
 
+    const appendStatement = (statement: StatementNode, annotations: CompilerAnnotationNode[]) => {
+      // Multi-variable declarations can return a BlockStatementNode containing
+      // multiple VariableDeclarationNodes. Unwrap to keep parent block flat.
+      if (statement.kind === 'BlockStatement') {
+        const block = statement as BlockStatementNode;
+        for (let i = 0; i < block.body.length; i++) {
+          statements.push(block.body[i]);
+          if (i === 0 && annotations.length > 0) {
+            attachCompilerAnnotations(block.body[i], annotations);
+          }
+        }
+      } else {
+        statements.push(statement);
+        if (annotations.length > 0) {
+          attachCompilerAnnotations(statement, annotations);
+        }
+      }
+    };
+
+    if (parser.usesVirtualIndentationTokens()) {
+      while (parser.lookAhead(1).tokenType === Newline) {
+        const newlineToken = parser.consumeToken(Newline);
+        blockStartToken = blockStartToken ?? newlineToken;
+        lastToken = newlineToken;
+      }
+
+      if (parser.lookAhead(1).tokenType === Indent) {
+        const indentToken = parser.consumeToken(Indent);
+        blockStartToken = blockStartToken ?? indentToken;
+        lastToken = indentToken;
+
+        while (true) {
+          while (parser.lookAhead(1).tokenType === Newline) {
+            const newlineToken = parser.consumeToken(Newline);
+            lastToken = newlineToken;
+          }
+
+          if (parser.lookAhead(1).tokenType === EOF || parser.lookAhead(1).tokenType === Dedent) {
+            break;
+          }
+
+          const annotations: CompilerAnnotationNode[] = [];
+          while (parser.lookAhead(1).tokenType === CompilerAnnotation) {
+            const annotationToken = parser.consumeToken(CompilerAnnotation);
+            annotations.push(createCompilerAnnotationNode(annotationToken));
+            lastToken = annotationToken;
+
+            while (parser.lookAhead(1).tokenType === Newline) {
+              const newlineToken = parser.consumeToken(Newline);
+              lastToken = newlineToken;
+            }
+
+            if (parser.lookAhead(1).tokenType === EOF || parser.lookAhead(1).tokenType === Dedent) {
+              break;
+            }
+          }
+
+          if (parser.lookAhead(1).tokenType === EOF || parser.lookAhead(1).tokenType === Dedent) {
+            break;
+          }
+
+          const statementStartToken = parser.lookAhead(1);
+          let statement: StatementNode;
+          if (statementStartToken.tokenType === LBracket && !parser.isTupleAssignmentStart()) {
+            const expression = parser.invokeSubrule(parser.expression);
+            statement = createExpressionStatementNode(expression);
+          } else {
+            statement = parser.invokeSubrule(parser.statement);
+          }
+
+          appendStatement(statement, annotations);
+
+          firstStatementToken = firstStatementToken ?? statementStartToken;
+          lastToken = parser.lookAhead(0);
+        }
+
+        if (parser.lookAhead(1).tokenType === Dedent) {
+          lastToken = parser.consumeToken(Dedent);
+        }
+
+        return createBlockStatementNode(
+          statements,
+          blockStartToken ?? firstStatementToken,
+          lastToken ?? blockStartToken ?? firstStatementToken,
+        );
+      }
+    }
+
     if (parser.lookAhead(1).tokenType === Newline) {
       const newlineToken = parser.consumeToken(Newline);
       blockStartToken = blockStartToken ?? newlineToken;
@@ -528,7 +652,7 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
           continue;
         }
 
-        if (tokenIndent(lookahead) <= indent) {
+        if (parser.resolveTokenIndent(lookahead) <= indent) {
           shouldBreak = true;
           break;
         }
@@ -552,7 +676,7 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
           const newlineToken = parser.consumeToken(Newline);
           lastToken = newlineToken;
           const lookahead = parser.lookAhead(1);
-          if (lookahead.tokenType === EOF || tokenIndent(lookahead) <= indent) {
+          if (lookahead.tokenType === EOF || parser.resolveTokenIndent(lookahead) <= indent) {
             shouldBreak = true;
             break;
           }
@@ -568,7 +692,7 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
       }
 
       next = parser.lookAhead(1);
-      if (next.tokenType === EOF || tokenIndent(next) <= indent) {
+      if (next.tokenType === EOF || parser.resolveTokenIndent(next) <= indent) {
         break;
       }
 
@@ -580,25 +704,9 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
       } else {
         statement = parser.invokeSubrule(parser.statement);
       }
-      
-      // Multi-variable declarations can return a BlockStatementNode containing multiple VariableDeclarationNodes
-      // We need to unwrap these and add them individually to the parent block to maintain flat structure
-      if (statement.kind === 'BlockStatement') {
-        const block = statement as BlockStatementNode;
-        for (let i = 0; i < block.body.length; i++) {
-          statements.push(block.body[i]);
-          // Attach annotations only to the first declaration
-          if (i === 0 && annotations.length > 0) {
-            attachCompilerAnnotations(block.body[i], annotations);
-          }
-        }
-      } else {
-        statements.push(statement);
-        if (annotations.length > 0) {
-          attachCompilerAnnotations(statement, annotations);
-        }
-      }
-      
+
+      appendStatement(statement, annotations);
+
       firstStatementToken = firstStatementToken ?? statementStartToken;
       lastToken = parser.lookAhead(0);
 

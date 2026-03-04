@@ -91,7 +91,6 @@ import {
   createTupleExpressionNode,
   createUnaryExpressionNode,
   buildTypeReferenceFromTokens,
-  tokenIndent,
   createSyntheticToken,
 } from '../node-builders';
 import { VirtualTokenReason } from '../../virtual-tokens';
@@ -273,19 +272,89 @@ function parseBinaryRightOperand(
   return { operand: placeholder, recovery };
 }
 
-function hasBinaryOperatorAhead(parser: PineParser, operatorTokens: TokenType[]): boolean {
+type BinaryOperatorLookaheadOptions = {
+  disallowAmbiguousUnaryAcrossIndentedNewline?: boolean;
+};
+
+function hasBinaryOperatorAhead(
+  parser: PineParser,
+  operatorTokens: TokenType[],
+  options: BinaryOperatorLookaheadOptions = {},
+): boolean {
   let offset = 1;
   let next = parser.lookAhead(offset);
+  let crossedNewline = false;
   while (next.tokenType === Newline) {
+    crossedNewline = true;
     offset += 1;
     next = parser.lookAhead(offset);
   }
 
-  return operatorTokens.includes(next.tokenType);
+  if (!operatorTokens.includes(next.tokenType)) {
+    return false;
+  }
+
+  if (
+    options.disallowAmbiguousUnaryAcrossIndentedNewline &&
+    crossedNewline &&
+    (next.tokenType === Plus || next.tokenType === Minus)
+  ) {
+    const previousToken = parser.lookAhead(0);
+    const previousLine = previousToken?.endLine ?? previousToken?.startLine ?? 1;
+    const operatorLine = next.startLine ?? previousLine;
+    const previousIndentLevel = Math.floor(parser.getLineIndent(previousLine) / 4);
+    const operatorIndentLevel = Math.floor(parser.getLineIndent(operatorLine) / 4);
+
+    // If newline crosses into a deeper indentation block, treat +/- as unary for
+    // the next statement instead of binary continuation.
+    if (operatorIndentLevel > previousIndentLevel) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function consumeOptionalNewlinesRule(parser: PineParser, occurrence = 1): void {
   parser.invokeSubrule(parser.consumeOptionalNewlines, occurrence);
+}
+
+function looksLikeIdentifierWord(image: string | undefined): boolean {
+  if (!image) {
+    return false;
+  }
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(image);
+}
+
+function canBeNamedArgumentNameToken(token: IToken | undefined): boolean {
+  if (!token) {
+    return false;
+  }
+
+  if (isIdentifierLikeToken(token)) {
+    return true;
+  }
+
+  const tokenType = token.tokenType;
+  if (
+    tokenType === NumberToken ||
+    tokenType === TrailingNumberLiteral ||
+    tokenType === StringToken ||
+    tokenType === ColorToken ||
+    tokenType === True ||
+    tokenType === False ||
+    tokenType === NaToken ||
+    tokenType === Newline ||
+    tokenType === Comma ||
+    tokenType === RParen ||
+    tokenType === LParen ||
+    tokenType === LBracket ||
+    tokenType === RBracket
+  ) {
+    return false;
+  }
+
+  return looksLikeIdentifierWord(token.image);
 }
 
 function isRecordingPhase(parser: PineParser): boolean {
@@ -555,7 +624,11 @@ export function createAdditiveExpressionRule(parser: PineParser) {
     parser.repeatMany({
       GATE: () =>
         isRecordingPhase(parser) ||
-        hasBinaryOperatorAhead(parser, [Plus, Minus, BitwiseOr, BitwiseXor]),
+        hasBinaryOperatorAhead(
+          parser,
+          [Plus, Minus, BitwiseOr, BitwiseXor],
+          { disallowAmbiguousUnaryAcrossIndentedNewline: true },
+        ),
       DEF: () => {
         consumeOptionalNewlinesRule(parser);
         const operator = parser.choose<IToken>([
@@ -835,6 +908,9 @@ export function createCallExpressionRule(parser: PineParser) {
 
       if (tokenType === Dot) {
         parser.consumeToken(Dot);
+        while (parser.lookAhead(1).tokenType === Newline) {
+          parser.consumeToken(Newline);
+        }
         const propertyToken = parser.consumeToken(IdentifierToken);
         const property = createIdentifierNode(propertyToken);
         expression = createMemberExpressionNode(expression, property, propertyToken);
@@ -893,6 +969,9 @@ export function createMemberExpressionRule(parser: PineParser) {
         {
           ALT: () => {
             parser.consumeToken(Dot);
+            while (parser.lookAhead(1).tokenType === Newline) {
+              parser.consumeToken(Newline);
+            }
             const propertyToken = parser.consumeToken(IdentifierToken);
             const property = createIdentifierNode(propertyToken);
             expression = createMemberExpressionNode(expression, property, propertyToken);
@@ -982,6 +1061,16 @@ export function createArgumentListRule(parser: PineParser) {
       if (tokenType === Newline) {
         return false;
       }
+
+      // Support named arguments whose names lex as keyword tokens
+      // (e.g., `type = input.string`).
+      if (
+        canBeNamedArgumentNameToken(token) &&
+        parser.lookAhead(2).tokenType === Equal
+      ) {
+        return true;
+      }
+
       if (argumentStartTokenTypes.has(tokenType)) {
         return true;
       }
@@ -1145,8 +1234,8 @@ export function createArgumentListRule(parser: PineParser) {
 export function createArgumentRule(parser: PineParser) {
   return parser.createRule('argument', () => {
     const lookahead = parser.lookAhead(1);
-    if (isIdentifierLikeToken(lookahead) && parser.lookAhead(2).tokenType === Equal) {
-      const nameToken = parser.consumeToken(IdentifierToken);
+    if (canBeNamedArgumentNameToken(lookahead) && parser.lookAhead(2).tokenType === Equal) {
+      const nameToken = parser.consumeToken(lookahead.tokenType);
       parser.consumeToken(Equal);
       const value = parser.invokeSubrule(parser.expression);
       const name = createIdentifierNode(nameToken);
@@ -1418,6 +1507,9 @@ export function createIdentifierExpressionRule(parser: PineParser) {
 
     parser.repeatMany(() => {
       parser.consumeToken(Dot);
+      while (parser.lookAhead(1).tokenType === Newline) {
+        parser.consumeToken(Newline);
+      }
       const propertyToken = parser.consumeToken(IdentifierToken, 2);
       const property = createIdentifierNode(propertyToken);
       expression = createMemberExpressionNode(expression, property, propertyToken);
@@ -1442,7 +1534,7 @@ export function createIfExpressionRule(parser: PineParser): () => IfExpressionNo
       offset += 1;
     }
     const potentialElse = parser.lookAhead(offset);
-    if (potentialElse.tokenType === Else && tokenIndent(potentialElse) <= baseIndent) {
+    if (potentialElse.tokenType === Else && parser.resolveTokenIndent(potentialElse) <= baseIndent) {
       while (parser.lookAhead(1).tokenType === Newline) {
         parser.consumeToken(Newline);
       }

@@ -7,6 +7,7 @@ import type {
   ParserRecoveryError,
   VirtualToken,
 } from '../nodes';
+import type { IndentationTokenModel } from './indentation-prepass';
 
 import {
   createAssignmentStartGuard,
@@ -107,6 +108,8 @@ type ArgumentListRecovery = {
 
 export class PineParser extends EmbeddedActionsParser {
   private lineIndentCache = new Map<number, number>();
+  private indentationTokenModel: IndentationTokenModel | null = null;
+  private useVirtualIndentationTokens = false;
 
   public nextSignificantToken = createNextSignificantTokenHelper(this);
 
@@ -149,6 +152,8 @@ export class PineParser extends EmbeddedActionsParser {
   public override reset(): void {
     super.reset();
     this.lineIndentCache.clear();
+    this.indentationTokenModel = null;
+    this.useVirtualIndentationTokens = false;
     this.recoveryErrors.length = 0;
     this.argumentListRecovery = null;
   }
@@ -289,6 +294,33 @@ export class PineParser extends EmbeddedActionsParser {
 
   public getInputTokens(): IToken[] {
     return this.input;
+  }
+
+  public setIndentationTokenModel(model: IndentationTokenModel | null): void {
+    this.indentationTokenModel = model;
+    this.lineIndentCache.clear();
+  }
+
+  public setUseVirtualIndentationTokens(enabled: boolean): void {
+    this.useVirtualIndentationTokens = enabled;
+  }
+
+  public usesVirtualIndentationTokens(): boolean {
+    return this.useVirtualIndentationTokens;
+  }
+
+  public getPreprocessedLineIndent(line: number): number | undefined {
+    return this.indentationTokenModel?.effectiveIndentByLine.get(line);
+  }
+
+  public resolveTokenIndent(token: IToken): number {
+    const line = token.startLine ?? token.endLine ?? 1;
+    const preprocessed = this.getPreprocessedLineIndent(line);
+    if (preprocessed !== undefined) {
+      return preprocessed;
+    }
+    const startColumn = token.startColumn ?? 1;
+    return Math.max(0, startColumn - 1);
   }
 
   public consumeToken(tokenType: any, occurrence = 1, options?: unknown): IToken {

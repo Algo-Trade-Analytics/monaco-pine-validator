@@ -14,6 +14,8 @@ import {
   Identifier as IdentifierToken,
   If,
   Import,
+  Indent,
+  Dedent,
   Indicator,
   LBracket,
   LParen,
@@ -49,7 +51,6 @@ import {
   createEnumDeclarationNode,
   createEnumMemberNode,
   createSyntheticToken,
-  tokenIndent,
 } from '../node-builders';
 import { VirtualTokenReason } from '../../virtual-tokens';
 import { attachLoopResultBinding } from '../helpers';
@@ -248,7 +249,7 @@ export function createFunctionDeclarationRule(parser: PineParser) {
     const blockIndentToken = startToken ?? consumedTypeTokens[0] ?? consumedNameTokens[0] ?? arrowToken;
 
     if (parser.lookAhead(1).tokenType === Newline) {
-      body = parser.parseIndentedBlock(tokenIndent(blockIndentToken));
+      body = parser.parseIndentedBlock(parser.resolveTokenIndent(blockIndentToken));
     } else {
       const expression = parser.invokeSubrule(parser.expression) ?? createPlaceholderExpression();
       const endToken = parser.lookAhead(0);
@@ -407,9 +408,40 @@ export function createEnumDeclarationRule(parser: PineParser) {
 
     const members: EnumMemberNode[] = [];
     const indentToken = exportToken ?? enumToken;
-    const baseIndent = tokenIndent(indentToken);
+    const baseIndent = parser.resolveTokenIndent(indentToken);
 
     parser.repeatMany(() => parser.consumeToken(Newline));
+
+    if (parser.usesVirtualIndentationTokens() && parser.lookAhead(1).tokenType === Indent) {
+      parser.consumeToken(Indent);
+
+      while (true) {
+        while (parser.lookAhead(1).tokenType === Newline) {
+          parser.consumeToken(Newline);
+        }
+
+        const next = parser.lookAhead(1);
+        if (next.tokenType === EOF_TOKEN || next.tokenType === Dedent) {
+          break;
+        }
+
+        const member = parser.invokeSubrule(parser.enumMember, 1, { ARGS: [baseIndent] }) as EnumMemberNode;
+        members.push(member);
+      }
+
+      if (parser.lookAhead(1).tokenType === Dedent) {
+        parser.consumeToken(Dedent);
+      }
+
+      const endToken = members.length > 0 ? parser.lookAhead(0) : identifierToken;
+      return createEnumDeclarationNode(
+        identifier,
+        members,
+        Boolean(exportToken),
+        exportToken ?? enumToken,
+        endToken,
+      );
+    }
 
     while (true) {
       const next = parser.lookAhead(1);
@@ -422,7 +454,7 @@ export function createEnumDeclarationRule(parser: PineParser) {
         continue;
       }
 
-      if (tokenIndent(next) <= baseIndent) {
+      if (parser.resolveTokenIndent(next) <= baseIndent) {
         break;
       }
 
@@ -483,9 +515,52 @@ export function createTypeDeclarationRule(parser: PineParser) {
 
     const fields: TypeFieldNode[] = [];
     const indentToken = exportToken ?? typeToken;
-    const baseIndent = tokenIndent(indentToken);
+    const baseIndent = parser.resolveTokenIndent(indentToken);
+
+    // Legacy Pine syntax allows: `type Name =>` before the indented fields.
+    if (parser.lookAhead(1).tokenType === FatArrow) {
+      parser.consumeToken(FatArrow);
+    }
 
     parser.repeatMany(() => parser.consumeToken(Newline));
+
+    if (parser.usesVirtualIndentationTokens() && parser.lookAhead(1).tokenType === Indent) {
+      parser.consumeToken(Indent);
+
+      while (true) {
+        while (parser.lookAhead(1).tokenType === Newline) {
+          parser.consumeToken(Newline);
+        }
+
+        const next = parser.lookAhead(1);
+        if (next.tokenType === EOF_TOKEN || next.tokenType === Dedent) {
+          break;
+        }
+
+        if (
+          next.tokenType === IdentifierToken &&
+          (next.image ?? '').toLowerCase() === 'method'
+        ) {
+          break;
+        }
+
+        const field = parser.invokeSubrule(parser.typeField);
+        fields.push(field);
+      }
+
+      if (parser.lookAhead(1).tokenType === Dedent) {
+        parser.consumeToken(Dedent);
+      }
+
+      const endToken = fields.length > 0 ? parser.lookAhead(0) : identifierToken;
+      return createTypeDeclarationNode(
+        identifier,
+        fields,
+        Boolean(exportToken),
+        exportToken ?? typeToken,
+        endToken,
+      );
+    }
 
     while (true) {
       const next = parser.lookAhead(1);
@@ -498,7 +573,7 @@ export function createTypeDeclarationRule(parser: PineParser) {
         continue;
       }
 
-      if (tokenIndent(next) <= baseIndent) {
+      if (parser.resolveTokenIndent(next) <= baseIndent) {
         break;
       }
 

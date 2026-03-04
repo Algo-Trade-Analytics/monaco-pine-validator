@@ -124,6 +124,80 @@ describe('Chevrotain parser', () => {
     expect(stepValue.value).toBeCloseTo(0.05);
   });
 
+  it('parses keyword-like named arguments such as type = ...', () => {
+    const source = [
+      '//@version=6',
+      'indicator("Test")',
+      'value = input.string("A", type = input.string)',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    const assignment = program.body[1] as AssignmentStatementNode;
+    const call = assignment.right as CallExpressionNode;
+    expect(call.kind).toBe('CallExpression');
+    expect(call.args).toHaveLength(2);
+
+    const named = call.args[1];
+    expect(named.name?.kind).toBe('Identifier');
+    expect(named.name?.name).toBe('type');
+    expect(named.value.kind).toBe('MemberExpression');
+  });
+
+  it('does not crash on keyword-token named argument labels', () => {
+    const source = ['foo(if = 1)', ''].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
+
+    expect(ast).not.toBeNull();
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+    const program = ast as ProgramNode;
+    const statement = program.body[0] as ExpressionStatementNode;
+    const call = statement.expression as CallExpressionNode;
+    expect(call.kind).toBe('CallExpression');
+    expect(call.args).toHaveLength(1);
+    expect(call.args[0].name?.name).toBe('if');
+    expect(call.args[0].value.kind).toBe('NumberLiteral');
+  });
+
+  it('captures non-annotation line comments when includeComments is enabled', () => {
+    const source = [
+      '//@version=6',
+      '// top level comment',
+      'indicator("Comment Test // inside string")',
+      'value = 1 // trailing comment',
+      '//@function annotation comment',
+      'f() => 1',
+      '// final note',
+      '',
+    ].join('\n');
+
+    const { diagnostics } = parseWithChevrotain(source, { includeComments: true });
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(diagnostics.comments).toHaveLength(3);
+    expect(diagnostics.comments.map((comment) => comment.value)).toEqual([
+      'top level comment',
+      'trailing comment',
+      'final note',
+    ]);
+    expect(diagnostics.comments.map((comment) => comment.loc.start.line)).toEqual([2, 4, 7]);
+  });
+
+  it('does not collect comments by default', () => {
+    const source = ['// comment', 'indicator("No comments")', ''].join('\n');
+    const { diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(diagnostics.comments).toHaveLength(0);
+  });
+
   it('parses import declarations with aliases', () => {
     const source = [
       'import "user/lib/1" as lib',
@@ -383,6 +457,213 @@ describe('Chevrotain parser', () => {
     expect(sixth.left.kind).toBe('Identifier');
     expect((sixth.left as IdentifierNode).name).toBe('quux');
     expect(sixth.right?.kind).toBe('NumberLiteral');
+  });
+
+  it('parses member call chaining when property access continues after newline', () => {
+    const source = [
+      'result = ta.',
+      '  sma(close, 10)',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    const assignment = program.body[0] as AssignmentStatementNode;
+    expect(assignment.kind).toBe('AssignmentStatement');
+
+    const call = assignment.right as CallExpressionNode;
+    expect(call.kind).toBe('CallExpression');
+
+    const callee = call.callee as MemberExpressionNode;
+    expect(callee.kind).toBe('MemberExpression');
+    expect((callee.object as IdentifierNode).name).toBe('ta');
+    expect((callee.property as IdentifierNode).name).toBe('sma');
+  });
+
+  it('parses assignment targets with member access continued after newline', () => {
+    const source = [
+      'foo.',
+      '  bar := 1',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    const assignment = program.body[0] as AssignmentStatementNode;
+    expect(assignment.kind).toBe('AssignmentStatement');
+    expect(assignment.left.kind).toBe('MemberExpression');
+
+    const left = assignment.left as MemberExpressionNode;
+    expect((left.object as IdentifierNode).name).toBe('foo');
+    expect((left.property as IdentifierNode).name).toBe('bar');
+    expect(assignment.right?.kind).toBe('NumberLiteral');
+  });
+
+  it('does not treat indented newline + as additive continuation across block boundaries', () => {
+    const source = [
+      'if condition',
+      '    y = 2',
+      '        + 3',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    const ifStatement = program.body[0] as IfStatementNode;
+    const consequent = ifStatement.consequent as BlockStatementNode;
+    expect(consequent.body).toHaveLength(2);
+
+    const assignment = consequent.body[0] as AssignmentStatementNode;
+    expect(assignment.kind).toBe('AssignmentStatement');
+    expect(assignment.right?.kind).toBe('NumberLiteral');
+
+    const continuationStatement = consequent.body[1] as ExpressionStatementNode;
+    expect(continuationStatement.kind).toBe('ExpressionStatement');
+    const unary = continuationStatement.expression as UnaryExpressionNode;
+    expect(unary.kind).toBe('UnaryExpression');
+    expect(unary.operator).toBe('+');
+    expect(unary.argument.kind).toBe('NumberLiteral');
+  });
+
+  it('keeps newline + as additive continuation when indentation level does not enter a deeper block', () => {
+    const source = [
+      'if condition',
+      '    y = 2',
+      '      + 3',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    const ifStatement = program.body[0] as IfStatementNode;
+    const consequent = ifStatement.consequent as BlockStatementNode;
+    expect(consequent.body).toHaveLength(1);
+
+    const assignment = consequent.body[0] as AssignmentStatementNode;
+    expect(assignment.kind).toBe('AssignmentStatement');
+    const right = assignment.right as BinaryExpressionNode;
+    expect(right.kind).toBe('BinaryExpression');
+    expect(right.operator).toBe('+');
+    expect(right.left.kind).toBe('NumberLiteral');
+    expect(right.right.kind).toBe('NumberLiteral');
+  });
+
+  it('keeps legacy indentation behavior by default', () => {
+    const source = [
+      'if outer',
+      '    if inner',
+      '      x = 1',
+      '    y = 2',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    const outerIf = program.body[0] as IfStatementNode;
+    const outerBlock = outerIf.consequent as BlockStatementNode;
+    expect(outerBlock.body).toHaveLength(2);
+
+    const innerIf = outerBlock.body[0] as IfStatementNode;
+    const innerBlock = innerIf.consequent as BlockStatementNode;
+    expect(innerBlock.body).toHaveLength(1);
+  });
+
+  it('treats non-multiple-of-4 indentation as non-structural when indentation-token pre-pass is enabled', () => {
+    const source = [
+      'if outer',
+      '    if inner',
+      '      x = 1',
+      '    y = 2',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, {
+      allowErrors: true,
+      useIndentationTokens: true,
+    });
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    const outerIf = program.body[0] as IfStatementNode;
+    const outerBlock = outerIf.consequent as BlockStatementNode;
+    expect(outerBlock.body).toHaveLength(3);
+
+    const innerIf = outerBlock.body[0] as IfStatementNode;
+    const innerBlock = innerIf.consequent as BlockStatementNode;
+    expect(innerBlock.body).toHaveLength(0);
+
+    const promotedAssignment = outerBlock.body[1] as AssignmentStatementNode;
+    expect(promotedAssignment.left.kind).toBe('Identifier');
+    expect((promotedAssignment.left as IdentifierNode).name).toBe('x');
+  });
+
+  it('parses type fields with virtual INDENT/DEDENT tokens enabled', () => {
+    const source = [
+      'type Candle',
+      '    float open',
+      '    float close',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, {
+      useIndentationTokens: true,
+    });
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    const typeDecl = program.body[0] as TypeDeclarationNode;
+    expect(typeDecl.kind).toBe('TypeDeclaration');
+    expect(typeDecl.fields).toHaveLength(2);
+    expect(typeDecl.fields[0].identifier.name).toBe('open');
+    expect(typeDecl.fields[1].identifier.name).toBe('close');
+  });
+
+  it('parses switch cases with virtual INDENT/DEDENT tokens enabled', () => {
+    const source = [
+      'result = switch',
+      '    close > open => 1',
+      '    => 0',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source, {
+      useIndentationTokens: true,
+    });
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    const assignment = program.body[0] as AssignmentStatementNode;
+    const switchExpr = assignment.right as SwitchStatementNode;
+    expect(switchExpr.kind).toBe('SwitchStatement');
+    expect(switchExpr.cases).toHaveLength(2);
+    expect(switchExpr.cases[0].test?.kind).toBe('BinaryExpression');
+    expect(switchExpr.cases[1].test).toBeNull();
   });
 
   it('parses tuple destructuring assignments with holes', () => {
@@ -790,6 +1071,33 @@ describe('Chevrotain parser', () => {
     const method = program.body[2] as FunctionDeclarationNode;
     expect(method.kind).toBe('FunctionDeclaration');
     expect(method.identifier?.name).toBe('Point.new');
+  });
+
+  it('parses legacy type declarations that include an arrow token', () => {
+    const source = [
+      '//@version=5',
+      'indicator("Legacy Type")',
+      '',
+      'type Pivot =>',
+      '    int index',
+      '    float value',
+      '',
+    ].join('\n');
+
+    const { ast, diagnostics } = parseWithChevrotain(source);
+
+    expect(diagnostics.syntaxErrors).toHaveLength(0);
+    expect(ast).not.toBeNull();
+
+    const program = ast as ProgramNode;
+    const typeDecl = program.body.find(
+      (node): node is TypeDeclarationNode => node.kind === 'TypeDeclaration',
+    );
+
+    expect(typeDecl).toBeDefined();
+    expect(typeDecl?.identifier.name).toBe('Pivot');
+    expect(typeDecl?.fields.map((field) => field.identifier.name)).toEqual(['index', 'value']);
+    expect(typeDecl?.fields.map((field) => field.typeAnnotation?.name.name)).toEqual(['int', 'float']);
   });
 
   it('parses if/else statements with indentation-based blocks', () => {
@@ -1577,9 +1885,7 @@ describe('Chevrotain parser', () => {
       expect(arrayDecl.identifier.name).toBe('poly');
       expect(arrayDecl.typeAnnotation?.name.name).toBe('array');
       expect(arrayDecl.typeAnnotation?.generics).toHaveLength(1);
-      expect(arrayDecl.typeAnnotation?.generics[0]?.name.name).toBe('chart');
-      // Note: chart.point is parsed as 'chart' type, not as nested generics
-      // This is the current parser behavior for namespaced types
+      expect(arrayDecl.typeAnnotation?.generics[0]?.name.name).toBe('chart.point');
 
       // Test matrix<Point3D> declaration
       const matrixDecl = declarations[1];
@@ -1624,8 +1930,7 @@ describe('Chevrotain parser', () => {
       expect(pointsParam?.identifier.name).toBe('points');
       expect(pointsParam?.typeAnnotation?.name.name).toBe('array');
       expect(pointsParam?.typeAnnotation?.generics).toHaveLength(1);
-      expect(pointsParam?.typeAnnotation?.generics[0]?.name.name).toBe('chart');
-      // Note: chart.point is parsed as 'chart' type, not as nested generics
+      expect(pointsParam?.typeAnnotation?.generics[0]?.name.name).toBe('chart.point');
 
       // Test second parameter: matrix<Point3D> data
       const dataParam = functionDecl?.params[1];
@@ -1671,8 +1976,30 @@ describe('Chevrotain parser', () => {
       expect(varDecl.identifier.name).toBe('poly');
       expect(varDecl.typeAnnotation?.name.name).toBe('array');
       expect(varDecl.typeAnnotation?.generics).toHaveLength(1);
-      expect(varDecl.typeAnnotation?.generics[0]?.name.name).toBe('chart');
-      // Note: chart.point is parsed as 'chart' type, not as nested generics
+      expect(varDecl.typeAnnotation?.generics[0]?.name.name).toBe('chart.point');
+    });
+
+    it('parses dotted type declarations without declaration keywords', () => {
+      const source = [
+        '//@version=6',
+        'indicator("Test")',
+        '',
+        'chart.point p = na',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: false });
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+      expect(ast).not.toBeNull();
+
+      const program = ast as ProgramNode;
+      const declaration = program.body.find(
+        (node): node is VariableDeclarationNode => node.kind === 'VariableDeclaration',
+      );
+
+      expect(declaration).toBeDefined();
+      expect(declaration?.identifier.name).toBe('p');
+      expect(declaration?.typeAnnotation?.name.name).toBe('chart.point');
     });
   });
 
@@ -1887,6 +2214,33 @@ describe('Chevrotain parser', () => {
       expect(sequence.kind).toBe('BlockStatement');
       expect(sequence.body).toHaveLength(3);
       expect(sequence.body.every((node) => node.kind === 'AssignmentStatement')).toBe(true);
+    });
+
+    it('parses mixed assignment and expression comma sequences without crashing', () => {
+      const source = [
+        '//@version=6',
+        'indicator("Test")',
+        '',
+        'f() =>',
+        '    a = 1, b = 2, a + b',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
+
+      expect(ast).not.toBeNull();
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+      const program = ast as ProgramNode;
+      const fn = program.body.find(
+        (node): node is FunctionDeclarationNode => node.kind === 'FunctionDeclaration',
+      );
+
+      expect(fn).toBeDefined();
+      const block = fn?.body as BlockStatementNode;
+      expect(block.body).toHaveLength(3);
+      expect(block.body[0].kind).toBe('AssignmentStatement');
+      expect(block.body[1].kind).toBe('AssignmentStatement');
+      expect(block.body[2].kind).toBe('ExpressionStatement');
     });
   });
 

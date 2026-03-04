@@ -12,6 +12,18 @@ export const Newline = createToken({
   line_breaks: true,
 });
 
+// Virtual indentation markers injected by the indentation pre-pass when
+// `useIndentationTokens` is enabled.
+export const Indent = createToken({
+  name: 'Indent',
+  pattern: Lexer.NA,
+});
+
+export const Dedent = createToken({
+  name: 'Dedent',
+  pattern: Lexer.NA,
+});
+
 export const VersionDirective = createToken({
   name: 'VersionDirective',
   // Matches //@version=5 style directives. We intentionally keep this token
@@ -250,6 +262,8 @@ export const In = createToken({
 export const AllTokens = [
   WhiteSpace,
   Newline,
+  Indent,
+  Dedent,
   VersionDirective,
   CompilerAnnotation,
   LineComment,

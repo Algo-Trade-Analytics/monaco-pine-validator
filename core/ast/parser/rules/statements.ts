@@ -166,8 +166,9 @@ export function createStatementRule(parser: PineParser) {
         GATE: () => parser.isAssignmentStart(),
         ALT: () => {
           const startToken = parser.lookAhead(1);
-          const assignments = [parser.invokeSubrule(parser.assignmentStatement)];
+          const sequenceStatements: StatementNode[] = [parser.invokeSubrule(parser.assignmentStatement)];
           let assignmentOccurrence = 2;
+          let expressionOccurrence = 2;
 
           // Parse comma-separated assignments (e.g., "a := 1, b := 2")
           while (parser.lookAhead(1).tokenType === Comma) {
@@ -178,17 +179,24 @@ export function createStatementRule(parser: PineParser) {
               parser.consumeToken(Newline);
             }
 
-            assignments.push(parser.invokeSubrule(parser.assignmentStatement, assignmentOccurrence));
-            assignmentOccurrence += 1;
+            if (parser.isAssignmentStart()) {
+              sequenceStatements.push(parser.invokeSubrule(parser.assignmentStatement, assignmentOccurrence));
+              assignmentOccurrence += 1;
+              continue;
+            }
+
+            const expression = parser.invokeSubrule(parser.expression, expressionOccurrence);
+            expressionOccurrence += 1;
+            sequenceStatements.push(createExpressionStatementNode(expression));
           }
 
           // Return single assignment or BlockStatementNode for multiple
-          if (assignments.length === 1) {
-            return assignments[0];
+          if (sequenceStatements.length === 1) {
+            return sequenceStatements[0];
           }
 
           const endToken = parser.lookAhead(0);
-          return createBlockStatementNode(assignments, startToken, endToken);
+          return createBlockStatementNode(sequenceStatements, startToken, endToken);
         },
       },
       {
