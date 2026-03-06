@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh api repos/QuantForgeOrg/PineTS/contents/src --jq '.[].name')",
+      "Bash(gh api repos/QuantForgeOrg/PineTS/readme --jq '.content')",
+      "Bash(gh api repos/QuantForgeOrg/PineTS/contents/src/transpiler --jq '.[].name')",
+      "Bash(gh api repos/QuantForgeOrg/PineTS/contents/src/transpiler/pineToJS/parser.ts --jq '.content')"
+    ]
+  }
+}

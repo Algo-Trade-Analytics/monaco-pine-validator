@@ -308,6 +308,7 @@ export interface EnumDeclarationNode extends BaseNode {
 export interface TypeDeclarationNode extends BaseNode {
   kind: 'TypeDeclaration';
   identifier: IdentifierNode;
+  parentType: TypeReferenceNode | null;
   fields: TypeFieldNode[];
   export: boolean;
   annotations: CompilerAnnotationNode[];

@@ -246,18 +246,23 @@ export function createArrowFunctionExpressionNode(
 export function createUnaryExpressionNode(
   operatorToken: IToken | undefined,
   argument: ExpressionNode | undefined,
+  prefix = true,
 ): UnaryExpressionNode {
   const safeOperator = ensureToken(operatorToken);
   const argumentNode = argument ?? createPlaceholderExpression();
-  const end = argumentNode.loc.end;
-  const rangeEnd = argumentNode.range[1];
+  const start = prefix ? tokenStart(safeOperator) : argumentNode.loc.start;
+  const end = prefix ? argumentNode.loc.end : tokenEnd(safeOperator);
+  const rangeStart = prefix ? (safeOperator.startOffset ?? 0) : argumentNode.range[0];
+  const rangeEnd = prefix
+    ? argumentNode.range[1]
+    : (safeOperator.endOffset ?? safeOperator.startOffset ?? argumentNode.range[1]);
   return {
     kind: 'UnaryExpression',
     operator: safeOperator.image,
     argument: argumentNode,
-    prefix: true,
-    loc: createLocation(tokenStart(safeOperator), end),
-    range: createRange(safeOperator.startOffset ?? 0, rangeEnd),
+    prefix,
+    loc: createLocation(start, end),
+    range: createRange(rangeStart, rangeEnd),
   };
 }
 

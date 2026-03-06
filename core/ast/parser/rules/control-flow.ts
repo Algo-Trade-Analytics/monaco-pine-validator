@@ -58,6 +58,7 @@ import {
   Repeat,
   Return,
   RBracket,
+  Semicolon,
   SlashEqual,
   StarEqual,
   To,
@@ -82,7 +83,7 @@ function extractLoopResult(block: BlockStatementNode): ExpressionNode | null {
 }
 
 function isStatementTerminator(tokenType: unknown): boolean {
-  return tokenType === Newline || tokenType === EOF || tokenType === Else;
+  return tokenType === Newline || tokenType === Semicolon || tokenType === EOF || tokenType === Else;
 }
 
 function isForInLoopHeader(parser: PineParser): boolean {

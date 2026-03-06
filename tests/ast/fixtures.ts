@@ -600,10 +600,12 @@ export function createTypeDeclaration(
   lineEnd = lineStart,
   isExported = false,
   annotations: CompilerAnnotationNode[] = [],
+  parentType: TypeReferenceNode | null = null,
 ): TypeDeclarationNode {
   return {
     kind: 'TypeDeclaration',
     identifier,
+    parentType,
     fields,
     export: isExported,
     annotations,

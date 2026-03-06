@@ -1,4 +1,4 @@
-import { CompilerAnnotation, Dedent, Indent, Newline, VersionDirective } from '../tokens';
+import { CompilerAnnotation, Dedent, Indent, Newline, Semicolon, VersionDirective } from '../tokens';
 import { attachCompilerAnnotations } from '../parser-utils';
 import { createCompilerAnnotationNode, createVersionDirectiveNode } from '../node-builders';
 import type { VersionDirectiveNode, StatementNode, CompilerAnnotationNode } from '../../nodes';
@@ -12,6 +12,7 @@ export function createProgramRule(parser: PineParser) {
       parser.repeatMany(() => {
         parser.choose([
           { ALT: () => parser.consumeToken(Newline) },
+          { ALT: () => parser.consumeToken(Semicolon) },
           { ALT: () => parser.consumeToken(Indent) },
           { ALT: () => parser.consumeToken(Dedent) },
         ]);
@@ -25,6 +26,7 @@ export function createProgramRule(parser: PineParser) {
       parser.repeatMany(() => {
         parser.choose([
           { ALT: () => parser.consumeToken(Newline, 2) },
+          { ALT: () => parser.consumeToken(Semicolon) },
           { ALT: () => parser.consumeToken(Indent) },
           { ALT: () => parser.consumeToken(Dedent) },
         ]);
@@ -34,6 +36,7 @@ export function createProgramRule(parser: PineParser) {
     parser.repeatMany(() => {
       parser.choose([
         { ALT: () => parser.consumeToken(Newline, 3) },
+        { ALT: () => parser.consumeToken(Semicolon) },
         { ALT: () => parser.consumeToken(Indent) },
         { ALT: () => parser.consumeToken(Dedent) },
       ]);
@@ -45,6 +48,7 @@ export function createProgramRule(parser: PineParser) {
       parser.repeatMany(() => {
         parser.choose([
           { ALT: () => parser.consumeToken(Newline, 6) },
+          { ALT: () => parser.consumeToken(Semicolon) },
           { ALT: () => parser.consumeToken(Indent) },
           { ALT: () => parser.consumeToken(Dedent) },
         ]);
@@ -56,6 +60,7 @@ export function createProgramRule(parser: PineParser) {
         parser.repeatMany(() => {
           parser.choose([
             { ALT: () => parser.consumeToken(Newline, 5) },
+            { ALT: () => parser.consumeToken(Semicolon) },
             { ALT: () => parser.consumeToken(Indent) },
             { ALT: () => parser.consumeToken(Dedent) },
           ]);
@@ -69,6 +74,7 @@ export function createProgramRule(parser: PineParser) {
       parser.repeatMany(() => {
         parser.choose([
           { ALT: () => parser.consumeToken(Newline, 4) },
+          { ALT: () => parser.consumeToken(Semicolon) },
           { ALT: () => parser.consumeToken(Indent) },
           { ALT: () => parser.consumeToken(Dedent) },
         ]);

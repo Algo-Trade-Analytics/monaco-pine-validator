@@ -253,6 +253,7 @@ export function createTypeDeclarationNode(
   isExported: boolean,
   startToken: IToken | undefined,
   endToken: IToken | undefined,
+  parentType: TypeReferenceNode | null = null,
 ): TypeDeclarationNode {
   if (fields.length > 0) {
     const first = fields[0];
@@ -262,6 +263,7 @@ export function createTypeDeclarationNode(
     return {
       kind: 'TypeDeclaration',
       identifier,
+      parentType,
       fields,
       export: isExported,
       annotations: [],
@@ -280,6 +282,7 @@ export function createTypeDeclarationNode(
   return {
     kind: 'TypeDeclaration',
     identifier,
+    parentType,
     fields,
     export: isExported,
     annotations: [],

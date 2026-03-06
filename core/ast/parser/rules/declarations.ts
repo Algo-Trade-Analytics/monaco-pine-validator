@@ -6,8 +6,10 @@ import {
   Colon,
   ColonEqual,
   Comma,
+  Dot,
   Enum,
   Equal,
+  Extends,
   False,
   FatArrow,
   Greater,
@@ -513,6 +515,22 @@ export function createTypeDeclarationRule(parser: PineParser) {
     const identifierToken = parser.consumeToken(IdentifierToken);
     const identifier = createIdentifierNode(identifierToken);
 
+    // Parse optional `extends ParentType` (supports dotted types like `ns.Parent`).
+    let parentType: TypeReferenceNode | null = null;
+    const nextForExtends = parser.lookAhead(1);
+    if (
+      nextForExtends.tokenType === Extends ||
+      (nextForExtends.tokenType === IdentifierToken && (nextForExtends.image ?? '') === 'extends')
+    ) {
+      parser.consumeToken(nextForExtends.tokenType);
+      const parentTokens: IToken[] = [parser.consumeToken(IdentifierToken)];
+      while (parser.lookAhead(1).tokenType === Dot) {
+        parentTokens.push(parser.consumeToken(Dot));
+        parentTokens.push(parser.consumeToken(IdentifierToken));
+      }
+      parentType = buildTypeReferenceFromTokens(parentTokens);
+    }
+
     const fields: TypeFieldNode[] = [];
     const indentToken = exportToken ?? typeToken;
     const baseIndent = parser.resolveTokenIndent(indentToken);
@@ -559,6 +577,7 @@ export function createTypeDeclarationRule(parser: PineParser) {
         Boolean(exportToken),
         exportToken ?? typeToken,
         endToken,
+        parentType,
       );
     }
 
@@ -593,7 +612,7 @@ export function createTypeDeclarationRule(parser: PineParser) {
     }
 
     const endToken = fields.length > 0 ? parser.lookAhead(0) : identifierToken;
-    return createTypeDeclarationNode(identifier, fields, Boolean(exportToken), exportToken ?? typeToken, endToken);
+    return createTypeDeclarationNode(identifier, fields, Boolean(exportToken), exportToken ?? typeToken, endToken, parentType);
   });
 }
 

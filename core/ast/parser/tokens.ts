@@ -50,7 +50,10 @@ export const LParen = createToken({ name: 'LParen', pattern: /\(/ });
 export const RParen = createToken({ name: 'RParen', pattern: /\)/ });
 export const LBracket = createToken({ name: 'LBracket', pattern: /\[/ });
 export const RBracket = createToken({ name: 'RBracket', pattern: /\]/ });
+export const LBrace = createToken({ name: 'LBrace', pattern: /\{/ });
+export const RBrace = createToken({ name: 'RBrace', pattern: /\}/ });
 export const Comma = createToken({ name: 'Comma', pattern: /,/ });
+export const Semicolon = createToken({ name: 'Semicolon', pattern: /;/ });
 export const Dot = createToken({ name: 'Dot', pattern: /\./ });
 
 export const Identifier = createToken({
@@ -259,6 +262,13 @@ export const In = createToken({
   pattern: /in/,
   longer_alt: Identifier,
 });
+
+export const Extends = createToken({
+  name: 'Extends',
+  pattern: /extends/,
+  longer_alt: Identifier,
+  categories: [Identifier],
+});
 export const AllTokens = [
   WhiteSpace,
   Newline,
@@ -291,6 +301,7 @@ export const AllTokens = [
   To,
   By,
   In,
+  Extends,
   True,
   False,
   NaToken,
@@ -298,7 +309,10 @@ export const AllTokens = [
   RParen,
   LBracket,
   RBracket,
+  LBrace,
+  RBrace,
   Comma,
+  Semicolon,
   Dot,
   StrictEqual,
   StrictNotEqual,

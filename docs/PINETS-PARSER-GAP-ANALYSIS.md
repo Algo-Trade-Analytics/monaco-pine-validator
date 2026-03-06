@@ -1,10 +1,10 @@
 # PineTS Parser Gap Analysis
 
-Date: 2026-03-04
+Date: 2026-03-07
 
 Reference implementation reviewed:
 - Repo: https://github.com/QuantForgeOrg/PineTS
-- Commit: `a073796fd6d53b87a57ced0a893c84ef85ddfdec`
+- Commit: `94c2254aae5319e72cf6c8dbcc919c7235994b8a`
 - Parser files: `src/transpiler/pineToJS/{tokens.ts,lexer.ts,parser.ts,ast.ts}`
 
 ## Goal
@@ -28,8 +28,20 @@ Capture parser concepts we can learn from PineTS and port into `monaco-pine-vali
 | Mixed comma sequences (`a = 1, b = 2, a + b`) | Supported (`parseStatementOrSequence`) | Supported (assignment branch now accepts assignment + expression items) | Done (Phase 8) |
 | Comment token retention in parser stream | Supported (COMMENT tokens) | Added opt-in comment stream (`includeComments`) in diagnostics | Done (Phase 3) |
 | Newline continuation guard for ambiguous `+`/`-` across indent boundaries | Supported (`peekOperatorEx`) | Added guard in additive lookahead (`hasBinaryOperatorAhead`) | Done (Phase 2) |
+| Type inheritance (`type Child extends Parent`) | `extends` keyword supported | `Extends` token + `parentType` on `TypeDeclarationNode` | Done (Phase 9) |
+| Postfix increment/decrement (`x++`, `x--`) | `UpdateExpression` with prefix/postfix | Supported via `UnaryExpression(prefix=false)` | Done (Phase 15) |
+| Semicolon token (`;`) | Lexed as `SEMICOLON` | Tokenized and accepted as a statement separator | Done (Phase 13) |
+| Brace tokens (`{`, `}`) | Lexed, depth tracked for line-continuation | Tokenized in Chevrotain lexer | Done (Phase 14) |
+| Brace depth in line-continuation | Suppresses NEWLINE inside `{}` | Prepass now tracks `{}` alongside `()` and `[]` | Done (Phase 14) |
+| Multi-qualifier typed declarations (`var series float x = ...`) | Full qualifier chain parsing | Verified working | Done (Phase 10) |
+| Array shorthand type (`float[] x = ...`) | Explicit `TYPE[]` parsing | Verified working | Done (Phase 11) |
+| Typed `varip` with generics (`varip array<float> x = ...`) | Full type parsing in `parseVarDeclaration` | Verified working | Done (Phase 12) |
+| `\|\|` and `&&` operator permissiveness | Lexed as valid multi-char operators | `InvalidLogicalAnd`/`InvalidLogicalOr` (flagged as errors) | **Intentional difference** |
+| `na` handling | Plain identifier | Dedicated `NaToken` | **Intentional difference** |
 
 ## Port Backlog (Prioritized)
+
+### Completed (Phases 1-8)
 
 1. `DONE` Support legacy `type Name =>` syntax.
 2. `DONE` Add continuation-boundary guard for ambiguous binary `+`/`-` when newline crosses indentation boundary.
@@ -40,6 +52,32 @@ Capture parser concepts we can learn from PineTS and port into `monaco-pine-vali
 7. `DONE` Migrate to true prepass-emitted virtual `INDENT`/`DEDENT` tokens for block-oriented parser rules.
 8. `DONE` Support dotted type references consistently in variable declarations, function parameters, and generic type arguments.
 9. `DONE` Support mixed assignment/expression comma sequences and avoid parser crash recovery paths.
+
+### Remaining Gaps (Phase 9+)
+
+10. `DONE` **Type inheritance with `extends`**: Added `Extends` token and `parentType: TypeReferenceNode | null` field to `TypeDeclarationNode`. Supports dotted parent types (`chart.point`).
+
+11. `DONE` **Postfix increment/decrement (`x++`, `x--`)**: Added postfix parsing support using the existing `UnaryExpressionNode` shape with `prefix: false`. This preserves validator compatibility while matching PineTS acceptance.
+
+12. `DONE` **Semicolon token**: Added `Semicolon` token support in the Chevrotain lexer and threaded it through top-level and indented-block statement separation.
+
+13. `DONE` **Brace tokens (`{`, `}`)**: Added `LBrace`/`RBrace` tokens to the Chevrotain lexer so the token stream matches PineTS more closely for future grammar work.
+
+14. `DONE` **Brace depth in line-continuation logic**: Updated the indentation prepass so `{}` participates in continuation-depth tracking, preventing false structural indentation inside brace-delimited contexts.
+
+15. `TODO` **`na` as keyword vs identifier**: PineTS does not treat `na` specially in its lexer (it's an identifier). Our parser has a dedicated `NaToken`. Consider whether this causes any edge-case issues.
+
+16. `DONE` **Multi-qualifier type annotations in var/varip**: Verified `var series float x = 1.0` and `series float x = 1.0` parse correctly.
+
+17. `DONE` **Array shorthand type syntax (`float[] x = ...`)**: Verified `float[] arr = array.new<float>(10)` parses correctly.
+
+18. `DONE` **`varip` with type + array/generic**: Verified `varip array<float> x = array.new<float>(10)` parses correctly.
+
+19. `TODO` **Function name collision avoidance**: PineTS tracks `functionNames` and renames variables that collide with function names by appending `_var` (e.g., if function `foo` exists, variable `foo` becomes `foo_var`). This is a transpiler concern but may be relevant for diagnostics/warnings.
+
+20. `TODO` **IIFE detection for complex if-expressions**: PineTS detects when if-expressions need IIFE wrapping (multi-statement branches, nested control flow) via `needsIIFE`. This is a code-generation concern but the AST marking (`needsIIFE` flag) could be useful for validation warnings about expression complexity.
+
+21. `TODO` **`||` and `&&` as valid operators**: PineTS lexes `||` and `&&` as multi-character operators and converts them to standard logical ops during parsing. Our parser has `InvalidLogicalAnd` and `InvalidLogicalOr` tokens that flag these as errors. This matches TradingView behavior (Pine uses `and`/`or` keywords) but PineTS is more permissive.
 
 ## Phase 1 Completed in This Change
 
@@ -111,3 +149,89 @@ Capture parser concepts we can learn from PineTS and port into `monaco-pine-vali
   - dotted type names in generics and parameters,
   - dotted type declarations without declaration keywords,
   - mixed assignment/expression comma sequences.
+
+## Phase 9 Completed in This Change
+
+- Added `Extends` token (`categories: [Identifier]`) to lexer and `AllTokens`.
+- Added `parentType: TypeReferenceNode | null` to `TypeDeclarationNode` interface.
+- Updated `createTypeDeclarationNode` builder to accept and propagate `parentType`.
+- Updated `createTypeDeclarationRule` to parse optional `extends ParentType` (including dotted types).
+- Added parser regression tests for:
+  - `type Child extends Parent` with fields,
+  - `export type` with extends,
+  - dotted parent type (`chart.point`),
+  - extends with no fields,
+  - type without extends has `null` parentType.
+
+## Phases 10-12 Verified in This Change
+
+- Verified multi-qualifier typed declarations (`var series float x`, `series float x`) parse without errors.
+- Verified array shorthand type (`float[] arr = ...`) parses without errors.
+- Verified typed varip with generics (`varip array<float> x = ...`) parses without errors.
+
+## Phases 13-15 Completed in This Change
+
+- Added `Semicolon` token support and treated `;` as a structural statement separator in the program rule and indented-block parsing.
+- Added `LBrace`/`RBrace` token support and extended indentation prepass delimiter tracking to include braces.
+- Added postfix `++`/`--` parsing by reusing `UnaryExpressionNode` with `prefix: false`.
+- Added regression coverage for:
+  - semicolon-separated top-level statements,
+  - semicolon-separated statements inside virtual-indentation blocks,
+  - postfix increment parsing,
+  - brace-aware indentation prepass behavior.
+
+---
+
+## Architectural Comparison
+
+### PineTS Parser Architecture
+- **Purpose**: Transpiler (Pine Script → JavaScript). Parser is stage 1 of a pipeline.
+- **Approach**: Hand-written recursive descent lexer + parser (no parser framework).
+- **Lexer**: Single-pass, emits `INDENT`/`DEDENT` tokens inline (Python-style). Tracks paren/bracket/brace depth to suppress newlines during line continuation.
+- **Parser**: Recursive descent with operator precedence climbing. Uses `matchEx`/`peekOperatorEx` helpers for cross-newline operator matching.
+- **AST**: ESTree-compatible nodes (for downstream JS code generation via `astring`).
+- **Error handling**: Throws on first error. No recovery.
+- **Code generation**: Direct AST-to-JS string emission (`CodeGenerator` class).
+
+### Our Parser Architecture
+- **Purpose**: Validator/diagnostics for Monaco editor. No code generation.
+- **Approach**: Chevrotain parser framework with embedded actions.
+- **Lexer**: Chevrotain-based tokenization with optional indentation pre-pass for virtual `INDENT`/`DEDENT` tokens.
+- **Parser**: Recursive descent via Chevrotain rules. Error recovery built-in.
+- **AST**: Custom node types with full source location tracking.
+- **Error handling**: Comprehensive error recovery with diagnostic messages and suggestions.
+
+### Key Differences
+| Aspect | PineTS | Ours |
+|---|---|---|
+| Framework | None (hand-written) | Chevrotain |
+| Error recovery | None (throws) | Full recovery with diagnostics |
+| Source locations | Line/column on tokens only | Full offset ranges on AST nodes |
+| INDENT/DEDENT | Always-on in lexer | Opt-in pre-pass |
+| Operator tokens | Single `OPERATOR` type with string value | Individual token types per operator |
+| Keyword tokens | Single `KEYWORD` type with string value | Individual token types per keyword |
+| AST target | ESTree (for JS codegen) | Custom (for diagnostics/validation) |
+| `not`/`and`/`or` | Parsed as keywords, emitted as `!`/`&&`/`\|\|` | Parsed as dedicated tokens |
+
+### What We Can Learn (Non-Parser)
+PineTS also has features beyond parsing that could inform our validation:
+- **Scope analysis**: `ScopeManager` renames variables by scope prefix (`glb1_x`, `if2_y`, `fn3_z`). Could inform scope-aware diagnostics.
+- **TA call ID tracking**: Unique IDs (`_ta0`, `_ta1`) for state isolation. Could inform "duplicate call" warnings.
+- **Tuple return convention**: `[[value1, value2]]` double-bracket for tuples. Could inform tuple-return validation.
+- **NaN-safe comparison**: `a == b` → `math.__eq(a, b)`. Could inform comparison-with-na warnings.
+
+---
+
+## Recommended Phase 9+ Implementation Order
+
+Priority is based on likelihood of real Pine Script code hitting these features:
+
+| Phase | Task | Effort | Impact | Status |
+|---|---|---|---|---|
+| 9 | Type inheritance (`extends`) | Medium | High | **Done** |
+| 10 | Verify multi-qualifier typed declarations | Low | Medium | **Done** |
+| 11 | Verify array shorthand type (`float[] x`) | Low | Medium | **Done** |
+| 12 | Verify typed `varip` with generics | Low | Low | **Done** |
+| 13 | Semicolon token | Low | Low - Future Pine v6 prep | **Done** |
+| 14 | Brace tokens + depth tracking | Low | Low - Future Pine v6 prep | **Done** |
+| 15 | Postfix increment/decrement | Low | Low - Pine uses prefix only | **Done** |

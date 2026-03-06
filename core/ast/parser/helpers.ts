@@ -43,6 +43,7 @@ import {
   RParen,
   SlashEqual,
   StarEqual,
+  Semicolon,
 } from './tokens';
 import type { PineParser } from './parser';
 
@@ -560,10 +561,16 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
     };
 
     if (parser.usesVirtualIndentationTokens()) {
-      while (parser.lookAhead(1).tokenType === Newline) {
-        const newlineToken = parser.consumeToken(Newline);
-        blockStartToken = blockStartToken ?? newlineToken;
-        lastToken = newlineToken;
+      while (
+        parser.lookAhead(1).tokenType === Newline ||
+        parser.lookAhead(1).tokenType === Semicolon
+      ) {
+        const separatorToken =
+          parser.lookAhead(1).tokenType === Newline
+            ? parser.consumeToken(Newline)
+            : parser.consumeToken(Semicolon);
+        blockStartToken = blockStartToken ?? separatorToken;
+        lastToken = separatorToken;
       }
 
       if (parser.lookAhead(1).tokenType === Indent) {
@@ -572,9 +579,15 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
         lastToken = indentToken;
 
         while (true) {
-          while (parser.lookAhead(1).tokenType === Newline) {
-            const newlineToken = parser.consumeToken(Newline);
-            lastToken = newlineToken;
+          while (
+            parser.lookAhead(1).tokenType === Newline ||
+            parser.lookAhead(1).tokenType === Semicolon
+          ) {
+            const separatorToken =
+              parser.lookAhead(1).tokenType === Newline
+                ? parser.consumeToken(Newline)
+                : parser.consumeToken(Semicolon);
+            lastToken = separatorToken;
           }
 
           if (parser.lookAhead(1).tokenType === EOF || parser.lookAhead(1).tokenType === Dedent) {
@@ -587,9 +600,15 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
             annotations.push(createCompilerAnnotationNode(annotationToken));
             lastToken = annotationToken;
 
-            while (parser.lookAhead(1).tokenType === Newline) {
-              const newlineToken = parser.consumeToken(Newline);
-              lastToken = newlineToken;
+            while (
+              parser.lookAhead(1).tokenType === Newline ||
+              parser.lookAhead(1).tokenType === Semicolon
+            ) {
+              const separatorToken =
+                parser.lookAhead(1).tokenType === Newline
+                  ? parser.consumeToken(Newline)
+                  : parser.consumeToken(Semicolon);
+              lastToken = separatorToken;
             }
 
             if (parser.lookAhead(1).tokenType === EOF || parser.lookAhead(1).tokenType === Dedent) {
@@ -636,6 +655,12 @@ export function createParseIndentedBlockHelper(parser: PineParser) {
 
     let shouldBreak = false;
     while (!shouldBreak) {
+      while (parser.lookAhead(1).tokenType === Semicolon) {
+        const semicolonToken = parser.consumeToken(Semicolon);
+        blockStartToken = blockStartToken ?? semicolonToken;
+        lastToken = semicolonToken;
+      }
+
       let next = parser.lookAhead(1);
       while (next.tokenType === Newline) {
         let lookaheadOffset = 2;

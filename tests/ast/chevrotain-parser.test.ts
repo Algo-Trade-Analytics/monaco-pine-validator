@@ -2336,4 +2336,223 @@ describe('Chevrotain parser', () => {
       });
     });
   });
+
+  // ─── Phase 9: Type inheritance with extends ───────────────────────────
+
+  describe('type inheritance (extends)', () => {
+    it('parses type declaration with extends', () => {
+      const source = [
+        'type Child extends Parent',
+        '    float x',
+        '    float y',
+        '',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+      expect(ast).not.toBeNull();
+
+      const program = ast as ProgramNode;
+      const typeDecl = program.body[0] as TypeDeclarationNode;
+      expect(typeDecl.kind).toBe('TypeDeclaration');
+      expect(typeDecl.identifier.name).toBe('Child');
+      expect(typeDecl.parentType).not.toBeNull();
+      expect(typeDecl.parentType?.name.name).toBe('Parent');
+      expect(typeDecl.fields).toHaveLength(2);
+    });
+
+    it('parses export type with extends', () => {
+      const source = [
+        'export type ExtChild extends BaseType',
+        '    int level',
+        '',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+      const program = ast as ProgramNode;
+      const typeDecl = program.body[0] as TypeDeclarationNode;
+      expect(typeDecl.kind).toBe('TypeDeclaration');
+      expect(typeDecl.export).toBe(true);
+      expect(typeDecl.identifier.name).toBe('ExtChild');
+      expect(typeDecl.parentType?.name.name).toBe('BaseType');
+      expect(typeDecl.fields).toHaveLength(1);
+    });
+
+    it('parses type with dotted parent type', () => {
+      const source = [
+        'type MyPoint extends chart.point',
+        '    float extra',
+        '',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+      const program = ast as ProgramNode;
+      const typeDecl = program.body[0] as TypeDeclarationNode;
+      expect(typeDecl.kind).toBe('TypeDeclaration');
+      expect(typeDecl.parentType?.name.name).toBe('chart.point');
+      expect(typeDecl.fields).toHaveLength(1);
+    });
+
+    it('parses type with extends and no fields', () => {
+      const source = [
+        'type Empty extends Parent',
+        '',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+      const program = ast as ProgramNode;
+      const typeDecl = program.body[0] as TypeDeclarationNode;
+      expect(typeDecl.kind).toBe('TypeDeclaration');
+      expect(typeDecl.identifier.name).toBe('Empty');
+      expect(typeDecl.parentType?.name.name).toBe('Parent');
+      expect(typeDecl.fields).toHaveLength(0);
+    });
+
+    it('parses type without extends and has null parentType', () => {
+      const source = [
+        'type Simple',
+        '    float value',
+        '',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+      const program = ast as ProgramNode;
+      const typeDecl = program.body[0] as TypeDeclarationNode;
+      expect(typeDecl.kind).toBe('TypeDeclaration');
+      expect(typeDecl.parentType).toBeNull();
+    });
+  });
+
+  // ─── Phase 10-12: Verification of existing features ──────────────────
+
+  describe('typed declaration verification', () => {
+    it('parses multi-qualifier typed declarations (var series float x)', () => {
+      const source = [
+        'var series float x = 1.0',
+        '',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+      const program = ast as ProgramNode;
+      const decl = program.body[0] as VariableDeclarationNode;
+      expect(decl.kind).toBe('VariableDeclaration');
+      expect(decl.identifier?.name).toBe('x');
+    });
+
+    it('parses multi-qualifier without var keyword (series float x)', () => {
+      const source = [
+        'series float x = 1.0',
+        '',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+      const program = ast as ProgramNode;
+      const decl = program.body[0] as VariableDeclarationNode;
+      expect(decl.kind).toBe('VariableDeclaration');
+      expect(decl.identifier?.name).toBe('x');
+    });
+
+    it('parses array shorthand type (float[] arr = ...)', () => {
+      const source = [
+        'float[] arr = array.new<float>(10)',
+        '',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+      const program = ast as ProgramNode;
+      expect(program.body.length).toBeGreaterThan(0);
+    });
+
+    it('parses varip with generic type (varip array<float> x = ...)', () => {
+      const source = [
+        'varip array<float> x = array.new<float>(10)',
+        '',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+      const program = ast as ProgramNode;
+      const decl = program.body[0] as VariableDeclarationNode;
+      expect(decl.kind).toBe('VariableDeclaration');
+      expect(decl.identifier?.name).toBe('x');
+    });
+  });
+
+  describe('PineTS parity ports', () => {
+    it('parses semicolon-separated top-level statements', () => {
+      const source = ['a = 1; b = 2; plot(a + b)', ''].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source);
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+      const program = ast as ProgramNode;
+      expect(program.body).toHaveLength(3);
+      expect(program.body[0]?.kind).toBe('AssignmentStatement');
+      expect(program.body[1]?.kind).toBe('AssignmentStatement');
+      expect(program.body[2]?.kind).toBe('ExpressionStatement');
+    });
+
+    it('parses semicolon-separated statements inside indented blocks with virtual indentation tokens', () => {
+      const source = [
+        'f() =>',
+        '    a = 1; b = 2',
+        '    a + b',
+        '',
+      ].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source, { useIndentationTokens: true });
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+      const program = ast as ProgramNode;
+      const declaration = program.body[0] as FunctionDeclarationNode;
+      const body = declaration.body as BlockStatementNode;
+      expect(body.body).toHaveLength(3);
+      expect(body.body[0]?.kind).toBe('AssignmentStatement');
+      expect(body.body[1]?.kind).toBe('AssignmentStatement');
+      expect(body.body[2]?.kind).toBe('ExpressionStatement');
+    });
+
+    it('parses postfix increment operators as non-prefix unary expressions', () => {
+      const source = ['counter++', ''].join('\n');
+
+      const { ast, diagnostics } = parseWithChevrotain(source, { allowErrors: true });
+
+      expect(diagnostics.syntaxErrors).toHaveLength(0);
+
+      const program = ast as ProgramNode;
+      const statement = program.body[0] as ExpressionStatementNode;
+      const expression = statement.expression as UnaryExpressionNode;
+      expect(expression.kind).toBe('UnaryExpression');
+      expect(expression.operator).toBe('++');
+      expect(expression.prefix).toBe(false);
+      expect(expression.argument.kind).toBe('Identifier');
+      expect((expression.argument as IdentifierNode).name).toBe('counter');
+    });
+  });
 });

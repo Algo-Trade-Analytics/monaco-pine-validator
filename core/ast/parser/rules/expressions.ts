@@ -714,7 +714,19 @@ export function createUnaryExpressionRule(parser: PineParser) {
       return createUnaryExpressionNode(operator, argument);
     }
 
-    return parser.invokeSubrule(parser.callExpression);
+    const expression = parser.invokeSubrule(parser.callExpression);
+
+    if (parser.lookAhead(1).tokenType === Increment) {
+      const operator = parser.consumeToken(Increment);
+      return createUnaryExpressionNode(operator, expression, false);
+    }
+
+    if (parser.lookAhead(1).tokenType === Decrement) {
+      const operator = parser.consumeToken(Decrement);
+      return createUnaryExpressionNode(operator, expression, false);
+    }
+
+    return expression;
   });
 }
 

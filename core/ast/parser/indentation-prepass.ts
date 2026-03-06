@@ -13,6 +13,7 @@ import {
   EqualEqual,
   Greater,
   GreaterEqual,
+  LBrace,
   LBracket,
   LParen,
   Less,
@@ -26,6 +27,7 @@ import {
   Percent,
   Question,
   RBracket,
+  RBrace,
   RParen,
   Slash,
   Star,
@@ -92,11 +94,11 @@ function isContinuationSuffixToken(tokenType: TokenType | undefined): boolean {
 }
 
 function isOpeningDelimiter(tokenType: TokenType): boolean {
-  return tokenType === LParen || tokenType === LBracket;
+  return tokenType === LParen || tokenType === LBracket || tokenType === LBrace;
 }
 
 function isClosingDelimiter(tokenType: TokenType): boolean {
-  return tokenType === RParen || tokenType === RBracket;
+  return tokenType === RParen || tokenType === RBracket || tokenType === RBrace;
 }
 
 export function buildIndentationTokenModel(tokens: IToken[]): IndentationTokenModel {
