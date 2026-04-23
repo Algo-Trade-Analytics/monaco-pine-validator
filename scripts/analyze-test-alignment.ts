@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { pineScriptDocumentation } from '../PineScriptContext/enhanced-structures';
+import { pineScriptDocumentation } from '../PineScriptContext/structures/index';
 import { NAMESPACE_MEMBERS } from '../core/constants';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,6 +15,30 @@ interface TestIssue {
   namespace: string;
   severity: 'error' | 'warning' | 'info';
   recommendation: string;
+}
+
+function normalizeMemberName(
+  namespace: string,
+  member: string,
+  officialNsMembers: Set<string> | undefined
+): string {
+  if (!officialNsMembers) {
+    return member;
+  }
+
+  // Constructors in the scraped reference are type-parametric:
+  //   array.new<type>, matrix.new<type>, map.new<type,type>
+  // while tests/validator sources often use shorthand `*.new`.
+  if (member === 'new') {
+    const genericConstructor = Array.from(officialNsMembers).find(candidate =>
+      candidate.startsWith('new<')
+    );
+    if (genericConstructor) {
+      return genericConstructor;
+    }
+  }
+
+  return member;
 }
 
 // Get official API members
@@ -41,6 +65,17 @@ function getOfficialMembers(): Map<string, Set<string>> {
             result.get('global')!.add(fullKey);
           }
         } else {
+          // Container namespaces (e.g. strategy.closedtrades, strategy.direction)
+          // are valid access paths even when the scraped structure only stores
+          // metadata on child members.
+          const parts = fullKey.split('.');
+          if (parts.length > 1) {
+            const ns = parts[0];
+            const member = parts.slice(1).join('.');
+            if (!result.has(ns)) result.set(ns, new Set());
+            result.get(ns)!.add(member);
+          }
+
           // It's a nested namespace, recurse
           processNested(value, fullKey);
         }
@@ -58,6 +93,24 @@ function getOfficialMembers(): Map<string, Set<string>> {
   processNested(pineScriptDocumentation.constants);
   
   return result;
+}
+
+function isMemberInValidator(namespace: string, member: string): boolean {
+  const directMembers = NAMESPACE_MEMBERS[namespace];
+  if (directMembers?.has(member)) {
+    return true;
+  }
+
+  const dotIndex = member.indexOf('.');
+  if (dotIndex === -1) {
+    return false;
+  }
+
+  const firstSegment = member.slice(0, dotIndex);
+  const rest = member.slice(dotIndex + 1);
+  const nestedNamespace = `${namespace}.${firstSegment}`;
+  const nestedMembers = NAMESPACE_MEMBERS[nestedNamespace];
+  return nestedMembers?.has(rest) || false;
 }
 
 // Flatten nested objects
@@ -92,12 +145,14 @@ function extractPineScriptPatterns(content: string): {
   const lines = content.split('\n');
   
   lines.forEach((line, index) => {
-    // Match namespace.member patterns
-    const namespacePattern = /\b([a-z_][a-z0-9_]*)\s*\.\s*([a-z_][a-z0-9_]*)\b/gi;
+    // Match namespace.member and deeper namespace.member.submember patterns
+    const namespacePattern = /\b([a-z_][a-z0-9_]*(?:\s*\.\s*[a-z_][a-z0-9_]*)+)\b/gi;
     let match;
     while ((match = namespacePattern.exec(line)) !== null) {
-      const namespace = match[1];
-      const member = match[2];
+      const fullAccess = match[1].replace(/\s+/g, '');
+      const parts = fullAccess.split('.');
+      const namespace = parts[0];
+      const member = parts.slice(1).join('.');
       
       // Skip common non-Pine patterns
       if (['expect', 'result', 'validator', 'console', 'describe', 'it', 'test'].includes(namespace)) {
@@ -142,11 +197,11 @@ function analyzeTestFile(filePath: string, officialMembers: Map<string, Set<stri
   // Check namespace accesses
   namespaceAccess.forEach(({ line, namespace, member }) => {
     const officialNsMembers = officialMembers.get(namespace);
-    const validatorNsMembers = NAMESPACE_MEMBERS[namespace];
+    const normalizedMember = normalizeMemberName(namespace, member, officialNsMembers);
     
     // Check if member exists in official docs
-    const inOfficial = officialNsMembers?.has(member) || false;
-    const inValidator = validatorNsMembers?.has(member) || false;
+    const inOfficial = officialNsMembers?.has(normalizedMember) || false;
+    const inValidator = isMemberInValidator(namespace, member);
     
     if (inValidator && !inOfficial) {
       // Member is in validator but not in official docs - should be removed
@@ -165,10 +220,10 @@ function analyzeTestFile(filePath: string, officialMembers: Map<string, Set<stri
         file: relativePath,
         line,
         issue: 'Testing missing member (good - should fail until implemented)',
-        member: `${namespace}.${member}`,
+        member: `${namespace}.${normalizedMember}`,
         namespace,
         severity: 'info',
-        recommendation: `This test should expect validation error until ${namespace}.${member} is implemented in validator`
+        recommendation: `This test should expect validation error until ${namespace}.${normalizedMember} is implemented in validator`
       });
     }
   });
@@ -452,4 +507,3 @@ function main() {
 }
 
 main();
-
