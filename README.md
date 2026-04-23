@@ -219,6 +219,8 @@ We welcome contributions! This project is in active development and there are ma
 
 ### Areas for Contribution
 
+For cloud execution planning, start with `docs/ENGINE-IMPROVEMENTS-TASK-FLOW.md`, `docs/NEXT-CLUSTERS.md`, the D1 smoke-test prompt in `docs/CODEX-CLOUD-SMOKE-D1.md`, and the 75%-accuracy target tracker in `docs/ENGINE-ACCURACY-75-PLAN.md`.
+
 1. **Validation Module Improvements**
    - Fix false positives in existing validators
    - Add missing function signatures

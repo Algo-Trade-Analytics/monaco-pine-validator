@@ -1,0 +1,1342 @@
+{
+  "summary": {
+    "totalFiles": 179,
+    "filesWithIssues": 17,
+    "errorCount": 14,
+    "warningCount": 6,
+    "infoCount": 121
+  },
+  "issues": [
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 1866,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 1866,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 1883,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 1888,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 1911,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 1928,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 1933,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 1954,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 1954,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 1979,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 1987,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 2002,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 2387,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 2399,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 66,
+      "severity": "warning",
+      "issue": "Testing metadata artifact",
+      "member": "declaration.arguments",
+      "namespace": "declaration",
+      "recommendation": "Remove test for declaration.arguments - this is a metadata artifact, not a Pine Script member"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 68,
+      "severity": "warning",
+      "issue": "Testing metadata artifact",
+      "member": "declaration.arguments",
+      "namespace": "declaration",
+      "recommendation": "Remove test for declaration.arguments - this is a metadata artifact, not a Pine Script member"
+    },
+    {
+      "file": "tests/ast/chevrotain-parser.test.ts",
+      "line": 245,
+      "severity": "warning",
+      "issue": "Testing metadata artifact",
+      "member": "declaration.arguments",
+      "namespace": "declaration",
+      "recommendation": "Remove test for declaration.arguments - this is a metadata artifact, not a Pine Script member"
+    },
+    {
+      "file": "tests/ast/final-constants-validator-ast.test.ts",
+      "line": 58,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "strategy.risk.max_daily_loss",
+      "namespace": "strategy",
+      "recommendation": "Remove or update test - strategy.risk.max_daily_loss does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/complete-function-signatures.test.ts",
+      "line": 359,
+      "severity": "warning",
+      "issue": "Testing metadata artifact",
+      "member": "param.qualifier",
+      "namespace": "param",
+      "recommendation": "Remove test for param.qualifier - this is a metadata artifact, not a Pine Script member"
+    },
+    {
+      "file": "tests/complete-function-signatures.test.ts",
+      "line": 360,
+      "severity": "warning",
+      "issue": "Testing metadata artifact",
+      "member": "param.qualifier",
+      "namespace": "param",
+      "recommendation": "Remove test for param.qualifier - this is a metadata artifact, not a Pine Script member"
+    },
+    {
+      "file": "tests/e2e/comma-operator-nested.test.ts",
+      "line": 27,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/comma-operator-nested.test.ts",
+      "line": 27,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/comma-operator-nested.test.ts",
+      "line": 33,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/comma-operator-nested.test.ts",
+      "line": 161,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/comma-operator-nested.test.ts",
+      "line": 161,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/comma-operator-nested.test.ts",
+      "line": 290,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/comma-operator-nested.test.ts",
+      "line": 290,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/comma-operator-nested.test.ts",
+      "line": 297,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 7,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 27,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 36,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 41,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 50,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 50,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 70,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 79,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 84,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 108,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 113,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 121,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 180,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 200,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 201,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 202,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 203,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/drawing-functions-enhancement.test.ts",
+      "line": 204,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 4,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 7,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 44,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 45,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 54,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 75,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 76,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 90,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 112,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 113,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 125,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 148,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 158,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 181,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 191,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 214,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 217,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 248,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 269,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/enum-validation-fix.test.ts",
+      "line": 276,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/function-param-type-inference.test.ts",
+      "line": 151,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/line-new-chart-point.test.ts",
+      "line": 4,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/line-new-chart-point.test.ts",
+      "line": 7,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/line-new-chart-point.test.ts",
+      "line": 28,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/line-new-chart-point.test.ts",
+      "line": 53,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/line-new-chart-point.test.ts",
+      "line": 97,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/line-new-chart-point.test.ts",
+      "line": 117,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/line-new-chart-point.test.ts",
+      "line": 126,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/line-new-chart-point.test.ts",
+      "line": 131,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/line-new-chart-point.test.ts",
+      "line": 140,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/line-new-chart-point.test.ts",
+      "line": 145,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/line-new-chart-point.test.ts",
+      "line": 153,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/namespace-validation.test.ts",
+      "line": 227,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/namespace-validation.test.ts",
+      "line": 230,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/namespace-validation.test.ts",
+      "line": 245,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/namespace-validation.test.ts",
+      "line": 245,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/namespace-validation.test.ts",
+      "line": 261,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/namespace-validation.test.ts",
+      "line": 263,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/namespace-validation.test.ts",
+      "line": 288,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/namespace-validation.test.ts",
+      "line": 288,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/namespace-validation.test.ts",
+      "line": 303,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/namespace-validation.test.ts",
+      "line": 306,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/namespace-validation.test.ts",
+      "line": 307,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/namespace-validation.test.ts",
+      "line": 320,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/type-map-enum-detection.test.ts",
+      "line": 7,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/type-map-enum-detection.test.ts",
+      "line": 29,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/type-map-enum-detection.test.ts",
+      "line": 30,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/type-map-enum-detection.test.ts",
+      "line": 108,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/type-map-enum-detection.test.ts",
+      "line": 108,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/type-map-enum-detection.test.ts",
+      "line": 237,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/type-map-enum-detection.test.ts",
+      "line": 275,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/type-map-enum-detection.test.ts",
+      "line": 311,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/type-map-enum-detection.test.ts",
+      "line": 347,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/type-map-enum-detection.test.ts",
+      "line": 352,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/e2e/type-map-enum-detection.test.ts",
+      "line": 380,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/function-signatures.test.ts",
+      "line": 125,
+      "severity": "warning",
+      "issue": "Testing metadata artifact",
+      "member": "param.qualifier",
+      "namespace": "param",
+      "recommendation": "Remove test for param.qualifier - this is a metadata artifact, not a Pine Script member"
+    },
+    {
+      "file": "tests/specs/alert-table-polyline-validation.spec.ts",
+      "line": 251,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/alert-table-polyline-validation.spec.ts",
+      "line": 268,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/alert-table-polyline-validation.spec.ts",
+      "line": 290,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/alert-table-polyline-validation.spec.ts",
+      "line": 310,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/alert-table-polyline-validation.spec.ts",
+      "line": 333,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/alert-table-polyline-validation.spec.ts",
+      "line": 333,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/alert-table-polyline-validation.spec.ts",
+      "line": 420,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/alert-table-polyline-validation.spec.ts",
+      "line": 420,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/alert-table-polyline-validation.spec.ts",
+      "line": 421,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/alert-table-polyline-validation.spec.ts",
+      "line": 421,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/alert-table-polyline-validation.spec.ts",
+      "line": 488,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/alert-table-polyline-validation.spec.ts",
+      "line": 537,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 27,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 88,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 104,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 125,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 133,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 144,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 160,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 180,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 185,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 198,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 203,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 219,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 234,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/chart-functions-validation.spec.ts",
+      "line": 239,
+      "severity": "info",
+      "issue": "Testing missing member (good - should fail until implemented)",
+      "member": "chart.point",
+      "namespace": "chart",
+      "recommendation": "This test should expect validation error until chart.point is implemented in validator"
+    },
+    {
+      "file": "tests/specs/constants-enums-validation.spec.ts",
+      "line": 298,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "plot.style_linebreak",
+      "namespace": "plot",
+      "recommendation": "Remove or update test - plot.style_linebreak does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/specs/input-functions-validation.spec.ts",
+      "line": 250,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "input.resolution",
+      "namespace": "input",
+      "recommendation": "Remove or update test - input.resolution does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/specs/input-functions-validation.spec.ts",
+      "line": 256,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "input.resolution",
+      "namespace": "input",
+      "recommendation": "Remove or update test - input.resolution does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/specs/input-functions-validation.spec.ts",
+      "line": 257,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "input.resolution",
+      "namespace": "input",
+      "recommendation": "Remove or update test - input.resolution does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/specs/strategy-properties-validation.spec.ts",
+      "line": 247,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "strategy.closedtrades.direction",
+      "namespace": "strategy",
+      "recommendation": "Remove or update test - strategy.closedtrades.direction does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/specs/strategy-properties-validation.spec.ts",
+      "line": 253,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "strategy.closedtrades.direction",
+      "namespace": "strategy",
+      "recommendation": "Remove or update test - strategy.closedtrades.direction does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/specs/strategy-properties-validation.spec.ts",
+      "line": 437,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "strategy.opentrades.direction",
+      "namespace": "strategy",
+      "recommendation": "Remove or update test - strategy.opentrades.direction does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/specs/strategy-properties-validation.spec.ts",
+      "line": 443,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "strategy.opentrades.direction",
+      "namespace": "strategy",
+      "recommendation": "Remove or update test - strategy.opentrades.direction does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/specs/strategy-risk-commission-advanced.spec.ts",
+      "line": 17,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "strategy.risk.max_consecutive_losses",
+      "namespace": "strategy",
+      "recommendation": "Remove or update test - strategy.risk.max_consecutive_losses does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/specs/strategy-risk-commission-advanced.spec.ts",
+      "line": 18,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "strategy.risk.max_daily_loss",
+      "namespace": "strategy",
+      "recommendation": "Remove or update test - strategy.risk.max_daily_loss does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/specs/strategy-risk-commission-advanced.spec.ts",
+      "line": 19,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "strategy.risk.position_size_limit",
+      "namespace": "strategy",
+      "recommendation": "Remove or update test - strategy.risk.position_size_limit does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/specs/strategy-risk-commission-advanced.spec.ts",
+      "line": 30,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "strategy.commission.basis_points",
+      "namespace": "strategy",
+      "recommendation": "Remove or update test - strategy.commission.basis_points does not exist in official Pine Script v6 docs"
+    },
+    {
+      "file": "tests/specs/strategy-risk-commission-advanced.spec.ts",
+      "line": 31,
+      "severity": "error",
+      "issue": "Testing non-existent member",
+      "member": "strategy.commission.per_share_tiered",
+      "namespace": "strategy",
+      "recommendation": "Remove or update test - strategy.commission.per_share_tiered does not exist in official Pine Script v6 docs"
+    }
+  ],
+  "byNamespace": {
+    "chart": {
+      "count": 121,
+      "errors": 0,
+      "warnings": 0,
+      "infos": 121,
+      "members": [
+        "chart.point"
+      ]
+    },
+    "declaration": {
+      "count": 3,
+      "errors": 0,
+      "warnings": 3,
+      "infos": 0,
+      "members": [
+        "declaration.arguments"
+      ]
+    },
+    "strategy": {
+      "count": 10,
+      "errors": 10,
+      "warnings": 0,
+      "infos": 0,
+      "members": [
+        "strategy.risk.max_daily_loss",
+        "strategy.closedtrades.direction",
+        "strategy.opentrades.direction",
+        "strategy.risk.max_consecutive_losses",
+        "strategy.risk.position_size_limit",
+        "strategy.commission.basis_points",
+        "strategy.commission.per_share_tiered"
+      ]
+    },
+    "param": {
+      "count": 3,
+      "errors": 0,
+      "warnings": 3,
+      "infos": 0,
+      "members": [
+        "param.qualifier"
+      ]
+    },
+    "plot": {
+      "count": 1,
+      "errors": 1,
+      "warnings": 0,
+      "infos": 0,
+      "members": [
+        "plot.style_linebreak"
+      ]
+    },
+    "input": {
+      "count": 3,
+      "errors": 3,
+      "warnings": 0,
+      "infos": 0,
+      "members": [
+        "input.resolution"
+      ]
+    }
+  }
+}
